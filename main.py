@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - main.py launcher
+-Intricate - main.py application launcher for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
