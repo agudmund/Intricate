@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - main_window.py main application window
+-Intricate - main_window.py main application window for enjoyment
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
