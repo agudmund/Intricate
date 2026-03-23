@@ -125,6 +125,7 @@ class IntricateView(QGraphicsView):
 
     def mousePressEvent(self, event) -> None:
         """Start pan on middle mouse."""
+        self.setFocus()
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = event.position()
             self.setCursor(Qt.ClosedHandCursor)

@@ -30,10 +30,6 @@ class Theme:
     sidebarPadding      = 6             # Padding inside the sidebar around buttons
     sidebarButtonGap    = 6             # Gap between buttons in the sidebar
     sidebarCategoryGap  = 16            # Gap between category groups
-    # Sidebar width derives from iconButtonSize — single source, no magic numbers
-    @classmethod
-    def sidebarWidth(cls) -> int:
-        return cls.iconButtonSize + cls.sidebarPadding * 2
 
     # =========================================================================
     # BUTTONS
@@ -219,3 +215,8 @@ class Theme:
     def color(hex_str: str) -> QColor:
         """Convenience — construct a QColor from a Theme hex string on demand."""
         return QColor(hex_str)
+
+    # Sidebar width derives from iconButtonSize — single source, no magic numbers
+    @classmethod
+    def sidebarWidth(cls) -> int:
+        return cls.iconButtonSize + cls.sidebarPadding * 2

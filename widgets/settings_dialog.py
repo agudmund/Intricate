@@ -15,7 +15,7 @@ from pathlib import Path
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        self.setWindowTitle("The Soon To Be Beautiful Settings Window 🌱")
         self.setModal(True)
         self.setMinimumWidth(400)
         self.tabs = QTabWidget(self)
@@ -23,7 +23,7 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
         btns = QHBoxLayout()
-        save_btn = QPushButton("Save", self)
+        save_btn = QPushButton("Exid", self) # Again, Note : Exid is not a typo, its an exit button named Exid
         save_btn.clicked.connect(self.save)
         btns.addStretch()
         btns.addWidget(save_btn)
@@ -32,14 +32,16 @@ class SettingsDialog(QDialog):
     def _setup_tabs(self):
         self.general_tab = QWidget()
         self.theme_tab = QWidget()
+        self.about_tab = QWidget()
         self.tabs.addTab(self.general_tab, "General")
         self.tabs.addTab(self.theme_tab, "Theme")
+        self.tabs.addTab(self.about_tab, "About")
         self._setup_general_tab()
         self._setup_theme_tab()
 
     def _setup_general_tab(self):
         layout = QVBoxLayout(self.general_tab)
-        layout.addWidget(QLabel("(Future settings go here)", self.general_tab))
+        layout.addWidget(QLabel("Coming soon, Future!", self.general_tab))
         layout.addStretch()
 
     def _setup_theme_tab(self):

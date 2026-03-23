@@ -97,14 +97,14 @@ class WarmNode(BaseNode):
         """)
         self._editor.setPlainText(self.data.body_text)
         self._editor.textChanged.connect(self._on_text_changed)
-        self._editor.setFocusPolicy(Qt.StrongFocus)  # Passionately focused
 
         self._editor_proxy = QGraphicsProxyWidget(self)
         self._editor_proxy.setWidget(self._editor)
         self._editor_proxy.setGeometry(self._body_rect())
-        self._editor_proxy.setFocusPolicy(Qt.StrongFocus)  # Passionately focused
         self._editor_proxy.setFlag(QGraphicsItem.ItemIsFocusable)  # Accept focus on first click
         self._editor_proxy.show()   # WarmNode shows editor by default — it IS the content
+
+        self.setFocusProxy(self._editor_proxy)
 
     def _on_text_changed(self) -> None:
         """Sync text to data on every keystroke — no explicit commit needed."""
@@ -127,14 +127,16 @@ class WarmNode(BaseNode):
         super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event):
-        # If we click inside the body area (the text area)
+        # Clicked the body? Direct to text.
         if self._body_rect().contains(event.pos()):
-            # Ensure the proxy goes to the front and give it keyboard focus
-            self._editor_proxy.setFocus()
-            self._editor.setFocus()
-            super().mousePressEvent(event)
+            self._editor.setFocus(Qt.MouseFocusReason)
             event.accept()
             return
+            
+        # Clicked the header? Clear text focus so we can drag cleanly.
+        else:
+            self._editor.clearFocus()
+            
         super().mousePressEvent(event)
 
     def focusOutEvent(self, event) -> None:

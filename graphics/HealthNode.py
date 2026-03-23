@@ -10,6 +10,7 @@ import gc
 import time
 from PySide6.QtCore import Qt, QTimer, QPointF
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
+from PySide6.QtWidgets import QApplication, QGraphicsProxyWidget
 
 from .BaseNode import BaseNode
 from .HealthNodeData import HealthNodeData
@@ -81,6 +82,21 @@ class HealthNode(BaseNode):
         self._poll_count += 1
         t0 = time.monotonic()
 
+        # 1. The Global Widget Focus (Buttons, Sidebar, Canvas itself)
+        fw = QApplication.focusWidget()
+        qt_widget_focus = fw.objectName() or fw.__class__.__name__ if fw else "None"
+
+        # 2. The Internal Scene Focus (Which node/proxy is active)
+        scene_focus = "None"
+        if self.scene():
+            fi = self.scene().focusItem()
+            if fi:
+                # If it's a proxy, we want to know what widget it's holding
+                if isinstance(fi, QGraphicsProxyWidget):
+                    scene_focus = f"Proxy({fi.widget().__class__.__name__})"
+                else:
+                    scene_focus = fi.__class__.__name__
+
         try:
             gc.collect()
             from .BaseNode import BaseNode as _BaseNode
@@ -113,6 +129,11 @@ class HealthNode(BaseNode):
 
         if self.scene() and hasattr(self.scene(), 'set_dirty'):
             self.scene().set_dirty(False)
+
+        # Optionally: store or log qt_widget_focus and scene_focus for diagnostics
+        self._qt_widget_focus = qt_widget_focus
+        self._scene_focus = scene_focus
+        self._qt_focus_display = f"W: {qt_widget_focus} | S: {scene_focus}"
 
     # ─────────────────────────────────────────────────────────────────────────
     # CLICK MONITOR
@@ -218,6 +239,7 @@ class HealthNode(BaseNode):
             ("RAM delta",     delta_str,                             delta_color),
             ("Last click",    self._last_clicked_type,               c_text),
             ("  └ identity",  self._last_clicked_item,               c_label),
+            ("  └ focus",     self._qt_focus_display,                c_label),
             ("GC time",       f"{self._last_gc_time * 1000:.1f}ms",  c_text),
             ("Poll #",        str(self._poll_count),                 c_label),
         ]
