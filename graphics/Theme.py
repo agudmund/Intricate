@@ -69,9 +69,12 @@ class Theme:
     # to the icons/ folder at the project root. Adding a new icon means adding
     # its filename constant here and calling Theme.icon() at the callsite.
 
-    iconPathCurtains         = "iconic.png"         # Top toolbar curtain toggle button
-    iconDelete               = "tester.png"         # Node delete (normal state)
-    iconConfirm              = "icon_confirm.png"   # Node delete (confirm state)
+    iconPathCurtains            = "iconic.png"          # Top toolbar curtain toggle button
+    iconDelete                  = "iconic.png"          # Node delete (normal state)
+    iconConfirm                 = "icon_confirm.png"    # Node delete (confirm state)
+    iconHealth                  = "health_icon.png"     # Health Node icon
+    iconWarm                    = "warm_icon.png"       # Warm Node icon
+    iconAbout                   = "about_icon.png"       # About Node icon
 
     # =========================================================================
     # COMBOBOX

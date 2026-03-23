@@ -321,15 +321,16 @@ class IntricateApp(QMainWindow):
 
         # ── Canvas category ───────────────────────────────────────────────────
         layout.addWidget(self._sidebar_button(
-            icon     = Theme.iconPathCurtains,
-            tooltip  = "Warm Node",
-            clicked  = self._spawn_warm_node,
-        ))
-        layout.addWidget(self._sidebar_button(
-            icon     = Theme.iconPathCurtains,
+            icon     = Theme.iconAbout,
             tooltip  = "About Node",
             clicked  = self._spawn_about_node,
         ))
+        layout.addWidget(self._sidebar_button(
+            icon     = Theme.iconWarm,
+            tooltip  = "Warm Node",
+            clicked  = self._spawn_warm_node,
+        ))
+        
         layout.addWidget(self._sidebar_button(
             icon     = Theme.iconPathCurtains,
             tooltip  = "Bezier Node",
@@ -340,7 +341,7 @@ class IntricateApp(QMainWindow):
 
         # ── Diagnostic category ───────────────────────────────────────────────
         self._health_btn = self._sidebar_button(
-            icon     = Theme.iconPathCurtains,
+            icon     = Theme.iconHealth,
             tooltip  = "Health Node (one per scene)",
             clicked  = self._spawn_health_node,
         )
