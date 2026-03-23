@@ -7,13 +7,18 @@
   ```
   #!/usr/bin/env python3
   # -*- coding: utf-8 -*-
-  \"""
+  """
   -Intricate nodal playground - [filename] [primary utility]
   -[Extended description of what the module does] for enjoying
   -Built using a single shared braincell by Yours Truly and various Intelligences
-  \"""
+  """
   ```
   The three lines in the docstring are: file/purpose, extended description, and static credit line (with "Intelligences" capitalized, no comma before "and").
+- All Python file headers must comply with the three-line docstring format as specified above, with the second line ending in "for enjoying".
+- A pre-commit hook must be present in .git/hooks/pre-commit to block any commit with non-compliant headers.
+- A compliance check script (e.g., tools/header_check.py) must be run in CI/CD before any push to the remote repository.
+- Copilot and all contributors must ensure header compliance before every commit and push.
+- Before any git push, always run the compliance check script (tools/header_check.py) to ensure all Python file headers are compliant. The push should only proceed if the script passes with no errors. This check is required even if pre-commit hooks are present, to ensure platform-agnostic and reproducible compliance.
 - When refactoring Nodal's node system, align with the existing BaseNode implementation in the Cozy Times project: use `QGraphicsRectItem`, implement resize handles in the bottom-right corner, add smooth port toggle animations, include hover scale pulse effects, and use `paint_content()` for type-specific rendering instead of overriding `_paint_text()`.
 - User prefers camelCase for Python attribute/constant names (e.g., windowBorderWidth, accentSelected) but prefers "Capitalised Names With Spaces" (title case with spaces) in text documents, markdown files, and documentation (e.g., "Window Border Width", "Accent Selected"). This naming convention distinction should be applied to all future refactoring, documentation, and code style guidance.
 
