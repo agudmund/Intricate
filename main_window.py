@@ -78,6 +78,9 @@ def button(
         if slot is not None:
             btn.clicked.connect(slot)
 
+    # Ensure sidebar buttons never take focus
+    btn.setFocusPolicy(Qt.NoFocus)
+
     # Then apply remaining kwargs as setters
     for key, value in kwargs.items():
         setter_name = f"set{key[0].upper() + key[1:]}"
