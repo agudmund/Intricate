@@ -6,7 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
+from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit, QGraphicsItem
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
@@ -97,10 +97,13 @@ class WarmNode(BaseNode):
         """)
         self._editor.setPlainText(self.data.body_text)
         self._editor.textChanged.connect(self._on_text_changed)
+        self._editor.setFocusPolicy(Qt.StrongFocus)  # Passionately focused
 
         self._editor_proxy = QGraphicsProxyWidget(self)
         self._editor_proxy.setWidget(self._editor)
         self._editor_proxy.setGeometry(self._body_rect())
+        self._editor_proxy.setFocusPolicy(Qt.StrongFocus)  # Passionately focused
+        self._editor_proxy.setFlag(QGraphicsItem.ItemIsFocusable)  # Accept focus on first click
         self._editor_proxy.show()   # WarmNode shows editor by default — it IS the content
 
     def _on_text_changed(self) -> None:
@@ -122,6 +125,17 @@ class WarmNode(BaseNode):
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
+
+    def mousePressEvent(self, event):
+        # If we click inside the body area (the text area)
+        if self._body_rect().contains(event.pos()):
+            # Ensure the proxy goes to the front and give it keyboard focus
+            self._editor_proxy.setFocus()
+            self._editor.setFocus()
+            super().mousePressEvent(event)
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     def focusOutEvent(self, event) -> None:
         """Restore view focus policy when the node loses focus."""
