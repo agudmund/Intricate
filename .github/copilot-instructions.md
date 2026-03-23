@@ -15,7 +15,6 @@
   ```
   The three lines in the docstring are: file/purpose, extended description, and static credit line (with "Intelligences" capitalized, no comma before "and").
 - All Python file headers must comply with the three-line docstring format as specified above, with the second line ending in "for enjoying".
-- A pre-commit hook must be present in .git/hooks/pre-commit to block any commit with non-compliant headers.
 - A compliance check script (e.g., tools/header_check.py) must be run in CI/CD before any push to the remote repository.
 - Copilot and all contributors must ensure header compliance before every commit and push.
 - Before any git push, always run the compliance check script (tools/header_check.py) to ensure all Python file headers are compliant. The push should only proceed if the script passes with no errors. This check is required even if pre-commit hooks are present, to ensure platform-agnostic and reproducible compliance.
