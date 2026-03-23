@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - main_window.py main application window
+-Intricate nodal playground - main_window.py main application window
 -One day it woke up and dreamt of becoming a frameless window with draggable toolbars and a node graphics view for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

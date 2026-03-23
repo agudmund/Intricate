@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/AboutNodeData.py
--Identity and state for the AboutNode. Pure Python, zero Qt.
+-Intricate nodal playground - graphics/AboutNodeData.py AboutNodeData data class
+-Identity and state for the AboutNode. Pure Python, zero Qt for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

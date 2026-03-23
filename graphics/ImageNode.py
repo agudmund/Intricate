@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/ImageNode.py
--Renders image thumbnails on the canvas with an editable caption.
+-Intricate nodal playground - graphics/ImageNode.py ImageNode class
+-Renders image thumbnails on the canvas with an editable caption for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

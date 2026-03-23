@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/BaseNode.py
--The visual and structural foundation every node type builds on.
+-Intricate nodal playground - graphics/BaseNode.py BaseNode class
+-The visual and structural foundation every node type builds on for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

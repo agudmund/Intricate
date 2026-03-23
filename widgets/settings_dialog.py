@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - widgets/settings_dialog.py
--SettingsDialog: settings with General and Theme tabs, icon path selectors, TOML-backed.
+-Intricate nodal playground - widgets/settings_dialog.py SettingsDialog dialog widget
+-SettingsDialog: settings with General and Theme tabs, icon path selectors, TOML-backed for enjoying
+-Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 from PySide6.QtWidgets import QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog

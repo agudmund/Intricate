@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - utils/settings.py
--TOML-backed settings. Read on startup, written on change.
+-Intricate nodal playground - utils/settings.py settings module
+-TOML-backed settings. Read on startup, written on change for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

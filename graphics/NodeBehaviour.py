@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/NodeBehaviour.py
--The personality and ambient life of a node. Animations, character, soul.
+-Intricate nodal playground - graphics/NodeBehaviour.py NodeBehaviour class
+-The personality and ambient life of a node. Animations, character, soul for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

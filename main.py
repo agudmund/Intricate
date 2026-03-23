@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - main.py application launcher for enjoying
+-Intricate nodal playground - main.py application launcher
+-Launches the Intricate node-based UI application for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

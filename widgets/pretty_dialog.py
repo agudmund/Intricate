@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - widgets/pretty_dialog.py
--PrettyDialog: a modern, theme-driven dialog with 3x3 grid, draggable top bar, curtains/fade, and resize grip.
+-Intricate nodal playground - widgets/pretty_dialog.py PrettyDialog dialog widget
+-Modern, theme-driven dialog with 3x3 grid, draggable top bar, curtains/fade, and resize grip for enjoying
+-Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QWidget, QLabel, QPushButton, QSizeGrip

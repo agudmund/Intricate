@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/NodeData.py
--The identity and state of a node. Pure Python, zero Qt.
+-Intricate nodal playground - graphics/NodeData.py NodeData data class
+-The identity and state of a node. Pure Python, zero Qt for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

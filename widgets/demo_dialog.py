@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - widgets/demo_dialog.py
--A simple demo dialog using PrettyDialog for demonstration/testing.
+-Intricate nodal playground - widgets/demo_dialog.py DemoDialog dialog widget
+-A simple demo dialog using PrettyDialog for demonstration/testing for enjoying
+-Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 from PySide6.QtWidgets import QLabel, QVBoxLayout

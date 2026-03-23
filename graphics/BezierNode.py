@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/BezierNode.py
--A smooth cubic bezier curve node with draggable control handles.
+-Intricate nodal playground - graphics/BezierNode.py BezierNode class
+-A smooth cubic bezier curve node with draggable control handles for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

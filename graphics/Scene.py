@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/Scene.py
--The infinite canvas. Holds items, manages the world, owns the purge contract.
+-Intricate nodal playground - graphics/Scene.py IntricateScene class
+-The infinite canvas. Holds items, manages the world, owns the purge contract for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

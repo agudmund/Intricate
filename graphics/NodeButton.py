@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/NodeButton.py
--A small action button that lives on a node. Scene-native, LOD-aware.
+-Intricate nodal playground - graphics/NodeButton.py NodeButton class
+-A small action button that lives on a node. Scene-native, LOD-aware for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/Theme.py
--Single source of truth for all visual values across the entire app.
+-Intricate nodal playground - graphics/Theme.py Theme class
+-Single source of truth for all visual values across the entire app for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

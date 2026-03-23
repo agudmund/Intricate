@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/WarmNode.py
--The main content node. Free-form text with an emoji accent and editable title.
+-Intricate nodal playground - graphics/WarmNode.py WarmNode class
+-The main content node. Free-form text with an emoji accent and editable title for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

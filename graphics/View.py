@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/View.py
--The window into the world. Renders the scene, handles navigation and OS drops.
+-Intricate nodal playground - graphics/View.py IntricateView class
+-The window into the world. Renders the scene, handles navigation and OS drops for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

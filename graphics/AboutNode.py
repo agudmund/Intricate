@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/AboutNode.py
--A minimal sticky-note node. A category memo planted near groups of nodes.
+-Intricate nodal playground - graphics/AboutNode.py AboutNode node class
+-A minimal sticky-note node. A category memo planted near groups of nodes for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
