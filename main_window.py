@@ -12,83 +12,11 @@ from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
+from graphics.PrettyButton import button
 from widgets.pretty_dialog import PrettyDialog
 from widgets.settings_dialog import SettingsDialog
 from widgets.demo_dialog import DemoDialog
 
-class PrettyButton(QPushButton):
-    """
-    A warm and pretty button with its own specific defaults 🌿
-    """
-    def __init__(self, text="yay! 🌿", parent=None):
-        super().__init__(text, parent)
-        self.setMinimumWidth(Theme.buttonMinWidth)
-        self.setMinimumHeight(Theme.buttonMinHeight)
-
-        # Apply our Python-driven styles
-        self.update_style()
-
-        font = self.font()
-        font.setFamily(Theme.buttonFontFamily)
-        font.setPointSize(Theme.buttonFontSize)
-        font.setBold(Theme.buttonFontBold)
-        self.setFont(font)
-
-    def update_style(self):
-        # We use HexArgb to ensure that if we add transparency to the theme later,
-        # the stylesheet actually respects the alpha channel.
-        base_padding = 5
-        top_padding = base_padding + Theme.buttonTextVerticalOffset
-        bottom_padding = base_padding - Theme.buttonTextVerticalOffset
-
-        # Clamp to ensure we never have negative padding
-        top_padding = max(0, top_padding)
-        bottom_padding = max(0, bottom_padding)
-
-        # Theme-driven border logic
-        # background-color: {Theme.buttonBg};
-        border_width = Theme.buttonBorderWidth if Theme.buttonBorderEnabled else 0
-
-        self.setStyleSheet(f"""
-           QPushButton {{
-               background-color: {Theme.buttonBg};
-               border: {border_width}px solid {Theme.buttonBorder};
-               border-radius: 6px;
-               color: {Theme.textPrimary};
-               padding: {top_padding}px 15px {bottom_padding}px 15px;
-           }}
-        """)
-        
-
-def button(
-    text: str = "yay! 🌿",
-    parent=None,
-    **kwargs
-) -> QPushButton:
-    """
-    Creates a fresh pretty button ready for layouts.
-    Special support for 'clicked=slot' (connects the clicked signal).
-    Other kwargs are passed to setters (e.g. fixedWidth=120, icon=..., etc.)
-    """
-    btn = PrettyButton(text, parent)
-
-    # Handle signal connections first
-    if "clicked" in kwargs:
-        slot = kwargs.pop("clicked")
-        if slot is not None:
-            btn.clicked.connect(slot)
-
-    # Ensure sidebar buttons never take focus
-    btn.setFocusPolicy(Qt.NoFocus)
-
-    # Then apply remaining kwargs as setters
-    for key, value in kwargs.items():
-        setter_name = f"set{key[0].upper() + key[1:]}"
-        setter = getattr(btn, setter_name, None)
-        if setter and callable(setter):
-            setter(value)
-
-    return btn
 
 class IntricateApp(QMainWindow):
     def __init__(self):
@@ -197,10 +125,8 @@ class IntricateApp(QMainWindow):
 
     def setup_iconic_button(self, clicked=None, icon: str | None = None) -> QPushButton:
             """Creates a square icon-only button. icon= filename via Theme.icon()."""
-            btn = PrettyButton("", self)
+            btn = button("", icon=QIcon(Theme.icon(Theme.iconPathCurtains)))
             btn.setFixedSize(QSize(Theme.iconButtonSize, Theme.iconButtonSize))
-            icon_filename = icon if icon is not None else Theme.iconPathCurtains
-            btn.setIcon(QIcon(Theme.icon(icon_filename)))
             btn.setIconSize(QSize(
                 Theme.iconButtonSize - Theme.iconPadding,
                 Theme.iconButtonSize - Theme.iconPadding
@@ -247,9 +173,9 @@ class IntricateApp(QMainWindow):
         self.is_collapsed = not self.is_collapsed
 
 
-    # =========================================================================
-    # The central area — sidebar | canvas | reserved
-    # =========================================================================
+    # =================================================================================
+    # The central area — sidebar | canvas | reserved for a special vip arriving later
+    # =================================================================================
 
     def _setupTheAreaFormerlyKnownAsNodal(self):
         """
