@@ -5,5 +5,3 @@
 -Graphics package initializer for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
-
-# ...existing code...
