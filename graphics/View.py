@@ -2,13 +2,16 @@
 # -*- coding: utf-8 -*-
 """
 -Intricate - graphics/View.py
--The window into the world. Renders the scene, handles navigation.
+-The window into the world. Renders the scene, handles navigation and OS drops.
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QPainter, QColor
+
+
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
 
 
 class IntricateView(QGraphicsView):
@@ -16,27 +19,33 @@ class IntricateView(QGraphicsView):
     The viewport into IntricateScene.
 
     Responsibilities:
-        - Renders the scene with correct transparency and antialiasing
-        - Handles pan (middle mouse) and zoom (wheel)
-        - Keeps the transform anchor honest so pan/zoom feel correct
+        - Renders the scene with correct background and antialiasing
+        - Handles pan (middle mouse) and zoom (wheel, cursor-anchored)
+        - Receives OS drag-and-drop events and routes image files to the scene
 
     Navigation ledger:
-        current_zoom tracks the applied scale factor so zoom limits
-        and external sync both have a single source of truth.
+        current_zoom tracks the applied scale factor — single source of truth
+        for zoom limits and any external camera sync.
+
+    Drag and drop:
+        Image files dragged from Explorer land here. The view maps the drop
+        position to scene coordinates and delegates to scene.add_image_node().
+        Multiple files dropped together are staggered so they don't overlap.
     """
 
     ZOOM_MIN = 0.1
     ZOOM_MAX = 5.0
+    DROP_STAGGER = 20.0     # QPointF offset between multiple dropped files
 
     def __init__(self, scene: QGraphicsScene, parent=None):
         super().__init__(scene, parent)
 
-        self.current_zoom = 1.0
-        self._last_pan_pos = None
+        self.current_zoom  = 1.0
+        self._last_pan_pos: QPointF | None = None
 
         self._configure()
 
-    def _configure(self):
+    def _configure(self) -> None:
         # ── Frame ─────────────────────────────────────────────────────────────
         self.setFrameShape(QGraphicsView.NoFrame)
         self.setLineWidth(0)
@@ -48,6 +57,7 @@ class IntricateView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # ── Transform anchors ─────────────────────────────────────────────────
+        # NoAnchor — we control camera position explicitly, Qt does not help.
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.setResizeAnchor(QGraphicsView.NoAnchor)
         self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
@@ -57,60 +67,63 @@ class IntricateView(QGraphicsView):
         self.setStyleSheet("background: transparent;")
 
         # ── Paint quality ─────────────────────────────────────────────────────
+        # FullViewportUpdate required with TranslucentBackground —
+        # partial updates leave artifacts.
         self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
         self.setRenderHint(QPainter.Antialiasing)
 
         # ── Focus ─────────────────────────────────────────────────────────────
+        # NoFocus prevents the view from stealing keyboard focus from toolbar
+        # widgets. Key events are routed explicitly when needed.
         self.setFocusPolicy(Qt.NoFocus)
+
+        # ── Drag and drop ─────────────────────────────────────────────────────
+        self.setAcceptDrops(True)
 
     # ─────────────────────────────────────────────────────────────────────────
     # BACKGROUND
     # ─────────────────────────────────────────────────────────────────────────
 
-    def drawBackground(self, painter, rect):
+    def drawBackground(self, painter: QPainter, rect) -> None:
         """Solid canvas background — one honest rectangle, no magic yet."""
         painter.save()
         painter.resetTransform()
-        painter.fillRect(self.viewport().rect(), QColor("#282828"))
+        painter.fillRect(self.viewport().rect(), QColor(Theme.backDrop))
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────
     # NAVIGATION
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _apply_zoom(self, factor: float, anchor_scene_pos=None):
+    def _apply_zoom(self, factor: float, anchor: QPointF | None = None) -> None:
         """
-        Apply a zoom factor, clamped to [ZOOM_MIN, ZOOM_MAX].
-
-        anchor_scene_pos: if provided, the zoom anchors on that scene point
-        so the point under the cursor stays fixed. If None, zooms from center.
+        Apply a zoom factor clamped to [ZOOM_MIN, ZOOM_MAX].
+        If anchor is provided the scene point under that position stays fixed.
         """
         new_zoom = self.current_zoom * factor
         if not (self.ZOOM_MIN <= new_zoom <= self.ZOOM_MAX):
             return
 
-        if anchor_scene_pos:
-            old_pos = self.mapFromScene(anchor_scene_pos)
+        if anchor is not None:
+            old_vp = self.mapFromScene(anchor)
             self.scale(factor, factor)
-            new_pos = self.mapFromScene(anchor_scene_pos)
-            delta = new_pos - old_pos
-            self.translate(
-                self.transform().inverted()[0].m11() * delta.x(),
-                self.transform().inverted()[0].m22() * delta.y()
-            )
+            new_vp = self.mapFromScene(anchor)
+            delta  = new_vp - old_vp
+            zoom   = self.transform().m11()
+            self.translate(-delta.x() / zoom, -delta.y() / zoom)
         else:
             self.scale(factor, factor)
 
         self.current_zoom = new_zoom
 
-    def wheelEvent(self, event):
-        """Zoom in/out anchored to the cursor position."""
+    def wheelEvent(self, event) -> None:
+        """Zoom anchored to the cursor position."""
         factor = 1.25 if event.angleDelta().y() > 0 else 0.8
         anchor = self.mapToScene(event.position().toPoint())
-        self._apply_zoom(factor, anchor_scene_pos=anchor)
+        self._apply_zoom(factor, anchor=anchor)
         event.accept()
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event) -> None:
         """Start pan on middle mouse."""
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = event.position()
@@ -119,18 +132,18 @@ class IntricateView(QGraphicsView):
             return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event) -> None:
         """Pan the canvas on middle mouse drag."""
-        if self._last_pan_pos and event.buttons() & Qt.MiddleButton:
-            delta = event.position() - self._last_pan_pos
+        if self._last_pan_pos is not None and event.buttons() & Qt.MiddleButton:
+            delta          = event.position() - self._last_pan_pos
             self._last_pan_pos = event.position()
-            zoom = self.transform().m11()
+            zoom           = self.transform().m11()
             self.translate(delta.x() / zoom, delta.y() / zoom)
             event.accept()
             return
         super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event) -> None:
         """End pan."""
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = None
@@ -138,3 +151,57 @@ class IntricateView(QGraphicsView):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DRAG AND DROP
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def dragEnterEvent(self, event) -> None:
+        """Accept drags that contain at least one supported image file."""
+        if event.mimeData().hasUrls():
+            paths = [u.toLocalFile() for u in event.mimeData().urls()]
+            if any(Path(p).suffix.lower() in _IMAGE_EXTENSIONS for p in paths):
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
+    def dragMoveEvent(self, event) -> None:
+        """Keep accepting during the drag so the cursor stays correct."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:
+        """
+        Map the drop position to scene coordinates and create ImageNodes.
+
+        Multiple files are staggered by DROP_STAGGER so they don't pile up.
+        Non-image files in a multi-file drop are silently skipped.
+        """
+        if not event.mimeData().hasUrls():
+            event.ignore()
+            return
+
+        # Map drop viewport position → scene coordinates (QPointF all the way)
+        drop_scene_pos = self.mapToScene(event.position().toPoint())
+
+        offset = QPointF(0.0, 0.0)
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if Path(path).suffix.lower() not in _IMAGE_EXTENSIONS:
+                continue
+            scene = self.scene()
+            if scene and hasattr(scene, 'add_image_node'):
+                scene.add_image_node(
+                    pos  = drop_scene_pos + offset,
+                    path = path
+                )
+                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+
+        event.acceptProposedAction()
+
+
+# Theme import at bottom — View.py is part of the graphics package and
+# Theme lives there too. Deferred to avoid any circular import risk at
+# package initialisation time.
+from .Theme import Theme
+from pathlib import Path

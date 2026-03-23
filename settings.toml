@@ -1,0 +1,18 @@
+# Intricate — settings.toml
+# Human-readable, version-controllable, no platform-specific registry.
+# All values here are the defaults. Edit freely.
+
+[window]
+width  = 900
+height = 700
+x      = 100
+y      = 100
+
+[canvas]
+fog_alpha = 180     # 0-255 — transparency of the fog layer (placeholder)
+
+[session]
+last_loaded = ""    # Name of the last loaded session
+
+[ui]
+sidebar_visible = true
