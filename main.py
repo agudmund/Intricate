@@ -10,8 +10,11 @@ import sys
 from PySide6.QtWidgets import QApplication
 from main_window import IntricateApp
 
+APP_NAME = "Intricate"
+ORG_NAME = "Single Shared Braincell"
 
 def main():
+    print(f"{APP_NAME} is generally so happy that you are here. ✨")
     app = QApplication(sys.argv)
     window = IntricateApp()
     window.show()
