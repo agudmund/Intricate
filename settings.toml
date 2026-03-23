@@ -1,18 +1,22 @@
-# Intricate — settings.toml
-# Human-readable, version-controllable, no platform-specific registry.
-# All values here are the defaults. Edit freely.
-
 [window]
-width  = 900
+width = 900
 height = 700
-x      = 100
-y      = 100
+x = 100
+y = 100
 
 [canvas]
-fog_alpha = 180     # 0-255 — transparency of the fog layer (placeholder)
+fog_alpha = 180
 
 [session]
-last_loaded = ""    # Name of the last loaded session
+last_loaded = ""
 
 [ui]
 sidebar_visible = true
+
+[theme]
+iconAbout = "about_icon.png"
+iconConfirm = "icon_confirm.png"
+iconDelete = "iconic.png"
+iconHealth = "health_icon.png"
+iconPathCurtains = "iconic.png"
+iconWarm = "warm_icon.png"

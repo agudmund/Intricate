@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{b9717fec-c418-409c-9a70-7e402f1f8e3a}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>main.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId />
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="graphics\AboutNode.py" />
+    <Compile Include="graphics\AboutNodeData.py" />
+    <Compile Include="graphics\BaseNode.py" />
+    <Compile Include="graphics\BezierNode.py" />
+    <Compile Include="graphics\BezierNodeData.py" />
+    <Compile Include="graphics\HealthNode.py" />
+    <Compile Include="graphics\HealthNodeData.py" />
+    <Compile Include="graphics\ImageNode.py" />
+    <Compile Include="graphics\ImageNodeData.py" />
+    <Compile Include="graphics\NodeBehaviour.py" />
+    <Compile Include="graphics\NodeButton.py" />
+    <Compile Include="graphics\NodeData.py" />
+    <Compile Include="graphics\OSClickMonitor.py" />
+    <Compile Include="graphics\Port.py" />
+    <Compile Include="graphics\Scene.py" />
+    <Compile Include="graphics\Theme.py" />
+    <Compile Include="graphics\View.py" />
+    <Compile Include="graphics\WarmNode.py" />
+    <Compile Include="graphics\WarmNodeData.py" />
+    <Compile Include="graphics\__init.py" />
+    <Compile Include="main.py" />
+    <Compile Include="main_window.py" />
+    <Compile Include="utils\settings.py" />
+    <Compile Include="utils\__init.py" />
+    <Compile Include="widgets\demo_dialog.py" />
+    <Compile Include="widgets\pretty_dialog.py" />
+    <Compile Include="widgets\settings_dialog.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="icons\about_icon.png" />
+    <Content Include="icons\health_icon.png" />
+    <Content Include="icons\iconic.png" />
+    <Content Include="icons\tester.png" />
+    <Content Include="icons\warm_icon.PNG" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="graphics" />
+    <Folder Include="icons" />
+    <Folder Include="utils" />
+    <Folder Include="widgets\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>
