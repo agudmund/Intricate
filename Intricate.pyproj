@@ -41,6 +41,7 @@
     <Compile Include="graphics\__init.py" />
     <Compile Include="main.py" />
     <Compile Include="main_window.py" />
+    <Compile Include="tools\header_check.py" />
     <Compile Include="utils\settings.py" />
     <Compile Include="utils\__init.py" />
     <Compile Include="widgets\demo_dialog.py" />
@@ -48,6 +49,10 @@
     <Compile Include="widgets\settings_dialog.py" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include=".git\hooks\pre-commit" />
+    <Content Include=".git\hooks\pre-commit.ps1" />
+    <Content Include="Documents\Docstring Compliance Report.md" />
+    <Content Include="Documents\Python Header Compliance Guide.md" />
     <Content Include="icons\about_icon.png" />
     <Content Include="icons\health_icon.png" />
     <Content Include="icons\iconic.png" />
@@ -55,8 +60,12 @@
     <Content Include="icons\warm_icon.PNG" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include=".git\" />
+    <Folder Include=".git\hooks\" />
+    <Folder Include="Documents\" />
     <Folder Include="graphics" />
     <Folder Include="icons" />
+    <Folder Include="tools\" />
     <Folder Include="utils" />
     <Folder Include="widgets\" />
   </ItemGroup>

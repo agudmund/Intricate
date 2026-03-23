@@ -12,6 +12,10 @@ from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
+from widgets.pretty_dialog import PrettyDialog
+from widgets.settings_dialog import SettingsDialog
+from widgets.demo_dialog import DemoDialog
+
 class PrettyButton(QPushButton):
     """
     A warm and pretty button with its own specific defaults 🌿
@@ -106,7 +110,6 @@ class IntricateApp(QMainWindow):
         self._setupTopToolbar()
         self._setupTheAreaFormerlyKnownAsNodal()
         self._setupBottomToolbar()
-        self._add_dialog_buttons()
 
     def _setup_grid(self):
         """
@@ -452,9 +455,21 @@ class IntricateApp(QMainWindow):
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignVCenter)
         layout.addStretch()
-        layout.addWidget(button("Exid", clicked=self.close))   # "Exid" is not a typo
+        layout.addWidget(button("Demo", clicked=self._open_demo_dialog))
+        layout.addWidget(button("Settings", clicked=self._open_settings_dialog))
+        layout.addWidget(button("Exid", clicked=self.close))   # Note: "Exid" is not a typo, its an Exit button named Exid
 
         self.grid.addWidget(self.bottomToolbar, 2, 0)
+
+    def _open_settings_dialog(self):
+
+        dlg = SettingsDialog(self)
+        dlg.exec()
+
+    def _open_demo_dialog(self):
+
+        dlg = DemoDialog(self)
+        dlg.exec()
 
     # =========================================================================
     # Sessions
@@ -568,27 +583,3 @@ class IntricateApp(QMainWindow):
         self.fadeOut.start()
 
         print(f"Exid: Intricate will be back as soon as we can! ✨")
-
-    def _add_dialog_buttons(self):
-        from widgets.pretty_dialog import PrettyDialog
-        from widgets.settings_dialog import SettingsDialog
-        from widgets.demo_dialog import DemoDialog
-        # Add Settings and Demo dialog buttons to the top toolbar
-        settings_btn = PrettyButton("Settings", self)
-        settings_btn.clicked.connect(self._open_settings_dialog)
-        demo_btn = PrettyButton("Demo Dialog", self)
-        demo_btn.clicked.connect(self._open_demo_dialog)
-        # Insert after the last stretch in the top toolbar
-        layout = self.topToolbar.layout()
-        layout.insertWidget(layout.count() - 1, settings_btn)
-        layout.insertWidget(layout.count() - 1, demo_btn)
-
-    def _open_settings_dialog(self):
-        from widgets.settings_dialog import SettingsDialog
-        dlg = SettingsDialog(self)
-        dlg.exec()
-
-    def _open_demo_dialog(self):
-        from widgets.demo_dialog import DemoDialog
-        dlg = DemoDialog(self)
-        dlg.exec()
