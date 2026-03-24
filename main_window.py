@@ -193,6 +193,9 @@ class IntricateApp(QMainWindow):
         self.view    = IntricateView(self.scene)
 
         # ── Left sidebar ──────────────────────────────────────────────────────
+        self.sidebar_layout = QHBoxLayout(self.central)
+        self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        self.sidebar_layout.setSpacing(0)
         self.sidebar = self._build_sidebar()
 
         # ── Right reserved ────────────────────────────────────────────────────
@@ -220,12 +223,14 @@ class IntricateApp(QMainWindow):
         self.splitter.setStretchFactor(1, 1)
         self.splitter.setStretchFactor(2, 0)
 
-        layout = QHBoxLayout(self.central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self.splitter)
+        
+        self.sidebar_layout.addWidget(self.splitter)
 
         self.grid.addWidget(self.central, 1, 0)
+
+    # =================================================================================
+    # The actual sidebar
+    # =================================================================================
 
     def _build_sidebar(self) -> QWidget:
         """
@@ -237,9 +242,8 @@ class IntricateApp(QMainWindow):
         Categories:
             Canvas     — WarmNode, AboutNode, BezierNode
             Diagnostic — HealthNode (one per scene, button reflects this)
-
-        Image nodes are intentionally absent — drag and drop is their path.
         """
+
         sidebar = QWidget()
         sidebar.setFixedWidth(Theme.sidebarWidth())
         sidebar.setStyleSheet(f"background-color: {Theme.windowBg};")
@@ -252,33 +256,19 @@ class IntricateApp(QMainWindow):
         layout.setSpacing(Theme.sidebarButtonGap)
         layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
-        # ── Canvas category ───────────────────────────────────────────────────
-        layout.addWidget(self._sidebar_button(
-            icon     = Theme.iconAbout,
-            tooltip  = "About Node",
-            clicked  = self._spawn_about_node,
-        ))
-        layout.addWidget(self._sidebar_button(
-            icon     = Theme.iconWarm,
-            tooltip  = "Warm Node",
-            clicked  = self._spawn_warm_node,
-        ))
-        
-        layout.addWidget(self._sidebar_button(
-            icon     = Theme.iconPathCurtains,
-            tooltip  = "Bezier Node",
-            clicked  = self._spawn_bezier_node,
-        ))
+        tools = [
+            (Theme.iconAbout, self._spawn_about_node, "Sticky note"),
+            (Theme.iconWarm, self._spawn_warm_node, "Warm and Comfortable Writing Node"),
+            (Theme.iconImage, self._spawn_image_node, "The Glorious Image Node"),
+            (Theme.iconBezier, self._spawn_bezier_node, "The Prestigious Bezier Node"),
+            (Theme.iconHealth, self._spawn_health_node, "The Oddly Important Health Node"),
 
-        layout.addSpacing(Theme.sidebarCategoryGap)
+        ]
 
-        # ── Diagnostic category ───────────────────────────────────────────────
-        self._health_btn = self._sidebar_button(
-            icon     = Theme.iconHealth,
-            tooltip  = "Health Node (one per scene)",
-            clicked  = self._spawn_health_node,
-        )
-        layout.addWidget(self._health_btn)
+        for icon, slot, description in tools:
+            btn = button(icon_name=icon, clicked=slot,tooltip=description)
+            btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
+            layout.addWidget(btn)
 
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
         layout.addStretch()
@@ -344,11 +334,11 @@ class IntricateApp(QMainWindow):
         """Slider → progress bar mirror. Will drive fog alpha when fog arrives."""
         self.fog_progress.setValue(value)
 
-    def _sidebar_button(self, icon: str, tooltip: str, clicked) -> QPushButton:
-        """Square icon-only sidebar button via setup_iconic_button."""
-        btn = self.setup_iconic_button(clicked=clicked, icon=icon)
-        btn.setToolTip(tooltip)
-        return btn
+    # def _sidebar_button(self, icon: str, tooltip: str, clicked) -> QPushButton:
+    #     """Square icon-only sidebar button via setup_iconic_button."""
+    #     btn = self.setup_iconic_button(clicked=clicked, icon=icon)
+    #     btn.setToolTip(tooltip)
+    #     return btn
 
     # ─────────────────────────────────────────────────────────────────────────
     # NODE SPAWN ACTIONS
@@ -370,6 +360,11 @@ class IntricateApp(QMainWindow):
 
     def _spawn_health_node(self):
         self.scene.add_health_node(pos=self._viewport_center())
+
+    def _spawn_image_node(self):
+        self.scene.add_image_node(pos=self._viewport_center())
+
+
 
     # =========================================================================
     # The buttons and stuff at the bottom of the Ui

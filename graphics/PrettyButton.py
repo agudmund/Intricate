@@ -6,7 +6,8 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QPushButton
 from graphics.Theme import Theme
 
@@ -14,11 +15,13 @@ class PrettyButton(QPushButton):
     """
     A warm and pretty button with its own specific defaults 🌿
     """
-    def __init__(self, text="yay! 🌿", parent=None):
+    def __init__(self, text="yay! 🌿", icon_name=None, parent=None):
         super().__init__(text, parent)
         self.setFocusPolicy(Qt.NoFocus)
         self.setMinimumWidth(Theme.buttonMinWidth)
         self.setMinimumHeight(Theme.buttonMinHeight)
+        if icon_name:
+            self.set_pretty_icon(icon_name)
 
         # Apply our Python-driven styles
         self.update_style()
@@ -28,6 +31,13 @@ class PrettyButton(QPushButton):
         font.setPointSize(Theme.buttonFontSize)
         font.setBold(Theme.buttonFontBold)
         self.setFont(font)
+
+    def set_pretty_icon(self, icon_name):
+        """Fetches pixmap from Theme and applies it as a QIcon."""
+        pixmap = Theme.icon(icon_name)
+        if pixmap:
+            self.setIcon(QIcon(pixmap))
+            self.setIconSize(QSize(Theme.iconSize, Theme.iconSize))
 
     def update_style(self):
         # We use HexArgb to ensure that if we add transparency to the theme later,
@@ -54,30 +64,37 @@ class PrettyButton(QPushButton):
            }}
         """)
         
-
 def button(
-    text: str = "yay! 🌿",
-    parent=None,
+    text: str = None, 
+    icon_name: str = None, 
+    parent=None, 
     **kwargs
 ) -> QPushButton:
     """
-    Creates a fresh pretty button ready for layouts.
-    Special support for 'clicked=slot' (connects the clicked signal).
-    Other kwargs are passed to setters (e.g. fixedWidth=120, icon=..., etc.)
+    Creates a fresh pretty button. 
+    Now with intelligent property mapping for ToolTips and Icons.
     """
-    btn = PrettyButton(text, parent)
+    # 1. Initialize with our new icon support
+    btn = PrettyButton(text or "", icon_name=icon_name, parent=parent)
 
-    # Handle signal connections first
+    # 2. Handle ToolTip casing specifically (Designer-friendly)
+    if "tooltip" in kwargs:
+        btn.setToolTip(kwargs.pop("tooltip"))
+
+    # 3. Handle signal connections
     if "clicked" in kwargs:
         slot = kwargs.pop("clicked")
-        if slot is not None:
+        if slot:
             btn.clicked.connect(slot)
 
-    # Then apply remaining kwargs as setters
+    # 4. Apply remaining kwargs as setters (e.g., fixedWidth=120)
     for key, value in kwargs.items():
-        setter_name = f"set{key[0].upper() + key[1:]}"
+        # We capitalize the first letter to match Qt's setPropertyName pattern
+        setter_name = f"set{key[0].upper()}{key[1:]}"
         setter = getattr(btn, setter_name, None)
-        if setter and callable(setter):
+        if setter:
             setter(value)
-
+        else:
+            print(f"Warning: PrettyButton has no setter for '{key}' (tried {setter_name})")
+            
     return btn

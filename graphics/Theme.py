@@ -72,7 +72,10 @@ class Theme:
     iconConfirm                 = "icon_confirm.png"    # Node delete (confirm state)
     iconHealth                  = "health_icon.png"     # Health Node icon
     iconWarm                    = "warm_icon.png"       # Warm Node icon
-    iconAbout                   = "about_icon.png"       # About Node icon
+    iconAbout                   = "about_icon.png"      # About Node icon
+    iconImage                   = "image_icon.png"      # Image Node icon
+    iconBezier                  = "bezier_icon.png"     # Bezier Node icon
+    iconSize                    = 32
 
     # =========================================================================
     # COMBOBOX
