@@ -1,0 +1,69 @@
+✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
+Generated: 2026-03-23 18:30:30
+Location:  C:\Users\thisg\Desktop\Intricate
+Mode:      with cozy emojis
+────────────────────────────────────────────────────────────
+
+├── 📁 .github/
+│   └── 📄 copilot-instructions.md
+├── 📁 Documents/
+│   ├── 📄 Docstring Compliance Report.md
+│   └── 📄 Python Header Compliance Guide.md
+├── 📁 graphics/
+│   ├── 📄 __init.py
+│   ├── 📄 AboutNode.py
+│   ├── 📄 AboutNodeData.py
+│   ├── 📄 BaseNode.py
+│   ├── 📄 BezierNode.py
+│   ├── 📄 BezierNodeData.py
+│   ├── 📄 HealthNode.py
+│   ├── 📄 HealthNodeData.py
+│   ├── 📄 ImageNode.py
+│   ├── 📄 ImageNodeData.py
+│   ├── 📄 NodeBehaviour.py
+│   ├── 📄 NodeButton.py
+│   ├── 📄 NodeData.py
+│   ├── 📄 OSClickMonitor.py
+│   ├── 📄 Port.py
+│   ├── 📄 PrettyButton.py
+│   ├── 📄 Scene.py
+│   ├── 📄 Theme.py
+│   ├── 📄 View.py
+│   ├── 📄 WarmNode.py
+│   └── 📄 WarmNodeData.py
+├── 📁 icons/
+│   ├── 📄 about_icon.png
+│   ├── 📄 health_icon.png
+│   ├── 📄 I took a photo of it to show you.png
+│   ├── 📄 iconic.png
+│   ├── 📄 Our Love as Intricate as the patterns we impose.png
+│   ├── 📄 tester.png
+│   └── 📄 warm_icon.PNG
+├── 📁 tools/
+│   └── 📄 header_check.py
+├── 📁 utils/
+│   ├── 📄 __init.py
+│   ├── 📄 logger.py
+│   ├── 📄 settings - Copy.py
+│   └── 📄 settings.py
+├── 📁 widgets/
+│   ├── 📄 demo_dialog.py
+│   ├── 📄 pretty_dialog - Copy.py
+│   ├── 📄 pretty_dialog.py
+│   ├── 📄 settings_dialog - Copy.py
+│   └── 📄 settings_dialog.py
+├── 📄 .gitignore
+├── 📄 Intricate.pyproj
+├── 📄 Intricate.sln
+├── 📄 main.lnk
+├── 📄 main.py
+├── 📄 main_window.py
+├── 📄 nodal_config.ini
+├── 📄 README.md
+├── 📄 settings.toml
+└── 📄 The Thurr - Palette.png
+
+────────────────────────────────────────────────────────────
+Saved by cozy-snapshot.py  •  gentle sibling to cozy-tree.py
+Hidden: .git, __pycache__, gitignored items, empty folders
+Double-click or run anytime — add --print to see live ♡

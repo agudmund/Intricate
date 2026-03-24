@@ -11,56 +11,59 @@ from PySide6.QtCore import Qt
 from graphics.Theme import Theme
 import utils.settings as settings
 from pathlib import Path
+from graphics.PrettyButton import button
+from widgets.pretty_dialog import PrettyDialog
 
-class SettingsDialog(QDialog):
+class SettingsDialog(PrettyDialog):
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("The Soon To Be Beautiful Settings Window 🌱")
-        self.setModal(True)
-        self.setMinimumWidth(400)
-        self.tabs = QTabWidget(self)
+        super().__init__(parent, title="The Unnecciarily Nitpicky but Incredibly Beautiful Settings Window 🌱")
+        
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(600)
+
+        # Create your tabs
+        self.tabs = QTabWidget()
+        
+        # Add the tabs to the content layout from the template
+        self.content_layout.addWidget(self.tabs)
+        
         self._setup_tabs()
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.tabs)
-        btns = QHBoxLayout()
-        save_btn = QPushButton("Exid", self) # Again, Note : Exid is not a typo, its an exit button named Exid
-        save_btn.clicked.connect(self.save)
-        btns.addStretch()
-        btns.addWidget(save_btn)
-        layout.addLayout(btns)
 
     def _setup_tabs(self):
-        self.general_tab = QWidget()
-        self.theme_tab = QWidget()
-        self.about_tab = QWidget()
-        self.tabs.addTab(self.general_tab, "General")
-        self.tabs.addTab(self.theme_tab, "Theme")
-        self.tabs.addTab(self.about_tab, "About")
         self._setup_general_tab()
         self._setup_theme_tab()
 
     def _setup_general_tab(self):
-        layout = QVBoxLayout(self.general_tab)
-        layout.addWidget(QLabel("Coming soon, Future!", self.general_tab))
-        layout.addStretch()
+        """General Ui Settings"""
+        general_tab = QWidget()
+        gen_layout = QVBoxLayout(general_tab)
+        gen_layout.addWidget(QLabel("Coming soon, Future!"))
+        gen_layout.addStretch()
+        self.tabs.addTab(general_tab, "General")
 
     def _setup_theme_tab(self):
-        layout = QVBoxLayout(self.theme_tab)
-        self.icon_fields = {}
+        """Theme Settings"""
+        theme_tab = QWidget()
+        theme_layout = QVBoxLayout(theme_tab)
+        theme_layout.addWidget(QLabel("General Theme Settings"))
+
+        icon_fields = {}
         for attr in dir(Theme):
             if attr.startswith("icon") and isinstance(getattr(Theme, attr), str):
                 path = getattr(Theme, attr)
                 row = QHBoxLayout()
-                label = QLabel(attr, self.theme_tab)
-                field = QLineEdit(path, self.theme_tab)
-                browse = QPushButton("Browse", self.theme_tab)
+                label = QLabel(attr, theme_tab)
+                field = QLineEdit(path, theme_tab)
+                browse = QPushButton("Browse", theme_tab)
                 browse.clicked.connect(lambda _, a=attr, f=field: self._browse_icon(a, f))
                 row.addWidget(label)
                 row.addWidget(field)
                 row.addWidget(browse)
-                layout.addLayout(row)
-                self.icon_fields[attr] = field
-        layout.addStretch()
+                theme_layout.addLayout(row)
+                icon_fields[attr] = field
+
+        theme_layout.addStretch()
+        self.tabs.addTab(theme_tab, "Theme")
 
     def _browse_icon(self, attr, field):
         file, _ = QFileDialog.getOpenFileName(self, "Select Icon", str(Path(field.text()).parent), "Images (*.png *.jpg *.bmp)")
@@ -68,10 +71,3 @@ class SettingsDialog(QDialog):
             field.setText(file)
             # Clear icon cache for this filename
             Theme._icon_cache.pop(getattr(Theme, attr), None)
-
-    def save(self):
-        # Write icon paths to settings.toml
-        for attr, field in self.icon_fields.items():
-            settings.set_value("theme", attr, field.text())
-            Theme._icon_cache.pop(getattr(Theme, attr), None)
-        self.accept()

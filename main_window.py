@@ -391,14 +391,18 @@ class IntricateApp(QMainWindow):
         self.grid.addWidget(self.bottomToolbar, 2, 0)
 
     def _open_settings_dialog(self):
-
-        dlg = SettingsDialog(self)
-        dlg.exec()
+        # Because it's a QWidget now, we need to ensure it doesn't get garbage collected
+        if not hasattr(self, "_settings_dlg") or self._settings_dlg is None:
+            self._settings_dlg = SettingsDialog(self)
+        
+        self._settings_dlg.show()
+        self._settings_dlg.raise_()
+        self._settings_dlg.activateWindow()
 
     def _open_demo_dialog(self):
 
         dlg = DemoDialog(self)
-        dlg.exec()
+        dlg.show()
 
     # =========================================================================
     # Sessions

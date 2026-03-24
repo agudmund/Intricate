@@ -25,11 +25,13 @@ class Theme:
     layoutMargins       = (10, 5, 10, 5)
     handleHeightTop     = 35            # Top toolbar height — also the draggable area
     handleHeightBottom  = 100           # Bottom toolbar height
+    toolbarBg           = windowBg
 
     # Sidebar
     sidebarPadding      = 6             # Padding inside the sidebar around buttons
     sidebarButtonGap    = 6             # Gap between buttons in the sidebar
     sidebarCategoryGap  = 16            # Gap between category groups
+    windowRollTiming    = 600           # The pace timing of the window roll up
 
     # =========================================================================
     # BUTTONS
