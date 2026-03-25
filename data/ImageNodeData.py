@@ -8,7 +8,7 @@
 
 from dataclasses import dataclass, field
 from .NodeData import NodeData
-from .Theme import Theme
+from graphics.Theme import Theme
 
 
 @dataclass(slots=True)

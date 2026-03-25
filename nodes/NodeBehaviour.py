@@ -8,7 +8,7 @@
 
 import random
 from PySide6.QtCore import QVariantAnimation, QEasingCurve
-from .Theme import Theme
+from graphics.Theme import Theme
 
 
 # Pulse values resolved from Theme

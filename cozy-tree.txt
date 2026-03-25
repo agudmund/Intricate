@@ -1,5 +1,5 @@
 ✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
-Generated: 2026-03-23 18:30:30
+Generated: 2026-03-25 02:55:27
 Location:  C:\Users\thisg\Desktop\Intricate
 Mode:      with cozy emojis
 ────────────────────────────────────────────────────────────
@@ -33,9 +33,12 @@ Mode:      with cozy emojis
 │   └── 📄 WarmNodeData.py
 ├── 📁 icons/
 │   ├── 📄 about_icon.png
+│   ├── 📄 bezier_icon.png
 │   ├── 📄 health_icon.png
+│   ├── 📄 I Also Wrote This Poem Just For You.png
 │   ├── 📄 I took a photo of it to show you.png
 │   ├── 📄 iconic.png
+│   ├── 📄 image_icon.png
 │   ├── 📄 Our Love as Intricate as the patterns we impose.png
 │   ├── 📄 tester.png
 │   └── 📄 warm_icon.PNG
@@ -53,6 +56,7 @@ Mode:      with cozy emojis
 │   ├── 📄 settings_dialog - Copy.py
 │   └── 📄 settings_dialog.py
 ├── 📄 .gitignore
+├── 📄 cozy-tree.txt
 ├── 📄 Intricate.pyproj
 ├── 📄 Intricate.sln
 ├── 📄 main.lnk

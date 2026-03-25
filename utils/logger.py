@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Cozy times nodal playground - logger.py its really just a fancypants print statement wrapper
+-Intricate nodal playground - logger.py its really just a fancypants print statement wrapper
 -3-slot startup rotation with recycle bin safety net, matching build.py's rollover methodology for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

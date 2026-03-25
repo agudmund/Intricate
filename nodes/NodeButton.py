@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QGraphicsObject
 from PySide6.QtCore import Qt, QRectF, QPointF, QTimer
 from PySide6.QtGui import QPainter, QPixmap, QColor
 
-from .Theme import Theme
+from graphics.Theme import Theme
 
 
 # Display size in logical pixels — source icons are 2x (32×32) for crispness

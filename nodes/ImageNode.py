@@ -18,8 +18,8 @@ from PySide6.QtGui import (
 )
 
 from .BaseNode import BaseNode
-from .ImageNodeData import ImageNodeData
-from .Theme import Theme
+from data.ImageNodeData import ImageNodeData
+from graphics.Theme import Theme
 
 
 # Layout constants

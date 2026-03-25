@@ -7,7 +7,7 @@
 """
 
 from PySide6.QtWidgets import QLabel, QVBoxLayout
-from widgets.pretty_dialog import PrettyDialog
+from dialogs.pretty_dialog import PrettyDialog
 
 class DemoDialog(PrettyDialog):
     def __init__(self, parent=None):

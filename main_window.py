@@ -12,10 +12,10 @@ from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
-from graphics.PrettyButton import button
-from widgets.pretty_dialog import PrettyDialog
-from widgets.settings_dialog import SettingsDialog
-from widgets.demo_dialog import DemoDialog
+from widgets.PrettyButton import button
+from dialogs.pretty_dialog import PrettyDialog
+from dialogs.settings_dialog import SettingsDialog
+from dialogs.demo_dialog import DemoDialog
 
 
 class IntricateApp(QMainWindow):

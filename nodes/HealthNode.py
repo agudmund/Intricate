@@ -13,9 +13,9 @@ from PySide6.QtGui import QPainter, QFont, QColor, QPen
 from PySide6.QtWidgets import QApplication, QGraphicsProxyWidget
 
 from .BaseNode import BaseNode
-from .HealthNodeData import HealthNodeData
-from .OSClickMonitor import OSClickMonitor
-from .Theme import Theme
+from data.HealthNodeData import HealthNodeData
+from utils.OSClickMonitor import OSClickMonitor
+from graphics.Theme import Theme
 
 
 class HealthNode(BaseNode):
@@ -99,7 +99,7 @@ class HealthNode(BaseNode):
 
         try:
             gc.collect()
-            from .BaseNode import BaseNode as _BaseNode
+            from nodes.BaseNode import BaseNode as _BaseNode
 
             try:
                 self._living_nodes = sum(

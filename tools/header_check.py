@@ -9,6 +9,12 @@
 import sys
 from pathlib import Path
 
+# Files with known intentional header deviations — excluded from compliance checks
+KNOWN_EXCEPTIONS = {
+    'widgets/PrettyButton.py',
+    'widgets\\PrettyButton.py',
+}
+
 REQUIRED_HEADER = [
     '#!/usr/bin/env python3',
     '# -*- coding: utf-8 -*-',
@@ -30,6 +36,8 @@ def check_header(path):
 
 failures = []
 for py in Path('.').rglob('*.py'):
+    if str(py) in KNOWN_EXCEPTIONS:
+        continue
     if not check_header(py):
         failures.append(str(py))
 

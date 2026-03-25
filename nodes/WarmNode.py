@@ -11,8 +11,8 @@ from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
 from .BaseNode import BaseNode
-from .WarmNodeData import WarmNodeData
-from .Theme import Theme
+from data.WarmNodeData import WarmNodeData
+from graphics.Theme import Theme
 
 
 # Layout constants

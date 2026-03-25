@@ -11,8 +11,8 @@ from PySide6.QtCore import Qt
 from graphics.Theme import Theme
 import utils.settings as settings
 from pathlib import Path
-from graphics.PrettyButton import button
-from widgets.pretty_dialog import PrettyDialog
+from widgets.PrettyButton import button
+from dialogs.pretty_dialog import PrettyDialog
 
 class SettingsDialog(PrettyDialog):
     def __init__(self, parent=None):

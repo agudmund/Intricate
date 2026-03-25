@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QW
 from PySide6.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, QSize, QRect,QAbstractAnimation
 from PySide6.QtGui import QPainter, QColor, QIcon
 from graphics.Theme import Theme
-from graphics.PrettyButton import button
+from widgets.PrettyButton import button
 from PySide6.QtCore import QParallelAnimationGroup, QPropertyAnimation, QEasingCurve
 
 class PrettyDialog(QWidget): # Switched from QDialog

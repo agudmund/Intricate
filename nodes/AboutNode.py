@@ -11,8 +11,8 @@ from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QFont, QColor
 
 from .BaseNode import BaseNode
-from .AboutNodeData import AboutNodeData
-from .Theme import Theme
+from data.AboutNodeData import AboutNodeData
+from graphics.Theme import Theme
 
 
 class AboutNode(BaseNode):

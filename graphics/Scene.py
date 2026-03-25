@@ -34,7 +34,7 @@ class IntricateScene(QGraphicsScene):
         """
         Add a HealthNode at pos. One per scene — returns existing if present.
         """
-        from .HealthNode import HealthNode
+        from nodes.HealthNode import HealthNode
 
         for item in self.items():
             if isinstance(item, HealthNode):
@@ -48,7 +48,7 @@ class IntricateScene(QGraphicsScene):
 
     def add_warm_node(self, pos: QPointF | None = None):
         """Add a WarmNode at pos."""
-        from .WarmNode import WarmNode
+        from nodes.WarmNode import WarmNode
         node = WarmNode()
         if pos is not None:
             node.setPos(pos)
@@ -57,7 +57,7 @@ class IntricateScene(QGraphicsScene):
 
     def add_about_node(self, pos: QPointF | None = None):
         """Add an AboutNode at pos."""
-        from .AboutNode import AboutNode
+        from nodes.AboutNode import AboutNode
         node = AboutNode()
         if pos is not None:
             node.setPos(pos)
@@ -66,7 +66,7 @@ class IntricateScene(QGraphicsScene):
 
     def add_bezier_node(self, pos: QPointF | None = None):
         """Add a BezierNode at pos."""
-        from .BezierNode import BezierNode
+        from nodes.BezierNode import BezierNode
         node = BezierNode()
         if pos is not None:
             node.setPos(pos)
@@ -80,7 +80,7 @@ class IntricateScene(QGraphicsScene):
         Called by the Node button (no path, opens file browser on double-click)
         and by View.dropEvent (path provided directly from the dropped file).
         """
-        from .ImageNode import ImageNode
+        from nodes.ImageNode import ImageNode
 
         node = ImageNode()
         if pos is not None:

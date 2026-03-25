@@ -11,9 +11,9 @@ from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsDropShadowEffect
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath
 
-from .NodeData import NodeData
+from data.NodeData import NodeData
 from .NodeBehaviour import NodeBehaviour
-from .Theme import Theme
+from graphics.Theme import Theme
 from .NodeButton import NodeButton, BUTTON_SIZE
 
 
@@ -257,7 +257,7 @@ class BaseNode(QGraphicsRectItem):
     def _create_ports(self):
         """Instantiate ports as child items, hidden until wiring mode is enabled."""
         # Port import is local to avoid circular imports at module load time
-        from .Port import Port
+        from graphics.Port import Port
         self.input_port  = Port(self, is_output=False)
         self.output_port = Port(self, is_output=True)
         self._place_ports()

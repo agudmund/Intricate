@@ -11,8 +11,8 @@ from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QPainterPath, QPen, QColor, QBrush
 
 from .BaseNode import BaseNode
-from .BezierNodeData import BezierNodeData
-from .Theme import Theme
+from data.BezierNodeData import BezierNodeData
+from graphics.Theme import Theme
 
 
 # Visual constants resolved from Theme at import time
