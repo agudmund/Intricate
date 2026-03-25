@@ -9,7 +9,11 @@
 
 from PySide6.QtGui import QColor, QPixmap, QPainter, QBrush
 from pathlib import Path
+import os as _os
 import utils.settings as settings
+from utils.logger import setup_logger as _setup_logger
+
+_log = _setup_logger("theme")
 
 
 _MISSING_ICON = "__missing__"   # Sentinel — Theme.icon() draws a circle for this
@@ -186,35 +190,88 @@ class Theme(metaclass=_ThemeMeta):
 
     _icon_cache: dict = {}
 
+    # Vault subfolder for icons — matches the vault's one-level structure
+    _VAULT_SUBFOLDER = "icons"
+
+    @classmethod
+    def _resolve_icon_path(cls, filename: str) -> Path | None:
+        """
+        Resolve a filename to an absolute path using the two-level lookup:
+
+            1. ./icons/  — local project folder, ships with the repo.
+                           Project-specific overrides always win.
+            2. $SingleSharedBraincell_AssetVault/icons/  — personal vault.
+                           Never committed. Anyone outside the organisation
+                           gets circles instead, which is correct behaviour.
+
+        Returns the first Path that exists, or None if neither has the file.
+        """
+        from utils.logger import TRACE
+
+        # 1. Local project icons/ — always checked first
+        local = Path(__file__).parent.parent / "icons" / filename
+        _log.log(TRACE, f"[icon resolve] '{filename}' → checking local: {local}")
+        if local.exists():
+            _log.debug(f"[icon resolve] '{filename}' → found locally: {local}")
+            return local
+        _log.log(TRACE, f"[icon resolve] '{filename}' → not in local icons/")
+
+        # 2. Personal asset vault
+        vault_root = _os.environ.get("SingleSharedBraincell_AssetVault")
+        if not vault_root:
+            _log.log(TRACE, f"[icon resolve] '{filename}' → SingleSharedBraincell_AssetVault not set")
+        else:
+            vault = Path(vault_root) / cls._VAULT_SUBFOLDER / filename
+            _log.log(TRACE, f"[icon resolve] '{filename}' → checking vault: {vault}")
+            if vault.exists():
+                _log.debug(f"[icon resolve] '{filename}' → found in vault: {vault}")
+                return vault
+            else:
+                _log.log(TRACE, f"[icon resolve] '{filename}' → not in vault (vault root: {vault_root})")
+
+        _log.log(TRACE, f"[icon resolve] '{filename}' → not found anywhere — circle fallback")
+        return None
+
     @classmethod
     def icon(cls, filename: str | None, fallback_color: str = "#6b5a47") -> QPixmap:
         """
         Return the cached QPixmap for filename, loading on first request.
 
-        Resolves filename relative to the icons/ folder at the project root.
-        If filename is None, empty, or the file is missing — generates a
-        filled circle in fallback_color. This is the honest representation
-        of 'no icon configured' and requires no fallback values elsewhere.
+        Resolution order:
+            1. ./icons/filename                                — local override
+            2. $SingleSharedBraincell_AssetVault/icons/filename — personal vault
+            3. _make_circle()                                  — honest fallback
 
-        Called by every button and node that needs an icon. The cache means
-        thirty nodes sharing the same delete icon share one GPU texture.
+        If filename is None, empty, or the missing-icon sentinel — skips
+        resolution entirely and returns a circle immediately.
+
+        The cache key is the filename string. Once loaded from either location
+        the pixmap is cached — zero per-frame resolution cost.
         """
+        from utils.logger import TRACE
+
         # None, empty string, or the missing-icon sentinel → circle immediately
         if not filename or filename == _MISSING_ICON:
+            _log.log(TRACE, f"[icon] sentinel/None → circle (fallback_color={fallback_color})")
             return cls._make_circle(fallback_color)
 
         if filename in cls._icon_cache:
+            _log.log(TRACE, f"[icon] '{filename}' → cache hit")
             return cls._icon_cache[filename]
 
-        icon_path = Path(__file__).parent.parent / "icons" / filename
+        _log.log(TRACE, f"[icon] '{filename}' → cache miss, resolving...")
         pix = None
-
-        if icon_path.exists():
-            candidate = QPixmap(str(icon_path))
+        resolved = cls._resolve_icon_path(filename)
+        if resolved:
+            candidate = QPixmap(str(resolved))
             if not candidate.isNull():
                 pix = candidate
-
+                _log.debug(f"[icon] '{filename}' → loaded from {resolved}")
+            else:
+                _log.warning(f"[icon] '{filename}' → file exists at {resolved} but QPixmap is null")
+        
         if pix is None:
+            _log.log(TRACE, f"[icon] '{filename}' → drawing circle fallback")
             pix = cls._make_circle(fallback_color)
 
         cls._icon_cache[filename] = pix

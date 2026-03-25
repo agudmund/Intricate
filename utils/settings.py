@@ -17,16 +17,16 @@ from PySide6.QtCore import QFileSystemWatcher, QObject, Signal
 # PATH
 # ─────────────────────────────────────────────────────────────────────────────
 
-# INTRICATE_SETTINGS env var overrides the default path.
-# Supports local paths, network shares, or any future remote resolver.
+# SingleSharedBraincell_SettingsFile env var points all apps in the family
+# at the same shared settings.toml — Intricate, The Settlers, any future app.
+# Organisation-scoped so the contract is shared across all projects.
 # Falls back to settings.toml next to main.py for development convenience.
-# Set it to any absolute path before launching:
-#   Windows:  set INTRICATE_SETTINGS=C:\Users\you\AppData\Roaming\Intricate\settings.toml
-#   Or point it at a network share, a mounted cloud drive, anything the OS can read.
+#   Windows:  set SingleSharedBraincell_SettingsFile=C:\Users\you\Shared\settings.toml
 import os as _os
+_ENV_VAR       = "SingleSharedBraincell_SettingsFile"
 _SETTINGS_PATH = Path(
     _os.environ.get(
-        "INTRICATE_SETTINGS",
+        _ENV_VAR,
         str(Path(__file__).resolve().parent.parent / "settings.toml")
     )
 )
