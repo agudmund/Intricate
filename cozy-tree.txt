@@ -1,36 +1,33 @@
 ✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
-Generated: 2026-03-25 02:55:27
+Generated: 2026-03-25 04:03:56
 Location:  C:\Users\thisg\Desktop\Intricate
 Mode:      with cozy emojis
 ────────────────────────────────────────────────────────────
 
+├── 📁 .claude/
+│   └── 📄 settings.local.json
 ├── 📁 .github/
 │   └── 📄 copilot-instructions.md
+├── 📁 data/
+│   ├── 📄 AboutNodeData.py
+│   ├── 📄 BezierNodeData.py
+│   ├── 📄 HealthNodeData.py
+│   ├── 📄 ImageNodeData.py
+│   ├── 📄 NodeData.py
+│   └── 📄 WarmNodeData.py
+├── 📁 dialogs/
+│   ├── 📄 demo_dialog.py
+│   ├── 📄 pretty_dialog.py
+│   └── 📄 settings_dialog.py
 ├── 📁 Documents/
 │   ├── 📄 Docstring Compliance Report.md
 │   └── 📄 Python Header Compliance Guide.md
 ├── 📁 graphics/
-│   ├── 📄 __init.py
-│   ├── 📄 AboutNode.py
-│   ├── 📄 AboutNodeData.py
-│   ├── 📄 BaseNode.py
-│   ├── 📄 BezierNode.py
-│   ├── 📄 BezierNodeData.py
-│   ├── 📄 HealthNode.py
-│   ├── 📄 HealthNodeData.py
-│   ├── 📄 ImageNode.py
-│   ├── 📄 ImageNodeData.py
-│   ├── 📄 NodeBehaviour.py
-│   ├── 📄 NodeButton.py
-│   ├── 📄 NodeData.py
-│   ├── 📄 OSClickMonitor.py
+│   ├── 📄 __init__.py
 │   ├── 📄 Port.py
-│   ├── 📄 PrettyButton.py
 │   ├── 📄 Scene.py
 │   ├── 📄 Theme.py
-│   ├── 📄 View.py
-│   ├── 📄 WarmNode.py
-│   └── 📄 WarmNodeData.py
+│   └── 📄 View.py
 ├── 📁 icons/
 │   ├── 📄 about_icon.png
 │   ├── 📄 bezier_icon.png
@@ -42,19 +39,27 @@ Mode:      with cozy emojis
 │   ├── 📄 Our Love as Intricate as the patterns we impose.png
 │   ├── 📄 tester.png
 │   └── 📄 warm_icon.PNG
+├── 📁 nodes/
+│   ├── 📄 AboutNode.py
+│   ├── 📄 BaseNode.py
+│   ├── 📄 BezierNode.py
+│   ├── 📄 HealthNode.py
+│   ├── 📄 ImageNode.py
+│   ├── 📄 NodeBehaviour.py
+│   ├── 📄 NodeButton.py
+│   └── 📄 WarmNode.py
 ├── 📁 tools/
 │   └── 📄 header_check.py
 ├── 📁 utils/
-│   ├── 📄 __init.py
+│   ├── 📄 __init__.py
 │   ├── 📄 logger.py
+│   ├── 📄 OSClickMonitor.py
 │   ├── 📄 settings - Copy.py
 │   └── 📄 settings.py
 ├── 📁 widgets/
-│   ├── 📄 demo_dialog.py
 │   ├── 📄 pretty_dialog - Copy.py
-│   ├── 📄 pretty_dialog.py
-│   ├── 📄 settings_dialog - Copy.py
-│   └── 📄 settings_dialog.py
+│   ├── 📄 PrettyButton.py
+│   └── 📄 settings_dialog - Copy.py
 ├── 📄 .gitignore
 ├── 📄 cozy-tree.txt
 ├── 📄 Intricate.pyproj
