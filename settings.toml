@@ -1,8 +1,13 @@
+# Intricate — settings.toml
+# Shared contract between Intricate and The Settlers.
+# Intricate reads and watches this file. The Settlers writes to it.
+# Neither project imports the other. This file is the entire handshake.
+
 [window]
-width = 900
+width  = 900
 height = 700
-x = 100
-y = 100
+x      = 100
+y      = 100
 
 [canvas]
 fog_alpha = 180
@@ -13,10 +18,23 @@ last_loaded = ""
 [ui]
 sidebar_visible = true
 
-[theme]
-iconAbout = "about_icon.png"
-iconConfirm = "icon_confirm.png"
-iconDelete = "iconic.png"
-iconHealth = "health_icon.png"
-iconPathCurtains = "iconic.png"
-iconWarm = "warm_icon.png"
+[theme.icons]
+# Filenames only — resolved relative to icons/ at the project root.
+# The Settlers writes these when the user browses for a new icon.
+# Intricate clears its icon cache for the affected key and repaints.
+curtains = "iconic.png"
+delete   = "iconic.png"
+confirm  = "icon_confirm.png"
+health   = "health_icon.png"
+warm     = "warm_icon.PNG"
+about    = "about_icon.png"
+bezier   = "bezier_icon.png"
+image    = "image_icon.png"
+
+[theme.colors]
+# Hex strings. The Settlers writes these when the user picks a color.
+# Intricate reloads Theme constants and triggers a full scene repaint.
+window_bg      = "#282828"
+primary_border = "#6b5a47"
+text_primary   = "#d2d1cf"
+backdrop       = "#2a2a3a"

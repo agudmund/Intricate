@@ -1,5 +1,5 @@
 ✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
-Generated: 2026-03-25 04:03:56
+Generated: 2026-03-25 04:08:10
 Location:  C:\Users\thisg\Desktop\Intricate
 Mode:      with cozy emojis
 ────────────────────────────────────────────────────────────
@@ -9,6 +9,7 @@ Mode:      with cozy emojis
 ├── 📁 .github/
 │   └── 📄 copilot-instructions.md
 ├── 📁 data/
+│   ├── 📄 __init__.py
 │   ├── 📄 AboutNodeData.py
 │   ├── 📄 BezierNodeData.py
 │   ├── 📄 HealthNodeData.py
@@ -40,6 +41,7 @@ Mode:      with cozy emojis
 │   ├── 📄 tester.png
 │   └── 📄 warm_icon.PNG
 ├── 📁 nodes/
+│   ├── 📄 __init__.py
 │   ├── 📄 AboutNode.py
 │   ├── 📄 BaseNode.py
 │   ├── 📄 BezierNode.py
