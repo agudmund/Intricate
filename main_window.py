@@ -13,9 +13,6 @@ from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
 from widgets.PrettyButton import button
-from dialogs.pretty_dialog import PrettyDialog
-from dialogs.settings_dialog import SettingsDialog
-from dialogs.demo_dialog import DemoDialog
 
 
 class IntricateApp(QMainWindow):
@@ -124,8 +121,9 @@ class IntricateApp(QMainWindow):
         return self.project_selector
 
     def setup_iconic_button(self, clicked=None, icon: str | None = None) -> QPushButton:
-            """Creates a square icon-only button. icon= filename via Theme.icon()."""
-            btn = button("", icon=QIcon(Theme.icon(Theme.iconPathCurtains)))
+            """Creates a square icon-only button. icon= filename string via Theme.icon()."""
+            icon_name = icon if icon is not None else Theme.iconCurtains
+            btn = button("", icon_name=icon_name)
             btn.setFixedSize(QSize(Theme.iconButtonSize, Theme.iconButtonSize))
             btn.setIconSize(QSize(
                 Theme.iconButtonSize - Theme.iconPadding,
@@ -492,11 +490,34 @@ class IntricateApp(QMainWindow):
         self.fadeIn.setEasingCurve(QEasingCurve.OutCubic) # Smooth deceleration
         self.fadeIn.start()
 
+    def _cleanup_pycache(self) -> None:
+        """
+        Remove all __pycache__ folders and .pyc files under the project root.
+        Equivalent to the 'housekeeping' PowerShell alias.
+        Always runs fresh on next launch — no stale bytecode, no surprises.
+        Non-fatal: if cleanup fails for any reason the app still exits cleanly.
+        """
+        import shutil
+        from pathlib import Path
+        root = Path(__file__).resolve().parent
+        cleaned = 0
+        try:
+            for item in root.rglob("__pycache__"):
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                    cleaned += 1
+            for item in root.rglob("*.pyc"):
+                item.unlink(missing_ok=True)
+            print(f"Python cache cleaned! ({cleaned} __pycache__ folders removed) ✨")
+        except Exception as e:
+            print(f"Cache cleanup skipped: {e}")
+
     def closeEvent(self, event):
         """
         It should be a joyful moment because now we can look forward to seeing each other later.
         """
         if self.windowOpacity() <= 0.0:
+            self._cleanup_pycache()
             event.accept()
             return
 

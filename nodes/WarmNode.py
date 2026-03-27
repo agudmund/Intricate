@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/WarmNode.py WarmNode class
--The main content node. Free-form text with an emoji accent and editable title for enjoying
+-Intricate - graphics/WarmNode.py
+-The main content node. Free-form text with an emoji accent and editable title.
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit, QGraphicsItem
+import subprocess
+from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
-from .BaseNode import BaseNode
+from nodes.BaseNode import BaseNode
 from data.WarmNodeData import WarmNodeData
 from graphics.Theme import Theme
 
@@ -101,10 +102,7 @@ class WarmNode(BaseNode):
         self._editor_proxy = QGraphicsProxyWidget(self)
         self._editor_proxy.setWidget(self._editor)
         self._editor_proxy.setGeometry(self._body_rect())
-        self._editor_proxy.setFlag(QGraphicsItem.ItemIsFocusable)  # Accept focus on first click
         self._editor_proxy.show()   # WarmNode shows editor by default — it IS the content
-
-        self.setFocusProxy(self._editor_proxy)
 
     def _on_text_changed(self) -> None:
         """Sync text to data on every keystroke — no explicit commit needed."""
@@ -115,29 +113,63 @@ class WarmNode(BaseNode):
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _launch_editor(self) -> None:
+        """
+        Launch the external warm node editor as a peer process.
+
+        Path is read from settings.toml [apps] warm_editor at call time —
+        never cached, so changing the path in The Settlers takes effect
+        immediately without restarting Intricate.
+
+        Falls back to notepad.exe if no path is configured.
+        Fires and forgets — Intricate doesn't own the child process.
+        """
+        import utils.settings as _settings
+        editor_path = _settings.get("apps", "warm_editor", "").strip()
+        if not editor_path:
+            editor_path = "notepad.exe"
+        try:
+            subprocess.Popen([editor_path])
+        except FileNotFoundError:
+            # Editor not found — log quietly, don't crash the canvas
+            try:
+                from utils.logger import setup_logger
+                setup_logger("warmnnode").warning(
+                    f"[WarmNode] Editor not found: '{editor_path}' — "
+                    f"update [apps] warm_editor in settings.toml"
+                )
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                from utils.logger import setup_logger
+                setup_logger("warmnode").error(f"[WarmNode] Failed to launch editor: {e}")
+            except Exception:
+                pass
+
     def mouseDoubleClickEvent(self, event) -> None:
-        """Focus the body editor on double-click anywhere in the body zone."""
-        if self._body_rect().contains(event.pos()):
+        """
+        Route double-click by zone:
+
+            Title zone  → launch external editor (Notepad++ Duplex+ or fallback)
+            Body zone   → focus the inline QTextEdit editor
+        """
+        pos = event.pos()
+
+        if self._title_rect().contains(pos) or self._emoji_rect().contains(pos):
+            self._launch_editor()
+            event.accept()
+            return
+
+        if self._body_rect().contains(pos):
             if self.scene() and self.scene().views():
                 self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
             self._editor_proxy.setFocus()
             self._editor.setFocus(Qt.MouseFocusReason)
             event.accept()
             return
-        super().mouseDoubleClickEvent(event)
 
-    def mousePressEvent(self, event):
-        # Clicked the body? Direct to text.
-        if self._body_rect().contains(event.pos()):
-            self._editor.setFocus(Qt.MouseFocusReason)
-            event.accept()
-            return
-            
-        # Clicked the header? Clear text focus so we can drag cleanly.
-        else:
-            self._editor.clearFocus()
-            
-        super().mousePressEvent(event)
+        super().mouseDoubleClickEvent(event)
 
     def focusOutEvent(self, event) -> None:
         """Restore view focus policy when the node loses focus."""

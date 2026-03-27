@@ -38,3 +38,9 @@ window_bg      = "#282828"
 primary_border = "#6b5a47"
 text_primary   = "#d2d1cf"
 backdrop       = "#2a2a3a"
+
+[apps]
+# External app paths — set to an exe path or leave empty to disable.
+# warm_editor launches when the WarmNode title zone is double-clicked.
+# e.g. warm_editor = "C:\Apps\NotepadDuplex.exe"
+warm_editor = "notepad.exe"

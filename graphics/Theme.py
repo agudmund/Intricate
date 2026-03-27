@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/Theme.py
--Live view over settings.toml. Reads from settings, exposes as Python attributes.
--Helper methods for QPixmap caching, QColor construction, and derived values.
--Built using a single shared braincell by Yours Truly and various Intelligences
+Single Shared Braincell - graphics/Theme.py
+Live view over settings.toml. Reads from settings, exposes as Python attributes.
+Helper methods for QPixmap caching, QColor construction, and derived values.
+App-agnostic — all apps in the family read from this, override locally if needed.
+Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 from PySide6.QtGui import QColor, QPixmap, QPainter, QBrush
@@ -14,7 +15,6 @@ import utils.settings as settings
 from utils.logger import setup_logger as _setup_logger
 
 _log = _setup_logger("theme")
-
 
 _MISSING_ICON = "__missing__"   # Sentinel — Theme.icon() draws a circle for this
 
@@ -34,32 +34,42 @@ class _ThemeMeta(type):
     no empty plates, no changes needed anywhere else ever.
     """
     def __getattr__(cls, name: str) -> str:
-        return _MISSING_ICON
+        # Guard: only intercept iconXxx attributes — not the icon() method itself
+        # or any other short name that happens to start with "icon".
+        # A dynamic icon attribute is always "icon" + at least one more character
+        # that is uppercase (camelCase convention from the TOML key transform).
+        if name.startswith("icon") and len(name) > 4 and name[4].isupper():
+            return _MISSING_ICON
+        raise AttributeError(
+            f"type object 'Theme' has no attribute '{name}'"
+        )
 
 
 class Theme(metaclass=_ThemeMeta):
     """
-    Single source of truth for all visual values across the entire app.
+    Single source of truth for all visual values across the entire app family.
 
     Values flow in one direction:
         settings.toml → utils/settings.py → Theme → every widget and node
 
-    Theme never writes to settings.toml directly — that's settings.py's job.
-    When settings.toml changes (written by The Settlers or anyone else),
-    settings.py calls Theme.reload() which pulls new values in and clears
-    the icon cache so repaints pick up the changes automatically.
+    Theme never writes to settings.toml directly — that's The Settlers' job.
+    When settings.toml changes, settings.py calls Theme.reload() which pulls
+    new values in and clears the icon cache so repaints pick up changes
+    automatically.
 
-    Hardcoded values here are only those that are structural constants —
-    things that are genuinely not user-configurable and have no reason to
-    live in a config file (animation physics, minimum sizes, padding ratios).
-    Everything the user might want to change lives in settings.toml.
+    Hardcoded values here are structural constants only — things that are
+    genuinely not user-configurable and have no reason to live in a config
+    file (animation physics, minimum sizes, padding ratios). Everything the
+    user might want to change lives in settings.toml.
     """
+
+
 
     # =========================================================================
     # GLOBAL — sourced from [theme.colors] in settings.toml
     # =========================================================================
-    # These are populated by reload() at startup and on every file change.
-    # Accessing them before reload() runs returns the hardcoded fallback below.
+    # Populated by reload() at startup and on every file change.
+    # Accessing before reload() runs returns the hardcoded fallback below.
 
     windowBg        = "#282828"
     primaryBorder   = "#6b5a47"
@@ -199,12 +209,10 @@ class Theme(metaclass=_ThemeMeta):
         Resolve a filename to an absolute path using the two-level lookup:
 
             1. ./icons/  — local project folder, ships with the repo.
-                           Project-specific overrides always win.
-            2. $SingleSharedBraincell_AssetVault/icons/  — personal vault.
-                           Never committed. Anyone outside the organisation
-                           gets circles instead, which is correct behaviour.
+            2. $SingleSharedBraincell_AssetVault/icons/ — personal asset vault.
 
-        Returns the first Path that exists, or None if neither has the file.
+        Local always wins over the vault so per-project overrides are respected.
+        Returns None if the file is not found in either location.
         """
         from utils.logger import TRACE
 
@@ -238,11 +246,11 @@ class Theme(metaclass=_ThemeMeta):
         Return the cached QPixmap for filename, loading on first request.
 
         Resolution order:
-            1. ./icons/filename                                — local override
-            2. $SingleSharedBraincell_AssetVault/icons/filename — personal vault
-            3. _make_circle()                                  — honest fallback
+            1. ./icons/filename                                    — local override
+            2. $SingleSharedBraincell_AssetVault/icons/filename   — personal vault
+            3. _make_circle()                                      — honest fallback
 
-        If filename is None, empty, or the missing-icon sentinel — skips
+        If filename is None, empty, or the _MISSING_ICON sentinel — skips
         resolution entirely and returns a circle immediately.
 
         The cache key is the filename string. Once loaded from either location
@@ -269,7 +277,7 @@ class Theme(metaclass=_ThemeMeta):
                 _log.debug(f"[icon] '{filename}' → loaded from {resolved}")
             else:
                 _log.warning(f"[icon] '{filename}' → file exists at {resolved} but QPixmap is null")
-        
+
         if pix is None:
             _log.log(TRACE, f"[icon] '{filename}' → drawing circle fallback")
             pix = cls._make_circle(fallback_color)
@@ -295,7 +303,7 @@ class Theme(metaclass=_ThemeMeta):
     def invalidate_icon(cls, filename: str) -> None:
         """
         Remove a filename from the icon cache.
-        Called by Theme.reload() when settings.toml reports a new icon path.
+        Called by reload() when settings.toml reports a new icon path.
         Next call to Theme.icon(filename) will reload from disk.
         """
         cls._icon_cache.pop(filename, None)
@@ -318,81 +326,98 @@ class Theme(metaclass=_ThemeMeta):
         Also called once at startup from main.py after settings are loaded.
 
         Order of operations:
-            1. Read colors from [theme.colors] — update class attributes
-            2. Read icons from [theme.icons] — update filename attributes
+            1. Read colors from [theme.colors]  — update class attributes
+            2. Read icons from [theme.icons]    — update filename attributes dynamically
             3. Clear icon cache for any filename that changed
-            4. Dependent attributes (combobox colors etc.) are recalculated
+            4. Dependent attributes (combobox colors etc.) recalculated
                from the new base values
         """
         # ── Colors ────────────────────────────────────────────────────────────
         colors = settings.get_section("theme").get("colors", {})
 
         if "window_bg" in colors:
-            cls.windowBg        = colors["window_bg"]
-            cls.toolbarBg       = cls.windowBg
+            cls.windowBg           = colors["window_bg"]
+            cls.toolbarBg          = cls.windowBg
             cls.buttonPrimaryColor = cls.windowBg
-            cls.buttonBg        = cls.windowBg
-            cls.buttonBgHover   = cls.windowBg
-            cls.comboboxBg      = cls.windowBg
+            cls.buttonBg           = cls.windowBg
+            cls.buttonBgHover      = cls.windowBg
+            cls.comboboxBg         = cls.windowBg
 
         if "primary_border" in colors:
-            cls.primaryBorder       = colors["primary_border"]
-            cls.toolbarBorder       = cls.primaryBorder
-            cls.buttonBorder        = cls.primaryBorder
-            cls.buttonBorderHover   = cls.primaryBorder
-            cls.nodeBorder          = cls.primaryBorder
-            cls.comboboxBorder      = cls.primaryBorder
-            cls.bezierHandleColor   = cls.primaryBorder
+            cls.primaryBorder     = colors["primary_border"]
+            cls.toolbarBorder     = cls.primaryBorder
+            cls.buttonBorder      = cls.primaryBorder
+            cls.buttonBorderHover = cls.primaryBorder
+            cls.nodeBorder        = cls.primaryBorder
+            cls.comboboxBorder    = cls.primaryBorder
+            cls.bezierHandleColor = cls.primaryBorder
 
         if "text_primary" in colors:
-            cls.textPrimary         = colors["text_primary"]
-            cls.comboboxText        = cls.textPrimary
-            cls.nodeBorderSelected  = cls.textPrimary
+            cls.textPrimary        = colors["text_primary"]
+            cls.comboboxText       = cls.textPrimary
+            cls.nodeBorderSelected = cls.textPrimary
 
         if "backdrop" in colors:
-            cls.backDrop        = colors["backdrop"]
-            cls.comboboxBgOpen  = cls.backDrop
+            cls.backDrop       = colors["backdrop"]
+            cls.comboboxBgOpen = cls.backDrop
 
         # ── Icons ─────────────────────────────────────────────────────────────
-        # Attributes are created dynamically via setattr — they don't exist
-        # on Theme until the TOML puts them there. Callsites use
-        # getattr(Theme, 'iconWarm', None) so Theme.icon() receives None
-        # and generates the circle fallback if the TOML hasn't loaded yet.
+        # Fully dynamic — no closed icon_map. Every key present in [theme.icons]
+        # becomes a Theme attribute automatically:
+        #   "curtains" → Theme.iconCurtains
+        #   "close"    → Theme.iconClose
+        #   "anything" → Theme.iconAnything
         #
-        # If a key is present in icon_map but absent from the TOML:
-        #   - invalidate any cached pixmap for the old filename
-        #   - remove the attribute from Theme entirely
-        # This ensures a missing TOML entry produces a circle on next paint,
-        # even on a warm cache from a previous load.
-        icon_map = {
-            "curtains": "iconPathCurtains",
-            "delete":   "iconDelete",
-            "confirm":  "iconConfirm",
-            "health":   "iconHealth",
-            "warm":     "iconWarm",
-            "about":    "iconAbout",
-            "bezier":   "iconBezier",
-            "image":    "iconImage",
-        }
+        # Attribute naming: "icon" + first char uppercased + rest preserved as-is.
+        # This keeps camelCase keys intact:
+        #   "healthBig" → Theme.iconHealthBig  (not Theme.iconHealthbig)
+        #
+        # If a key is present in the TOML with an empty value, or was present
+        # in a previous load but is now absent, the attribute is removed so the
+        # metaclass __getattr__ returns _MISSING_ICON and Theme.icon() draws a
+        # circle — consistent with a key that was never set at all.
         icons = settings.get_section("theme").get("icons", {})
-        for toml_key, attr_name in icon_map.items():
-            new_filename = icons.get(toml_key)
+
+        # Track previously dynamic attrs so we can clean up keys removed from TOML
+        # existing_dynamic = {
+            # k for k in vars(cls)
+            # if k.startswith("icon") and k not in (
+            #     "iconButtonSize", "iconPadding", "iconSize",
+            #     "_icon_cache", "invalidate_icon", "invalidate_all_icons"
+            # )
+        # }
+        existing_dynamic = {k for k in vars(cls)}
+
+        seen_attrs = set()
+        for toml_key, filename in icons.items():
+            attr_name = "icon" + toml_key[0].upper() + toml_key[1:]
+            seen_attrs.add(attr_name)
             old_filename = getattr(cls, attr_name, None)
 
-            if new_filename:
-                # Key present — update if changed
-                if old_filename != new_filename:
+            if filename:
+                # Key present and non-empty — update if changed
+                if old_filename != filename:
                     cls.invalidate_icon(old_filename or "")
-                    setattr(cls, attr_name, new_filename)
+                    setattr(cls, attr_name, filename)
             else:
-                # Key missing or empty — invalidate cache and remove attribute
-                # so next paint receives None and draws the circle fallback
+                # Empty value — invalidate cache and remove attribute so next
+                # paint gets the circle fallback, same as if the key never existed
                 if old_filename:
                     cls.invalidate_icon(old_filename)
                 try:
                     delattr(cls, attr_name)
                 except AttributeError:
-                    pass    # Already absent — nothing to do
+                    pass
+
+        # Remove dynamic icon attrs for keys that disappeared from the TOML entirely
+        # for attr_name in existing_dynamic - seen_attrs:
+        #     old_filename = getattr(cls, attr_name, None)
+            # if old_filename:
+            #     cls.invalidate_icon(old_filename)
+            # try:
+            #     delattr(cls, attr_name)
+            # except AttributeError:
+            #     pass
 
     # =========================================================================
     # UTILITIES

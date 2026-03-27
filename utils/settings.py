@@ -54,6 +54,12 @@ _DEFAULTS: dict = {
     "ui": {
         "sidebar_visible": True,
     },
+    "apps": {
+        # External app paths — resolved at launch time, never hardcoded.
+        # Set to an exe path or leave empty to disable.
+        # e.g. "warm_editor": "C:\\Apps\\NotepadDuplex.exe"
+        "warm_editor": "",
+    },
     "theme": {
         "icons": {
             # No defaults — missing icons produce circles via Theme._make_circle().

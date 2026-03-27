@@ -17,7 +17,7 @@ from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath
 )
 
-from .BaseNode import BaseNode
+from nodes.BaseNode import BaseNode
 from data.ImageNodeData import ImageNodeData
 from graphics.Theme import Theme
 
@@ -179,6 +179,8 @@ class ImageNode(BaseNode):
         Load an image from a file path.
 
         Sets the caption to the filename stem if no caption exists yet.
+        Fires a VisionWorker to identify the image content — on response
+        the caption updates automatically. Fire and forget, no blocking.
         Encodes to base64 PNG for session persistence.
         Public — called by file browser and by View.dropEvent.
         """
@@ -189,11 +191,62 @@ class ImageNode(BaseNode):
 
         self._pixmap = pixmap
 
+        # Set filename stem as initial caption — Vision will update it if available
         if not self.data.caption:
             self.data.caption = path.stem
 
         self._encode_to_b64()
         self.update()
+
+        # Fire Vision worker — identifies the image and updates caption on response.
+        # Uses SingleSharedBraincell_ApiKey env var. Degrades silently if key is
+        # absent or API is unreachable — filename stem stays as caption.
+        self._run_vision(path)
+
+    def _run_vision(self, path: Path) -> None:
+        """
+        Spin up a VisionWorker to identify the image content.
+
+        Prompt is intentionally brief — we want a short descriptive label
+        suitable as a node caption, not a full description.
+        Worker is parented to this node so it's cleaned up on removal.
+        """
+        try:
+            from utils.vision import VisionWorker
+            import os
+            if not os.environ.get("SingleSharedBraincell_ApiKey", "").strip():
+                return  # No key — skip silently, filename stem stays
+
+            self._vision_worker = VisionWorker(
+                image_path = path,
+                prompt     = (
+                    "Describe this image in 5 words or fewer. "
+                    "Return only the description, no punctuation."
+                ),
+                max_tokens = 20,
+                parent     = None,  # No Qt parent — node lifetime managed separately
+            )
+            self._vision_worker.finished.connect(self._on_vision_result)
+            self._vision_worker.failed.connect(self._on_vision_failed)
+            self._vision_worker.start()
+        except Exception:
+            pass  # Vision is a convenience — never crash the canvas over it
+
+    def _on_vision_result(self, text: str) -> None:
+        """Update caption with Vision result and repaint."""
+        caption = text.strip().strip(".")
+        if caption:
+            self.data.caption = caption
+            if self._editor and not self._editor_proxy.isVisible():
+                self.update()
+
+    def _on_vision_failed(self, error: str) -> None:
+        """Log Vision failure quietly — filename stem caption stays."""
+        try:
+            from utils.logger import setup_logger
+            setup_logger("imagenode").debug(f"[Vision] caption skipped: {error[:80]}")
+        except Exception:
+            pass
 
     def _load_from_b64(self, b64_str: str) -> None:
         """Reconstruct the pixmap from a base64 PNG string (session restore)."""

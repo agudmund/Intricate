@@ -7,7 +7,7 @@
 """
 
 from dataclasses import dataclass, field
-from .NodeData import NodeData
+from data.NodeData import NodeData
 
 
 @dataclass(slots=True)

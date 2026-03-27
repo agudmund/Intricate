@@ -11,9 +11,6 @@ import signal
 import argparse
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
-from main_window import IntricateApp
-import utils.settings as settings
-from graphics.Theme import Theme
 from utils.logger import setup_logger, set_log_level, TRACE
 
 APP_NAME = "Intricate"
@@ -21,35 +18,19 @@ ORG_NAME = "Single Shared Braincell"
 
 
 def main():
-    # ── 1. Parse command-line arguments ───────────────────────────────────────
     parser = argparse.ArgumentParser(description=APP_NAME)
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable DEBUG logging to console"
-    )
-    parser.add_argument(
-        "--trace",
-        action="store_true",
-        help="Enable TRACE logging — verbose path resolution, paint cycles, all of it"
-    )
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--trace", action="store_true")
     args = parser.parse_args()
 
-    # ── 2. Ctrl+C works in the terminal ───────────────────────────────────────
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    # ── 3. Logger — must exist before anything else touches it ────────────────
     logger = setup_logger()
     set_log_level(args.debug, args.trace)
-
     if args.trace:
         logger.log(TRACE, "Trace mode active — verbose diagnostics will appear in console")
-
     logger.info(f"{APP_NAME} is generally so happy that you are here. ✨")
 
-    # ── 4. Qt message handler — routes Qt internals through our logger ─────────
-    # Catches Qt warnings about missing resources, bad stylesheets, etc.
-    # Without this they print raw to stderr and bypass the log file entirely.
     def _qt_message_handler(msg_type, context, message):
         level_map = {
             QtMsgType.QtDebugMsg:    logger.debug,
@@ -62,96 +43,49 @@ def main():
         log_fn(f"[Qt] {message}  ({context.file}:{context.line})")
     qInstallMessageHandler(_qt_message_handler)
 
-    # ── 5. QApplication ───────────────────────────────────────────────────────
+    logger.log(TRACE, "[boot:1] creating QApplication")
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORG_NAME)
+    logger.log(TRACE, "[boot:2] QApplication created — Qt event loop ready")
 
-    # ── STUB: Windows taskbar identity ────────────────────────────────────────
-    # Makes Windows treat Intricate as its own taskbar entity with its own icon.
-    # Uncomment when the app icon and build pipeline are in place.
-    #
-    # import ctypes
-    # try:
-    #     myappid = f"SingleSharedBraincell.{APP_NAME}.v1.0"
-    #     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-    # except Exception:
-    #     pass
+    logger.log(TRACE, "[boot:3] importing utils.settings")
+    import utils.settings as settings
+    logger.log(TRACE, "[boot:4] utils.settings imported")
 
-    # ── STUB: App icon ────────────────────────────────────────────────────────
-    # Set the application icon from the asset vault or local resources.
-    # Uncomment when the app icon exists.
-    #
-    # from PySide6.QtGui import QIcon
-    # from pathlib import Path
-    # icon_path = Path(__file__).parent / "icons" / "app_icon.png"
-    # if icon_path.exists():
-    #     app.setWindowIcon(QIcon(str(icon_path)))
+    logger.log(TRACE, "[boot:5] importing graphics.Theme")
+    from graphics.Theme import Theme
+    logger.log(TRACE, "[boot:6] graphics.Theme imported")
+    logger.log(TRACE, f"[boot:6a] Theme.icon = {Theme.__dict__.get('icon', 'NOT IN __dict__')}")
+    logger.log(TRACE, f"[boot:6b] hasattr(Theme, 'icon') = {hasattr(Theme, 'icon')}")
+    try:
+        logger.log(TRACE, f"[boot:6c] Theme.icon via getattr = {getattr(Theme, 'icon', 'MISSING')}")
+    except Exception as e:
+        logger.log(TRACE, f"[boot:6c] Theme.icon getattr raised: {e}")
 
-    # ── STUB: High-DPI policy ─────────────────────────────────────────────────
-    # Qt 6 handles most high-DPI cases automatically. If rendering looks off
-    # on a high-DPI display, enable PassThrough mode here.
-    #
-    # from PySide6.QtCore import Qt
-    # app.setHighDpiScaleFactorRoundingPolicy(
-    #     Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    logger.log(TRACE, "[boot:7] importing main_window.IntricateApp")
+    from main_window import IntricateApp
+    logger.log(TRACE, "[boot:8] main_window.IntricateApp imported")
 
-    # ── STUB: Encoding shield ─────────────────────────────────────────────────
-    # Needed for pythonw, PyInstaller bundles, and redirected streams.
-    # Not needed for normal development console use.
-    #
-    # import io
-    # if sys.stdout is not None:
-    #     try:
-    #         if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
-    #             sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-    #     except (AttributeError, io.UnsupportedOperation):
-    #         pass
-
-    # ── STUB: Build signature ─────────────────────────────────────────────────
-    # Logs the build timestamp and signature on launch.
-    # Useful when running multiple builds side by side.
-    # Wire up when a build pipeline exists.
-    #
-    # _log_build_signature(logger)
-
-    # ── 6. Settings and Theme bootstrap ───────────────────────────────────────
-    # settings._reload() ran at import time above. Theme.reload() pulls the
-    # initial TOML values into Theme attributes before any UI is created.
+    logger.log(TRACE, "[boot:9] calling Theme.reload()")
     Theme.reload()
+    logger.log(TRACE, "[boot:10] Theme.reload() complete")
     logger.debug(f"[boot] TOML loaded from: {settings._SETTINGS_PATH}")
 
-    # ── 7. File watcher ────────────────────────────────────────────────────────
-    # QFileSystemWatcher requires an active QApplication — must come after step 5.
-    # Any write to settings.toml from The Settlers or anywhere else fires this.
+    logger.log(TRACE, "[boot:11] initialising file watcher")
     _watcher = settings.init_watcher()
     _watcher.changed.connect(Theme.reload)
     _watcher.changed.connect(lambda: app.activeWindow() and app.activeWindow().update())
     logger.debug(f"[boot] File watcher active on: {settings._SETTINGS_PATH}")
+    logger.log(TRACE, "[boot:12] file watcher active")
 
-    # ── STUB: Window geometry restore ─────────────────────────────────────────
-    # settings.toml already has [window] x/y/width/height.
-    # Wire up after IntricateApp exposes restoreGeometry().
-    #
-    # geometry = settings.get("window", "geometry")
-    # if geometry:
-    #     window.restoreGeometry(geometry)
-
-    # ── 8. Launch ─────────────────────────────────────────────────────────────
+    logger.log(TRACE, "[boot:13] constructing IntricateApp window")
+    logger.log(TRACE, f"[boot:13a] Theme.icon at window construction = {getattr(Theme, 'icon', 'MISSING')}")
     window = IntricateApp()
-    window.show()
+    logger.log(TRACE, "[boot:14] IntricateApp window constructed")
 
-    # ── STUB: Catastrophic failure dialog ─────────────────────────────────────
-    # Wrap sys.exit(app.exec()) in try/except with QMessageBox for production.
-    # Overkill for development — the traceback in the console is more useful.
-    #
-    # try:
-    #     sys.exit(app.exec())
-    # except Exception as e:
-    #     logger.exception(f"Catastrophic failure: {e}")
-    #     from PySide6.QtWidgets import QMessageBox
-    #     QMessageBox.critical(None, "Something went wrong", str(e))
-    #     sys.exit(1)
+    window.show()
+    logger.log(TRACE, "[boot:15] window shown — entering event loop")
 
     sys.exit(app.exec())
 

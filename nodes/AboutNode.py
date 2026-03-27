@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/AboutNode.py AboutNode node class
--A minimal sticky-note node. A category memo planted near groups of nodes for enjoying
+-Intricate - graphics/AboutNode.py
+-A minimal sticky-note node. A category memo planted near groups of nodes.
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QGraphicsProxyWidget, QLineEdit
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QFont, QColor
 
-from .BaseNode import BaseNode
+from nodes.BaseNode import BaseNode
 from data.AboutNodeData import AboutNodeData
 from graphics.Theme import Theme
 

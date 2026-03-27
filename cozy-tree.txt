@@ -1,5 +1,5 @@
 ✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
-Generated: 2026-03-25 04:08:10
+Generated: 2026-03-26 20:33:56
 Location:  C:\Users\thisg\Desktop\Intricate
 Mode:      with cozy emojis
 ────────────────────────────────────────────────────────────
@@ -16,10 +16,6 @@ Mode:      with cozy emojis
 │   ├── 📄 ImageNodeData.py
 │   ├── 📄 NodeData.py
 │   └── 📄 WarmNodeData.py
-├── 📁 dialogs/
-│   ├── 📄 demo_dialog.py
-│   ├── 📄 pretty_dialog.py
-│   └── 📄 settings_dialog.py
 ├── 📁 Documents/
 │   ├── 📄 Docstring Compliance Report.md
 │   └── 📄 Python Header Compliance Guide.md
@@ -56,14 +52,12 @@ Mode:      with cozy emojis
 │   ├── 📄 __init__.py
 │   ├── 📄 logger.py
 │   ├── 📄 OSClickMonitor.py
-│   ├── 📄 settings - Copy.py
 │   └── 📄 settings.py
 ├── 📁 widgets/
-│   ├── 📄 pretty_dialog - Copy.py
-│   ├── 📄 PrettyButton.py
-│   └── 📄 settings_dialog - Copy.py
+│   ├── 📄 __init__.py
+│   ├── 📄 NoteEditor.py
+│   └── 📄 PrettyButton.py
 ├── 📄 .gitignore
-├── 📄 cozy-tree.txt
 ├── 📄 Intricate.pyproj
 ├── 📄 Intricate.sln
 ├── 📄 main.lnk
@@ -71,6 +65,7 @@ Mode:      with cozy emojis
 ├── 📄 main_window.py
 ├── 📄 nodal_config.ini
 ├── 📄 README.md
+├── 📄 requirements.txt
 ├── 📄 settings.toml
 └── 📄 The Thurr - Palette.png
 

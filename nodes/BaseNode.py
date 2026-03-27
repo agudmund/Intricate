@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/BaseNode.py BaseNode class
--The visual and structural foundation every node type builds on for enjoying
+-Intricate - graphics/BaseNode.py
+-The visual and structural foundation every node type builds on.
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -12,9 +12,9 @@ from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath
 
 from data.NodeData import NodeData
-from .NodeBehaviour import NodeBehaviour
+from nodes.NodeBehaviour import NodeBehaviour
 from graphics.Theme import Theme
-from .NodeButton import NodeButton, BUTTON_SIZE
+from nodes.NodeButton import NodeButton, BUTTON_SIZE
 
 
 def _c(hex_str): return QColor(hex_str)   # local shorthand
@@ -257,7 +257,7 @@ class BaseNode(QGraphicsRectItem):
     def _create_ports(self):
         """Instantiate ports as child items, hidden until wiring mode is enabled."""
         # Port import is local to avoid circular imports at module load time
-        from graphics.Port import Port
+        from nodes.Port import Port
         self.input_port  = Port(self, is_output=False)
         self.output_port = Port(self, is_output=True)
         self._place_ports()
