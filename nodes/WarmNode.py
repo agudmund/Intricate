@@ -127,7 +127,7 @@ class WarmNode(BaseNode):
         import utils.settings as _settings
         editor_path = _settings.get("apps", "warm_editor", "").strip()
         if not editor_path:
-            editor_path = "notepad.exe"
+            editor_path = "NotepadPlusDuplexTurbo.exe"
         try:
             subprocess.Popen([editor_path])
         except FileNotFoundError:
