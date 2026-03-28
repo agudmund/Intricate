@@ -332,12 +332,6 @@ class IntricateApp(QMainWindow):
         """Slider → progress bar mirror. Will drive fog alpha when fog arrives."""
         self.fog_progress.setValue(value)
 
-    # def _sidebar_button(self, icon: str, tooltip: str, clicked) -> QPushButton:
-    #     """Square icon-only sidebar button via setup_iconic_button."""
-    #     btn = self.setup_iconic_button(clicked=clicked, icon=icon)
-    #     btn.setToolTip(tooltip)
-    #     return btn
-
     # ─────────────────────────────────────────────────────────────────────────
     # NODE SPAWN ACTIONS
     # ─────────────────────────────────────────────────────────────────────────
