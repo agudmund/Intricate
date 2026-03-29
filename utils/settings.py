@@ -70,6 +70,8 @@ _DEFAULTS: dict = {
             "font_size": 10,
             "font_color": "#e8f0ff",
             "bg_color": "#2a2a2a",
+            "bg_color_front": "#322a3a",
+            "bg_alpha": 180,
             "border_color": "#6b5a47",
             "border_hover_color": "#8a7560",
             "border_selected_color": "#8a7560",

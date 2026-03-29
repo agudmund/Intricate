@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/NodeButton.py NodeButton class
+-Intricate nodal playground - nodes/NodeButton.py NodeButton class
 -A small action button that lives on a node. Scene-native, LOD-aware for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
@@ -53,10 +53,12 @@ class NodeButton(QGraphicsObject):
         pixmap_normal:  QPixmap,
         callback,
         pixmap_confirm: QPixmap | None = None,
+        toggle:         bool           = False,
     ):
         super().__init__(parent)
 
         self._callback       = callback
+        self._toggle         = toggle
         self._in_confirm     = False
         self._reset_timer    = QTimer()
         self._reset_timer.setSingleShot(True)
@@ -111,6 +113,11 @@ class NodeButton(QGraphicsObject):
 
         if self._pix_confirm is None:
             # Single-stage action — fire immediately
+            self._callback()
+        elif self._toggle:
+            # Persistent toggle — flip state and fire, no timer
+            self._in_confirm = not self._in_confirm
+            self.update()
             self._callback()
         elif not self._in_confirm:
             # First click — enter confirm state, start reset timer

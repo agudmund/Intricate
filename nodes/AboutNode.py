@@ -11,6 +11,8 @@ from PySide6.QtCore import Qt, QRectF, QSizeF
 from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
 
 _BUTTON_ZONE_H = 24.0   # px reserved for button strip (4 pad + 16 button + 4 gap)
+_Z_FRONT       = 10.0
+_Z_BACK        = -10.0
 
 from nodes.BaseNode import BaseNode
 from nodes.NodeButton import NodeButton
@@ -40,7 +42,7 @@ class AboutNode(BaseNode):
 
         super().__init__(data)
 
-        self.setBrush(QColor(Theme.aboutBgColor))
+        self.setBrush(self._bg_color())
         _w = Theme.nodeBorderWidth
         self.normal_pen   = QPen(QColor(Theme.aboutBorderColor),         _w)
         self.hover_pen    = QPen(QColor(Theme.aboutBorderHoverColor),    _w)
@@ -48,6 +50,7 @@ class AboutNode(BaseNode):
         self.current_pen  = self.normal_pen
         self.setPen(self.current_pen)
         self._min_height = data.height  # allow resizing back to creation size
+        self._apply_depth()
 
         self._editor: QLineEdit | None = None
         self._editor_proxy: QGraphicsProxyWidget | None = None
@@ -61,10 +64,23 @@ class AboutNode(BaseNode):
         super()._build_buttons()
         depth_off_pix = Theme.icon(Theme.aboutDepthIconOff, fallback_color="#7b9bc9")
         depth_on_pix  = Theme.icon(Theme.aboutDepthIconOn,  fallback_color="#9bc97b")
-        self._buttons.append(NodeButton(self, depth_off_pix, self._depth_action, depth_on_pix))
+        btn = NodeButton(self, depth_off_pix, self._depth_action, depth_on_pix, toggle=True)
+        btn._in_confirm = self.data.depth_front  # restore visual state on session load
+        self._buttons.append(btn)
 
     def _depth_action(self) -> None:
-        pass  # depth behaviour — coming soon
+        self.data.depth_front = not self.data.depth_front
+        self._apply_depth()
+
+    def _bg_color(self) -> QColor:
+        c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
+        c.setAlpha(Theme.aboutBgAlpha)
+        return c
+
+    def _apply_depth(self) -> None:
+        self.setZValue(_Z_FRONT if self.data.depth_front else _Z_BACK)
+        self.setBrush(self._bg_color())
+        self.update()
 
     # ─────────────────────────────────────────────────────────────────────────
     # EDITOR

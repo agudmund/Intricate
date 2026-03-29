@@ -190,6 +190,8 @@ class Theme(metaclass=_ThemeMeta):
     aboutFontSize            = 10
     aboutFontColor           = "#e8f0ff"
     aboutBgColor             = "#2a2a2a"
+    aboutBgColorFront        = "#322a3a"
+    aboutBgAlpha             = 180
     aboutBorderColor         = "#6b5a47"
     aboutBorderHoverColor    = "#8a7560"
     aboutBorderSelectedColor = "#8a7560"
@@ -348,6 +350,10 @@ class Theme(metaclass=_ThemeMeta):
             cls.aboutFontColor = about["font_color"]
         if "bg_color" in about:
             cls.aboutBgColor = about["bg_color"]
+        if "bg_color_front" in about:
+            cls.aboutBgColorFront = about["bg_color_front"]
+        if "bg_alpha" in about:
+            cls.aboutBgAlpha = int(about["bg_alpha"])
         if "border_color" in about:
             cls.aboutBorderColor = about["border_color"]
         if "border_hover_color" in about:

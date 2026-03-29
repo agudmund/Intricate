@@ -28,10 +28,12 @@ class AboutNodeData(NodeData):
     height:     float = field(default=42.0)
 
     label:      str   = field(default_factory=lambda: random.choice(motivationalMessages))
+    depth_front: bool = field(default=False)
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data["label"] = self.label
+        data["label"]       = self.label
+        data["depth_front"] = self.depth_front
         return data
 
     @classmethod
@@ -46,5 +48,6 @@ class AboutNodeData(NodeData):
             width         = float(data.get("width",     0.0)),
             height        = float(data.get("height",   42.0)),
             ports_visible = data.get("ports_visible", False),
-            label         = data.get("label",     ""),
+            label         = data.get("label",       ""),
+            depth_front   = data.get("depth_front", False),
         )
