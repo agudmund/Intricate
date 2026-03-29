@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/BaseNode.py
--The visual and structural foundation every node type builds on.
+-Intricate nodal playground - nodes/BaseNode.py BaseNode class
+-The visual and structural foundation every node type builds on, for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -94,6 +94,7 @@ class BaseNode(QGraphicsRectItem):
         self._is_resizing      = False
         self._resize_start_pos  = QPointF()
         self._resize_start_rect = QRectF()
+        self._min_height        = _MIN_HEIGHT
 
         # ── Position throttle ─────────────────────────────────────────────────
         # Connection redraws are batched so rapid movement doesn't flood the scene.
@@ -326,7 +327,7 @@ class BaseNode(QGraphicsRectItem):
         if self._is_resizing:
             delta      = event.pos() - self._resize_start_pos
             new_width  = max(_MIN_WIDTH,  self._resize_start_rect.width()  + delta.x())
-            new_height = max(_MIN_HEIGHT, self._resize_start_rect.height() + delta.y())
+            new_height = max(self._min_height, self._resize_start_rect.height() + delta.y())
             if event.modifiers() & Qt.ShiftModifier:
                 ratio = self._resize_start_rect.width() / self._resize_start_rect.height()
                 new_height = new_width / ratio

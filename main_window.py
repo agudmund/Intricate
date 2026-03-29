@@ -13,6 +13,7 @@ from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
 from widgets.PrettyButton import button
+from utils.motivationalMessages import motivationalMessages
 
 
 class IntricateApp(QMainWindow):
@@ -399,40 +400,6 @@ class IntricateApp(QMainWindow):
         print('Joy buckets are still not filling, keep going you got this!')
 
     def populate_sessions(self):
-        motivationalMessages = [
-            "All Glory",
-            "Practical and pleasurable",
-            "Tiny little extra sprinkles of joy",
-            "Irresistible",
-            "Sweet",
-            "Soft",
-            "New Thought",
-            "Delicate",
-            "Gentle",
-            "Intentional",
-            "Pure Light",
-            "Fresh Start",
-            "Endless Potential",
-            "Golden Hour",
-            "Growth",
-            "Boundless Joy",
-            "Infinite Wisdom",
-            "Onward",
-            "Clear Vision",
-            "Bright Tomorrow",
-            "Inner Peace",
-            "Clay",
-            "Omnious",
-            "Intricate",
-            "Bloom",
-            "Unfold",
-            "Evolve",
-            "Beautiful",
-            "Elegant",
-            "Grace",
-            "Accurate",
-            "Kinetic",
-        ]
         self.project_selector.addItems(motivationalMessages)
 
     # =========================================================================

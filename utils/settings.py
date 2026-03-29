@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - utils/settings.py
--TOML-backed settings. Single source of truth on disk.
--File watcher notifies Theme when values change from any source.
+-Intricate nodal playground - utils/settings.py TOML-backed settings loader
+-Single source of truth on disk. File watcher notifies Theme on change for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -65,6 +64,17 @@ _DEFAULTS: dict = {
             # No defaults — missing icons produce circles via Theme._make_circle().
             # A circle is the honest "no icon configured" state.
             # The Settlers writes real filenames here when the user sets them.
+        },
+        "about": {
+            "font_vertical_offset": 0,
+            "font_size": 10,
+            "font_color": "#e8f0ff",
+            "bg_color": "#2a2a2a",
+            "border_color": "#6b5a47",
+            "border_hover_color": "#8a7560",
+            "border_selected_color": "#8a7560",
+            "depth_icon_off": "depth_off.png",
+            "depth_icon_on": "depth_on.png",
         },
         "colors": {
             # Colors always need a valid value — defaults ensure Intricate

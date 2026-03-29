@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Single Shared Braincell - graphics/Theme.py
-Live view over settings.toml. Reads from settings, exposes as Python attributes.
-Helper methods for QPixmap caching, QColor construction, and derived values.
-App-agnostic — all apps in the family read from this, override locally if needed.
-Built using a single shared braincell by Yours Truly and various Intelligences
+-Intricate nodal playground - graphics/Theme.py Theme class
+-Live view over settings.toml. Colors, icons, and QPixmap caching for enjoying
+-Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 from PySide6.QtGui import QColor, QPixmap, QPainter, QBrush
@@ -147,7 +145,7 @@ class Theme(metaclass=_ThemeMeta):
     nodeBorder              = primaryBorder
     nodeBorderSelected      = textPrimary
     nodeBorderWidth         = 1.5
-    nodeBorderSelectedScale = 1.8
+    nodeBorderSelectedScale = 1.0
     nodeRoundRadius         = 12.0
     nodeShadowBlur          = 28
     nodeShadowColor         = "#5a000000"
@@ -188,6 +186,16 @@ class Theme(metaclass=_ThemeMeta):
     healthWarnThreshold  = 50
     healthHighThreshold  = 150
     healthPollIntervalMs = 2000
+    aboutFontFamily          = "Chandler42"
+    aboutFontSize            = 10
+    aboutFontColor           = "#e8f0ff"
+    aboutBgColor             = "#2a2a2a"
+    aboutBorderColor         = "#6b5a47"
+    aboutBorderHoverColor    = "#8a7560"
+    aboutBorderSelectedColor = "#8a7560"
+    aboutDepthIconOff        = "depth_off.png"
+    aboutDepthIconOn         = "depth_on.png"
+    aboutFontVerticalOffset  = 0.0
     healthFontFamily     = "Segoe UI"
     healthFontSizeLabel  = 8
     healthFontSizeValue  = 9
@@ -332,6 +340,27 @@ class Theme(metaclass=_ThemeMeta):
             4. Dependent attributes (combobox colors etc.) recalculated
                from the new base values
         """
+        # ── About node ────────────────────────────────────────────────────────
+        about = settings.get_section("theme").get("about", {})
+        if "font_size" in about:
+            cls.aboutFontSize = int(about["font_size"])
+        if "font_color" in about:
+            cls.aboutFontColor = about["font_color"]
+        if "bg_color" in about:
+            cls.aboutBgColor = about["bg_color"]
+        if "border_color" in about:
+            cls.aboutBorderColor = about["border_color"]
+        if "border_hover_color" in about:
+            cls.aboutBorderHoverColor = about["border_hover_color"]
+        if "border_selected_color" in about:
+            cls.aboutBorderSelectedColor = about["border_selected_color"]
+        if "depth_icon_off" in about:
+            cls.aboutDepthIconOff = about["depth_icon_off"]
+        if "depth_icon_on" in about:
+            cls.aboutDepthIconOn = about["depth_icon_on"]
+        if "font_vertical_offset" in about:
+            cls.aboutFontVerticalOffset = float(about["font_vertical_offset"])
+
         # ── Colors ────────────────────────────────────────────────────────────
         colors = settings.get_section("theme").get("colors", {})
 

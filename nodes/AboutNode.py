@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/AboutNode.py
--A minimal sticky-note node. A category memo planted near groups of nodes.
+-Intricate nodal playground - nodes/AboutNode.py AboutNode class
+-A minimal sticky-note node. A category memo planted near groups of nodes, for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 from PySide6.QtWidgets import QGraphicsProxyWidget, QLineEdit
-from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QPainter, QFont, QColor
+from PySide6.QtCore import Qt, QRectF, QSizeF
+from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
+
+_BUTTON_ZONE_H = 24.0   # px reserved for button strip (4 pad + 16 button + 4 gap)
 
 from nodes.BaseNode import BaseNode
+from nodes.NodeButton import NodeButton
 from data.AboutNodeData import AboutNodeData
 from graphics.Theme import Theme
 
@@ -30,11 +33,38 @@ class AboutNode(BaseNode):
     def __init__(self, data: AboutNodeData | None = None):
         if data is None:
             data = AboutNodeData()
+        if data.width == 0.0:
+            font = QFont(Theme.aboutFontFamily, Theme.aboutFontSize)
+            text_w = QFontMetrics(font).horizontalAdvance(data.label or data.title)
+            data.width = text_w + 48   # 24px padding each side
+
         super().__init__(data)
+
+        self.setBrush(QColor(Theme.aboutBgColor))
+        _w = Theme.nodeBorderWidth
+        self.normal_pen   = QPen(QColor(Theme.aboutBorderColor),         _w)
+        self.hover_pen    = QPen(QColor(Theme.aboutBorderHoverColor),    _w)
+        self.selected_pen = QPen(QColor(Theme.aboutBorderSelectedColor), _w)
+        self.current_pen  = self.normal_pen
+        self.setPen(self.current_pen)
+        self._min_height = data.height  # allow resizing back to creation size
 
         self._editor: QLineEdit | None = None
         self._editor_proxy: QGraphicsProxyWidget | None = None
         self._build_editor()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # BUTTONS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_buttons(self) -> None:
+        super()._build_buttons()
+        depth_off_pix = Theme.icon(Theme.aboutDepthIconOff, fallback_color="#7b9bc9")
+        depth_on_pix  = Theme.icon(Theme.aboutDepthIconOn,  fallback_color="#9bc97b")
+        self._buttons.append(NodeButton(self, depth_off_pix, self._depth_action, depth_on_pix))
+
+    def _depth_action(self) -> None:
+        pass  # depth behaviour — coming soon
 
     # ─────────────────────────────────────────────────────────────────────────
     # EDITOR
@@ -47,10 +77,9 @@ class AboutNode(BaseNode):
         self._editor.setStyleSheet(f"""
             QLineEdit {{
                 background: transparent;
-                color: {Theme.textPrimary};
-                font-family: {Theme.healthFontFamily};
-                font-size: 10pt;
-                font-weight: bold;
+                color: {Theme.aboutFontColor};
+                font-family: {Theme.aboutFontFamily};
+                font-size: {Theme.aboutFontSize}pt;
                 border: none;
                 padding: 0px;
                 selection-background-color: {Theme.primaryBorder};
@@ -64,7 +93,9 @@ class AboutNode(BaseNode):
         self._editor_proxy.hide()
 
     def _start_edit(self) -> None:
-        self._editor_proxy.setGeometry(self.rect())
+        r = self.rect()
+        text_rect = QRectF(r.left(), r.top() + _BUTTON_ZONE_H, r.width(), r.height() - _BUTTON_ZONE_H)
+        self._editor_proxy.setGeometry(text_rect)
         self._editor.setText(self.data.label or self.data.title)
         self._editor.selectAll()
         if self.scene() and self.scene().views():
@@ -113,12 +144,12 @@ class AboutNode(BaseNode):
         if self._editor_proxy and self._editor_proxy.isVisible():
             return
         painter.save()
-        font = QFont(Theme.healthFontFamily, 10)
-        font.setBold(True)
+        font = QFont(Theme.aboutFontFamily, Theme.aboutFontSize)
         painter.setFont(font)
-        painter.setPen(QColor(Theme.textPrimary))
-        painter.drawText(self.rect(), Qt.AlignCenter,
-                         self.data.label or self.data.title)
+        painter.setPen(QColor(Theme.aboutFontColor))
+        r = self.rect()
+        text_rect = QRectF(r.left(), r.top() + _BUTTON_ZONE_H + Theme.aboutFontVerticalOffset, r.width(), r.height() - _BUTTON_ZONE_H)
+        painter.drawText(text_rect, Qt.AlignCenter, self.data.label or self.data.title)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────
