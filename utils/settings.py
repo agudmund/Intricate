@@ -59,14 +59,10 @@ _DEFAULTS: dict = {
         # e.g. "warm_editor": "C:\\Apps\\NotepadDuplex.exe"
         "warm_editor": "",
     },
-    "theme": {
-        "icons": {
-            # No defaults — missing icons produce circles via Theme._make_circle().
-            # A circle is the honest "no icon configured" state.
-            # The Settlers writes real filenames here when the user sets them.
-        },
+    "node": {
         "about": {
             "font_vertical_offset": 0,
+            "editor_vertical_offset": 0,
             "font_size": 10,
             "font_color": "#e8f0ff",
             "bg_color": "#2a2a2a",
@@ -77,6 +73,16 @@ _DEFAULTS: dict = {
             "border_selected_color": "#8a7560",
             "depth_icon_off": "depth_off.png",
             "depth_icon_on": "depth_on.png",
+            "min_height": 42,
+            "text_padding_left": 6,
+            "text_padding_top": 0,
+        },
+    },
+    "theme": {
+        "icons": {
+            # No defaults — missing icons produce circles via Theme._make_circle().
+            # A circle is the honest "no icon configured" state.
+            # The Settlers writes real filenames here when the user sets them.
         },
         "colors": {
             # Colors always need a valid value — defaults ensure Intricate

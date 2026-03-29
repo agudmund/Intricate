@@ -35,6 +35,8 @@ class AboutNode(BaseNode):
     def __init__(self, data: AboutNodeData | None = None):
         if data is None:
             data = AboutNodeData()
+        if data.height == 0.0:
+            data.height = Theme.aboutMinHeight
         if data.width == 0.0:
             font = QFont(Theme.aboutFontFamily, Theme.aboutFontSize)
             text_w = QFontMetrics(font).horizontalAdvance(data.label or data.title)
@@ -49,7 +51,7 @@ class AboutNode(BaseNode):
         self.selected_pen = QPen(QColor(Theme.aboutBorderSelectedColor), _w)
         self.current_pen  = self.normal_pen
         self.setPen(self.current_pen)
-        self._min_height = data.height  # allow resizing back to creation size
+        self._min_height = Theme.aboutMinHeight
         self._apply_depth()
 
         self._editor: QLineEdit | None = None
@@ -88,7 +90,7 @@ class AboutNode(BaseNode):
 
     def _build_editor(self) -> None:
         self._editor = QLineEdit()
-        self._editor.setAlignment(Qt.AlignCenter)
+        self._editor.setAlignment(Qt.AlignLeft)
         self._editor.setFrame(False)
         self._editor.setStyleSheet(f"""
             QLineEdit {{
@@ -110,7 +112,8 @@ class AboutNode(BaseNode):
 
     def _start_edit(self) -> None:
         r = self.rect()
-        text_rect = QRectF(r.left(), r.top() + _BUTTON_ZONE_H, r.width(), r.height() - _BUTTON_ZONE_H)
+        pad = Theme.aboutTextPaddingLeft
+        text_rect = QRectF(r.left() + pad, r.top() + _BUTTON_ZONE_H + Theme.aboutEditorVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - _BUTTON_ZONE_H)
         self._editor_proxy.setGeometry(text_rect)
         self._editor.setText(self.data.label or self.data.title)
         self._editor.selectAll()
@@ -164,8 +167,11 @@ class AboutNode(BaseNode):
         painter.setFont(font)
         painter.setPen(QColor(Theme.aboutFontColor))
         r = self.rect()
-        text_rect = QRectF(r.left(), r.top() + _BUTTON_ZONE_H + Theme.aboutFontVerticalOffset, r.width(), r.height() - _BUTTON_ZONE_H)
-        painter.drawText(text_rect, Qt.AlignCenter, self.data.label or self.data.title)
+        pad = Theme.aboutTextPaddingLeft
+        text_rect = QRectF(r.left() + pad, r.top() + _BUTTON_ZONE_H + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - _BUTTON_ZONE_H)
+        label = self.data.label or self.data.title
+        label = QFontMetrics(font).elidedText(label, Qt.ElideRight, int(text_rect.width()))
+        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignTop, label)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────

@@ -25,7 +25,7 @@ class AboutNodeData(NodeData):
     node_type:  str   = field(default="about")
     title:      str   = field(default="Note")
     width:      float = field(default=0.0)   # 0 = auto-size from text at construction
-    height:     float = field(default=42.0)
+    height:     float = field(default=0.0)   # 0 = use Theme.aboutDefaultHeight
 
     label:      str   = field(default_factory=lambda: random.choice(motivationalMessages))
     depth_front: bool = field(default=False)
@@ -46,7 +46,7 @@ class AboutNodeData(NodeData):
             x             = float(data.get("x",       0.0)),
             y             = float(data.get("y",       0.0)),
             width         = float(data.get("width",     0.0)),
-            height        = float(data.get("height",   42.0)),
+            height        = float(data.get("height",    0.0)),
             ports_visible = data.get("ports_visible", False),
             label         = data.get("label",       ""),
             depth_front   = data.get("depth_front", False),

@@ -197,7 +197,11 @@ class Theme(metaclass=_ThemeMeta):
     aboutBorderSelectedColor = "#8a7560"
     aboutDepthIconOff        = "depth_off.png"
     aboutDepthIconOn         = "depth_on.png"
-    aboutFontVerticalOffset  = 0.0
+    aboutMinHeight           = 42.0
+    aboutTextPaddingLeft     = 6.0
+    aboutTextPaddingTop      = 0.0
+    aboutFontVerticalOffset   = 0.0
+    aboutEditorVerticalOffset = 0.0
     healthFontFamily     = "Segoe UI"
     healthFontSizeLabel  = 8
     healthFontSizeValue  = 9
@@ -343,7 +347,7 @@ class Theme(metaclass=_ThemeMeta):
                from the new base values
         """
         # ── About node ────────────────────────────────────────────────────────
-        about = settings.get_section("theme").get("about", {})
+        about = settings.get_section("node").get("about", {})
         if "font_size" in about:
             cls.aboutFontSize = int(about["font_size"])
         if "font_color" in about:
@@ -364,8 +368,16 @@ class Theme(metaclass=_ThemeMeta):
             cls.aboutDepthIconOff = about["depth_icon_off"]
         if "depth_icon_on" in about:
             cls.aboutDepthIconOn = about["depth_icon_on"]
+        if "min_height" in about:
+            cls.aboutMinHeight = float(about["min_height"])
+        if "text_padding_left" in about:
+            cls.aboutTextPaddingLeft = float(about["text_padding_left"])
+        if "text_padding_top" in about:
+            cls.aboutTextPaddingTop = float(about["text_padding_top"])
         if "font_vertical_offset" in about:
             cls.aboutFontVerticalOffset = float(about["font_vertical_offset"])
+        if "editor_vertical_offset" in about:
+            cls.aboutEditorVerticalOffset = float(about["editor_vertical_offset"])
 
         # ── Colors ────────────────────────────────────────────────────────────
         colors = settings.get_section("theme").get("colors", {})
