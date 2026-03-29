@@ -379,9 +379,9 @@ class BaseNode(QGraphicsRectItem):
         )
 
     def shape(self):
-        """Hit-test shape covers the full bounding rect including shadow margin."""
+        """Hit-test shape matches the visible node border, not the shadow margin."""
         path = QPainterPath()
-        path.addRect(self.boundingRect())
+        path.addRoundedRect(self.rect(), self.round_radius, self.round_radius)
         return path
 
     def paint(self, painter, option, widget=None):
