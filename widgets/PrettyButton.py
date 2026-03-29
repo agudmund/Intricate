@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - The Pretty Button
--The last of the pretty buttons knew that it could become all that it was destined to be, for enjoying.
+-Intricate nodal playground - PrettyButton.py themed button widget
+-The last of the pretty buttons knew it could become all it was destined to be, for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

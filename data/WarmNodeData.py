@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/WarmNodeData.py WarmNodeData data class
+-Intricate nodal playground - data/WarmNodeData.py WarmNodeData data class
 -Identity and state for the WarmNode. Pure Python, zero Qt for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

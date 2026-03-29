@@ -1,5 +1,5 @@
 ✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
-Generated: 2026-03-26 20:33:56
+Generated: 2026-03-29 04:35:45
 Location:  C:\Users\thisg\Desktop\Intricate
 Mode:      with cozy emojis
 ────────────────────────────────────────────────────────────
@@ -21,7 +21,6 @@ Mode:      with cozy emojis
 │   └── 📄 Python Header Compliance Guide.md
 ├── 📁 graphics/
 │   ├── 📄 __init__.py
-│   ├── 📄 Port.py
 │   ├── 📄 Scene.py
 │   ├── 📄 Theme.py
 │   └── 📄 View.py
@@ -45,19 +44,21 @@ Mode:      with cozy emojis
 │   ├── 📄 ImageNode.py
 │   ├── 📄 NodeBehaviour.py
 │   ├── 📄 NodeButton.py
+│   ├── 📄 Port.py
 │   └── 📄 WarmNode.py
-├── 📁 tools/
-│   └── 📄 header_check.py
 ├── 📁 utils/
 │   ├── 📄 __init__.py
 │   ├── 📄 logger.py
 │   ├── 📄 OSClickMonitor.py
-│   └── 📄 settings.py
+│   ├── 📄 settings.py
+│   └── 📄 vision.py
 ├── 📁 widgets/
 │   ├── 📄 __init__.py
 │   ├── 📄 NoteEditor.py
 │   └── 📄 PrettyButton.py
 ├── 📄 .gitignore
+├── 📄 CLAUDE.md
+├── 📄 cozy-tree.txt
 ├── 📄 Intricate.pyproj
 ├── 📄 Intricate.sln
 ├── 📄 main.lnk

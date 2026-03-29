@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - note_editor.py cozy note editing dialog
+-Intricate nodal playground - NoteEditor.py cozy note editing dialog
 -Sophisticated note editor with title field, word count, spell checking, and emoji insertion for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/Port.py Port class
+-Intricate nodal playground - nodes/Port.py Port class
 -A connection point. Knows its owner and its role. Nothing more for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

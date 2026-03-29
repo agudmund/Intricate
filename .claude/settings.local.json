@@ -3,7 +3,14 @@
     "allow": [
       "Bash(git mv:*)",
       "Bash(python:*)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(ls -1 /c/Users/thisg/Desktop/Intricate/nodes/*.py)",
+      "Bash(xargs -I {} basename {} .py)",
+      "Bash(where cozy-snapshot.py)",
+      "Bash(where cozy-snapshot:*)",
+      "Bash(find C:UsersthisgDesktopIntricate -name *.ttf -o -name *.otf)",
+      "Bash(find C:Usersthisg -name *Chandler*)",
+      "Bash(echo \"Env var: $SingleSharedBraincell_SettingsFile\")"
     ]
   }
 }

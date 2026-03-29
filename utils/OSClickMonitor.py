@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/OSClickMonitor.py OSClickMonitor class
+-Intricate nodal playground - utils/OSClickMonitor.py OSClickMonitor class
 -OS-level global mouse hook. Knows what the mouse is clicking, unconditionally for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/ImageNodeData.py ImageNodeData data class
+-Intricate nodal playground - data/ImageNodeData.py ImageNodeData data class
 -Identity and state for the ImageNode. Pure Python, zero Qt for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

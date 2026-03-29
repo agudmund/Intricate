@@ -31,7 +31,7 @@
 
 ## Git Integration
 - User has GitHub repository set up and linked to their Visual Studio project with Git integration working. For future sessions, remember that Git is already configured and working - no need to ask about initialization or remote setup. Just proceed with git commands via terminal.
-- Git workflow: Commit changes locally automatically after implementation, but ONLY push to remote GitHub when user explicitly asks. This preserves GitHub as a stable revert point. Do not auto-push - wait for user approval.
+- Git workflow: Commit changes locally after implementation, but ONLY push to remote GitHub when user explicitly asks. This preserves GitHub as a stable revert point. Do not auto-push - wait for user approval.
 
 ## Terminal Commands
 - Always use PowerShell commands exclusively. Do not use Unix/bash commands. The development environment is Windows-based with PowerShell as the shell.

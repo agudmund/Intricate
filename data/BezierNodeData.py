@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - graphics/BezierNodeData.py BezierNodeData data class
+-Intricate nodal playground - data/BezierNodeData.py BezierNodeData data class
 -Identity and state for the BezierNode. Pure Python, zero Qt for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

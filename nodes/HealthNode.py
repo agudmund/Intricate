@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/HealthNode.py
--Live system health monitor. Watches the GC and every click at OS level.
+-Intricate nodal playground - nodes/HealthNode.py HealthNode class
+-Live system health monitor. Watches the GC and every click at OS level, for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

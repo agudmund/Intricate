@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - graphics/WarmNode.py
--The main content node. Free-form text with an emoji accent and editable title.
+-Intricate nodal playground - nodes/WarmNode.py WarmNode class
+-The main content node. Free-form text with an emoji accent and editable title, for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -127,7 +127,7 @@ class WarmNode(BaseNode):
         import utils.settings as _settings
         editor_path = _settings.get("apps", "warm_editor", "").strip()
         if not editor_path:
-            editor_path = "NotepadPlusDuplexTurbo.exe"
+            editor_path = "NotepadPlusPlusDuplexPlusTurbo.exe"
         try:
             subprocess.Popen([editor_path])
         except FileNotFoundError:
