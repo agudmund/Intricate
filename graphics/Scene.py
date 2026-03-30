@@ -75,14 +75,6 @@ class IntricateScene(QGraphicsScene):
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)
-        # Shift right past any overlapping ClaudeResponseNodes (up to 10 nudges)
-        for _ in range(10):
-            colliders = [i for i in self.collidingItems(node)
-                         if i is not node and isinstance(i, ClaudeResponseNode)]
-            if not colliders:
-                break
-            right_edge = max(i.mapToScene(i.boundingRect().topRight()).x() for i in colliders)
-            node.setPos(right_edge + 16, node.pos().y())
         return node
 
     def add_claude_node(self, pos: QPointF | None = None):

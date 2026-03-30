@@ -73,7 +73,7 @@ class ClaudeNode(BaseNode):
         self._watcher: QFileSystemWatcher | None = None
         self._file_offset: int = 0
         self._current_reply: str = ""
-        self._response_count: int = 0
+
         self._reply_done_timer = QTimer()
         self._reply_done_timer.setSingleShot(True)
         self._reply_done_timer.setInterval(1500)
@@ -296,7 +296,6 @@ class ClaudeNode(BaseNode):
         if scene and reply and "no response requested" not in reply.lower():
             from PySide6.QtCore import QPointF
             below = self.pos() + QPointF(0, self.rect().height() + 16)
-            self._response_count += 1
             scene.add_claude_response_node(pos=below, label=reply)
 
     def _send_input(self, text: str) -> None:
