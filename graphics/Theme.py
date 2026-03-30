@@ -201,6 +201,7 @@ class Theme(metaclass=_ThemeMeta):
     claudeBorderWidth        = 1.0
     claudeBodyShowIcon       = "claude_body_show.png"
     claudeBodyHideIcon       = "claude_body_hide.png"
+    imageVisionIcon          = "image_icon.png"
 
     wireStart                = "#7a9e8a"   # output port mint
     wireEnd                  = "#a07a5a"   # input port amber

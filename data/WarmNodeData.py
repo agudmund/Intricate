@@ -6,8 +6,10 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import random
 from dataclasses import dataclass, field
 from data.NodeData import NodeData
+from utils.motivationalMessages import motivationalMessages
 
 
 @dataclass(slots=True)
@@ -21,17 +23,15 @@ class WarmNodeData(NodeData):
     """
 
     node_type:  str   = field(default="warm")
-    title:      str   = field(default="New Node")
+    title:      str   = field(default_factory=lambda: random.choice(motivationalMessages))
     width:      float = field(default=300.0)
     height:     float = field(default=200.0)
 
     body_text:  str   = field(default="")       # Main editable content
-    emoji:      str   = field(default="🌿")     # Accent emoji shown on the node
 
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["body_text"] = self.body_text
-        data["emoji"]     = self.emoji
         return data
 
     @classmethod

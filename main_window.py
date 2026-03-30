@@ -407,7 +407,13 @@ class IntricateApp(QMainWindow):
         print('Joy buckets are still not filling, keep going you got this!')
 
     def populate_sessions(self):
-        self.project_selector.addItems(motivationalMessages)
+        from pathlib import Path
+        desktop = Path.home() / "Desktop"
+        desktop_folders = sorted(
+            p.name for p in desktop.iterdir()
+            if p.is_dir() and not p.name.startswith(".")
+        ) if desktop.exists() else []
+        self.project_selector.addItems(desktop_folders)
 
     # =========================================================================
     # Mouse and Hover Events

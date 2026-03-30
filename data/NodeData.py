@@ -49,6 +49,9 @@ class NodeData:
     # Persisted so wiring mode survives session save/load.
     ports_visible: bool = False
 
+    # ── Accent emoji ──────────────────────────────────────────────────────────
+    emoji: str = field(default="🌿")
+
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION
     # ─────────────────────────────────────────────────────────────────────────
@@ -71,6 +74,7 @@ class NodeData:
             "width":         self.width,
             "height":        self.height,
             "ports_visible": self.ports_visible,
+            "emoji":         self.emoji,
         }
 
     @classmethod
@@ -91,4 +95,5 @@ class NodeData:
             width         = float(data.get("width",   300.0)),
             height        = float(data.get("height",  200.0)),
             ports_visible = data.get("ports_visible", False),
+            emoji         = data.get("emoji",         "🌿"),
         )

@@ -54,20 +54,6 @@ class WarmNode(BaseNode):
     # LAYOUT ZONES
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _emoji_rect(self) -> QRectF:
-        r = self.rect()
-        return QRectF(r.x() + PADDING, r.y() + PADDING, EMOJI_SIZE, EMOJI_SIZE)
-
-    def _title_rect(self) -> QRectF:
-        r  = self.rect()
-        er = self._emoji_rect()
-        return QRectF(
-            er.right() + 6.0,
-            r.y() + PADDING,
-            r.width() - er.right() - PADDING - 6.0,
-            EMOJI_SIZE
-        )
-
     def _body_rect(self) -> QRectF:
         r = self.rect()
         return QRectF(
@@ -182,32 +168,8 @@ class WarmNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
-        painter.save()
-
-        # ── Emoji accent ──────────────────────────────────────────────────────
-        emoji_font = QFont(Theme.healthFontFamily, 16)
-        painter.setFont(emoji_font)
-        painter.setPen(QColor(Theme.textPrimary))
-        painter.drawText(self._emoji_rect(), Qt.AlignCenter, self.data.emoji)
-
-        # ── Title ─────────────────────────────────────────────────────────────
-        title_font = QFont(Theme.healthFontFamily, 9)
-        title_font.setBold(True)
-        painter.setFont(title_font)
-        painter.setPen(QColor(Theme.textPrimary))
-        painter.drawText(self._title_rect(), Qt.AlignVCenter | Qt.AlignLeft,
-                         self.data.title)
-
-        # ── Divider under header ──────────────────────────────────────────────
-        r   = self.rect()
-        div_y = r.y() + PADDING + EMOJI_SIZE + 2.0
-        painter.setPen(QPen(QColor(Theme.primaryBorder), 1.0, Qt.DotLine))
-        painter.drawLine(
-            QPointF(r.x() + PADDING, div_y),
-            QPointF(r.right() - PADDING, div_y)
-        )
-
-        painter.restore()
+        # Emoji + title — fully delegated to BaseNode
+        super().paint_content(painter)
 
     # ─────────────────────────────────────────────────────────────────────────
     # GEOMETRY

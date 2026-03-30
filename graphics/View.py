@@ -151,7 +151,17 @@ class IntricateView(QGraphicsView):
                     scene.complete_connection(input_port.parent_node,
                                               explicit_port=input_port)
                 else:
-                    scene.cancel_connection()
+                    # No port hit — snap to the closest input port on whatever
+                    # node is under the cursor; dynamic corner routing handles the rest
+                    node = next(
+                        (i for i in scene.items(scene_pos)
+                         if hasattr(i, 'input_ports') and i.input_ports),
+                        None
+                    )
+                    if node:
+                        scene.complete_connection(node)
+                    else:
+                        scene.cancel_connection()
                 event.accept()
                 return
         super().mousePressEvent(event)
@@ -172,13 +182,42 @@ class IntricateView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
-        """End pan."""
+        """End pan; expand the scene rect if a node was dragged outside it."""
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = None
             self.setCursor(Qt.ArrowCursor)
             event.accept()
             return
         super().mouseReleaseEvent(event)
+        if event.button() == Qt.LeftButton:
+            # Defer to next event loop tick — scene state is fully settled by then
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, self._expand_scene_rect)
+
+    # ── Scene auto-expansion ──────────────────────────────────────────────────
+
+    _EXPAND_MARGIN = 300   # breathing room (scene px) beyond the outermost node
+
+    def _expand_scene_rect(self) -> None:
+        """
+        Grow the scene rect to encompass all nodes plus _EXPAND_MARGIN padding.
+        Only measures nodes (not wires) — wire paths overshoot into nodes and
+        would inflate the rect incorrectly.  Never shrinks; uses united().
+        """
+        scene = self.scene()
+        if not scene:
+            return
+        from PySide6.QtCore import QRectF
+        nodes_rect = QRectF()
+        for item in scene.items():
+            if hasattr(item, 'data') and hasattr(item, 'rect'):
+                nodes_rect = nodes_rect.united(item.mapRectToScene(item.rect()))
+        if nodes_rect.isNull():
+            return
+        m = self._EXPAND_MARGIN
+        new_rect = scene.sceneRect().united(nodes_rect.adjusted(-m, -m, m, m))
+        if new_rect != scene.sceneRect():
+            scene.setSceneRect(new_rect)
 
     # ─────────────────────────────────────────────────────────────────────────
     # DRAG AND DROP

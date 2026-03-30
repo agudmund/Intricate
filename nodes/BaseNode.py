@@ -172,25 +172,71 @@ class BaseNode(QGraphicsRectItem):
 
         return super().itemChange(change, value)
 
+    def _heal_connections(self):
+        """
+        When this node is deleted, bridge its input sources directly to its
+        output targets so the chain is not broken.
+
+        A → self → B  becomes  A → B.
+        Multiple sources / targets produce a full cross-join.
+        Only fires when both sides have at least one live node.
+        """
+        scene = self.scene()
+        if not scene:
+            return
+        try:
+            sources = [c.start_node for c in self.connections
+                       if c.end_node is self and c.start_node is not None]
+            targets = [c.end_node   for c in self.connections
+                       if c.start_node is self and c.end_node is not None]
+        except RuntimeError:
+            return
+        if not sources or not targets:
+            return
+        from graphics.Connection import Connection
+        for src in sources:
+            for tgt in targets:
+                if src is tgt:
+                    continue
+                try:
+                    new_conn = Connection(src, tgt)
+                    scene.addItem(new_conn)
+                    new_conn.update_path()
+                except Exception:
+                    pass
+
     def _prepare_for_removal(self):
         """
         Graceful exit — called when this node is leaving its scene.
 
         Order matters:
-            1. Disconnect Qt signals (behaviour) — before any Qt object is invalid
-            2. Sever wire connections — while scene APIs are still valid
-            3. Clear connection list — last, after all severing is done
+            1. Heal wires — bridge sources to targets before severing anything
+            2. Disconnect Qt signals (behaviour) — before any Qt object is invalid
+            3. Sever wire connections — while scene APIs are still valid
+            4. Clear connection list — last, after all severing is done
 
         Do NOT set self.behaviour = None here. The finished signal on pulse_anim
         fires re-entrantly during teardown and will segfault if behaviour is gone.
         disconnect_all() severs the connections instead — that's sufficient.
         """
+        self._heal_connections()
         self._detach_buttons()
 
         if hasattr(self, 'behaviour') and self.behaviour:
             self.behaviour.disconnect_all()
 
         for conn in list(self.connections):
+            # Stop the glide animation before touching any node references
+            if hasattr(conn, '_glide_timer'):
+                conn._glide_timer.stop()
+            # Remove from the other endpoint's connection list so it doesn't
+            # hold a stale reference after this node is gone
+            other = conn.end_node if conn.start_node is self else conn.start_node
+            if other is not None and other is not self and hasattr(other, 'connections'):
+                try:
+                    other.connections.remove(conn)
+                except ValueError:
+                    pass
             if conn.scene():
                 conn.scene().removeItem(conn)
             conn.start_node = None
@@ -289,9 +335,12 @@ class BaseNode(QGraphicsRectItem):
             self._delete_btn = None
 
     def _delete_self(self) -> None:
-        """Remove this node from the scene. Called by the delete button."""
-        if self.scene():
-            self.scene().removeItem(self)
+        """Remove this node from the scene. Called by the delete button.
+        Deferred one event-loop tick so the button's mousePressEvent fully
+        unwinds before Qt tears down the node and its child items."""
+        scene = self.scene()
+        if scene:
+            QTimer.singleShot(0, lambda: scene.removeItem(self))
 
     # ─────────────────────────────────────────────────────────────────────────
     # PORTS
@@ -375,6 +424,12 @@ class BaseNode(QGraphicsRectItem):
         scene = self.scene()
         if scene and hasattr(scene, 'raise_node'):
             scene.raise_node(self)
+
+        if event.button() == Qt.RightButton:
+            if scene and hasattr(scene, 'begin_connection'):
+                scene.begin_connection(self)
+            event.accept()
+            return
 
         if event.button() == Qt.LeftButton:
             # Resize handle — bottom-right corner
@@ -468,6 +523,14 @@ class BaseNode(QGraphicsRectItem):
         painter.restore()
 
     _BUTTON_ZONE_H = 24.0   # px reserved for the button strip (4 pad + 16 button + 4 gap)
+    _EMOJI_SIZE    = 22.0   # emoji accent square in the title row
+
+    def _emoji_rect(self) -> QRectF:
+        """Small square to the left of the title text, vertically centred in the title row."""
+        r   = self.rect()
+        pad = Theme.nodeTextPaddingLeft
+        ty  = r.top() + self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop
+        return QRectF(r.left() + pad, ty, self._EMOJI_SIZE, self._EMOJI_SIZE)
 
     def paint_content(self, painter: QPainter):
         """
@@ -476,22 +539,30 @@ class BaseNode(QGraphicsRectItem):
         Called after the shell (background + border) is painted.
         Painter is in node-local coordinates.
 
-        Default implementation draws self.data.title top-left using the
-        node font and offset Theme values. Subclasses that need
-        type-specific content override this entirely (no super() needed).
+        Default implementation draws the accent emoji then the title to its
+        right, using Theme font/color/offset values. Subclasses that need
+        type-specific content override this entirely (no super() needed),
+        or call super() to inherit the standard title+emoji row.
         """
         painter.save()
         r   = self.rect()
         pad = Theme.nodeTextPaddingLeft
-        content_rect = QRectF(
-            r.left()   + pad,
-            r.top()    + self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop,
-            r.width()  - pad,
+        er  = self._emoji_rect()
+
+        # ── Accent emoji ──────────────────────────────────────────────────────
+        painter.setFont(QFont(Theme.healthFontFamily, 14))
+        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.drawText(er, Qt.AlignCenter, self.data.emoji)
+
+        # ── Title — starts to the right of the emoji ──────────────────────────
+        title_rect = QRectF(
+            er.right() + 6.0,
+            er.top(),
+            r.right() - er.right() - pad - 6.0,
             r.height() - self._BUTTON_ZONE_H,
         )
-        painter.setPen(QColor(Theme.aboutFontColor))
         painter.setFont(QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize)))
-        painter.drawText(content_rect, Qt.AlignLeft | Qt.AlignTop, self.data.title)
+        painter.drawText(title_rect, Qt.AlignLeft | Qt.AlignTop, self.data.title)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────

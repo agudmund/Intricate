@@ -17,8 +17,10 @@ class Connection(QGraphicsPathItem):
     # 0.15 gives a smooth ~0.4 s ease-out glide between corners.
     _GLIDE_SPEED = 0.15
 
-    # Pixels to inset the wire endpoint into the node from the port position
-    _INSET = 8.0
+    # Pixels past the node border the wire endpoint is placed.
+    # The wire is then faded out over this same distance so it is only
+    # visible up to the edge — extending inside avoids a visible gap.
+    _INSIDE = 18.0
 
     def __init__(self, start_node, end_node=None):
         super().__init__()
@@ -56,9 +58,7 @@ class Connection(QGraphicsPathItem):
         self._glide_timer.setInterval(16)
         self._glide_timer.timeout.connect(self._glide_tick)
 
-        # z=0 — neutral between back nodes (z=-10) and front nodes (z=10).
-        self.setZValue(0)
-        self.update_path()
+        self.update_path()   # also sets z via _sync_z()
 
     # ------------------------------------------------------------------
     # Corner tangent helpers
@@ -66,22 +66,41 @@ class Connection(QGraphicsPathItem):
 
     def _corner_tangent(self, node, port):
         """
-        Given a port on node, return (inset_scene_pos, outward_dx, outward_dy).
-        The inset pos moves _INSET pixels from the corner toward the node centre.
-        The outward direction is what both ctrl1 (departure) and ctrl2 (arrival)
-        use — placing the control handle outside the corner so the bezier arc
-        comes in/out at the correct diagonal angle.
+        Given a port on node, return (endpoint_scene_pos, outward_dx, outward_dy).
+
+        The endpoint is placed _INSIDE pixels past the node border so the
+        bezier terminates well inside the node.  The wire is then faded out
+        over that same distance in paint() so it is only visible up to the edge.
+
+        The outward direction drives both ctrl1 (departure) and ctrl2 (arrival)
+        so the bezier arcs in/out at the correct diagonal angle for each corner.
         """
         port_local = port.pos()
         r  = node.rect()
-        cx = r.width()  / 2 - port_local.x()   # vector: port → centre
-        cy = r.height() / 2 - port_local.y()
+        px, py = port_local.x(), port_local.y()
+
+        # Unit vector: port → node centre (inward direction)
+        cx = r.width()  / 2 - px
+        cy = r.height() / 2 - py
         length = (cx * cx + cy * cy) ** 0.5
         if length > 0:
             nx, ny = cx / length, cy / length
         else:
             nx, ny = 1.0, 0.0
-        pos = node.mapToScene(port_local + QPointF(nx * self._INSET, ny * self._INSET))
+
+        # Parametric t at which the ray (px + t·nx, py + t·ny) first enters
+        # the node rect.  The port sits outside so both t values are positive;
+        # the larger one is when the point is inside on both axes.
+        t_x = ((r.left()   - px) / nx) if nx > 1e-6  else \
+              ((r.right()  - px) / nx) if nx < -1e-6 else 0.0
+        t_y = ((r.top()    - py) / ny) if ny > 1e-6  else \
+              ((r.bottom() - py) / ny) if ny < -1e-6 else 0.0
+        t_border = max(t_x, t_y)
+
+        pos = node.mapToScene(QPointF(
+            px + nx * (t_border + self._INSIDE),
+            py + ny * (t_border + self._INSIDE),
+        ))
         return pos, -nx, -ny   # outward = opposite of inward
 
     def _compute_source(self, ref_scene_pos):
@@ -97,6 +116,18 @@ class Connection(QGraphicsPathItem):
     @staticmethod
     def _node_center(node):
         return node.mapToScene(node.rect().center())
+
+    def _sync_z(self):
+        """
+        Match the wire's z to its lowest endpoint node.  Same-z ties are broken
+        by scene insertion order — nodes are added before wires, so nodes still
+        paint over the wire without the sub-pixel render-order seam that
+        z - epsilon introduced at the thin source end of the taper.
+        """
+        z = self.start_node.zValue()
+        if self.end_node:
+            z = min(z, self.end_node.zValue())
+        self.setZValue(z)
 
     # ------------------------------------------------------------------
     # Path construction
@@ -149,6 +180,7 @@ class Connection(QGraphicsPathItem):
             if not self._glide_timer.isActive():
                 self._glide_timer.start()
 
+            self._sync_z()
             self._build_bezier(
                 self._anim_p1, self._anim_d1x, self._anim_d1y,
                 self.floating_point, -1.0, 0.0,
@@ -157,6 +189,7 @@ class Connection(QGraphicsPathItem):
         else:
             return
 
+        self._sync_z()
         self._build_bezier(
             self._anim_p1, self._anim_d1x, self._anim_d1y,
             self._anim_p2, self._anim_d2x, self._anim_d2y,
@@ -211,6 +244,7 @@ class Connection(QGraphicsPathItem):
                 self._anim_d2x = dx2
                 self._anim_d2y = dy2
 
+        self._sync_z()
         if self._anim_p2 is not None:
             self._build_bezier(
                 self._anim_p1, self._anim_d1x, self._anim_d1y,
@@ -250,6 +284,26 @@ class Connection(QGraphicsPathItem):
             return
 
         painter.setRenderHint(QPainter.Antialiasing)
+
+        # Clip out the interior of both endpoint nodes so the wire is never
+        # visible inside them regardless of node background transparency.
+        # The cutout is expanded by half the border width so the wire tucks
+        # cleanly behind the border stroke rather than terminating flush with it.
+        clip = QPainterPath()
+        clip.addRect(self.boundingRect())
+        for ep in (self.start_node, self.end_node):
+            if ep is None:
+                continue
+            rr  = ep.round_radius if hasattr(ep, 'round_radius') else 0
+            bw  = ep.current_pen.widthF() if hasattr(ep, 'current_pen') else 2.0
+            margin = bw / 2.0   # clip at outer border edge so the stroke covers the wire tip
+            cutout = QPainterPath()
+            cutout.addRoundedRect(
+                ep.rect().adjusted(-margin, -margin, margin, margin),
+                rr + margin, rr + margin,
+            )
+            clip = clip.subtracted(ep.sceneTransform().map(cutout))
+        painter.setClipPath(clip)
 
         covering_nodes = []
         scene = self.scene()

@@ -282,6 +282,37 @@ class ImageNode(BaseNode):
             self.load_from_path(path)
 
     # ─────────────────────────────────────────────────────────────────────────
+    # BUTTONS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_buttons(self) -> None:
+        from nodes.NodeButton import NodeButton
+        super()._build_buttons()
+        vision_pix = Theme.icon(Theme.imageVisionIcon, fallback_color="#9ab8d9")
+        self._buttons.append(NodeButton(self, vision_pix, self._trigger_vision))
+
+    def _trigger_vision(self) -> None:
+        """Send this node's image to a ClaudeNode's vision API."""
+        if not self.data.image_b64:
+            return
+        from nodes.ClaudeNode import ClaudeNode
+        # Prefer a wired ClaudeNode — respects the user's explicit connection
+        for conn in list(self.connections):
+            try:
+                other = conn.end_node if conn.start_node is self else conn.start_node
+            except RuntimeError:
+                continue
+            if isinstance(other, ClaudeNode):
+                other.process_vision(self.data.image_b64, self.data.caption)
+                return
+        # Fall back to any ClaudeNode in the scene
+        scene = self.scene()
+        if scene:
+            claude = next((n for n in scene.items() if isinstance(n, ClaudeNode)), None)
+            if claude:
+                claude.process_vision(self.data.image_b64, self.data.caption)
+
+    # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 

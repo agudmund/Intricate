@@ -73,6 +73,8 @@ class ClaudeNode(BaseNode):
         self._watcher: QFileSystemWatcher | None = None
         self._file_offset: int = 0
         self._current_reply: str = ""
+        self._reply_received: bool = False   # set True the moment file-watcher content arrives
+        self._last_response_node = None      # chain: wire new responses from the previous one
 
         self._reply_done_timer = QTimer()
         self._reply_done_timer.setSingleShot(True)
@@ -155,6 +157,7 @@ class ClaudeNode(BaseNode):
                         if text:
                             self._append_body(text)
                             self._current_reply += text + " "
+                            self._reply_received = True
                             self._reply_done_timer.start()
             except json.JSONDecodeError:
                 pass
@@ -302,64 +305,158 @@ class ClaudeNode(BaseNode):
         self.data.depth_front = True
         self._apply_depth()
 
+    def _spawn_response_node(self, text: str) -> None:
+        """Spawn a ClaudeResponseNode with text and wire it to this node."""
+        import random
+        from PySide6.QtCore import QPointF, QRectF
+        scene = self.scene()
+        if not scene:
+            return
+        views = scene.views()
+        if views:
+            view   = views[0]
+            vr     = view.mapToScene(view.viewport().rect()).boundingRect()
+            margin = 40
+
+            def _pick_pos():
+                return QPointF(
+                    random.uniform(vr.left() + margin, vr.right()  - margin),
+                    random.uniform(vr.top()  + margin, vr.bottom() - margin),
+                )
+
+            def _node_under(p):
+                probe = QRectF(p.x() - 4, p.y() - 4, 8, 8)
+                for item in scene.items(probe):
+                    if hasattr(item, 'data'):
+                        return item
+                return None
+
+            pos = _pick_pos()
+            for _ in range(20):
+                occupant = _node_under(pos)
+                if occupant is None:
+                    break
+                if getattr(occupant.data, 'node_type', '') == 'claude_response':
+                    break
+                pos = _pick_pos()
+        else:
+            vr  = None
+            pos = self.pos() + QPointF(0, self.rect().height() + 16)
+
+        node = scene.add_claude_response_node(pos=pos, label=text)
+
+        if views and vr is not None:
+            nr = node.rect()
+            margin = 40
+            cx = max(vr.left() + margin,
+                     min(node.pos().x(), vr.right()  - margin - nr.width()))
+            cy = max(vr.top()  + margin,
+                     min(node.pos().y(), vr.bottom() - margin - nr.height()))
+            node.setPos(QPointF(cx, cy))
+
+        # Chain: wire from the previous response node if it still exists,
+        # otherwise anchor back to the ClaudeNode as the chain root.
+        from graphics.Connection import Connection
+        wire_source = (
+            self._last_response_node
+            if self._last_response_node is not None and self._last_response_node.scene()
+            else self
+        )
+        conn = Connection(wire_source, node)
+        scene.addItem(conn)
+        self._last_response_node = node
+
+    def process_vision(self, image_b64: str, caption: str) -> None:
+        """
+        Send image_b64 to the Claude vision API and spawn a response node.
+
+        Runs the HTTP call on a daemon thread — never blocks the canvas.
+        Result arrives on the main thread via QTimer.singleShot.
+        """
+        import os
+        import json
+        import urllib.request
+        import urllib.error
+
+        api_key = os.environ.get("SingleSharedBraincell_ApiKey", "").strip()
+        if not api_key:
+            self._spawn_response_node(
+                "API key not set — check SingleSharedBraincell_ApiKey."
+            )
+            return
+
+        prompt = "Describe this image in detail."
+        if caption:
+            prompt = f'Image caption: "{caption}"\n\n{prompt}'
+
+        # Surface it in the body log and show a title spinner
+        self._append_body(f"\n› [Vision: {caption or 'image'}]\n")
+        self._last_response_node = None   # vision call starts a fresh chain
+        _saved_title = self.data.title
+        self.data.title = f"Vision: {caption or 'image'}…"
+        self.update()
+
+        def _call():
+            try:
+                payload = json.dumps({
+                    "model":      "claude-sonnet-4-6",
+                    "max_tokens": 1024,
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type":   "image",
+                                "source": {
+                                    "type":       "base64",
+                                    "media_type": "image/png",
+                                    "data":       image_b64,
+                                },
+                            },
+                            {"type": "text", "text": prompt},
+                        ],
+                    }],
+                }).encode("utf-8")
+
+                req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages",
+                    data=payload,
+                    headers={
+                        "x-api-key":         api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type":      "application/json",
+                    },
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        body = json.loads(resp.read().decode("utf-8"))
+                    text = body["content"][0]["text"].strip()
+                except urllib.error.HTTPError as e:
+                    detail = e.read().decode("utf-8", errors="replace")
+                    text = f"Vision API error {e.code}:\n{detail[:300]}"
+                except Exception as e:
+                    text = f"Vision request failed:\n{e}"
+            except Exception as e:
+                text = f"Vision setup failed:\n{e}"
+
+            def _done():
+                self.data.title = _saved_title
+                self._append_body(text)
+                self.update()
+                self._spawn_response_node(text)
+            QTimer.singleShot(0, _done)
+
+        threading.Thread(target=_call, daemon=True).start()
+
     def _on_reply_done(self) -> None:
         self.data.depth_front = True
         self._apply_depth()
         close_after = getattr(self, '_close_on_reply', False)
         self._close_on_reply = False
-        scene = self.scene()
         reply = self._current_reply.strip()
         self._current_reply = ""
-        if scene and reply and "no response requested" not in reply.lower():
-            import random
-            from PySide6.QtCore import QPointF, QRectF
-            views = scene.views()
-            if views:
-                view   = views[0]
-                vr     = view.mapToScene(view.viewport().rect()).boundingRect()
-                margin = 40
-
-                def _pick_pos():
-                    return QPointF(
-                        random.uniform(vr.left() + margin, vr.right()  - margin),
-                        random.uniform(vr.top()  + margin, vr.bottom() - margin),
-                    )
-
-                def _node_under(p):
-                    """Return the topmost node at p, or None."""
-                    probe = QRectF(p.x() - 4, p.y() - 4, 8, 8)
-                    for item in scene.items(probe):
-                        if hasattr(item, 'data'):
-                            return item
-                    return None
-
-                pos = _pick_pos()
-                for _ in range(20):
-                    occupant = _node_under(pos)
-                    if occupant is None:
-                        break                          # clear spot — use it
-                    if getattr(occupant.data, 'node_type', '') == 'claude_response':
-                        break                          # stack on another response — fine
-                    pos = _pick_pos()                  # something else is there — retry
-            else:
-                pos = self.pos() + QPointF(0, self.rect().height() + 16)
-
-            node = scene.add_claude_response_node(pos=pos, label=reply)
-
-            # Clamp so the full node rect stays inside the viewport
-            if views:
-                nr = node.rect()
-                cx = max(vr.left() + margin,
-                         min(node.pos().x(), vr.right()  - margin - nr.width()))
-                cy = max(vr.top()  + margin,
-                         min(node.pos().y(), vr.bottom() - margin - nr.height()))
-                node.setPos(QPointF(cx, cy))
-
-            # Wire the ClaudeNode output to the response node —
-            # corner routing is handled dynamically in Connection.update_path.
-            from graphics.Connection import Connection
-            conn = Connection(self, node)
-            scene.addItem(conn)
+        if reply and "no response requested" not in reply.lower():
+            self._spawn_response_node(reply)
 
         if close_after:
             import json
@@ -373,6 +470,56 @@ class ClaudeNode(BaseNode):
             if win:
                 QTimer.singleShot(400, win.close)
 
+    def _check_error_response(self, status_text: str) -> None:
+        """If the subprocess exited with no reply, surface a friendly error node."""
+        if self._reply_received:
+            return   # file-watcher confirmed content arrived — all good
+        sl = status_text.lower()
+        if any(kw in sl for kw in ("connect", "network", "unreachable", "timeout",
+                                   "enotfound", "api connection", "no route")):
+            msg = "No internet connection — remember to turn on WiFi before talking to the API."
+        elif any(kw in sl for kw in ("api key", "authentication", "unauthorized", "401")):
+            msg = "API key issue — check that SingleSharedBraincell_ApiKey is set correctly."
+        elif status_text.strip():
+            msg = f"Claude didn't respond:\n\n{status_text.strip()[:300]}"
+        else:
+            msg = "Claude didn't respond — no output received. Check your connection."
+        self._spawn_response_node(msg)
+
+    def _connected_input_context(self) -> str:
+        """
+        Collect context from every node wired into this ClaudeNode's input ports.
+        Returns a prefix string to prepend to the outgoing prompt, or "" if nothing
+        is connected.  Each node type contributes what it knows:
+            - All nodes: title and node_type
+            - WarmNode / AboutNode / TextNode: body_text
+            - ImageNode: caption (image bytes handled separately when vision is wired)
+            - ClaudeResponseNode: label (the response text)
+        """
+        parts = []
+        for conn in list(self.connections):
+            try:
+                end = conn.end_node
+                src = conn.start_node
+            except RuntimeError:
+                continue
+            if end is not self:
+                continue
+            if src is None or not hasattr(src, 'data'):
+                continue
+            d = src.data
+            section = [f"[{d.node_type}] {d.title}"]
+            if hasattr(d, 'body_text') and d.body_text.strip():
+                section.append(d.body_text.strip())
+            elif hasattr(d, 'label') and d.label.strip():
+                section.append(d.label.strip())
+            elif hasattr(d, 'caption') and d.caption.strip():
+                section.append(f"caption: {d.caption.strip()}")
+            parts.append("\n".join(section))
+        if not parts:
+            return ""
+        return "Connected nodes:\n" + "\n\n".join(parts) + "\n\n"
+
     def _send_input(self, text: str) -> None:
         display_text = text                        # keep original for title/body
         text = self._preprocess_input(text)
@@ -380,6 +527,10 @@ class ClaudeNode(BaseNode):
             return
         if not self._current_uuid:
             return
+        # Prepend context from any nodes wired into the input ports
+        context = self._connected_input_context()
+        if context:
+            text = context + text
         self._append_body(f"\n› {display_text}\n")
         import textwrap
         self._title_question = textwrap.fill(display_text.capitalize(), width=84)
@@ -392,6 +543,8 @@ class ClaudeNode(BaseNode):
             self._file_offset = jsonl_path.stat().st_size
         except OSError:
             pass
+        self._reply_received = False
+        self._last_response_node = None   # reset chain — new question anchors back to ClaudeNode
         self._stream_q  = queue.SimpleQueue()
         self._status_q  = queue.SimpleQueue()
         proc = subprocess.Popen(
@@ -462,9 +615,13 @@ class ClaudeNode(BaseNode):
 
         if done:
             self._stream_timer.stop()
+            final_status = self._status_buf
             self._status_buf = ""
             self.data.title = getattr(self, "_title_question", self.data.title)
             self.update()
+            # Give the file watcher a moment to deliver any last JSONL entries,
+            # then check whether a reply actually arrived.
+            QTimer.singleShot(600, lambda: self._check_error_response(final_status))
 
     def _preprocess_input(self, text: str) -> str:
         """Substitute escape tokens and strip post-action suffixes.
