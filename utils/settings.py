@@ -68,9 +68,10 @@ _DEFAULTS: dict = {
         "warm_editor": "",
     },
     "node": {
-        "font_vertical_offset": -8,
-        "text_padding_left":    15,
-        "text_padding_top":     4,
+        "font_vertical_offset":       -8,
+        "text_padding_left":          15,
+        "text_padding_top":           4,
+        "border_selected_color":      "#8a7560",
         "claude": {
             "bg_color":          "#1e2a22",
             "bg_color_front":    "#28201e",

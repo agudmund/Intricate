@@ -108,13 +108,17 @@ class BaseNode(QGraphicsRectItem):
         self.behaviour = NodeBehaviour(self)
 
         # ── Visuals ───────────────────────────────────────────────────────────
-        self.round_radius  = _ROUND_RADIUS
-        self.normal_pen    = QPen(_BORDER, _BORDER_WIDTH)
-        self.hover_pen     = QPen(_BORDER.lighter(130), _BORDER_WIDTH)
-        self.selected_pen  = QPen(_BORDER_SELECTED, _BORDER_WIDTH * _BORDER_SELECTED_SCALE)
+        _bw  = Theme.nodeBorderWidth
+        _bc  = QColor(Theme.nodeBorder)
+        _bcs = QColor(Theme.nodeBorderSelected)
+        _bss = Theme.nodeBorderSelectedScale
+        self.round_radius  = Theme.nodeRoundRadius
+        self.normal_pen    = QPen(_bc, _bw)
+        self.hover_pen     = QPen(_bc.lighter(130), _bw)
+        self.selected_pen  = QPen(_bcs, _bw * _bss)
         self.current_pen   = self.normal_pen
 
-        self.setBrush(_BG)
+        self.setBrush(QColor(Theme.nodeBg))
         self.setPen(self.current_pen)
 
         self.setFlags(

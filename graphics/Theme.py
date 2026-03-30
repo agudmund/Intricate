@@ -143,8 +143,8 @@ class Theme(metaclass=_ThemeMeta):
 
     nodeBg                  = "#2a2a2a"
     nodeBorder              = primaryBorder
-    nodeBorderSelected      = textPrimary
-    nodeBorderWidth         = 1.5
+    nodeBorderSelected      = "#8a7560"
+    nodeBorderWidth         = 1.0
     nodeBorderSelectedScale = 1.0
     nodeRoundRadius         = 12.0
     nodeShadowBlur          = 28
@@ -189,13 +189,18 @@ class Theme(metaclass=_ThemeMeta):
     healthWarnThreshold  = 50
     healthHighThreshold  = 150
     healthPollIntervalMs = 2000
-    claudeBgColor            = "#1e2a22"
-    claudeBgColorFront       = "#28201e"
+    claudeBgColor            = windowBg
+    claudeBgColorFront       = "#2a2a2a"
+    claudeBgColorBack        = windowBg
+    claudeBgColorInput       = "#2a2a2a"
     claudeBgAlpha            = 179
     claudeBodyFontFamily     = "Lato"
     claudeBodyFontSize       = 10
     claudeDefaultWidth       = 200.0
     claudeDefaultHeight      = 300.0
+    claudeBorderWidth        = 1.0
+    claudeBodyShowIcon       = "claude_body_show.png"
+    claudeBodyHideIcon       = "claude_body_hide.png"
 
     aboutFontFamily          = "Chandler42"
     aboutFontSize            = 10
@@ -365,13 +370,15 @@ class Theme(metaclass=_ThemeMeta):
             cls.nodeTextPaddingLeft = float(node["text_padding_left"])
         if "text_padding_top" in node:
             cls.nodeTextPaddingTop = float(node["text_padding_top"])
+        if "border_selected_color" in node:
+            cls.nodeBorderSelected = node["border_selected_color"]
 
         # ── Claude node ───────────────────────────────────────────────────────
         claude = settings.get_section("node").get("claude", {})
-        if "bg_color" in claude:
-            cls.claudeBgColor = claude["bg_color"]
-        if "bg_color_front" in claude:
-            cls.claudeBgColorFront = claude["bg_color_front"]
+        cls.claudeBgColor      = claude.get("bg_color",       cls.windowBg)
+        cls.claudeBgColorFront = claude.get("bg_color_front", cls.claudeBgColorFront)
+        cls.claudeBgColorBack  = claude.get("bg_color_back",  cls.claudeBgColorBack)
+        cls.claudeBgColorInput = claude.get("bg_color_input", cls.claudeBgColorInput)
         if "bg_alpha" in claude:
             cls.claudeBgAlpha = int(claude["bg_alpha"])
         if "body_font_family" in claude:
@@ -382,6 +389,8 @@ class Theme(metaclass=_ThemeMeta):
             cls.claudeDefaultWidth = float(claude["default_width"])
         if "default_height" in claude:
             cls.claudeDefaultHeight = float(claude["default_height"])
+        if "border_width" in claude:
+            cls.claudeBorderWidth = float(claude["border_width"])
 
         # ── About node ────────────────────────────────────────────────────────
         # Inherit base node offsets first — [node.about] overrides only what it explicitly sets.
@@ -443,7 +452,6 @@ class Theme(metaclass=_ThemeMeta):
         if "text_primary" in colors:
             cls.textPrimary        = colors["text_primary"]
             cls.comboboxText       = cls.textPrimary
-            cls.nodeBorderSelected = cls.textPrimary
 
         if "backdrop" in colors:
             cls.backDrop       = colors["backdrop"]

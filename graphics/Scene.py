@@ -55,13 +55,34 @@ class IntricateScene(QGraphicsScene):
         self.addItem(node)
         return node
 
-    def add_about_node(self, pos: QPointF | None = None):
+    def add_about_node(self, pos: QPointF | None = None, label: str | None = None):
         """Add an AboutNode at pos."""
         from nodes.AboutNode import AboutNode
-        node = AboutNode()
+        from data.AboutNodeData import AboutNodeData
+        data = AboutNodeData(label=label) if label is not None else AboutNodeData()
+        node = AboutNode(data)
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)
+        return node
+
+    def add_claude_response_node(self, pos: QPointF | None = None, label: str = ""):
+        """Add a ClaudeResponseNode (multiline reply sticky) at pos."""
+        from nodes.ClaudeResponseNode import ClaudeResponseNode
+        from data.ClaudeResponseNodeData import ClaudeResponseNodeData
+        from PySide6.QtCore import QPointF
+        node = ClaudeResponseNode(ClaudeResponseNodeData(label=label))
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        # Shift right past any overlapping ClaudeResponseNodes (up to 10 nudges)
+        for _ in range(10):
+            colliders = [i for i in self.collidingItems(node)
+                         if i is not node and isinstance(i, ClaudeResponseNode)]
+            if not colliders:
+                break
+            right_edge = max(i.mapToScene(i.boundingRect().topRight()).x() for i in colliders)
+            node.setPos(right_edge + 16, node.pos().y())
         return node
 
     def add_claude_node(self, pos: QPointF | None = None):
@@ -69,7 +90,8 @@ class IntricateScene(QGraphicsScene):
         from nodes.ClaudeNode import ClaudeNode
         node = ClaudeNode()
         if pos is not None:
-            node.setPos(pos)
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
         self.addItem(node)
         return node
 

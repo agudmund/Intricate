@@ -182,12 +182,12 @@ class HealthNode(BaseNode):
         c_high  = QColor(Theme.healthColorHigh)
         c_text  = QColor(Theme.textPrimary)
 
-        f_label  = QFont(Theme.healthFontFamily, Theme.healthFontSizeLabel)
-        f_value  = QFont(Theme.healthFontFamily, Theme.healthFontSizeValue)
+        f_label  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeLabel))
+        f_value  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeValue))
         f_value.setBold(True)
-        f_header = QFont(Theme.healthFontFamily, Theme.healthFontSizeHeader)
+        f_header = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeHeader))
         f_header.setBold(True)
-        f_footer = QFont(Theme.healthFontFamily, Theme.healthFontSizeFooter)
+        f_footer = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeFooter))
 
         # ── HEADER ────────────────────────────────────────────────────────────
         painter.setFont(f_header)
