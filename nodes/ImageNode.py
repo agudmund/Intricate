@@ -20,6 +20,7 @@ from PySide6.QtGui import (
 from nodes.BaseNode import BaseNode
 from data.ImageNodeData import ImageNodeData
 from graphics.Theme import Theme
+import utils.settings as settings
 
 
 # Layout constants
@@ -268,14 +269,16 @@ class ImageNode(BaseNode):
         self.data.image_b64 = base64.b64encode(buf.data().data()).decode("utf-8")
 
     def _open_file_browser(self) -> None:
-        """Open a file dialog to pick an image."""
+        """Open a file dialog to pick an image, starting from the last used directory."""
+        start_dir = settings.get_nested("node", "image", "last_dir", "")
         path, _ = QFileDialog.getOpenFileName(
             None,
             "Select Image",
-            "",
+            start_dir,
             "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"
         )
         if path:
+            settings.set_nested("node", "image", "last_dir", str(Path(path).parent))
             self.load_from_path(path)
 
     # ─────────────────────────────────────────────────────────────────────────
