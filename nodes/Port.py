@@ -94,14 +94,18 @@ class Port(QGraphicsEllipseItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event) -> None:
-        """
-        Output port click — delegate wire creation to the parent node.
-        Input ports are passive receivers, they don't initiate wires.
-        """
-        if event.button() == Qt.LeftButton and self.is_output:
-            self.parent_node.on_port_clicked(self, event)
-            event.accept()
-            return
+        if event.button() == Qt.LeftButton:
+            if self.is_output:
+                self.parent_node.on_port_clicked(self, event)
+                event.accept()
+                return
+            else:
+                # Input port — complete a floating connection if one is in progress
+                scene = self.scene()
+                if scene and hasattr(scene, '_floating_conn') and scene._floating_conn:
+                    scene.complete_connection(self.parent_node)
+                    event.accept()
+                    return
         super().mousePressEvent(event)
 
     # ─────────────────────────────────────────────────────────────────────────

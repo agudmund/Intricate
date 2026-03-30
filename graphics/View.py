@@ -124,17 +124,30 @@ class IntricateView(QGraphicsView):
         event.accept()
 
     def mousePressEvent(self, event) -> None:
-        """Start pan on middle mouse."""
+        """Start pan on middle mouse. Cancel floating wire on right-click or empty-space click."""
         self.setFocus()
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = event.position()
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
             return
+        scene = self.scene()
+        if scene and getattr(scene, '_floating_conn', None):
+            if event.button() == Qt.RightButton:
+                scene.cancel_connection()
+                event.accept()
+                return
+            if event.button() == Qt.LeftButton:
+                scene_pos = self.mapToScene(event.position().toPoint())
+                item = scene.itemAt(scene_pos, self.transform())
+                from nodes.Port import Port
+                if not isinstance(item, Port):
+                    scene.cancel_connection()
+                    # fall through so click still selects/moves nodes
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        """Pan the canvas on middle mouse drag."""
+        """Pan on middle mouse drag; update floating wire on move."""
         if self._last_pan_pos is not None and event.buttons() & Qt.MiddleButton:
             delta          = event.position() - self._last_pan_pos
             self._last_pan_pos = event.position()
@@ -142,6 +155,10 @@ class IntricateView(QGraphicsView):
             self.translate(delta.x() / zoom, delta.y() / zoom)
             event.accept()
             return
+        scene = self.scene()
+        if scene and getattr(scene, '_floating_conn', None):
+            scene_pos = self.mapToScene(event.position().toPoint())
+            scene.update_floating_connection(scene_pos)
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:

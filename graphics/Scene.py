@@ -26,6 +26,52 @@ class IntricateScene(QGraphicsScene):
         # Cat strategy: certain ground first, expand when ready.
         self.setSceneRect(-500.0, -500.0, 1000.0, 1000.0)
 
+        self._floating_conn = None   # Connection being drawn, None when idle
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CONNECTION WIRING
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def begin_connection(self, start_node) -> None:
+        """Start drawing a wire from start_node's output port."""
+        from graphics.Connection import Connection
+        if self._floating_conn:
+            self.cancel_connection()
+        conn = Connection(start_node)
+        self._floating_conn = conn
+        self.addItem(conn)
+
+    def update_floating_connection(self, scene_pos: QPointF) -> None:
+        """Track the mouse position while a wire is being drawn."""
+        if self._floating_conn:
+            self._floating_conn.update_path(scene_pos)
+
+    def complete_connection(self, end_node) -> None:
+        """Snap the floating wire to end_node's input port."""
+        if not self._floating_conn:
+            return
+        conn = self._floating_conn
+        self._floating_conn = None
+        if conn.start_node is end_node:
+            self._discard_connection(conn)
+            return
+        conn.end_node = end_node
+        end_node.connections.append(conn)
+        conn.update_path()
+
+    def cancel_connection(self) -> None:
+        """Discard the floating wire without completing it."""
+        if self._floating_conn:
+            self._discard_connection(self._floating_conn)
+            self._floating_conn = None
+
+    def _discard_connection(self, conn) -> None:
+        try:
+            conn.start_node.connections.remove(conn)
+        except ValueError:
+            pass
+        self.removeItem(conn)
+
     # ─────────────────────────────────────────────────────────────────────────
     # NODE CREATION
     # ─────────────────────────────────────────────────────────────────────────

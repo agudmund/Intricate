@@ -202,6 +202,9 @@ class Theme(metaclass=_ThemeMeta):
     claudeBodyShowIcon       = "claude_body_show.png"
     claudeBodyHideIcon       = "claude_body_hide.png"
 
+    wireStart                = "#7a9e8a"   # output port mint
+    wireEnd                  = "#a07a5a"   # input port amber
+
     aboutFontFamily          = "Chandler42"
     aboutFontSize            = 10
     aboutFontColor           = "#e8f0ff"
@@ -271,6 +274,13 @@ class Theme(metaclass=_ThemeMeta):
 
         _log.log(TRACE, f"[icon resolve] '{filename}' → not found anywhere — circle fallback")
         return None
+
+    @classmethod
+    def from_hex(cls, hex_str: str, alpha: int = 255) -> 'QColor':
+        """Create a QColor from a hex string with optional alpha (0-255)."""
+        c = QColor(hex_str)
+        c.setAlpha(alpha)
+        return c
 
     @classmethod
     def icon(cls, filename: str | None, fallback_color: str = "#6b5a47") -> QPixmap:

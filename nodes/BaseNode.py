@@ -321,18 +321,10 @@ class BaseNode(QGraphicsRectItem):
             self.output_port.setVisible(visible)
 
     def on_port_clicked(self, port, event) -> None:
-        """
-        Called by Port.mousePressEvent when an output port is clicked.
-
-        Starts a temporary floating wire from this node's output port.
-        The wire follows the mouse until released on a target input port,
-        at which point the scene finalises the connection.
-
-        Connection logic is a future concern — this stub exists so Port
-        can call it without ImportError. It will be implemented when
-        Connection.py arrives.
-        """
-        pass  # Connection wire drawing — implemented when Connection.py arrives
+        """Start drawing a wire from this node's output port."""
+        scene = self.scene()
+        if scene and hasattr(scene, 'begin_connection'):
+            scene.begin_connection(self)
 
     # ─────────────────────────────────────────────────────────────────────────
     # MOUSE EVENTS
