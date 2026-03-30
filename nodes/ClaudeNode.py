@@ -8,9 +8,12 @@
 
 import json
 import queue
+import re
 import subprocess
 import threading
 from pathlib import Path
+
+_ANSI_RE = re.compile(r'\x1b\[[^A-Za-z]*[A-Za-z]')
 
 from PySide6.QtCore import QRectF, QFileSystemWatcher, QTimer, Signal, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent, QPainter, QPen
@@ -292,10 +295,9 @@ class ClaudeNode(BaseNode):
         self._current_reply = ""
         if scene and reply and "no response requested" not in reply.lower():
             from PySide6.QtCore import QPointF
-            nudge = self._response_count * 3
-            pos = self.pos() + QPointF(nudge, nudge)
+            below = self.pos() + QPointF(0, self.rect().height() + 16)
             self._response_count += 1
-            scene.add_claude_response_node(pos=pos, label=reply)
+            scene.add_claude_response_node(pos=below, label=reply)
 
     def _send_input(self, text: str) -> None:
         if self._handle_local_command(text):
@@ -314,18 +316,20 @@ class ClaudeNode(BaseNode):
             self._file_offset = jsonl_path.stat().st_size
         except OSError:
             pass
-        self._stream_q = queue.SimpleQueue()
+        self._stream_q  = queue.SimpleQueue()
+        self._status_q  = queue.SimpleQueue()
         proc = subprocess.Popen(
             ["powershell.exe", "-Command",
              f"claude --resume={self._current_uuid} --print \"{text}\""],
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         threading.Thread(target=self._read_proc_stdout, args=(proc,), daemon=True).start()
+        threading.Thread(target=self._read_proc_stderr, args=(proc,), daemon=True).start()
         self._stream_timer = QTimer()
         self._stream_timer.timeout.connect(self._flush_stream_title)
         self._stream_timer.start(80)
@@ -338,8 +342,17 @@ class ClaudeNode(BaseNode):
         finally:
             self._stream_q.put(None)
 
+    def _read_proc_stderr(self, proc) -> None:
+        try:
+            for chunk in iter(lambda: proc.stderr.read(64), ""):
+                if chunk:
+                    self._status_q.put(chunk)
+        finally:
+            self._status_q.put(None)
+
     def _flush_stream_title(self) -> None:
-        buf = getattr(self, "_stream_title_buf", "")
+        # Stdout — append response text to body as it streams
+        chunks = []
         done = False
         while True:
             try:
@@ -349,15 +362,31 @@ class ClaudeNode(BaseNode):
             if item is None:
                 done = True
                 break
-            buf += item
-        self._stream_title_buf = buf
-        display = buf.replace("\n", " ").strip()
-        if display:
-            self.data.title = display[-80:] if len(display) > 80 else display
-            self.update()
+            chunks.append(item)
+        if chunks:
+            self._append_body("".join(chunks))
+
+        # Stderr — show last visible status line (spinner, tool use) as title
+        buf = getattr(self, "_status_buf", "")
+        while True:
+            try:
+                chunk = self._status_q.get_nowait()
+            except queue.Empty:
+                break
+            if chunk is None:
+                break
+            buf += chunk
+        self._status_buf = buf
+        if buf:
+            segments = [_ANSI_RE.sub('', s).strip() for s in re.split(r'[\r\n]+', buf)]
+            last = next((s for s in reversed(segments) if s), None)
+            if last:
+                self.data.title = last[-80:]
+                self.update()
+
         if done:
             self._stream_timer.stop()
-            self._stream_title_buf = ""
+            self._status_buf = ""
             self.data.title = getattr(self, "_title_question", self.data.title)
             self.update()
 
