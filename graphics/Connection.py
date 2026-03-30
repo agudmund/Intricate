@@ -87,30 +87,47 @@ class Connection(QGraphicsPathItem):
         path.cubicTo(ctrl1, ctrl2, p2)
         self.setPath(path)
 
+    # Number of segments used for the tapered stroke
+    _TAPER_SEGMENTS = 24
+
     def paint(self, painter, option, widget):
         if self.start_node is None or not self.path():
             return
 
         painter.setRenderHint(QPainter.Antialiasing)
 
-        p1 = self.path().pointAtPercent(0)
-        p2 = self.path().pointAtPercent(1)
+        p_start = self.path().pointAtPercent(0)
+        p_end   = self.path().pointAtPercent(1)
 
-        grad = QLinearGradient(p1, p2)
+        grad = QLinearGradient(p_start, p_end)
         grad.setColorAt(0, QColor(Theme.wireStart))
         grad.setColorAt(1, QColor(Theme.wireEnd))
 
-        # Glow pass — thicker, semi-transparent
-        glow_pen = QPen(QBrush(grad), 6, Qt.SolidLine, Qt.RoundCap)
-        painter.setPen(glow_pen)
-        painter.drawPath(self.path())
+        N = self._TAPER_SEGMENTS
+        for i in range(N):
+            t0   = i / N
+            t1   = (i + 1) / N
+            t    = (t0 + t1) / 2          # midpoint for width/alpha sampling
+            pt0  = self.path().pointAtPercent(t0)
+            pt1  = self.path().pointAtPercent(t1)
 
-        # Core pass — thin, bright white centre
-        core_color = QColor("#ffffff")
-        core_color.setAlpha(150)
-        core_pen = QPen(core_color, 1.5, Qt.SolidLine, Qt.RoundCap)
-        painter.setPen(core_pen)
-        painter.drawPath(self.path())
+            seg = QPainterPath()
+            seg.moveTo(pt0)
+            seg.lineTo(pt1)
+
+            # Glow: 1 px at output end → 6 px at input end
+            w_glow = 1.0 + t * 5.0
+            glow_pen = QPen(QBrush(grad), w_glow, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            painter.setPen(glow_pen)
+            painter.drawPath(seg)
+
+            # Core: 0.5 px → 1.5 px, white, alpha 80 → 160
+            w_core = 0.5 + t * 1.0
+            core_color = QColor("#ffffff")
+            core_color.setAlpha(int(80 + t * 80))
+            core_pen = QPen(core_color, w_core, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            painter.setPen(core_pen)
+            painter.drawPath(seg)
 
 
 # Deferred — avoids circular import since Connection lives in graphics/
