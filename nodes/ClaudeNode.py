@@ -233,7 +233,11 @@ class ClaudeNode(BaseNode):
         self._position_body()
         if not self.data.body_visible:
             self._body_proxy.hide()
-            self._min_height = self._collapsed_height()
+            collapsed = self._collapsed_height()
+            self._min_height = collapsed
+            r = self.rect()
+            self.prepareGeometryChange()
+            self.setRect(QRectF(r.left(), r.top(), r.width(), collapsed))
 
     def _append_body(self, text: str) -> None:
         self._body.append(text)
