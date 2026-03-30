@@ -124,7 +124,7 @@ class IntricateView(QGraphicsView):
         event.accept()
 
     def mousePressEvent(self, event) -> None:
-        """Start pan on middle mouse. Cancel floating wire on right-click or empty-space click."""
+        """Start pan on middle mouse. Route clicks when a floating wire is active."""
         self.setFocus()
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = event.position()
@@ -139,11 +139,20 @@ class IntricateView(QGraphicsView):
                 return
             if event.button() == Qt.LeftButton:
                 scene_pos = self.mapToScene(event.position().toPoint())
-                item = scene.itemAt(scene_pos, self.transform())
+                # Use items() not itemAt() — itemAt can return the parent node
+                # instead of the Port child when they share the same area
                 from nodes.Port import Port
-                if not isinstance(item, Port):
+                input_port = next(
+                    (i for i in scene.items(scene_pos)
+                     if isinstance(i, Port) and not i.is_output),
+                    None
+                )
+                if input_port:
+                    scene.complete_connection(input_port.parent_node)
+                else:
                     scene.cancel_connection()
-                    # fall through so click still selects/moves nodes
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
