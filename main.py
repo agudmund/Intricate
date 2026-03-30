@@ -8,14 +8,40 @@
 
 import sys
 import signal
+import socket
 import argparse
+import ctypes
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from utils.logger import setup_logger, set_log_level, TRACE
 from utils.settings import appName, orgName
 
+_INSTANCE_PORT = 47321
+_instance_lock: socket.socket | None = None
+
+
+def _acquire_instance_lock() -> bool:
+    global _instance_lock
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+    try:
+        sock.bind(("127.0.0.1", _INSTANCE_PORT))
+        sock.listen(1)
+        _instance_lock = sock   # keep alive for process lifetime
+        return True
+    except OSError:
+        sock.close()
+        return False
+
 
 def main():
+    if not _acquire_instance_lock():
+        sys.exit(0)
+
+    # Name the process for the Windows taskbar and Task Manager Apps view
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appName)
+    ctypes.windll.kernel32.SetConsoleTitleW(appName)
+
     parser = argparse.ArgumentParser(description=appName)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--trace", action="store_true")
