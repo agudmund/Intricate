@@ -23,7 +23,8 @@
       "Bash(powershell -Command \"Get-Content ''C:\\\\Users\\\\thisg\\\\AppData\\\\Local\\\\Single Shared Braincell\\\\settings.toml'' | Select-Object -First 100\")",
       "Bash(powershell -Command \"Get-ChildItem Env: | Where-Object { $_.Name -like ''*Settings*'' }\")",
       "Bash(git -C:*)",
-      "Bash(echo \"SettingsFile env: $SingleSharedBraincell_SettingsFile\")"
+      "Bash(echo \"SettingsFile env: $SingleSharedBraincell_SettingsFile\")",
+      "WebFetch(*)"
     ]
   }
 }

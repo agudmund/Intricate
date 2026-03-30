@@ -86,8 +86,10 @@ class BaseNode(QGraphicsRectItem):
 
         # ── Ports ─────────────────────────────────────────────────────────────
         self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemSendsScenePositionChanges)
-        self.input_port  = None
-        self.output_port = None
+        self.input_ports  = []          # 4 corner input ports (TL, TR, BL, BR)
+        self.output_ports = []          # 4 corner output ports (TL, TR, BL, BR)
+        self.input_port   = None        # kept for backwards-compat — alias to TL
+        self.output_port  = None        # kept for backwards-compat — alias to TL
         self._create_ports()
 
         # ── Resize state ──────────────────────────────────────────────────────
@@ -140,6 +142,7 @@ class BaseNode(QGraphicsRectItem):
         # Built last — geometry must be final before positioning.
         # Subclasses append their own buttons by overriding _build_buttons().
         self._buttons: list[NodeButton] = []
+        self._delete_btn: NodeButton | None = None
         self._build_buttons()
         self._position_buttons()
 
@@ -203,6 +206,12 @@ class BaseNode(QGraphicsRectItem):
         if self._pending_update:
             for conn in self.connections:
                 conn.update_path()
+            # Repaint wires that pass under this node so their opacity gradient
+            # reflects the new position — they don't know this node moved.
+            own = set(self.connections)
+            for item in self.scene().items():
+                if hasattr(item, 'start_node') and item not in own:
+                    item.update()
             self._pending_update = False
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -227,9 +236,7 @@ class BaseNode(QGraphicsRectItem):
         """
         delete_pix         = Theme.icon(Theme.iconDelete,  fallback_color="#c97b7b")
         delete_confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
-        self._buttons.append(
-            NodeButton(self, delete_pix, self._delete_self, delete_confirm_pix)
-        )
+        self._delete_btn   = NodeButton(self, delete_pix, self._delete_self, delete_confirm_pix)
         ports_off_pix = Theme.icon(Theme.portsIconOff, fallback_color="#7a8a9a")
         ports_on_pix  = Theme.icon(Theme.portsIconOn,  fallback_color="#9ab8c9")
         ports_btn = NodeButton(self, ports_off_pix, self._toggle_ports, ports_on_pix, toggle=True)
@@ -256,26 +263,30 @@ class BaseNode(QGraphicsRectItem):
 
     def _position_buttons(self) -> None:
         """
-        Arrange buttons in a left-aligned row along the top of the node.
-        Left alignment follows western reading-direction muscle memory —
-        the eye and hand naturally reach top-left for quick actions.
-        Called after _build_buttons() and again after any resize.
+        Left strip: ports toggle + depth toggle (and any subclass buttons).
+        Delete button: pinned to the top-right corner.
         """
         pad     = 4.0
         spacing = 4.0
         r       = self.rect()
-        x       = r.left() + pad
-        y       = r.top()  + pad
+        y       = r.top() + pad
 
+        x = r.left() + pad
         for btn in self._buttons:
             btn.setPos(QPointF(x, y))
             x += BUTTON_SIZE + spacing
+
+        if self._delete_btn:
+            self._delete_btn.setPos(QPointF(r.right() - pad - BUTTON_SIZE, y))
 
     def _detach_buttons(self) -> None:
         """Stop button timers before scene removal."""
         for btn in self._buttons:
             btn.detach()
         self._buttons.clear()
+        if self._delete_btn:
+            self._delete_btn.detach()
+            self._delete_btn = None
 
     def _delete_self(self) -> None:
         """Remove this node from the scene. Called by the delete button."""
@@ -288,24 +299,55 @@ class BaseNode(QGraphicsRectItem):
 
     def _create_ports(self):
         """Instantiate ports as child items, hidden until wiring mode is enabled."""
-        # Port import is local to avoid circular imports at module load time
         from nodes.Port import Port
-        self.input_port  = Port(self, is_output=False)
-        self.output_port = Port(self, is_output=True)
+        self.input_ports  = [Port(self, is_output=False) for _ in range(4)]
+        self.output_ports = [Port(self, is_output=True)  for _ in range(4)]
+        self.input_port   = self.input_ports[0]   # backwards-compat alias
+        self.output_port  = self.output_ports[0]  # backwards-compat alias
         self._place_ports()
-        self.input_port.hide()
-        self.output_port.hide()
+        for p in self.input_ports + self.output_ports:
+            p.hide()
 
     def _place_ports(self):
-        """Anchor ports to the vertical center of each side."""
-        cy = self.rect().height() / 2
-        self.input_port.setPos(-10, cy)
-        self.output_port.setPos(self.rect().width() + 10, cy)
+        """All ports sit at the four corners, just outside the node edge."""
+        r  = self.rect()
+        w, h = r.width(), r.height()
+        ox = 10   # how far outside the node edge the port sits
+        corners = [
+            (-ox,    -ox   ),   # TL
+            (w + ox, -ox   ),   # TR
+            (-ox,    h + ox),   # BL
+            (w + ox, h + ox),   # BR
+        ]
+        for port, (cx, cy) in zip(self.input_ports, corners):
+            port.setPos(cx, cy)
+        for port, (cx, cy) in zip(self.output_ports, corners):
+            port.setPos(cx, cy)
+
+    def closest_input_port(self, scene_pos: 'QPointF'):
+        """Return the corner input port closest to scene_pos."""
+        best, best_d = self.input_ports[0], float('inf')
+        for port in self.input_ports:
+            p = self.mapToScene(port.pos())
+            d = (p.x() - scene_pos.x()) ** 2 + (p.y() - scene_pos.y()) ** 2
+            if d < best_d:
+                best_d, best = d, port
+        return best
+
+    def closest_output_port(self, scene_pos: 'QPointF'):
+        """Return the corner output port closest to scene_pos."""
+        best, best_d = self.output_ports[0], float('inf')
+        for port in self.output_ports:
+            p = self.mapToScene(port.pos())
+            d = (p.x() - scene_pos.x()) ** 2 + (p.y() - scene_pos.y()) ** 2
+            if d < best_d:
+                best_d, best = d, port
+        return best
 
     def setRect(self, rect):
         """Keep ports anchored and wires live on resize."""
         super().setRect(rect)
-        if self.input_port and self.output_port:
+        if self.output_ports:
             self._place_ports()
         if hasattr(self, '_buttons'):
             self._position_buttons()
@@ -313,12 +355,10 @@ class BaseNode(QGraphicsRectItem):
             conn.update_path()
 
     def set_ports_visible(self, visible: bool) -> None:
-        """Show or hide both ports. Called by the scene's wiring mode toggle."""
+        """Show or hide all ports."""
         self.ports_visible = visible
-        if self.input_port:
-            self.input_port.setVisible(visible)
-        if self.output_port:
-            self.output_port.setVisible(visible)
+        for p in self.input_ports + self.output_ports:
+            p.setVisible(visible)
 
     def on_port_clicked(self, port, event) -> None:
         """Start drawing a wire from this node's output port."""
@@ -331,6 +371,11 @@ class BaseNode(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event):
+        # Raise to top of its z-tier so the clicked node always appears in front
+        scene = self.scene()
+        if scene and hasattr(scene, 'raise_node'):
+            scene.raise_node(self)
+
         if event.button() == Qt.LeftButton:
             # Resize handle — bottom-right corner
             rect = self.rect()

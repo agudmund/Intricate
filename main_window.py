@@ -448,8 +448,8 @@ class IntricateApp(QMainWindow):
         This ensures the window fades in as the Star that it is rather than just popping into existence.
         """
         super().showEvent(event)
-        
-        # We use a ParallelAnimationGroup to ensure the opacity 
+
+        # We use a ParallelAnimationGroup to ensure the opacity
         # is driven specifically and cleanly
         self.fadeIn = QPropertyAnimation(self, b"windowOpacity")
         self.fadeIn.setDuration(500)
@@ -457,6 +457,26 @@ class IntricateApp(QMainWindow):
         self.fadeIn.setEndValue(1.0)
         self.fadeIn.setEasingCurve(QEasingCurve.OutCubic) # Smooth deceleration
         self.fadeIn.start()
+
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(600, self._check_vaporize_restart)
+
+    def _check_vaporize_restart(self):
+        """Spawn a response node if the previous session ended via 'then vaporize'."""
+        import json
+        from pathlib import Path
+        flag = Path(__file__).resolve().parent / ".vaporize_restart.json"
+        if not flag.exists():
+            return
+        try:
+            data  = json.loads(flag.read_text(encoding="utf-8"))
+            reply = data.get("reply", "").strip()
+        except Exception:
+            reply = ""
+        flag.unlink(missing_ok=True)
+        if reply:
+            pos  = self._viewport_center()
+            self.scene.add_claude_response_node(pos=pos, label=reply)
 
     def _restore_geometry(self) -> None:
         x  = get("window", "x",      100)

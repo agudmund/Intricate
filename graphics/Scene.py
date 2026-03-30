@@ -28,6 +28,21 @@ class IntricateScene(QGraphicsScene):
 
         self._floating_conn = None   # Connection being drawn, None when idle
 
+        # Monotonic counters — incremented each time a node is raised.
+        # Keeps same-tier nodes ordered by recency without crossing z-tiers.
+        self._back_z_top  = -10.0
+        self._front_z_top =  10.0
+
+    def raise_node(self, node) -> None:
+        """Bring node to the top of its z-tier (back or front)."""
+        is_front = getattr(node.data, 'depth_front', False)
+        if is_front:
+            self._front_z_top += 0.001
+            node.setZValue(self._front_z_top)
+        else:
+            self._back_z_top += 0.001
+            node.setZValue(self._back_z_top)
+
     # ─────────────────────────────────────────────────────────────────────────
     # CONNECTION WIRING
     # ─────────────────────────────────────────────────────────────────────────
@@ -46,7 +61,7 @@ class IntricateScene(QGraphicsScene):
         if self._floating_conn:
             self._floating_conn.update_path(scene_pos)
 
-    def complete_connection(self, end_node) -> None:
+    def complete_connection(self, end_node, explicit_port=None) -> None:
         """Snap the floating wire to end_node's input port."""
         if not self._floating_conn:
             return
@@ -56,6 +71,10 @@ class IntricateScene(QGraphicsScene):
             self._discard_connection(conn)
             return
         conn.end_node = end_node
+        if explicit_port is not None:
+            conn.end_input_port = explicit_port
+        # Corner routing is now fully dynamic in Connection.update_path —
+        # end_input_port is retained only for explicit overrides (e.g. clicking a specific port).
         end_node.connections.append(conn)
         conn.update_path()
 
@@ -90,6 +109,7 @@ class IntricateScene(QGraphicsScene):
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)
+        self.raise_node(node)
         return node
 
     def add_warm_node(self, pos: QPointF | None = None):
@@ -99,6 +119,7 @@ class IntricateScene(QGraphicsScene):
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)
+        self.raise_node(node)
         return node
 
     def add_about_node(self, pos: QPointF | None = None, label: str | None = None):
@@ -110,6 +131,7 @@ class IntricateScene(QGraphicsScene):
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)
+        self.raise_node(node)
         return node
 
     def add_claude_response_node(self, pos: QPointF | None = None, label: str = ""):
@@ -121,6 +143,7 @@ class IntricateScene(QGraphicsScene):
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)
+        self.raise_node(node)
         return node
 
     def add_claude_node(self, pos: QPointF | None = None):
@@ -131,6 +154,7 @@ class IntricateScene(QGraphicsScene):
             r = node.rect()
             node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
         self.addItem(node)
+        self.raise_node(node)
         return node
 
     def add_text_node(self, pos: QPointF | None = None):
@@ -141,6 +165,7 @@ class IntricateScene(QGraphicsScene):
             r = node.rect()
             node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
         self.addItem(node)
+        self.raise_node(node)
         return node
 
     def add_bezier_node(self, pos: QPointF | None = None):
@@ -150,6 +175,7 @@ class IntricateScene(QGraphicsScene):
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)
+        self.raise_node(node)
         return node
 
     def add_image_node(self, pos: QPointF | None = None, path: str | None = None):
@@ -165,6 +191,7 @@ class IntricateScene(QGraphicsScene):
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)
+        self.raise_node(node)
 
         if path:
             node.load_from_path(path)

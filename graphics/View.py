@@ -148,7 +148,8 @@ class IntricateView(QGraphicsView):
                     None
                 )
                 if input_port:
-                    scene.complete_connection(input_port.parent_node)
+                    scene.complete_connection(input_port.parent_node,
+                                              explicit_port=input_port)
                 else:
                     scene.cancel_connection()
                 event.accept()

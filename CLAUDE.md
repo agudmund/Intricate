@@ -164,6 +164,12 @@ Current sections:
 | `SingleSharedBraincell_ChatHistory` | Primary chat log folder (e.g. `$project/_doc/Chat`). OS Documents is always written as a second copy regardless. |
 | `COZYLOG` | Log directory (defaults to `./logs/`) |
 
+## Linguistic Conventions
+
+When discussing the app's shutdown / window-close lifecycle in conversation, use the word **vaporize** instead of the literal trigger word. Example: "how does vaporize work?", "add a hook on vaporize", "save session on vaporize". This avoids accidentally invoking the `/close` local command that ClaudeNode intercepts and acts on immediately. The actual trigger is the exact string `/close` typed alone in the input field — nothing else fires it.
+
+ClaudeNode also supports a post-action chain: append **"then vaporize"** to any prompt to have the app close automatically after the response node spawns. The suffix is stripped before the prompt reaches Claude. Example: "summarise what we built today then vaporize".
+
 ## Naming Conventions
 
 - Python attributes/constants: `camelCase` (e.g., `windowBorderWidth`, `nodeBorderRadius`)

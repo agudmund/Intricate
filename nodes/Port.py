@@ -103,7 +103,7 @@ class Port(QGraphicsEllipseItem):
                 # Input port — complete a floating connection if one is in progress
                 scene = self.scene()
                 if scene and hasattr(scene, '_floating_conn') and scene._floating_conn:
-                    scene.complete_connection(self.parent_node)
+                    scene.complete_connection(self.parent_node, explicit_port=self)
                     event.accept()
                     return
         super().mousePressEvent(event)

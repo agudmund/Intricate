@@ -17,7 +17,7 @@ _ANSI_RE = re.compile(r'\x1b\[[^A-Za-z]*[A-Za-z]')
 
 from PySide6.QtCore import QRectF, QFileSystemWatcher, QTimer, Signal, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent, QPainter, QPen
-from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
+from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit, QFrame, QVBoxLayout
 
 from nodes.BaseNode import BaseNode
 from data.ClaudeNodeData import ClaudeNodeData
@@ -262,12 +262,23 @@ class ClaudeNode(BaseNode):
         self._input.setFrameShape(QTextEdit.Shape.NoFrame)
         self._input.setPlaceholderText("Type a message…")
         self._input.setFont(QFont(Theme.claudeBodyFontFamily, max(1, Theme.claudeBodyFontSize)))
+
+        # Wrap in a QFrame so the outer dark border and inner light border can
+        # both use the shorthand `border` property — Qt QSS only honours
+        # border-radius reliably with the shorthand, not directional sides.
+        self._input_frame = QFrame()
+        self._input_frame.setObjectName("inputFrame")
+        _layout = QVBoxLayout(self._input_frame)
+        _layout.setContentsMargins(1, 1, 1, 1)
+        _layout.setSpacing(0)
+        _layout.addWidget(self._input)
+
         self._apply_input_style()
         if self.data.input_text:
             self._input.setPlainText(self.data.input_text)
         self._input.textChanged.connect(self._on_input_changed)
         self._input_proxy = QGraphicsProxyWidget(self)
-        self._input_proxy.setWidget(self._input)
+        self._input_proxy.setWidget(self._input_frame)
         self._position_input()
         QTimer.singleShot(0, lambda: self._input.focused.connect(self._on_input_focused))
 
@@ -294,22 +305,84 @@ class ClaudeNode(BaseNode):
     def _on_reply_done(self) -> None:
         self.data.depth_front = True
         self._apply_depth()
+        close_after = getattr(self, '_close_on_reply', False)
+        self._close_on_reply = False
         scene = self.scene()
         reply = self._current_reply.strip()
         self._current_reply = ""
         if scene and reply and "no response requested" not in reply.lower():
-            from PySide6.QtCore import QPointF
-            below = self.pos() + QPointF(0, self.rect().height() + 16)
-            scene.add_claude_response_node(pos=below, label=reply)
+            import random
+            from PySide6.QtCore import QPointF, QRectF
+            views = scene.views()
+            if views:
+                view   = views[0]
+                vr     = view.mapToScene(view.viewport().rect()).boundingRect()
+                margin = 40
+
+                def _pick_pos():
+                    return QPointF(
+                        random.uniform(vr.left() + margin, vr.right()  - margin),
+                        random.uniform(vr.top()  + margin, vr.bottom() - margin),
+                    )
+
+                def _node_under(p):
+                    """Return the topmost node at p, or None."""
+                    probe = QRectF(p.x() - 4, p.y() - 4, 8, 8)
+                    for item in scene.items(probe):
+                        if hasattr(item, 'data'):
+                            return item
+                    return None
+
+                pos = _pick_pos()
+                for _ in range(20):
+                    occupant = _node_under(pos)
+                    if occupant is None:
+                        break                          # clear spot — use it
+                    if getattr(occupant.data, 'node_type', '') == 'claude_response':
+                        break                          # stack on another response — fine
+                    pos = _pick_pos()                  # something else is there — retry
+            else:
+                pos = self.pos() + QPointF(0, self.rect().height() + 16)
+
+            node = scene.add_claude_response_node(pos=pos, label=reply)
+
+            # Clamp so the full node rect stays inside the viewport
+            if views:
+                nr = node.rect()
+                cx = max(vr.left() + margin,
+                         min(node.pos().x(), vr.right()  - margin - nr.width()))
+                cy = max(vr.top()  + margin,
+                         min(node.pos().y(), vr.bottom() - margin - nr.height()))
+                node.setPos(QPointF(cx, cy))
+
+            # Wire the ClaudeNode output to the response node —
+            # corner routing is handled dynamically in Connection.update_path.
+            from graphics.Connection import Connection
+            conn = Connection(self, node)
+            scene.addItem(conn)
+
+        if close_after:
+            import json
+            from pathlib import Path
+            flag = Path(__file__).resolve().parent.parent / ".vaporize_restart.json"
+            flag.write_text(json.dumps({"reply": reply}), encoding="utf-8")
+            from PySide6.QtWidgets import QApplication, QMainWindow
+            from PySide6.QtCore import QTimer
+            win = next((w for w in QApplication.topLevelWidgets()
+                        if isinstance(w, QMainWindow) and w.isVisible()), None)
+            if win:
+                QTimer.singleShot(400, win.close)
 
     def _send_input(self, text: str) -> None:
+        display_text = text                        # keep original for title/body
+        text = self._preprocess_input(text)
         if self._handle_local_command(text):
             return
         if not self._current_uuid:
             return
-        self._append_body(f"\n› {text}\n")
+        self._append_body(f"\n› {display_text}\n")
         import textwrap
-        self._title_question = textwrap.fill(text.capitalize(), width=84)
+        self._title_question = textwrap.fill(display_text.capitalize(), width=84)
         self.data.title = self._title_question
         self.update()
         self.data.depth_front = False
@@ -393,11 +466,23 @@ class ClaudeNode(BaseNode):
             self.data.title = getattr(self, "_title_question", self.data.title)
             self.update()
 
+    def _preprocess_input(self, text: str) -> str:
+        """Substitute escape tokens and strip post-action suffixes.
+        Trailing 'then vaporize' sets _close_on_reply so the app closes
+        after the response node spawns. [close] passes the literal word safely."""
+        import re
+        self._close_on_reply = bool(
+            re.search(r'\bthen\s+vaporize\s*$', text, re.IGNORECASE)
+        )
+        text = re.sub(r'\s*,?\s*then\s+vaporize\s*$', '', text, flags=re.IGNORECASE).strip()
+        return text.replace("[close]", "close")
+
     def _handle_local_command(self, text: str) -> bool:
         from PySide6.QtWidgets import QApplication, QMainWindow
         from PySide6.QtCore import QTimer
-        cmd = text.strip().lower()
-        if cmd == "/close" or "close the app" in cmd or "close app" in cmd:
+        # Only the exact /close command triggers — loose phrase matching made it
+        # impossible to discuss the close event without accidentally firing it.
+        if text.strip() == "/close":
             win = next((w for w in QApplication.topLevelWidgets()
                         if isinstance(w, QMainWindow) and w.isVisible()), None)
             if win:
@@ -423,6 +508,7 @@ class ClaudeNode(BaseNode):
             r.height() - self._BUTTON_ZONE_H,
         )
         painter.drawText(title_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, self.data.title)
+
         painter.restore()
 
     def _title_height(self) -> float:
@@ -472,15 +558,27 @@ class ClaudeNode(BaseNode):
     def _apply_input_style(self) -> None:
         if not hasattr(self, '_input'):
             return
+        # Outer frame — primary border colour, matches node + window border
+        rad_outer = max(4, int(self._input_h() / 2))
+        rad_inner = max(3, rad_outer - 1)
+        if hasattr(self, '_input_frame'):
+            self._input_frame.setStyleSheet(f"""
+                QFrame#inputFrame {{
+                    border: 1px solid {Theme.primaryBorder};
+                    border-radius: {rad_outer}px;
+                    background: transparent;
+                }}
+            """)
+        # Inner edit — subtle light inset ring gives the bevel depth
         self._input.setStyleSheet(f"""
             QTextEdit {{
                 background: {Theme.claudeBgColorInput};
                 color: {Theme.aboutFontColor};
                 font-family: {Theme.claudeBodyFontFamily};
                 font-size: {Theme.claudeBodyFontSize}pt;
-                border: none;
-                border-top: 1px solid rgba(255,255,255,30);
-                padding: 4px;
+                border: 1px solid rgba(255, 255, 255, 25);
+                border-radius: {rad_inner}px;
+                padding: 4px 10px;
             }}
         """)
 
