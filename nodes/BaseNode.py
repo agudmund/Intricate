@@ -440,7 +440,7 @@ class BaseNode(QGraphicsRectItem):
             r.height() - self._BUTTON_ZONE_H,
         )
         painter.setPen(QColor(Theme.aboutFontColor))
-        painter.setFont(QFont(Theme.aboutFontFamily, Theme.aboutFontSize))
+        painter.setFont(QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize)))
         painter.drawText(content_rect, Qt.AlignLeft | Qt.AlignTop, self.data.title)
         painter.restore()
 

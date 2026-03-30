@@ -1,6 +1,8 @@
 {
   "permissions": {
     "allow": [
+      "Edit(*)",
+      "Write(*)",
       "Bash(git mv:*)",
       "Bash(python:*)",
       "Bash(echo \"exit:$?\")",
@@ -10,7 +12,15 @@
       "Bash(where cozy-snapshot:*)",
       "Bash(find C:UsersthisgDesktopIntricate -name *.ttf -o -name *.otf)",
       "Bash(find C:Usersthisg -name *Chandler*)",
-      "Bash(echo \"Env var: $SingleSharedBraincell_SettingsFile\")"
+      "Bash(echo \"Env var: $SingleSharedBraincell_SettingsFile\")",
+      "Bash(find ~/.claude/projects -name *.json)",
+      "Bash(done)",
+      "Bash(grep -l 'custom-title' \"C:/Users/thisg/.claude/projects/C--Users-thisg-Desktop-Intricate/\"*.jsonl)",
+      "Bash(grep '\"\"type\"\":\"\"custom-title\"\"' \"C:/Users/thisg/.claude/projects/C--Users-thisg-Desktop-Intricate/\"*.jsonl)",
+      "Skill(update-config)",
+      "Bash(powershell -Command \"Get-ChildItem -Path 'C:\\\\Users\\\\thisg\\\\Desktop\\\\Intricate' -Filter '*.toml'\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\\\Users\\\\thisg\\\\AppData\\\\Local\\\\Single Shared Braincell\\\\settings.toml'' | Select-Object -First 100\")",
+      "Bash(powershell -Command \"Get-ChildItem Env: | Where-Object { $_.Name -like ''*Settings*'' }\")"
     ]
   }
 }

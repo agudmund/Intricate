@@ -6,7 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QComboBox, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect, QEvent
 from graphics.Scene import IntricateScene
@@ -15,7 +15,8 @@ from graphics.Theme import Theme
 from widgets.PrettyButton import button
 from utils.motivationalMessages import motivationalMessages
 from utils.logger import setup_logger
-from utils.settings import appName
+from utils.settings import appName, set_nested
+from widgets.PrettyCombo import combo as pretty_combo
 
 logger = setup_logger()
 
@@ -91,37 +92,8 @@ class IntricateApp(QMainWindow):
     def setup_project_selector(self):
         """The Project Selector Combo Box"""
 
-        self.project_selector = QComboBox()
-        self.project_selector.setObjectName("project_selector")
-
-        # Apply theme-driven stylesheet
-        self.project_selector.setMinimumWidth(Theme.comboboxMinWidth)
-        self.project_selector.setStyleSheet(f"""
-            QComboBox#project_selector {{
-                background-color: {Theme.comboboxBg};
-                color: {Theme.comboboxText};
-                border: 1px solid {Theme.comboboxBorder};
-                border-radius: {Theme.comboboxBorderRadius}px;
-                padding: {Theme.comboboxPadding};
-                font-family: {Theme.comboboxFontFamily};
-                font-size: {Theme.comboboxFontSize}pt;
-                font-weight: {Theme.comboboxFontWeight};
-            }}
-            QComboBox#project_selector::drop-down {{
-                border: none;
-                width: {Theme.comboboxDropdownWidth}px;
-            }}
-            QComboBox#project_selector QAbstractItemView {{
-                background-color: {Theme.comboboxBgOpen};
-                color: {Theme.comboboxText};
-                border: 1px solid {Theme.comboboxBorder};
-                selection-background-color: {Theme.backDrop};
-                font-family: {Theme.comboboxFontFamily};
-                font-size: {Theme.comboboxFontSize}pt;
-            }}
-        """)
-
         # Make sure that the sessions are populated before connecting the signal otherwise the literal seventh level of hades arrives needing over 200 lines of code to account for disabling and enabling the session list
+        self.project_selector = pretty_combo()
         self.populate_sessions()
         self.project_selector.currentIndexChanged.connect(self.on_session_changed)
 
@@ -500,12 +472,21 @@ class IntricateApp(QMainWindow):
         except Exception:
             pass
 
+    def _persist_claude_node_size(self) -> None:
+        from nodes.ClaudeNode import ClaudeNode
+        nodes = [n for n in self.scene.items() if isinstance(n, ClaudeNode)]
+        if nodes:
+            node = nodes[-1]
+            set_nested("node", "claude", "default_width",  node.rect().width())
+            set_nested("node", "claude", "default_height", node.rect().height())
+
     def closeEvent(self, event):
         """
         It should be a joyful moment because now we can look forward to seeing each other later.
         """
         if self.windowOpacity() <= 0.0:
             self._cleanup_pycache()
+            self._persist_claude_node_size()
             event.accept()
             return
 

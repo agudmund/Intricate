@@ -192,6 +192,10 @@ class Theme(metaclass=_ThemeMeta):
     claudeBgColor            = "#1e2a22"
     claudeBgColorFront       = "#28201e"
     claudeBgAlpha            = 179
+    claudeBodyFontFamily     = "Lato"
+    claudeBodyFontSize       = 10
+    claudeDefaultWidth       = 200.0
+    claudeDefaultHeight      = 300.0
 
     aboutFontFamily          = "Chandler42"
     aboutFontSize            = 10
@@ -370,6 +374,14 @@ class Theme(metaclass=_ThemeMeta):
             cls.claudeBgColorFront = claude["bg_color_front"]
         if "bg_alpha" in claude:
             cls.claudeBgAlpha = int(claude["bg_alpha"])
+        if "body_font_family" in claude:
+            cls.claudeBodyFontFamily = claude["body_font_family"]
+        if "body_font_size" in claude:
+            cls.claudeBodyFontSize = int(claude["body_font_size"])
+        if "default_width" in claude:
+            cls.claudeDefaultWidth = float(claude["default_width"])
+        if "default_height" in claude:
+            cls.claudeDefaultHeight = float(claude["default_height"])
 
         # ── About node ────────────────────────────────────────────────────────
         # Inherit base node offsets first — [node.about] overrides only what it explicitly sets.

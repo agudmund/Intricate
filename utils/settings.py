@@ -72,9 +72,13 @@ _DEFAULTS: dict = {
         "text_padding_left":    15,
         "text_padding_top":     4,
         "claude": {
-            "bg_color":       "#1e2a22",
-            "bg_color_front": "#28201e",
-            "bg_alpha":       179,
+            "bg_color":          "#1e2a22",
+            "bg_color_front":    "#28201e",
+            "bg_alpha":          179,
+            "body_font_family":  "Lato",
+            "body_font_size":    10,
+            "default_width":     200,
+            "default_height":    300,
         },
         "about": {
             "editor_vertical_offset": 0,
@@ -205,7 +209,7 @@ def _save() -> None:
 
         for k, v in scalars.items():
             if isinstance(v, str):
-                out.append(f'{k} = "{v}"')
+                out.append(f'{k} = "{v.replace(chr(92), chr(92)*2)}"')
             elif isinstance(v, bool):
                 out.append(f'{k} = {"true" if v else "false"}')
             else:
@@ -222,37 +226,28 @@ def _save() -> None:
         if isinstance(values, dict):
             # Check if it has subtables
             has_subtables = any(isinstance(v, dict) for v in values.values())
+            def _fmt(k, v) -> str:
+                if isinstance(v, str):
+                    return f'{k} = "{v.replace(chr(92), chr(92)*2)}"'
+                elif isinstance(v, bool):
+                    return f'{k} = {"true" if v else "false"}'
+                return f"{k} = {v}"
+
             if not has_subtables:
                 lines.append(f"\n[{section}]")
                 for k, v in values.items():
-                    if isinstance(v, str):
-                        lines.append(f'{k} = "{v}"')
-                    elif isinstance(v, bool):
-                        lines.append(f'{k} = {"true" if v else "false"}')
-                    else:
-                        lines.append(f"{k} = {v}")
+                    lines.append(_fmt(k, v))
             else:
-                # Write subtables as [section.subsection]
                 scalars = {k: v for k, v in values.items() if not isinstance(v, dict)}
                 tables  = {k: v for k, v in values.items() if isinstance(v, dict)}
                 if scalars:
                     lines.append(f"\n[{section}]")
                     for k, v in scalars.items():
-                        if isinstance(v, str):
-                            lines.append(f'{k} = "{v}"')
-                        elif isinstance(v, bool):
-                            lines.append(f'{k} = {"true" if v else "false"}')
-                        else:
-                            lines.append(f"{k} = {v}")
+                        lines.append(_fmt(k, v))
                 for sub_k, sub_v in tables.items():
                     lines.append(f"\n[{section}.{sub_k}]")
                     for k, v in sub_v.items():
-                        if isinstance(v, str):
-                            lines.append(f'{k} = "{v}"')
-                        elif isinstance(v, bool):
-                            lines.append(f'{k} = {"true" if v else "false"}')
-                        else:
-                            lines.append(f"{k} = {v}")
+                        lines.append(_fmt(k, v))
 
     _SETTINGS_PATH.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
 
