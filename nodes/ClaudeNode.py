@@ -7,40 +7,16 @@
 """
 
 import json
-import re
 import subprocess
-import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRectF, QFileSystemWatcher, Signal, Qt
+from PySide6.QtCore import QRectF, QFileSystemWatcher, Signal, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent
 from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
-
-_ANSI_RE = re.compile(r'\x1b(?:\[[0-9;]*[A-Za-z]|\].*?(?:\x07|\x1b\\))|[\r\x08]')
-
-
-class _OutputReader(QObject):
-    """Reads subprocess stdout in a daemon thread; emits line_ready on the Qt thread."""
-    line_ready = Signal(str)
-
-    def __init__(self, process: subprocess.Popen) -> None:
-        super().__init__()
-        self._process = process
-        threading.Thread(target=self._run, daemon=True).start()
-
-    def _run(self) -> None:
-        try:
-            for raw in iter(self._process.stdout.readline, b''):
-                text = _ANSI_RE.sub('', raw.decode('utf-8', errors='replace')).rstrip('\n')
-                if text.strip():
-                    self.line_ready.emit(text)
-        except Exception:
-            pass
 
 from nodes.BaseNode import BaseNode
 from data.ClaudeNodeData import ClaudeNodeData
 from graphics.Theme import Theme
-from widgets.PrettyCombo import PrettyCombo
 
 
 class _InputEdit(QTextEdit):
@@ -79,48 +55,45 @@ class ClaudeNode(BaseNode):
         self._current_uuid: str | None = None
         self._watcher: QFileSystemWatcher | None = None
         self._file_offset: int = 0
-        self._process: subprocess.Popen | None = None
-        self._reader: _OutputReader | None = None
-        self._build_combo()
         self._build_body()
         self._build_input()
+        self._auto_connect()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # COMBO
+    # AUTO CONNECT
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_combo(self) -> None:
-        self._combo = PrettyCombo()
-        for display_name, uuid in self._read_folder():
-            self._combo.addItem(display_name, uuid)
-        self._combo.activated.connect(self._on_session_selected)
-        self._combo_proxy = QGraphicsProxyWidget(self)
-        self._combo_proxy.setWidget(self._combo)
-        self._position_combo()
-
-    def _on_session_selected(self, index: int) -> None:
-        uuid = self._combo.itemData(index)
+    def _auto_connect(self) -> None:
+        """Find the 'Intricate Claude Node' session (or most recent) and connect."""
+        p = Path(self.data.folder_path)
+        if not p.exists():
+            return
+        target_uuid = None
+        fallback_uuid = None
+        fallback_mtime = 0.0
+        for jsonl_file in p.glob("*.jsonl"):
+            try:
+                mtime = jsonl_file.stat().st_mtime
+                if mtime > fallback_mtime:
+                    fallback_mtime = mtime
+                    fallback_uuid = jsonl_file.stem
+                with open(jsonl_file, encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        if "custom-title" not in line:
+                            continue
+                        try:
+                            entry = json.loads(line.strip())
+                            if entry.get("type") == "custom-title" and entry.get("customTitle") == "Intricate Claude Node":
+                                target_uuid = jsonl_file.stem
+                        except json.JSONDecodeError:
+                            pass
+            except OSError:
+                pass
+        uuid = target_uuid or fallback_uuid
         if not uuid:
             return
-        self._stop_process()
         self._current_uuid = uuid
         self._start_watching(uuid)
-        self._process = subprocess.Popen(
-            ["powershell.exe", "-NoExit", "-Command", f"claude --resume={uuid}"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        self._reader = _OutputReader(self._process)
-        self._reader.line_ready.connect(self._append_body)
-
-    def _stop_process(self) -> None:
-        if self._reader:
-            self._reader.line_ready.disconnect()
-            self._reader = None
-        if self._process and self._process.poll() is None:
-            self._process.terminate()
-        self._process = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # SESSION WATCHER
@@ -147,7 +120,7 @@ class ClaudeNode(BaseNode):
             return
         for line in new_lines:
             line = line.strip()
-            if not line or '"type":"assistant"' not in line:
+            if not line:
                 continue
             try:
                 entry = json.loads(line)
@@ -164,33 +137,6 @@ class ClaudeNode(BaseNode):
         if self._watcher and path not in self._watcher.files():
             self._watcher.addPath(path)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # FOLDER SCAN
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def _read_folder(self) -> list[tuple[str, str]]:
-        p = Path(self.data.folder_path)
-        if not p.exists():
-            return []
-        items = []
-        for jsonl_file in p.glob("*.jsonl"):
-            uuid = jsonl_file.stem
-            custom_title = None
-            try:
-                with open(jsonl_file, encoding="utf-8", errors="ignore") as f:
-                    for line in f:
-                        if "custom-title" not in line:
-                            continue
-                        try:
-                            entry = json.loads(line.strip())
-                            if entry.get("type") == "custom-title":
-                                custom_title = entry.get("customTitle")
-                        except json.JSONDecodeError:
-                            pass
-            except OSError:
-                pass
-            items.append((custom_title or uuid, uuid))
-        return sorted(items, key=lambda x: x[0])
 
     # ─────────────────────────────────────────────────────────────────────────
     # BODY
@@ -207,7 +153,10 @@ class ClaudeNode(BaseNode):
                 color: {Theme.aboutFontColor};
                 font-family: {Theme.claudeBodyFontFamily};
                 font-size: {Theme.claudeBodyFontSize}pt;
-                border: 1px solid rgba(255,255,255,30);
+                border-top: 1px solid rgba(0,0,0,80);
+                border-left: 1px solid rgba(0,0,0,80);
+                border-bottom: 1px solid rgba(255,255,255,40);
+                border-right: 1px solid rgba(255,255,255,40);
                 padding: 4px;
             }}
         """)
@@ -268,29 +217,14 @@ class ClaudeNode(BaseNode):
     # LAYOUT
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _position_combo(self) -> None:
-        r       = self.rect()
-        pad     = Theme.nodeTextPaddingLeft
-        font    = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
-        line_h  = QFontMetrics(font).height()
-        title_top = (self._BUTTON_ZONE_H
-                     + Theme.nodeFontVerticalOffset
-                     + Theme.nodeTextPaddingTop)
-        combo_y = title_top + line_h + 4
-        self._combo_proxy.setGeometry(QRectF(
-            r.left() + pad,
-            r.top()  + combo_y,
-            r.width() - pad * 2,
-            self._combo.sizeHint().height(),
-        ))
-
     def _position_body(self) -> None:
-        r            = self.rect()
-        pad          = Theme.nodeTextPaddingLeft
-        combo_bottom = (self._combo_proxy.geometry().bottom()
-                        if hasattr(self, '_combo_proxy') else 60)
-        input_top    = r.bottom() - self._INPUT_H - pad
-        body_y       = combo_bottom + 6
+        r         = self.rect()
+        pad       = Theme.nodeTextPaddingLeft
+        font      = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+        line_h    = QFontMetrics(font).height()
+        title_top = self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop
+        body_y    = r.top() + title_top + line_h + 6
+        input_top = r.bottom() - self._INPUT_H - pad
         self._body_proxy.setGeometry(QRectF(
             r.left() + pad,
             body_y,
@@ -319,8 +253,6 @@ class ClaudeNode(BaseNode):
 
     def setRect(self, rect) -> None:
         super().setRect(rect)
-        if hasattr(self, '_combo_proxy'):
-            self._position_combo()
         if hasattr(self, '_body_proxy'):
             self._position_body()
         if hasattr(self, '_input_proxy'):
@@ -331,18 +263,14 @@ class ClaudeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
-        self._stop_process()
         if self._watcher:
             self._watcher.fileChanged.disconnect()
             self._watcher.deleteLater()
             self._watcher = None
-        if hasattr(self, '_combo_proxy') and self._combo_proxy:
-            self._combo_proxy.hide()
         if hasattr(self, '_body_proxy') and self._body_proxy:
             self._body_proxy.hide()
         if hasattr(self, '_input_proxy') and self._input_proxy:
             self._input_proxy.hide()
-        self._combo = None
         self._body  = None
         self._input = None
         super()._prepare_for_removal()
