@@ -35,11 +35,17 @@ class Connection(QGraphicsPathItem):
             return
         self.floating_point = mouse_pos
 
-        # Start point — output port scene position
-        p1 = self.start_node.mapToScene(self.start_node.output_port.pos())
+        # Start/end points offset inward so wires visually sink into the node
+        # edge rather than floating at the port centre when ports are hidden.
+        _INSET = 8.0
+        p1 = self.start_node.mapToScene(
+            self.start_node.output_port.pos() + QPointF(-_INSET, 0)
+        )
 
         if self.end_node:
-            p2 = self.end_node.mapToScene(self.end_node.input_port.pos())
+            p2 = self.end_node.mapToScene(
+                self.end_node.input_port.pos() + QPointF(_INSET, 0)
+            )
         elif self.floating_point:
             p2 = self.floating_point
         else:
