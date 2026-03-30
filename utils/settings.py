@@ -6,6 +6,14 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+# ─────────────────────────────────────────────────────────────────────────────
+# APP IDENTITY  ← change these when forking to a new app
+# ─────────────────────────────────────────────────────────────────────────────
+
+appName = "Intricate"
+orgName = "Single Shared Braincell"
+
+
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -179,9 +187,9 @@ def _save() -> None:
     For the nested [theme.icons] and [theme.colors] structure we need
     to handle subtables explicitly.
     """
-    lines = ["# Intricate — settings.toml",
-             "# Shared contract between Intricate and The Settlers.",
-             "# Intricate reads and watches this file. The Settlers writes to it.",
+    lines = [f"# {appName} — settings.toml",
+             f"# Shared contract between {appName} and The Settlers.",
+             f"# {appName} reads and watches this file. The Settlers writes to it.",
              "# Neither project imports the other. This file is the entire handshake.",
              ""]
 

@@ -64,6 +64,15 @@ class IntricateScene(QGraphicsScene):
         self.addItem(node)
         return node
 
+    def add_claude_node(self, pos: QPointF | None = None):
+        """Add a ClaudeNode at pos."""
+        from nodes.ClaudeNode import ClaudeNode
+        node = ClaudeNode()
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        return node
+
     def add_bezier_node(self, pos: QPointF | None = None):
         """Add a BezierNode at pos."""
         from nodes.BezierNode import BezierNode

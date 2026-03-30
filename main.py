@@ -12,13 +12,11 @@ import argparse
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from utils.logger import setup_logger, set_log_level, TRACE
-
-APP_NAME = "Intricate"
-ORG_NAME = "Single Shared Braincell"
+from utils.settings import appName, orgName
 
 
 def main():
-    parser = argparse.ArgumentParser(description=APP_NAME)
+    parser = argparse.ArgumentParser(description=appName)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--trace", action="store_true")
     args = parser.parse_args()
@@ -29,7 +27,7 @@ def main():
     set_log_level(args.debug, args.trace)
     if args.trace:
         logger.log(TRACE, "Trace mode active — verbose diagnostics will appear in console")
-    logger.info(f"{APP_NAME} is generally so happy that you are here. ✨")
+    print(f"{appName} is generally so happy that you are here. ✨")
 
     def _qt_message_handler(msg_type, context, message):
         level_map = {
@@ -45,8 +43,8 @@ def main():
 
     logger.log(TRACE, "[boot:1] creating QApplication")
     app = QApplication(sys.argv)
-    app.setApplicationName(APP_NAME)
-    app.setOrganizationName(ORG_NAME)
+    app.setApplicationName(appName)
+    app.setOrganizationName(orgName)
     logger.log(TRACE, "[boot:2] QApplication created — Qt event loop ready")
 
     logger.log(TRACE, "[boot:3] importing utils.settings")

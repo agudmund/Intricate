@@ -8,12 +8,16 @@
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QComboBox, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar
 from PySide6.QtGui import QFont, QIcon
-from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect
+from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect, QEvent
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
 from widgets.PrettyButton import button
 from utils.motivationalMessages import motivationalMessages
+from utils.logger import setup_logger
+from utils.settings import appName
+
+logger = setup_logger()
 
 
 class IntricateApp(QMainWindow):
@@ -28,6 +32,7 @@ class IntricateApp(QMainWindow):
         self._dragging_window = False
         self._drag_pos = None
         self.is_collapsed = False
+        self._is_fullscreen = False
 
         # 3.  Window OS Defaults
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -81,6 +86,7 @@ class IntricateApp(QMainWindow):
         layout.addStretch()
 
         self.grid.addWidget(self.topToolbar, 0, 0)
+        self.topToolbar.installEventFilter(self)
 
     def setup_project_selector(self):
         """The Project Selector Combo Box"""
@@ -134,6 +140,24 @@ class IntricateApp(QMainWindow):
             if clicked is not None:
                 btn.clicked.connect(clicked)
             return btn
+
+    # =========================================================================
+    # Fullscreen toggle — double-click the top toolbar
+    # =========================================================================
+
+    def eventFilter(self, obj, event):
+        if obj is self.topToolbar and event.type() == QEvent.MouseButtonDblClick:
+            if event.button() == Qt.LeftButton:
+                self.toggle_fullscreen()
+                return True
+        return super().eventFilter(obj, event)
+
+    def toggle_fullscreen(self):
+        if self._is_fullscreen:
+            self.showNormal()
+        else:
+            self.showFullScreen()
+        self._is_fullscreen = not self._is_fullscreen
 
     # =========================================================================
     # Curtains, The Window Rollup Thing
@@ -261,6 +285,7 @@ class IntricateApp(QMainWindow):
             (Theme.iconImage, self._spawn_image_node, "The Glorious Image Node"),
             (Theme.iconBezier, self._spawn_bezier_node, "The Prestigious Bezier Node"),
             (Theme.iconHealth, self._spawn_health_node, "The Oddly Important Health Node"),
+            (Theme.iconClaude, self._spawn_claude_node, "Claude Node"),
 
         ]
 
@@ -353,6 +378,9 @@ class IntricateApp(QMainWindow):
 
     def _spawn_health_node(self):
         self.scene.add_health_node(pos=self._viewport_center())
+
+    def _spawn_claude_node(self):
+        self.scene.add_claude_node(pos=self._viewport_center())
 
     def _spawn_image_node(self):
         self.scene.add_image_node(pos=self._viewport_center())
@@ -469,9 +497,8 @@ class IntricateApp(QMainWindow):
                     cleaned += 1
             for item in root.rglob("*.pyc"):
                 item.unlink(missing_ok=True)
-            print(f"Python cache cleaned! ({cleaned} __pycache__ folders removed) ✨")
-        except Exception as e:
-            print(f"Cache cleanup skipped: {e}")
+        except Exception:
+            pass
 
     def closeEvent(self, event):
         """
@@ -492,4 +519,4 @@ class IntricateApp(QMainWindow):
         self.fadeOut.finished.connect(self.close) 
         self.fadeOut.start()
 
-        print(f"Exid: Intricate will be back as soon as we can! ✨")
+        logger.info(f"Exid: {appName} will be back as soon as we can! ✨")
