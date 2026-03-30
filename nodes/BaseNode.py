@@ -230,12 +230,21 @@ class BaseNode(QGraphicsRectItem):
         self._buttons.append(
             NodeButton(self, delete_pix, self._delete_self, delete_confirm_pix)
         )
+        ports_off_pix = Theme.icon(Theme.portsIconOff, fallback_color="#7a8a9a")
+        ports_on_pix  = Theme.icon(Theme.portsIconOn,  fallback_color="#9ab8c9")
+        ports_btn = NodeButton(self, ports_off_pix, self._toggle_ports, ports_on_pix, toggle=True)
+        ports_btn._in_confirm = self.data.ports_visible
+        self._buttons.append(ports_btn)
         if self._has_depth_toggle:
             depth_off_pix = Theme.icon(Theme.aboutDepthIconOff, fallback_color="#7b9bc9")
             depth_on_pix  = Theme.icon(Theme.aboutDepthIconOn,  fallback_color="#9bc97b")
             btn = NodeButton(self, depth_off_pix, self._depth_action, depth_on_pix, toggle=True)
             btn._in_confirm = getattr(self.data, 'depth_front', False)
             self._buttons.append(btn)
+
+    def _toggle_ports(self) -> None:
+        self.set_ports_visible(not self.ports_visible)
+        self.data.ports_visible = self.ports_visible
 
     def _depth_action(self) -> None:
         self.data.depth_front = not getattr(self.data, 'depth_front', False)
