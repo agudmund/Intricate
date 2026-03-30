@@ -116,6 +116,7 @@ class Theme(metaclass=_ThemeMeta):
     buttonBorder         = primaryBorder
     buttonBorderHover    = primaryBorder
     buttonBorderInactive = buttonInactiveColor
+    buttonTextHover      = "#ffffff"
 
     iconButtonSize  = handleHeightTop - 3
     iconPadding     = 12

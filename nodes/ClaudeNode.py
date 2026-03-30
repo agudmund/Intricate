@@ -507,6 +507,8 @@ class ClaudeNode(BaseNode):
                 continue
             if src is None or not hasattr(src, 'data'):
                 continue
+            if hasattr(src, 'sync_data'):
+                src.sync_data()
             d = src.data
             section = [f"[{d.node_type}] {d.title}"]
             if hasattr(d, 'body_text') and d.body_text.strip():
@@ -547,9 +549,24 @@ class ClaudeNode(BaseNode):
         self._last_response_node = None   # reset chain — new question anchors back to ClaudeNode
         self._stream_q  = queue.SimpleQueue()
         self._status_q  = queue.SimpleQueue()
+        # Write prompt to a temp file so PowerShell can read it back into $p —
+        # this avoids both the Windows 32K command-line length limit and all
+        # special-character escaping issues (brackets, dollar signs, backticks).
+        import tempfile
+        _tf = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", encoding="utf-8", delete=False
+        )
+        _tf.write(text)
+        _tf.close()
+        _tmp = _tf.name.replace("\\", "/")
+        _ps_cmd = (
+            f"$p = [System.IO.File]::ReadAllText('{_tmp}', "
+            f"[System.Text.Encoding]::UTF8); "
+            f"Remove-Item '{_tmp}' -ErrorAction SilentlyContinue; "
+            f"claude --resume={self._current_uuid} --print $p"
+        )
         proc = subprocess.Popen(
-            ["powershell.exe", "-Command",
-             f"claude --resume={self._current_uuid} --print \"{text}\""],
+            ["powershell.exe", "-Command", _ps_cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,

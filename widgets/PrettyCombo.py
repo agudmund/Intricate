@@ -8,7 +8,7 @@
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QFont, QFontMetrics
-from PySide6.QtWidgets import QComboBox, QStyledItemDelegate, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QListView, QStyledItemDelegate, QVBoxLayout, QWidget
 from graphics.Theme import Theme
 import utils.settings as settings
 
@@ -39,6 +39,9 @@ class PrettyCombo(QComboBox):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Replace the native OS popup with a plain QListView so Qt renders
+        # the entire dropdown itself — stylesheet, font, and scrollbar all apply.
+        self.setView(QListView())
         self.setItemDelegate(_TightDelegate(self))
         self._apply_stylesheet()
 
@@ -51,12 +54,13 @@ class PrettyCombo(QComboBox):
         self.setStyleSheet(
             f"""
             QComboBox {{
-                background:  transparent;
-                border:      none;
-                color:       {color};
-                font-family: {font};
-                font-size:   {font_size}px;
-                padding:     2px 6px;
+                background:    transparent;
+                border:        1px solid {Theme.primaryBorder};
+                border-radius: 6px;
+                color:         {color};
+                font-family:   {font};
+                font-size:     {font_size}px;
+                padding:       2px 6px;
             }}
             QComboBox::drop-down {{ border: none; }}
             QComboBox::down-arrow {{ image: none; width: 0; }}
@@ -80,6 +84,39 @@ class PrettyCombo(QComboBox):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #1e1e1e, stop:0.4 #5c3e4f,
                     stop:0.7 #a56a85, stop:1 #d87a9e);
+            }}
+            QMenu {{
+                background:    {Theme.backDrop};
+                color:         {Theme.textPrimary};
+                border:        1px solid {Theme.primaryBorder};
+                border-radius: 9px;
+                padding:       4px;
+                font-family:   'My Olivin (Nabana)';
+                font-size:     11px;
+            }}
+            QMenu::item {{
+                padding:       5px 16px;
+                border-radius: 5px;
+            }}
+            QMenu::item:selected {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1e1e1e, stop:0.4 #5c3e4f,
+                    stop:0.7 #a56a85, stop:1 #d87a9e);
+            }}
+            QScrollBar:vertical {{
+                background:   {Theme.backDrop};
+                width:        6px;
+                border-radius: 3px;
+                margin:       0;
+            }}
+            QScrollBar::handle:vertical {{
+                background:   {Theme.primaryBorder};
+                border-radius: 3px;
+                min-height:   20px;
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0;
             }}
             """
         )

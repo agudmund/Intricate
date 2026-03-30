@@ -7,13 +7,12 @@
 """
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect, QEvent
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
 from widgets.PrettyButton import button
-from utils.motivationalMessages import motivationalMessages
 from utils.logger import setup_logger
 from utils.settings import appName, set_nested, set_value, get
 from widgets.PrettyCombo import combo as pretty_combo
@@ -42,7 +41,7 @@ class IntricateApp(QMainWindow):
         
         # 4. Grid and widget setup
         self._setup_grid()
-        self._setupTopToolbar()
+        self._build_top_toolbar()
         self._setupTheAreaFormerlyKnownAsNodal()
         self._setupBottomToolbar()
 
@@ -53,7 +52,7 @@ class IntricateApp(QMainWindow):
         """
         3-row grid — the permanent skeleton of the window.
 
-        Row 0: topToolbar    — fixed height, anchored to top
+        Row 0: top_toolbar   — fixed height, anchored to top
         Row 1: central       — stretches to fill all available space
         Row 2: bottomToolbar — fixed height, anchored to bottom
 
@@ -76,21 +75,64 @@ class IntricateApp(QMainWindow):
     # The top toolbar with all the fancy features
     # =========================================================================
 
-    def _setupTopToolbar(self):
-        self.topToolbar = QWidget()
-        self.topToolbar.setFixedHeight(Theme.handleHeightTop)
+    def _build_top_toolbar(self):
+        """
+        Row 0 — top toolbar shelf.
+        Fixed height. Drag-to-move via mouse events below.
 
-        layout = QHBoxLayout(self.topToolbar)
+        Layout:  [ stretch | centered title | curtains btn | stretch ]
+                 [ exit btn — absolute, pinned to top-right corner    ]
+
+        Button sizes are derived from QFontMetrics on the label font so they
+        scale automatically if the font size or toolbar height ever changes.
+        The exit button is an absolute child of top_toolbar; resizeEvent keeps
+        it anchored to the right edge as the window width changes.
+        """
+        self.top_toolbar = QWidget()
+        self.top_toolbar.setFixedHeight(Theme.handleHeightTop)
+        self.top_toolbar.setStyleSheet(f"background-color: {Theme.windowBg};")
+
+        layout = QHBoxLayout(self.top_toolbar)
         layout.setContentsMargins(*Theme.layoutMargins)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
         layout.setAlignment(Qt.AlignVCenter)
-        layout.addStretch()
-        layout.addWidget(self.setup_project_selector())
-        layout.addWidget(self.setup_iconic_button(clicked=self.toggle_curtains))
+
+        # Stretch pushes combo to center
         layout.addStretch()
 
-        self.grid.addWidget(self.topToolbar, 0, 0)
-        self.topToolbar.installEventFilter(self)
+        # Centered project selector — acts as the window title
+        layout.addWidget(self.setup_project_selector(), alignment=Qt.AlignVCenter)
+
+        layout.addSpacing(6)
+
+        # Curtains button — sits right of the combo
+        layout.addWidget(self.setup_iconic_button(clicked=self.toggle_curtains))
+
+        # Stretch balances right side
+        layout.addStretch()
+
+        # ── Exit button: absolute child of top_toolbar, pinned to top-right ──────
+        # Icon-only square button — size matches the other toolbar icon buttons.
+        self._exit_btn = self.setup_iconic_button(
+            clicked=self.close, icon=Theme.iconClose
+        )
+        self._exit_btn.setParent(self.top_toolbar)
+        # Deferred first position — toolbar width isn't known at construction time
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self._reposition_exit_btn)
+
+        self.grid.addWidget(self.top_toolbar, 0, 0)
+        self.top_toolbar.installEventFilter(self)
+
+    def _reposition_exit_btn(self) -> None:
+        """Keep the exit button pinned to the top-right corner of the toolbar."""
+        if not hasattr(self, '_exit_btn') or not hasattr(self, 'top_toolbar'):
+            return
+        btn = self._exit_btn
+        tb  = self.top_toolbar
+        btn.move(tb.width() - btn.width() - 4,
+                 (tb.height() - btn.height()) // 2)
+        btn.raise_()
 
     def setup_project_selector(self):
         """The Project Selector Combo Box"""
@@ -121,7 +163,7 @@ class IntricateApp(QMainWindow):
     # =========================================================================
 
     def eventFilter(self, obj, event):
-        if obj is self.topToolbar and event.type() == QEvent.MouseButtonDblClick:
+        if obj is self.top_toolbar and event.type() == QEvent.MouseButtonDblClick:
             if event.button() == Qt.LeftButton:
                 self.toggle_fullscreen()
                 return True
@@ -380,8 +422,12 @@ class IntricateApp(QMainWindow):
         layout.setContentsMargins(*Theme.layoutMargins)
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignVCenter)
+
         layout.addStretch()
-        layout.addWidget(button("Exid", clicked=self.close))   # Note: "Exid" is not a typo, its an Exit button named Exid
+
+        # Exid button — lower-right anchor, styled via PrettyButton
+        self._exid_btn = button("Exid", clicked=self.close)
+        layout.addWidget(self._exid_btn, alignment=Qt.AlignVCenter)
 
         self.grid.addWidget(self.bottomToolbar, 2, 0)
 
@@ -404,9 +450,11 @@ class IntricateApp(QMainWindow):
     # =========================================================================
 
     def on_session_changed(self):
-        print('Joy buckets are still not filling, keep going you got this!')
+        import utils.settings as _s
+        _s.set_value("ui", "selected_project", self.project_selector.currentText())
 
     def populate_sessions(self):
+        import utils.settings as _s
         from pathlib import Path
         desktop = Path.home() / "Desktop"
         desktop_folders = sorted(
@@ -414,10 +462,17 @@ class IntricateApp(QMainWindow):
             if p.is_dir() and not p.name.startswith(".")
         ) if desktop.exists() else []
         self.project_selector.addItems(desktop_folders)
+        saved = _s.get("ui", "selected_project", "")
+        if saved in desktop_folders:
+            self.project_selector.setCurrentText(saved)
 
     # =========================================================================
     # Mouse and Hover Events
     # =========================================================================
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._reposition_exit_btn()
 
     def mousePressEvent(self, event):
         """The Curtains Sensor: Every single press counts. (coming soon!)"""
