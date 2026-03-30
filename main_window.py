@@ -264,7 +264,7 @@ class IntricateApp(QMainWindow):
             (Theme.iconBezier, self._spawn_bezier_node, "The Prestigious Bezier Node"),
             (Theme.iconHealth, self._spawn_health_node, "The Oddly Important Health Node"),
             (Theme.iconClaude, self._spawn_claude_node, "Claude Node"),
-
+            (Theme.iconText,  self._spawn_text_node,   "Text Node"),
         ]
 
         for icon, slot, description in tools:
@@ -362,6 +362,9 @@ class IntricateApp(QMainWindow):
 
     def _spawn_image_node(self):
         self.scene.add_image_node(pos=self._viewport_center())
+
+    def _spawn_text_node(self):
+        self.scene.add_text_node(pos=self._viewport_center())
 
 
 

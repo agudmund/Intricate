@@ -87,6 +87,16 @@ class IntricateScene(QGraphicsScene):
         self.addItem(node)
         return node
 
+    def add_text_node(self, pos: QPointF | None = None):
+        """Add a TextNode at pos."""
+        from nodes.TextNode import TextNode
+        node = TextNode()
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        return node
+
     def add_bezier_node(self, pos: QPointF | None = None):
         """Add a BezierNode at pos."""
         from nodes.BezierNode import BezierNode
