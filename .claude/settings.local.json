@@ -3,6 +3,7 @@
     "allow": [
       "Edit(*)",
       "Write(*)",
+      "Bash(git push:*)",
       "Bash(git mv:*)",
       "Bash(python:*)",
       "Bash(echo \"exit:$?\")",
