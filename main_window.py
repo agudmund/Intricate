@@ -15,7 +15,7 @@ from graphics.Theme import Theme
 from widgets.PrettyButton import button
 from utils.motivationalMessages import motivationalMessages
 from utils.logger import setup_logger
-from utils.settings import appName, set_nested
+from utils.settings import appName, set_nested, set_value, get
 from widgets.PrettyCombo import combo as pretty_combo
 
 logger = setup_logger()
@@ -45,6 +45,9 @@ class IntricateApp(QMainWindow):
         self._setupTopToolbar()
         self._setupTheAreaFormerlyKnownAsNodal()
         self._setupBottomToolbar()
+
+        # 5. Restore persisted geometry
+        self._restore_geometry()
 
     def _setup_grid(self):
         """
@@ -127,7 +130,10 @@ class IntricateApp(QMainWindow):
     def toggle_fullscreen(self):
         if self._is_fullscreen:
             self.showNormal()
+            if hasattr(self, '_pre_fullscreen_geometry'):
+                self.setGeometry(self._pre_fullscreen_geometry)
         else:
+            self._pre_fullscreen_geometry = self.geometry()
             self.showFullScreen()
         self._is_fullscreen = not self._is_fullscreen
 
@@ -372,8 +378,6 @@ class IntricateApp(QMainWindow):
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignVCenter)
         layout.addStretch()
-        layout.addWidget(button("Demo", clicked=self._open_demo_dialog))
-        layout.addWidget(button("Settings", clicked=self._open_settings_dialog))
         layout.addWidget(button("Exid", clicked=self.close))   # Note: "Exid" is not a typo, its an Exit button named Exid
 
         self.grid.addWidget(self.bottomToolbar, 2, 0)
@@ -451,6 +455,27 @@ class IntricateApp(QMainWindow):
         self.fadeIn.setEasingCurve(QEasingCurve.OutCubic) # Smooth deceleration
         self.fadeIn.start()
 
+    def _restore_geometry(self) -> None:
+        x  = get("window", "x",      100)
+        y  = get("window", "y",      100)
+        w  = get("window", "width",  900)
+        h  = get("window", "height", 700)
+        self.setGeometry(x, y, w, h)
+        if get("window", "fullscreen", False):
+            self._is_fullscreen = True
+            self.showFullScreen()
+
+    def _save_geometry(self) -> None:
+        if self._is_fullscreen and hasattr(self, '_pre_fullscreen_geometry'):
+            r = self._pre_fullscreen_geometry
+        else:
+            r = self.geometry()
+        set_value("window", "x",          r.x())
+        set_value("window", "y",          r.y())
+        set_value("window", "width",      r.width())
+        set_value("window", "height",     r.height())
+        set_value("window", "fullscreen", self._is_fullscreen)
+
     def _cleanup_pycache(self) -> None:
         """
         Remove all __pycache__ folders and .pyc files under the project root.
@@ -477,8 +502,39 @@ class IntricateApp(QMainWindow):
         nodes = [n for n in self.scene.items() if isinstance(n, ClaudeNode)]
         if nodes:
             node = nodes[-1]
-            set_nested("node", "claude", "default_width",  node.rect().width())
-            set_nested("node", "claude", "default_height", node.rect().height())
+            w = max(200.0, min(800.0, node.rect().width()))
+            h = max(250.0, min(700.0, node.rect().height()))
+            set_nested("node", "claude", "default_width",  w)
+            set_nested("node", "claude", "default_height", h)
+
+    def _run_exit_script(self) -> None:
+        import subprocess
+        import random
+        import sys
+        from pathlib import Path
+        from utils.motivationalMessages import motivationalMessages
+        word = random.choice(motivationalMessages)
+        result = subprocess.run(
+            f"@echo off & echo {word}",
+            capture_output=True,
+            text=True,
+            shell=True,
+        )
+        if result.stdout.strip():
+            logger.info(result.stdout.strip())
+        import sys as _sys
+        _main_module = _sys.modules.get('__main__')
+        if _main_module is not None and getattr(_main_module, '_instance_lock', None) is not None:
+            try:
+                _main_module._instance_lock.close()
+            except OSError:
+                pass
+            _main_module._instance_lock = None
+        main = Path(__file__).resolve().parent / "main.py"
+        subprocess.Popen(
+            [sys.executable, str(main)],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
 
     def closeEvent(self, event):
         """
@@ -490,14 +546,16 @@ class IntricateApp(QMainWindow):
             event.accept()
             return
 
+        self._save_geometry()
+        self._run_exit_script()
         event.ignore()
-        
+
         self.fadeOut = QPropertyAnimation(self, b"windowOpacity")
         self.fadeOut.setDuration(300)
         self.fadeOut.setStartValue(self.windowOpacity())
         self.fadeOut.setEndValue(0.0)
         self.fadeOut.setEasingCurve(QEasingCurve.InCubic)
-        self.fadeOut.finished.connect(self.close) 
+        self.fadeOut.finished.connect(self.close)
         self.fadeOut.start()
 
         logger.info(f"Exid: {appName} will be back as soon as we can! ✨")
