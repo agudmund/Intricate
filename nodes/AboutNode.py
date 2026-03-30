@@ -15,12 +15,12 @@ _Z_FRONT       = 10.0
 _Z_BACK        = -10.0
 
 from nodes.BaseNode import BaseNode
-from nodes.NodeButton import NodeButton
 from data.AboutNodeData import AboutNodeData
 from graphics.Theme import Theme
 
 
 class AboutNode(BaseNode):
+    _has_depth_toggle = True
     """
     A minimal sticky-note node.
 
@@ -62,27 +62,14 @@ class AboutNode(BaseNode):
     # BUTTONS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_buttons(self) -> None:
-        super()._build_buttons()
-        depth_off_pix = Theme.icon(Theme.aboutDepthIconOff, fallback_color="#7b9bc9")
-        depth_on_pix  = Theme.icon(Theme.aboutDepthIconOn,  fallback_color="#9bc97b")
-        btn = NodeButton(self, depth_off_pix, self._depth_action, depth_on_pix, toggle=True)
-        btn._in_confirm = self.data.depth_front  # restore visual state on session load
-        self._buttons.append(btn)
-
-    def _depth_action(self) -> None:
-        self.data.depth_front = not self.data.depth_front
-        self._apply_depth()
-
     def _bg_color(self) -> QColor:
         c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
         c.setAlpha(Theme.aboutBgAlpha)
         return c
 
     def _apply_depth(self) -> None:
-        self.setZValue(_Z_FRONT if self.data.depth_front else _Z_BACK)
+        super()._apply_depth()
         self.setBrush(self._bg_color())
-        self.update()
 
     # ─────────────────────────────────────────────────────────────────────────
     # EDITOR

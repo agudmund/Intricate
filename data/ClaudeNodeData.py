@@ -19,13 +19,16 @@ class ClaudeNodeData(NodeData):
     Inherits all base geometry, identity, and port state from NodeData.
     """
 
-    node_type: str   = field(default="claude")
-    title:     str   = field(default="Claude Node")
-    width:     float = field(default=300.0)
-    height:    float = field(default=200.0)
+    node_type:   str   = field(default="claude")
+    title:       str   = field(default="Claude Node")
+    width:       float = field(default=300.0)
+    height:      float = field(default=200.0)
+    depth_front: bool  = field(default=False)
 
     def to_dict(self) -> dict:
-        return super().to_dict()
+        data = super().to_dict()
+        data["depth_front"] = self.depth_front
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> 'ClaudeNodeData':
@@ -39,4 +42,5 @@ class ClaudeNodeData(NodeData):
             width         = float(data.get("width",   300.0)),
             height        = float(data.get("height",  200.0)),
             ports_visible = data.get("ports_visible", False),
+            depth_front   = data.get("depth_front",   False),
         )

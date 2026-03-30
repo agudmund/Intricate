@@ -158,6 +158,9 @@ class Theme(metaclass=_ThemeMeta):
     nodePulseScale          = 1.018
     nodePulseMinMs          = 800
     nodePulseMaxMs          = 1400
+    nodeFontVerticalOffset  = -8.0
+    nodeTextPaddingLeft     = 15.0
+    nodeTextPaddingTop      = 4.0
 
     # =========================================================================
     # BEZIER NODE
@@ -186,6 +189,10 @@ class Theme(metaclass=_ThemeMeta):
     healthWarnThreshold  = 50
     healthHighThreshold  = 150
     healthPollIntervalMs = 2000
+    claudeBgColor            = "#1e2a22"
+    claudeBgColorFront       = "#28201e"
+    claudeBgAlpha            = 179
+
     aboutFontFamily          = "Chandler42"
     aboutFontSize            = 10
     aboutFontColor           = "#e8f0ff"
@@ -346,7 +353,29 @@ class Theme(metaclass=_ThemeMeta):
             4. Dependent attributes (combobox colors etc.) recalculated
                from the new base values
         """
+        # ── Base node ─────────────────────────────────────────────────────────
+        node = settings.get_section("node")
+        if "font_vertical_offset" in node:
+            cls.nodeFontVerticalOffset = float(node["font_vertical_offset"])
+        if "text_padding_left" in node:
+            cls.nodeTextPaddingLeft = float(node["text_padding_left"])
+        if "text_padding_top" in node:
+            cls.nodeTextPaddingTop = float(node["text_padding_top"])
+
+        # ── Claude node ───────────────────────────────────────────────────────
+        claude = settings.get_section("node").get("claude", {})
+        if "bg_color" in claude:
+            cls.claudeBgColor = claude["bg_color"]
+        if "bg_color_front" in claude:
+            cls.claudeBgColorFront = claude["bg_color_front"]
+        if "bg_alpha" in claude:
+            cls.claudeBgAlpha = int(claude["bg_alpha"])
+
         # ── About node ────────────────────────────────────────────────────────
+        # Inherit base node offsets first — [node.about] overrides only what it explicitly sets.
+        cls.aboutFontVerticalOffset = cls.nodeFontVerticalOffset
+        cls.aboutTextPaddingLeft    = cls.nodeTextPaddingLeft
+        cls.aboutTextPaddingTop     = cls.nodeTextPaddingTop
         about = settings.get_section("node").get("about", {})
         if "font_size" in about:
             cls.aboutFontSize = int(about["font_size"])

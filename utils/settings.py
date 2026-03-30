@@ -68,8 +68,15 @@ _DEFAULTS: dict = {
         "warm_editor": "",
     },
     "node": {
+        "font_vertical_offset": -8,
+        "text_padding_left":    15,
+        "text_padding_top":     4,
+        "claude": {
+            "bg_color":       "#1e2a22",
+            "bg_color_front": "#28201e",
+            "bg_alpha":       179,
+        },
         "about": {
-            "font_vertical_offset": 0,
             "editor_vertical_offset": 0,
             "font_size": 10,
             "font_color": "#e8f0ff",
@@ -82,8 +89,6 @@ _DEFAULTS: dict = {
             "depth_icon_off": "depth_off.png",
             "depth_icon_on": "depth_on.png",
             "min_height": 42,
-            "text_padding_left": 6,
-            "text_padding_top": 0,
         },
     },
     "theme": {

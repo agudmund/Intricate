@@ -9,7 +9,7 @@
 import uuid as _uuid
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsDropShadowEffect
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer
-from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath
+from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
 
 from data.NodeData import NodeData
 from nodes.NodeBehaviour import NodeBehaviour
@@ -94,6 +94,7 @@ class BaseNode(QGraphicsRectItem):
         self._is_resizing      = False
         self._resize_start_pos  = QPointF()
         self._resize_start_rect = QRectF()
+        self._min_width         = _MIN_WIDTH
         self._min_height        = _MIN_HEIGHT
 
         # ── Position throttle ─────────────────────────────────────────────────
@@ -204,11 +205,14 @@ class BaseNode(QGraphicsRectItem):
     # BUTTON STRIP
     # ─────────────────────────────────────────────────────────────────────────
 
+    _has_depth_toggle = False   # set to True in subclasses that want the front/back button
+
     def _build_buttons(self) -> None:
         """
-        Construct the button strip. Base adds the universal delete button.
+        Construct the button strip. Base adds the universal delete button,
+        and optionally a depth toggle if _has_depth_toggle is True.
 
-        Subclasses override to append type-specific buttons:
+        Subclasses that need additional buttons override and call super():
             def _build_buttons(self) -> None:
                 super()._build_buttons()
                 self._buttons.append(NodeButton(self, my_pix, self._my_action))
@@ -222,6 +226,20 @@ class BaseNode(QGraphicsRectItem):
         self._buttons.append(
             NodeButton(self, delete_pix, self._delete_self, delete_confirm_pix)
         )
+        if self._has_depth_toggle:
+            depth_off_pix = Theme.icon(Theme.aboutDepthIconOff, fallback_color="#7b9bc9")
+            depth_on_pix  = Theme.icon(Theme.aboutDepthIconOn,  fallback_color="#9bc97b")
+            btn = NodeButton(self, depth_off_pix, self._depth_action, depth_on_pix, toggle=True)
+            btn._in_confirm = getattr(self.data, 'depth_front', False)
+            self._buttons.append(btn)
+
+    def _depth_action(self) -> None:
+        self.data.depth_front = not getattr(self.data, 'depth_front', False)
+        self._apply_depth()
+
+    def _apply_depth(self) -> None:
+        self.setZValue(10.0 if getattr(self.data, 'depth_front', False) else -10.0)
+        self.update()
 
     def _position_buttons(self) -> None:
         """
@@ -326,7 +344,7 @@ class BaseNode(QGraphicsRectItem):
     def mouseMoveEvent(self, event):
         if self._is_resizing:
             delta      = event.pos() - self._resize_start_pos
-            new_width  = max(_MIN_WIDTH,  self._resize_start_rect.width()  + delta.x())
+            new_width  = max(self._min_width,  self._resize_start_rect.width()  + delta.x())
             new_height = max(self._min_height, self._resize_start_rect.height() + delta.y())
             if event.modifiers() & Qt.ShiftModifier:
                 ratio = self._resize_start_rect.width() / self._resize_start_rect.height()
@@ -399,14 +417,32 @@ class BaseNode(QGraphicsRectItem):
 
         painter.restore()
 
+    _BUTTON_ZONE_H = 24.0   # px reserved for the button strip (4 pad + 16 button + 4 gap)
+
     def paint_content(self, painter: QPainter):
         """
         Specialist paint handoff — override in subclasses.
 
         Called after the shell (background + border) is painted.
-        Painter is in node-local coordinates. Base implementation is empty.
+        Painter is in node-local coordinates.
+
+        Default implementation draws self.data.title top-left using the
+        node font and offset Theme values. Subclasses that need
+        type-specific content override this entirely (no super() needed).
         """
-        pass
+        painter.save()
+        r   = self.rect()
+        pad = Theme.nodeTextPaddingLeft
+        content_rect = QRectF(
+            r.left()   + pad,
+            r.top()    + self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop,
+            r.width()  - pad,
+            r.height() - self._BUTTON_ZONE_H,
+        )
+        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.setFont(QFont(Theme.aboutFontFamily, Theme.aboutFontSize))
+        painter.drawText(content_rect, Qt.AlignLeft | Qt.AlignTop, self.data.title)
+        painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION
