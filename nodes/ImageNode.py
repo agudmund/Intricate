@@ -355,6 +355,14 @@ class ImageNode(BaseNode):
 
             painter.setClipping(False)
 
+            # ── Bevel border over the image ───────────────────────────────────
+            bevel_r = max(CLIP_RADIUS_MIN, self.round_radius - IMAGE_PADDING)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QColor(0, 0, 0, 80), 1))
+            painter.drawRoundedRect(ir, bevel_r, bevel_r)
+            painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
+            painter.drawRoundedRect(ir.adjusted(1, 1, -1, -1), max(CLIP_RADIUS_MIN, bevel_r - 1), max(CLIP_RADIUS_MIN, bevel_r - 1))
+
         else:
             # ── Placeholder when no image is loaded ───────────────────────────
             painter.setPen(QPen(QColor(Theme.primaryBorder), 1, Qt.DashLine))
