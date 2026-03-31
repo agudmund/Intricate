@@ -8,7 +8,7 @@
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar
 from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect, QEvent
+from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
@@ -47,6 +47,9 @@ class IntricateApp(QMainWindow):
 
         # 5. Restore persisted geometry
         self._restore_geometry()
+
+        # 6. Load session for the initially selected project, then start autosave
+        QTimer.singleShot(0, self._load_initial_session)
 
     def _setup_grid(self):
         """
@@ -118,7 +121,6 @@ class IntricateApp(QMainWindow):
         )
         self._exit_btn.setParent(self.top_toolbar)
         # Deferred first position — toolbar width isn't known at construction time
-        from PySide6.QtCore import QTimer
         QTimer.singleShot(0, self._reposition_exit_btn)
 
         self.grid.addWidget(self.top_toolbar, 0, 0)
@@ -449,11 +451,81 @@ class IntricateApp(QMainWindow):
     # Sessions
     # =========================================================================
 
-    def on_session_changed(self):
-        import utils.settings as _s
-        _s.set_value("ui", "selected_project", self.project_selector.currentText())
+    # =========================================================================
+    # Sessions
+    # =========================================================================
 
-    def populate_sessions(self):
+    def _session_path(self, project: str | None = None) -> 'Path | None':
+        """Return the session.json path for a project folder name."""
+        from pathlib import Path
+        name = project if project is not None else self.project_selector.currentText()
+        if not name:
+            return None
+        return Path.home() / "Desktop" / name / "session.json"
+
+    def _swap_scene(self) -> None:
+        """Replace the current scene with a fresh one on the view.
+
+        Avoids calling removeItem on live nodes — instead the old scene is
+        handed to Python GC while the view gets a clean canvas immediately.
+        The autosave signal is re-wired to the new scene.
+        """
+        old_scene = self.scene
+        try:
+            old_scene.changed.disconnect(self._schedule_autosave)
+        except RuntimeError:
+            pass
+
+        self.scene = IntricateScene()
+        self.view.setScene(self.scene)
+        self.scene.changed.connect(self._schedule_autosave)
+
+    def _autosave(self) -> None:
+        """Save the current canvas to the active project's session.json."""
+        path = self._session_path()
+        if path:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.scene.save_session(path)
+
+    def _schedule_autosave(self) -> None:
+        """Debounce scene changes — save 2 s after the last modification."""
+        self._autosave_timer.start(2000)
+
+    def _load_initial_session(self) -> None:
+        """Load the session for the startup-selected project and wire autosave."""
+        self._autosave_timer = QTimer()
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.timeout.connect(self._autosave)
+        self.scene.changed.connect(self._schedule_autosave)
+
+        path = self._session_path()
+        if path and path.exists():
+            self.scene.load_session(path)
+
+    def on_session_changed(self) -> None:
+        """Save the outgoing session, swap to a fresh scene, load incoming."""
+        import utils.settings as _s
+        new_project = self.project_selector.currentText()
+
+        # Save whatever was on canvas for the previous project
+        if hasattr(self, '_active_project'):
+            prev_path = self._session_path(self._active_project)
+            if prev_path:
+                prev_path.parent.mkdir(parents=True, exist_ok=True)
+                self.scene.save_session(prev_path)
+
+        self._active_project = new_project
+        _s.set_value("ui", "selected_project", new_project)
+
+        # Fresh scene — avoids re-entrant Qt teardown on live nodes
+        self._swap_scene()
+
+        # Populate the new canvas from disk if a session exists
+        path = self._session_path(new_project)
+        if path and path.exists():
+            self.scene.load_session(path)
+
+    def populate_sessions(self) -> None:
         import utils.settings as _s
         from pathlib import Path
         desktop = Path.home() / "Desktop"
@@ -465,6 +537,7 @@ class IntricateApp(QMainWindow):
         saved = _s.get("ui", "selected_project", "")
         if saved in desktop_folders:
             self.project_selector.setCurrentText(saved)
+        self._active_project = self.project_selector.currentText()
 
     # =========================================================================
     # Mouse and Hover Events

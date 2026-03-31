@@ -7,6 +7,7 @@
 """
 
 import random
+import warnings
 from PySide6.QtCore import QVariantAnimation, QEasingCurve
 from graphics.Theme import Theme
 
@@ -115,12 +116,14 @@ class NodeBehaviour:
         Safe to call multiple times — already-disconnected signals raise
         RuntimeError which is caught and ignored.
         """
-        try:
-            self.pulse_anim.valueChanged.disconnect(self._node.setScale)
-        except RuntimeError:
-            pass
-        try:
-            self.pulse_anim.finished.disconnect(self._on_pulse_finished)
-        except RuntimeError:
-            pass
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            try:
+                self.pulse_anim.valueChanged.disconnect(self._node.setScale)
+            except RuntimeError:
+                pass
+            try:
+                self.pulse_anim.finished.disconnect(self._on_pulse_finished)
+            except RuntimeError:
+                pass
         self.pulse_anim.stop()

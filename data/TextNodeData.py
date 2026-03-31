@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from data.NodeData import NodeData
 
 
-@dataclass(slots=True)
+@dataclass
 class TextNodeData(NodeData):
     node_type:   str   = field(default="text")
     title:       str   = field(default="Text")

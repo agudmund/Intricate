@@ -197,3 +197,156 @@ class IntricateScene(QGraphicsScene):
             node.load_from_path(path)
 
         return node
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SESSION PERSISTENCE
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def save_session(self, path) -> None:
+        """Serialize all nodes and connections via SessionManager (rotation + checksum)."""
+        from nodes.BaseNode import BaseNode
+        from graphics.Connection import Connection
+        from utils.session_manager import SessionManager
+
+        nodes = []
+        connections = []
+        seen = set()
+
+        for item in self.items():
+            if isinstance(item, BaseNode):
+                nodes.append(item.to_dict())
+            elif isinstance(item, Connection) and id(item) not in seen:
+                seen.add(id(item))
+                try:
+                    if item.start_node and item.end_node:
+                        connections.append({
+                            "start_uuid": item.start_node.data.uuid,
+                            "end_uuid":   item.end_node.data.uuid,
+                        })
+                except RuntimeError:
+                    pass
+
+        SessionManager.save_session(str(path), {
+            "version":     SessionManager.VERSION,
+            "nodes":       nodes,
+            "connections": connections,
+            "viewport":    {},
+        })
+
+    def load_session(self, path) -> None:
+        """Clear the scene and restore from a session.json via SessionManager."""
+        from utils.session_manager import SessionManager
+
+        payload = SessionManager.get_session_data(str(path))
+        if payload is None:
+            return
+
+        uuid_map = {}
+        for d in payload.get("nodes", []):
+            node = self._restore_node(d)
+            if node:
+                uuid_map[d.get("uuid")] = node
+
+        from graphics.Connection import Connection
+        for c in payload.get("connections", []):
+            start = uuid_map.get(c.get("start_uuid"))
+            end   = uuid_map.get(c.get("end_uuid"))
+            if start and end and start is not end:
+                try:
+                    conn = Connection(start, end)
+                    self.addItem(conn)
+                    conn.update_path()
+                except Exception:
+                    pass
+
+    def _clear_all(self) -> None:
+        """Tear down every node and connection in the scene cleanly."""
+        from nodes.BaseNode import BaseNode
+        from graphics.Connection import Connection
+
+        # Stop all node pulse animations before touching anything
+        for item in list(self.items()):
+            if isinstance(item, BaseNode):
+                try:
+                    item.behaviour.disconnect_all()
+                except Exception:
+                    pass
+
+        # Stop connection glide timers and null node refs before removal.
+        # The _glide_timer fires every 16 ms — if it ticks after removeItem
+        # but before start_node/end_node are nulled it dereferences a stale
+        # C++ pointer and hard-crashes Qt.
+        for item in list(self.items()):
+            if isinstance(item, Connection):
+                try:
+                    item._glide_timer.stop()
+                    item.start_node = None
+                    item.end_node   = None
+                    self.removeItem(item)
+                except Exception:
+                    pass
+
+        # Clear each node's connection list then remove it from the scene
+        for item in list(self.items()):
+            if isinstance(item, BaseNode):
+                try:
+                    item.connections.clear()
+                    self.removeItem(item)
+                except Exception:
+                    pass
+
+        # Reset z-counters so restored nodes start from a clean slate
+        self._back_z_top  = -10.0
+        self._front_z_top =  10.0
+
+    def _restore_node(self, d: dict):
+        """Recreate a single node from its serialized dict."""
+        node_type = d.get("node_type", "")
+        node = None
+
+        if node_type == "warm":
+            from nodes.WarmNode import WarmNode
+            from data.WarmNodeData import WarmNodeData
+            node = WarmNode(WarmNodeData.from_dict(d))
+
+        elif node_type == "about":
+            from nodes.AboutNode import AboutNode
+            from data.AboutNodeData import AboutNodeData
+            node = AboutNode(AboutNodeData.from_dict(d))
+
+        elif node_type == "bezier":
+            from nodes.BezierNode import BezierNode
+            from data.BezierNodeData import BezierNodeData
+            node = BezierNode(BezierNodeData.from_dict(d))
+
+        elif node_type == "health":
+            from nodes.HealthNode import HealthNode
+            from data.HealthNodeData import HealthNodeData
+            node = HealthNode(HealthNodeData.from_dict(d))
+
+        elif node_type == "claude":
+            from nodes.ClaudeNode import ClaudeNode
+            from data.ClaudeNodeData import ClaudeNodeData
+            node = ClaudeNode(ClaudeNodeData.from_dict(d))
+
+        elif node_type == "claude_response":
+            from nodes.ClaudeResponseNode import ClaudeResponseNode
+            from data.ClaudeResponseNodeData import ClaudeResponseNodeData
+            node = ClaudeResponseNode(ClaudeResponseNodeData.from_dict(d))
+
+        elif node_type == "text":
+            from nodes.TextNode import TextNode
+            from data.TextNodeData import TextNodeData
+            node = TextNode(TextNodeData.from_dict(d))
+
+        elif node_type == "image":
+            from nodes.ImageNode import ImageNode
+            from data.ImageNodeData import ImageNodeData
+            node = ImageNode(ImageNodeData.from_dict(d))
+
+        if node is not None:
+            node.setPos(QPointF(d.get("x", 0.0), d.get("y", 0.0)))
+            self.addItem(node)
+            self.raise_node(node)
+
+        return node

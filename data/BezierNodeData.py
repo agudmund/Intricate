@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from data.NodeData import NodeData
 
 
-@dataclass(slots=True)
+@dataclass
 class BezierNodeData(NodeData):
     """
     The identity of a BezierNode.

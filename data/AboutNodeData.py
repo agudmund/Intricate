@@ -12,7 +12,7 @@ from data.NodeData import NodeData
 from utils.motivationalMessages import motivationalMessages
 
 
-@dataclass(slots=True)
+@dataclass
 class AboutNodeData(NodeData):
     """
     The identity of an AboutNode.

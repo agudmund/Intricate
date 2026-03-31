@@ -11,7 +11,7 @@ from data.NodeData import NodeData
 from graphics.Theme import Theme
 
 
-@dataclass(slots=True)
+@dataclass
 class HealthNodeData(NodeData):
     """
     The identity of a HealthNode.
