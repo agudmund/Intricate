@@ -29,7 +29,13 @@
       "Bash(do sed:*)",
       "Bash(grep -n \"@dataclass\" *.py)",
       "Bash(find /c/Users/thisg/Desktop -name build*.py)",
-      "Read(//c/Users/thisg/**)"
+      "Read(//c/Users/thisg/**)",
+      "Bash(ls /c/Users/thisg/Desktop/Intricate/cozy-*.py)",
+      "Bash(ls /c/Users/thisg/Desktop/Intricate/*.py)",
+      "Bash(find /c/Users/thisg -maxdepth 4 -name cozy-snapshot*)",
+      "Bash(grep:*)",
+      "Bash(claude --version)",
+      "Bash(python3 -c \"import sys,json; [print\\(json.loads\\(l\\).get\\(''''type'''',''''?''''\\)\\) for l in sys.stdin if l.strip\\(\\)]\")"
     ]
   }
 }

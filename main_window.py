@@ -6,7 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
@@ -16,6 +16,7 @@ from widgets.PrettyButton import button
 from utils.logger import setup_logger
 from utils.settings import appName, set_nested, set_value, get
 from widgets.PrettyCombo import combo as pretty_combo
+from widgets.PrettyLabel import label as pretty_label
 
 logger = setup_logger()
 
@@ -238,13 +239,12 @@ class IntricateApp(QMainWindow):
         self.sidebar_layout.setSpacing(0)
         self.sidebar = self._build_sidebar()
 
-        # ── Right reserved ────────────────────────────────────────────────────
-        # Empty widget — holds the slot open in the splitter for the VIP.
-        self.rightReserved = QWidget()
-        self.rightReserved.setFixedWidth(0)   # Collapsed until needed
-        self.rightReserved.setSizePolicy(
-            QSizePolicy.Fixed, QSizePolicy.Expanding
-        )
+        # ── Right panel — empty QFrame for the future VIP zone ─────────────
+        self.rightPanel = QFrame()
+        self.rightPanel.setFrameShape(QFrame.NoFrame)
+        self.rightPanel.setFixedWidth(0)      # Collapsed until needed
+        self.rightPanel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self.rightPanel.setStyleSheet(f"background: {Theme.windowBg};")
 
         # ── Splitter ──────────────────────────────────────────────────────────
         self.splitter = QSplitter(Qt.Horizontal)
@@ -256,7 +256,7 @@ class IntricateApp(QMainWindow):
         """)
         self.splitter.addWidget(self.sidebar)
         self.splitter.addWidget(self.view)
-        self.splitter.addWidget(self.rightReserved)
+        self.splitter.addWidget(self.rightPanel)
 
         # Canvas takes all available slack — sidebar and right zone are fixed
         self.splitter.setStretchFactor(0, 0)
@@ -304,6 +304,8 @@ class IntricateApp(QMainWindow):
             (Theme.iconHealth, self._spawn_health_node, "The Oddly Important Health Node"),
             (Theme.iconClaude, self._spawn_claude_node, "Claude Node"),
             (Theme.iconText,  self._spawn_text_node,   "Text Node"),
+            (Theme.iconSequence, self._spawn_sequence_node, "Image Sequence Scrubber"),
+            (Theme.iconTree,    self._spawn_tree_node,     "Folder Structure"),
         ]
 
         for icon, slot, description in tools:
@@ -386,24 +388,43 @@ class IntricateApp(QMainWindow):
 
     def _spawn_warm_node(self):
         self.scene.add_warm_node(pos=self._viewport_center())
+        self._status("a warm thought arrives")
 
     def _spawn_about_node(self):
         self.scene.add_about_node(pos=self._viewport_center())
+        self._status("a little note for later")
 
     def _spawn_bezier_node(self):
         self.scene.add_bezier_node(pos=self._viewport_center())
+        self._status("curves ahead")
 
     def _spawn_health_node(self):
         self.scene.add_health_node(pos=self._viewport_center())
+        self._status("checking in on things")
 
     def _spawn_claude_node(self):
-        self.scene.add_claude_node(pos=self._viewport_center())
+        from pathlib import Path
+        project_path = Path.home() / "Desktop" / self._active_project
+        self.scene.add_claude_node(pos=self._viewport_center(), project_path=project_path)
+        self._status("claude has entered the chat")
 
     def _spawn_image_node(self):
         self.scene.add_image_node(pos=self._viewport_center())
+        self._status("a picture is worth everything")
 
     def _spawn_text_node(self):
         self.scene.add_text_node(pos=self._viewport_center())
+        self._status("words, words, words")
+
+    def _spawn_sequence_node(self):
+        self.scene.add_sequence_node(pos=self._viewport_center())
+        self._status("ready to scrub")
+
+    def _spawn_tree_node(self):
+        path = self._session_path()
+        project_path = str(path.parent) if path else ""
+        self.scene.add_tree_node(pos=self._viewport_center(), project_path=project_path)
+        self._status("mapping the territory")
 
 
 
@@ -419,6 +440,10 @@ class IntricateApp(QMainWindow):
         layout.setContentsMargins(*Theme.layoutMargins)
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignVCenter)
+
+        # ── Selection info label — left side ─────────────────────────
+        self._selection_label = pretty_label("")
+        layout.addWidget(self._selection_label, alignment=Qt.AlignVCenter)
 
         layout.addStretch()
 
@@ -438,9 +463,20 @@ class IntricateApp(QMainWindow):
         self._settings_dlg.activateWindow()
 
     def _open_demo_dialog(self):
-
         dlg = DemoDialog(self)
         dlg.show()
+
+    # =========================================================================
+    # Status Bar — warm, hospitable feedback on major UI moments
+    # =========================================================================
+
+    def _status(self, text: str) -> None:
+        """Show a warm status message in the bottom toolbar."""
+        self._selection_label.setText(text)
+
+    def _on_selection_changed(self) -> None:
+        """Clear status when selection changes — status is event-driven, not live."""
+        pass
 
     # =========================================================================
     # Sessions
@@ -467,9 +503,15 @@ class IntricateApp(QMainWindow):
         except RuntimeError:
             pass
 
+        # Sever Qt C++ signal connections on the old scene so its nodes
+        # can be collected — without this, behaviour animations and glide
+        # timers create C++-side reference cycles that Python's GC can't break.
+        old_scene._release_all()
+
         self.scene = IntricateScene()
         self.view.setScene(self.scene)
         self.scene.changed.connect(self._schedule_autosave)
+        self.scene.selectionChanged.connect(self._on_selection_changed)
 
     def _autosave(self) -> None:
         """Save the current canvas to the active project's session.json."""
@@ -483,16 +525,23 @@ class IntricateApp(QMainWindow):
         self._autosave_timer.start(2000)
 
     def _init_autosave(self) -> None:
-        """Create the debounce timer and wire the scene-change signal."""
+        """Create the debounce timer and wire scene signals."""
         self._autosave_timer = QTimer()
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.timeout.connect(self._autosave)
         self.scene.changed.connect(self._schedule_autosave)
+        self.scene.selectionChanged.connect(self._on_selection_changed)
 
     def _load_initial_session(self) -> None:
         """Load the session for the startup-selected project and wire autosave."""
+        import os
         self._init_autosave()
         path = self._session_path()
+        if path and path.parent.exists():
+            try:
+                os.chdir(str(path.parent))
+            except OSError:
+                pass
         if path:
             if path.exists():
                 self.scene.load_session(path)
@@ -513,6 +562,16 @@ class IntricateApp(QMainWindow):
         self._active_project = new_project
         _s.set_value("ui", "selected_project", new_project)
 
+        # Change working directory to the new project folder
+        import os
+        from pathlib import Path
+        new_project_dir = Path.home() / "Desktop" / new_project
+        if new_project_dir.exists():
+            try:
+                os.chdir(str(new_project_dir))
+            except OSError:
+                pass
+
         # Fresh scene — avoids re-entrant Qt teardown on live nodes
         self._swap_scene()
 
@@ -522,6 +581,7 @@ class IntricateApp(QMainWindow):
             if path.exists():
                 self.scene.load_session(path)
             self.scene.sync_project_images(path.parent)
+        self._status(f"welcome back to {new_project}")
 
     def populate_sessions(self) -> None:
         import utils.settings as _s

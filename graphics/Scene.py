@@ -146,10 +146,28 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
-    def add_claude_node(self, pos: QPointF | None = None):
-        """Add a ClaudeNode at pos."""
+    @staticmethod
+    def _claude_folder_for(project_path: 'Path | None') -> str:
+        """Derive the ~/.claude/projects/... folder path for a given Desktop project path."""
+        from pathlib import Path
+        if project_path is None:
+            project_path = Path.cwd()
+        project_path = Path(project_path).resolve()
+        slug = str(project_path).replace(":", "-").replace("\\", "-").replace("/", "-")
+        return str(Path.home() / ".claude" / "projects" / slug)
+
+    def add_claude_node(self, pos: QPointF | None = None, project_path: 'Path | None' = None):
+        """Add a ClaudeNode at pos, wired to the given project's Claude session folder."""
         from nodes.ClaudeNode import ClaudeNode
-        node = ClaudeNode()
+        from data.ClaudeNodeData import ClaudeNodeData
+        from graphics.Theme import Theme
+        folder = self._claude_folder_for(project_path)
+        data = ClaudeNodeData(
+            width=Theme.claudeDefaultWidth,
+            height=Theme.claudeDefaultHeight,
+            folder_path=folder,
+        )
+        node = ClaudeNode(data)
         if pos is not None:
             r = node.rect()
             node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
@@ -198,11 +216,35 @@ class IntricateScene(QGraphicsScene):
 
         return node
 
+    def add_sequence_node(self, pos: QPointF | None = None, folder_path: str | None = None):
+        """Add a SequenceNode for scrubbing through an image sequence on disk."""
+        from nodes.SequenceNode import SequenceNode
+        from data.SequenceNodeData import SequenceNodeData
+        data = SequenceNodeData(folder_path=folder_path or "")
+        node = SequenceNode(data)
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
+    def add_tree_node(self, pos: QPointF | None = None, project_path: str | None = None):
+        """Add a TreeNode showing the folder structure for project_path."""
+        from nodes.TreeNode import TreeNode
+        from data.TreeNodeData import TreeNodeData
+        data = TreeNodeData(project_path=project_path or "")
+        node = TreeNode(data)
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     # ─────────────────────────────────────────────────────────────────────────
     # PROJECT IMAGE SYNC
     # ─────────────────────────────────────────────────────────────────────────
 
-    _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+    _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 
     def sync_project_images(self, project_folder) -> None:
         """
@@ -321,6 +363,33 @@ class IntricateScene(QGraphicsScene):
                 except Exception:
                     pass
 
+    def _release_all(self) -> None:
+        """
+        Sever all Qt C++ signal connections so the scene can be GC'd.
+
+        Does NOT call removeItem — that triggers itemChange → _prepare_for_removal
+        → _heal_connections which re-entrantly crashes on a half-torn-down scene.
+        Instead we just break the C++ signal cycles: behaviour animations, glide
+        timers, and node references on connections. Python's cyclic GC handles
+        the rest once the C++ pointers no longer prevent collection.
+        """
+        from nodes.BaseNode import BaseNode
+        from graphics.Connection import Connection
+
+        for item in list(self.items()):
+            if isinstance(item, BaseNode):
+                try:
+                    item.behaviour.disconnect_all()
+                except Exception:
+                    pass
+            elif isinstance(item, Connection):
+                try:
+                    item._glide_timer.stop()
+                    item.start_node = None
+                    item.end_node   = None
+                except Exception:
+                    pass
+
     def _clear_all(self) -> None:
         """Tear down every node and connection in the scene cleanly."""
         from nodes.BaseNode import BaseNode
@@ -405,6 +474,16 @@ class IntricateScene(QGraphicsScene):
             from nodes.ImageNode import ImageNode
             from data.ImageNodeData import ImageNodeData
             node = ImageNode(ImageNodeData.from_dict(d))
+
+        elif node_type == "sequence":
+            from nodes.SequenceNode import SequenceNode
+            from data.SequenceNodeData import SequenceNodeData
+            node = SequenceNode(SequenceNodeData.from_dict(d))
+
+        elif node_type == "tree":
+            from nodes.TreeNode import TreeNode
+            from data.TreeNodeData import TreeNodeData
+            node = TreeNode(TreeNodeData.from_dict(d))
 
         if node is not None:
             node.setPos(QPointF(d.get("x", 0.0), d.get("y", 0.0)))

@@ -74,6 +74,7 @@ class ClaudeNode(BaseNode):
         self._file_offset: int = 0
         self._current_reply: str = ""
         self._reply_received: bool = False   # set True the moment file-watcher content arrives
+        self._stdout_accumulated: str = ""   # full stdout of the current subprocess run
         self._last_response_node = None      # chain: wire new responses from the previous one
 
         self._reply_done_timer = QTimer()
@@ -89,36 +90,92 @@ class ClaudeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _auto_connect(self) -> None:
-        """Find the 'Intricate Claude Node' session (or most recent) and connect."""
+        """
+        Find the 'Intricate Claude Node' session (or most recent) and connect.
+        If no sessions exist for this project, create a fresh one via `claude`.
+        """
         p = Path(self.data.folder_path)
-        if not p.exists():
-            return
         target_uuid = None
         fallback_uuid = None
         fallback_mtime = 0.0
-        for jsonl_file in p.glob("*.jsonl"):
-            try:
-                mtime = jsonl_file.stat().st_mtime
-                if mtime > fallback_mtime:
-                    fallback_mtime = mtime
-                    fallback_uuid = jsonl_file.stem
-                with open(jsonl_file, encoding="utf-8", errors="ignore") as f:
-                    for line in f:
-                        if "custom-title" not in line:
-                            continue
-                        try:
-                            entry = json.loads(line.strip())
-                            if entry.get("type") == "custom-title" and entry.get("customTitle") == "Intricate Claude Node":
-                                target_uuid = jsonl_file.stem
-                        except json.JSONDecodeError:
-                            pass
-            except OSError:
-                pass
+
+        if p.exists():
+            for jsonl_file in p.glob("*.jsonl"):
+                try:
+                    mtime = jsonl_file.stat().st_mtime
+                    if mtime > fallback_mtime:
+                        fallback_mtime = mtime
+                        fallback_uuid = jsonl_file.stem
+                    with open(jsonl_file, encoding="utf-8", errors="ignore") as f:
+                        for line in f:
+                            if "custom-title" not in line:
+                                continue
+                            try:
+                                entry = json.loads(line.strip())
+                                if entry.get("type") == "custom-title" and entry.get("customTitle") == "Intricate Claude Node":
+                                    target_uuid = jsonl_file.stem
+                            except json.JSONDecodeError:
+                                pass
+                except OSError:
+                    pass
+
         uuid = target_uuid or fallback_uuid
-        if not uuid:
+        if uuid:
+            self._current_uuid = uuid
+            self._start_watching(uuid)
+        else:
+            # No sessions found for this project — create a new one.
+            threading.Thread(target=self._create_new_session, daemon=True).start()
+
+    def _create_new_session(self) -> None:
+        """
+        Bootstrap a fresh Claude session for this project by running `claude`
+        without --resume. Discovers the new JSONL UUID and wires up the watcher.
+        Runs on a background thread; connects back to the main thread via QTimer.
+        """
+        p = Path(self.data.folder_path)
+        # Snapshot existing JSONL stems before the new session is created
+        existing = set(f.stem for f in p.glob("*.jsonl")) if p.exists() else set()
+
+        # A silent seed prompt — the node checks this sentinel and won't spawn a response node.
+        # Run with the project dir as CWD so Claude maps the session to the right folder.
+        import os
+        project_cwd = os.getcwd()   # main thread already chdir'd to the project folder
+        _ps_cmd = "claude --print 'no response requested'"
+        try:
+            subprocess.run(
+                ["powershell.exe", "-Command", _ps_cmd],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                cwd=project_cwd,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=60,
+            )
+        except Exception:
             return
-        self._current_uuid = uuid
-        self._start_watching(uuid)
+
+        # Find the JSONL that appeared after the run
+        def _on_main():
+            if not p.exists():
+                return
+            new_uuid = None
+            newest_mtime = 0.0
+            for jsonl_file in p.glob("*.jsonl"):
+                if jsonl_file.stem in existing:
+                    continue
+                try:
+                    mtime = jsonl_file.stat().st_mtime
+                    if mtime > newest_mtime:
+                        newest_mtime = mtime
+                        new_uuid = jsonl_file.stem
+                except OSError:
+                    pass
+            if new_uuid:
+                self._current_uuid = new_uuid
+                self._start_watching(new_uuid)
+
+        QTimer.singleShot(0, _on_main)
 
     # ─────────────────────────────────────────────────────────────────────────
     # SESSION WATCHER
@@ -165,6 +222,55 @@ class ClaudeNode(BaseNode):
         if self._watcher and path not in self._watcher.files():
             self._watcher.addPath(path)
 
+    def _scan_jsonl_for_reply(self) -> None:
+        """
+        Directly scan the JSONL file for new assistant text entries.
+
+        Called after the subprocess exits as a reliable fallback when
+        QFileSystemWatcher doesn't fire (common on Windows). If no JSONL text
+        is found but stdout accumulated content, that is used instead so that
+        a response node always spawns on success.
+        """
+        if self._reply_received:
+            return   # file watcher already handled it
+        if not self._current_uuid:
+            return
+        jsonl_path = Path(self.data.folder_path) / f"{self._current_uuid}.jsonl"
+        try:
+            with open(jsonl_path, encoding="utf-8", errors="ignore") as f:
+                f.seek(self._file_offset)
+                new_lines = f.readlines()
+                self._file_offset = f.tell()
+        except OSError:
+            return
+
+        for line in new_lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                if entry.get("type") != "assistant":
+                    continue
+                for block in entry.get("message", {}).get("content", []):
+                    if block.get("type") == "text":
+                        text = block.get("text", "").strip()
+                        if text:
+                            self._current_reply += text + " "
+                            self._reply_received = True
+            except json.JSONDecodeError:
+                pass
+
+        if self._reply_received:
+            self._reply_done_timer.start()
+            return
+
+        # Last resort: use accumulated stdout content (plain text from --print)
+        stdout = _ANSI_RE.sub('', self._stdout_accumulated).strip()
+        if stdout:
+            self._current_reply = stdout
+            self._reply_received = True
+            self._reply_done_timer.start()
 
     def _build_buttons(self) -> None:
         from nodes.NodeButton import NodeButton
@@ -546,6 +652,7 @@ class ClaudeNode(BaseNode):
         except OSError:
             pass
         self._reply_received = False
+        self._stdout_accumulated = ""
         self._last_response_node = None   # reset chain — new question anchors back to ClaudeNode
         self._stream_q  = queue.SimpleQueue()
         self._status_q  = queue.SimpleQueue()
@@ -610,7 +717,9 @@ class ClaudeNode(BaseNode):
                 break
             chunks.append(item)
         if chunks:
-            self._append_body("".join(chunks))
+            joined = "".join(chunks)
+            self._append_body(joined)
+            self._stdout_accumulated += joined
 
         # Stderr — show last visible status line (spinner, tool use) as title
         buf = getattr(self, "_status_buf", "")
@@ -636,9 +745,11 @@ class ClaudeNode(BaseNode):
             self._status_buf = ""
             self.data.title = getattr(self, "_title_question", self.data.title)
             self.update()
-            # Give the file watcher a moment to deliver any last JSONL entries,
-            # then check whether a reply actually arrived.
-            QTimer.singleShot(600, lambda: self._check_error_response(final_status))
+            # Direct JSONL scan — don't rely solely on QFileSystemWatcher (unreliable on Windows).
+            # Give the OS 200 ms to finish flushing the file, then scan manually.
+            QTimer.singleShot(200, self._scan_jsonl_for_reply)
+            # If neither watcher nor scan delivered a reply, surface a friendly error.
+            QTimer.singleShot(800, lambda: self._check_error_response(final_status))
 
     def _preprocess_input(self, text: str) -> str:
         """Substitute escape tokens and strip post-action suffixes.

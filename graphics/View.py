@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QPainter, QColor
 
 
-_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 
 
 class IntricateView(QGraphicsView):

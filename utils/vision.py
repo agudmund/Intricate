@@ -24,7 +24,7 @@ _log = setup_logger("vision")
 # ---------------------------------------------------------------------------
 # Accepted image extensions for drag-and-drop
 # ---------------------------------------------------------------------------
-DROP_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+DROP_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".tif", ".tiff"}
 
 # Media type map for the API payload
 _MEDIA_TYPES = {

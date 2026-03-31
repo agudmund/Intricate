@@ -6,6 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import time as _time
 import uuid as _uuid
 from PySide6.QtWidgets import QGraphicsRectItem
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer
@@ -102,6 +103,10 @@ class BaseNode(QGraphicsRectItem):
         self._pending_update        = False
         self._last_scene_pos        = QPointF(data.x, data.y)
 
+        # ── Shake-to-detach ──────────────────────────────────────────────────
+        self._shake_samples: list  = []    # [(monotonic_time, QPointF), ...]
+        self._shake_triggered: bool = False
+
         # ── Behaviour ─────────────────────────────────────────────────────────
         # disconnect_all() is called in _prepare_for_removal — not optional.
         self.behaviour = NodeBehaviour(self)
@@ -127,6 +132,7 @@ class BaseNode(QGraphicsRectItem):
             QGraphicsRectItem.ItemSendsScenePositionChanges
         )
         self.setAcceptHoverEvents(True)
+        self.setFiltersChildEvents(True)   # route right-clicks through sceneEventFilter
         self.setTransformOriginPoint(self.rect().center())
 
 
@@ -141,6 +147,17 @@ class BaseNode(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
+
+    def sceneEventFilter(self, watched, event) -> bool:
+        """Intercept right-clicks on child items (QGraphicsProxyWidgets, etc.)
+        before they reach the child.  Without this, the QTextEdit proxy eats
+        the right-click for its context menu and BaseNode never sees it."""
+        from PySide6.QtCore import QEvent
+        if (event.type() == QEvent.GraphicsSceneMousePress
+                and event.button() == Qt.RightButton):
+            self.mousePressEvent(event)
+            return True   # handled — child does not see it
+        return super().sceneEventFilter(watched, event)
 
     def itemChange(self, change, value):
         if (change == QGraphicsRectItem.GraphicsItemChange.ItemSceneChange
@@ -441,6 +458,8 @@ class BaseNode(QGraphicsRectItem):
                 event.accept()
                 return
         self._is_resizing = False
+        self._shake_samples.clear()
+        self._shake_triggered = False
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -457,6 +476,90 @@ class BaseNode(QGraphicsRectItem):
             event.accept()
             return
         super().mouseMoveEvent(event)
+        if not self._is_resizing:
+            self._track_shake()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SHAKE-TO-DETACH
+    # ─────────────────────────────────────────────────────────────────────────
+
+    _SHAKE_SAMPLE_INTERVAL = 0.03   # seconds between position samples
+    _SHAKE_WINDOW          = 0.40   # seconds of history to keep
+    _SHAKE_MIN_DELTA       = 5.0    # px — ignore jitter smaller than this
+    _SHAKE_REVERSALS       = 3      # direction changes needed to trigger
+
+    def _track_shake(self) -> None:
+        """Sample position during drag at ~30ms intervals and check for shake."""
+        if not self.connections or self._shake_triggered:
+            return
+        now = _time.monotonic()
+        if self._shake_samples and (now - self._shake_samples[-1][0]) < self._SHAKE_SAMPLE_INTERVAL:
+            return
+        self._shake_samples.append((now, QPointF(self.scenePos())))
+        cutoff = now - self._SHAKE_WINDOW
+        self._shake_samples = [(t, p) for t, p in self._shake_samples if t >= cutoff]
+        if self._detect_shake():
+            self._shake_triggered = True
+            self._shake_detach()
+
+    def _detect_shake(self) -> bool:
+        """Count direction reversals on either axis — 3+ in the window = shake."""
+        pts = self._shake_samples
+        if len(pts) < 4:
+            return False
+        for axis in (0, 1):   # 0 = x, 1 = y
+            reversals = 0
+            prev_d = 0.0
+            for i in range(1, len(pts)):
+                d = (pts[i][1].x() - pts[i-1][1].x()) if axis == 0 \
+                    else (pts[i][1].y() - pts[i-1][1].y())
+                if abs(d) < self._SHAKE_MIN_DELTA:
+                    continue
+                if prev_d != 0.0 and d * prev_d < 0:
+                    reversals += 1
+                prev_d = d
+            if reversals >= self._SHAKE_REVERSALS:
+                return True
+        return False
+
+    def _shake_detach(self) -> None:
+        """Detach all wires from this node and bridge the gap behind it."""
+        scene = self.scene()
+        if not scene or not self.connections:
+            return
+        from graphics.Connection import Connection
+
+        # Collect the other endpoints before tearing anything down
+        sources = [c.start_node for c in self.connections
+                   if c.end_node is self and c.start_node is not None]
+        targets = [c.end_node   for c in self.connections
+                   if c.start_node is self and c.end_node is not None]
+
+        # Remove every wire attached to this node
+        for conn in list(self.connections):
+            conn._glide_timer.stop()
+            other = conn.end_node if conn.start_node is self else conn.start_node
+            if other is not None and other is not self:
+                try:    other.connections.remove(conn)
+                except ValueError: pass
+            conn.start_node = None
+            conn.end_node   = None
+            if conn.scene():
+                scene.removeItem(conn)
+        self.connections.clear()
+
+        # Visual celebration — particles burst from the freed node
+        from graphics.Particles import sprinkle
+        sprinkle(scene, self.mapToScene(self.rect().center()))
+
+        # Heal the chain: bridge every source → target pair
+        for src in sources:
+            for tgt in targets:
+                if src is tgt:
+                    continue
+                new_conn = Connection(src, tgt)
+                scene.addItem(new_conn)
+                new_conn.update_path()
 
     def mouseReleaseEvent(self, event):
         self._is_resizing = False
@@ -467,9 +570,76 @@ class BaseNode(QGraphicsRectItem):
         self.data.height = self.rect().height()
         super().mouseReleaseEvent(event)
 
+        # Wire splice — if the node was dropped on top of a wire, insert it
+        if event.button() == Qt.LeftButton:
+            self._try_splice_into_wire()
+
+    def _try_splice_into_wire(self) -> None:
+        """
+        Check if this node's center sits on a wire it isn't already part of.
+        If so, remove the original wire and create two new ones:
+            original.start → self → original.end
+        """
+        scene = self.scene()
+        if not scene:
+            return
+        from graphics.Connection import Connection
+
+        node_rect = self.mapRectToScene(self.rect())
+        for item in scene.items(node_rect):
+            if not isinstance(item, Connection):
+                continue
+            if item.start_node is self or item.end_node is self:
+                continue
+            src = item.start_node
+            tgt = item.end_node
+            if src is None or tgt is None:
+                continue
+
+            # Tear down the original wire
+            item._glide_timer.stop()
+            try:    src.connections.remove(item)
+            except ValueError: pass
+            try:    tgt.connections.remove(item)
+            except ValueError: pass
+            item.start_node = None
+            item.end_node   = None
+            scene.removeItem(item)
+
+            # Splice: src → self → tgt
+            conn_in  = Connection(src, self)
+            scene.addItem(conn_in)
+            conn_in.update_path()
+
+            conn_out = Connection(self, tgt)
+            scene.addItem(conn_out)
+            conn_out.update_path()
+            break   # one splice per drop
+
     def mouseDoubleClickEvent(self, event):
         """Override in subclasses for type-specific double-click behaviour."""
         super().mouseDoubleClickEvent(event)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # FILE DIALOG HELPER
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _lower_window(self) -> 'QMainWindow | None':
+        """Drop always-on-top before opening a file dialog so it isn't hidden."""
+        views = self.scene().views() if self.scene() else []
+        win = views[0].window() if views else None
+        if win:
+            self._saved_flags = win.windowFlags()
+            win.setWindowFlags(self._saved_flags & ~Qt.WindowStaysOnTopHint)
+            win.show()
+        return win
+
+    def _raise_window(self, win=None) -> None:
+        """Restore always-on-top after the dialog closes."""
+        if win and hasattr(self, '_saved_flags'):
+            win.setWindowFlags(self._saved_flags)
+            win.show()
+            win.raise_()
 
     def hoverEnterEvent(self, event):
         if self.behaviour:

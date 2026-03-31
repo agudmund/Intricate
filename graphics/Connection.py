@@ -33,10 +33,6 @@ class Connection(QGraphicsPathItem):
         if self.end_node:
             self.end_node.connections.append(self)
 
-        # Cached clip path — rebuilt in update_path(), reused every paint().
-        # Avoids an expensive QPainterPath boolean subtraction per frame.
-        self._clip_path: QPainterPath | None = None
-
         # Animated departure state (source end)
         self._anim_p1  = None
         self._anim_d1x =  1.0
@@ -147,33 +143,6 @@ class Connection(QGraphicsPathItem):
         path.moveTo(p1)
         path.cubicTo(ctrl1, ctrl2, p2)
         self.setPath(path)
-        self._rebuild_clip_path()
-
-    def _rebuild_clip_path(self) -> None:
-        """
-        Recompute the endpoint clip path and cache it.
-
-        Called once per path update (node move / wire snap), not per frame.
-        paint() reads self._clip_path directly — zero subtraction cost at draw time.
-        """
-        clip = QPainterPath()
-        clip.addRect(self.boundingRect())
-        for ep in (self.start_node, self.end_node):
-            if ep is None:
-                continue
-            try:
-                rr     = ep.round_radius if hasattr(ep, 'round_radius') else 0
-                bw     = ep.current_pen.widthF() if hasattr(ep, 'current_pen') else 2.0
-                margin = bw / 2.0
-                cutout = QPainterPath()
-                cutout.addRoundedRect(
-                    ep.rect().adjusted(-margin, -margin, margin, margin),
-                    rr + margin, rr + margin,
-                )
-                clip = clip.subtracted(ep.sceneTransform().map(cutout))
-            except RuntimeError:
-                pass
-        self._clip_path = clip
 
     def update_path(self, mouse_pos=None):
         """Called whenever a connected node moves. Refreshes targets and path."""
@@ -300,21 +269,21 @@ class Connection(QGraphicsPathItem):
     # ------------------------------------------------------------------
 
     _TAPER_SEGMENTS = 32      # 96 → 32: 3× fewer draw calls, visually indistinguishable
-    _FADE_OUTSIDE   = 10.0
-    _FADE_INSIDE    = 22.0
+    _FADE_OUTSIDE   = 18.0    # gradient zone outside the node edge
+    _FADE_INSIDE    =  2.0    # fully invisible just past the edge
 
     def _segment_opacity(self, pt, covering_nodes):
         if not covering_nodes:
             return 1.0
         min_opacity = 1.0
         for node in covering_nodes:
-            r     = node.mapRectToScene(node.boundingRect())
+            r     = node.mapRectToScene(node.rect())   # visible body, not shadow margin
             ix    = min(pt.x() - r.left(), r.right()  - pt.x())
             iy    = min(pt.y() - r.top(),  r.bottom() - pt.y())
             inset = min(ix, iy)
             span  = self._FADE_OUTSIDE + self._FADE_INSIDE
             fade  = max(0.0, min(1.0, (inset + self._FADE_OUTSIDE) / span))
-            min_opacity = min(min_opacity, 1.0 - fade * 0.92)
+            min_opacity = min(min_opacity, 1.0 - fade)
         return min_opacity
 
     def paint(self, painter, option, widget):
@@ -323,19 +292,34 @@ class Connection(QGraphicsPathItem):
 
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Use the pre-built clip path — recomputed only when update_path() fires,
-        # not on every frame. Falls back to the full bounding rect if not ready.
-        if self._clip_path is not None:
-            painter.setClipPath(self._clip_path)
-        else:
-            painter.setClipRect(self.boundingRect())
+        # Clip out the interior of both endpoint nodes so the wire is never
+        # visible inside them regardless of node background transparency.
+        clip = QPainterPath()
+        clip.addRect(self.boundingRect())
+        for ep in (self.start_node, self.end_node):
+            if ep is None:
+                continue
+            try:
+                rr  = ep.round_radius if hasattr(ep, 'round_radius') else 0
+                bw  = ep.current_pen.widthF() if hasattr(ep, 'current_pen') else 2.0
+                margin = bw / 2.0
+                cutout = QPainterPath()
+                cutout.addRoundedRect(
+                    ep.rect().adjusted(-margin, -margin, margin, margin),
+                    rr + margin, rr + margin,
+                )
+                clip = clip.subtracted(ep.sceneTransform().map(cutout))
+            except RuntimeError:
+                pass
+        painter.setClipPath(clip)
 
         covering_nodes = []
         scene = self.scene()
         if scene:
             for item in scene.items(self.boundingRect()):
-                if hasattr(item, 'data') and item is not self.start_node \
-                        and item is not self.end_node:
+                if (hasattr(item, 'connections')
+                        and item is not self.start_node
+                        and item is not self.end_node):
                     covering_nodes.append(item)
 
         def _wire_color(node):

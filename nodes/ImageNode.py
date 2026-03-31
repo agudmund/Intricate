@@ -286,13 +286,15 @@ class ImageNode(BaseNode):
 
     def _open_file_browser(self) -> None:
         """Open a file dialog to pick an image, starting from the last used directory."""
+        win = self._lower_window()
         start_dir = settings.get_nested("node", "image", "last_dir", "")
         path, _ = QFileDialog.getOpenFileName(
             None,
             "Select Image",
             start_dir,
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"
+            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tif *.tiff)"
         )
+        self._raise_window(win)
         if path:
             settings.set_nested("node", "image", "last_dir", str(Path(path).parent))
             self.load_from_path(path)

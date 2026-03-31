@@ -1,5 +1,5 @@
 ✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
-Generated: 2026-03-29 04:35:45
+Generated: 2026-03-31 03:06:27
 Location:  C:\Users\thisg\Desktop\Intricate
 Mode:      with cozy emojis
 ────────────────────────────────────────────────────────────
@@ -12,27 +12,39 @@ Mode:      with cozy emojis
 │   ├── 📄 __init__.py
 │   ├── 📄 AboutNodeData.py
 │   ├── 📄 BezierNodeData.py
+│   ├── 📄 ClaudeNodeData.py
+│   ├── 📄 ClaudeResponseNodeData.py
 │   ├── 📄 HealthNodeData.py
 │   ├── 📄 ImageNodeData.py
 │   ├── 📄 NodeData.py
+│   ├── 📄 TextNodeData.py
 │   └── 📄 WarmNodeData.py
 ├── 📁 Documents/
 │   ├── 📄 Docstring Compliance Report.md
 │   └── 📄 Python Header Compliance Guide.md
 ├── 📁 graphics/
 │   ├── 📄 __init__.py
+│   ├── 📄 Connection.py
 │   ├── 📄 Scene.py
 │   ├── 📄 Theme.py
 │   └── 📄 View.py
 ├── 📁 icons/
 │   ├── 📄 about_icon.png
 │   ├── 📄 bezier_icon.png
+│   ├── 📄 claude_body_hide.png
+│   ├── 📄 claude_body_show.png
+│   ├── 📄 claude_icon.png
+│   ├── 📄 close.png
+│   ├── 📄 depth_off.png
+│   ├── 📄 depth_on.png
 │   ├── 📄 health_icon.png
 │   ├── 📄 I Also Wrote This Poem Just For You.png
 │   ├── 📄 I took a photo of it to show you.png
 │   ├── 📄 iconic.png
 │   ├── 📄 image_icon.png
 │   ├── 📄 Our Love as Intricate as the patterns we impose.png
+│   ├── 📄 ports_off.png
+│   ├── 📄 ports_on.png
 │   ├── 📄 tester.png
 │   └── 📄 warm_icon.PNG
 ├── 📁 nodes/
@@ -40,23 +52,30 @@ Mode:      with cozy emojis
 │   ├── 📄 AboutNode.py
 │   ├── 📄 BaseNode.py
 │   ├── 📄 BezierNode.py
+│   ├── 📄 ClaudeNode.py
+│   ├── 📄 ClaudeResponseNode.py
 │   ├── 📄 HealthNode.py
 │   ├── 📄 ImageNode.py
 │   ├── 📄 NodeBehaviour.py
 │   ├── 📄 NodeButton.py
 │   ├── 📄 Port.py
+│   ├── 📄 TextNode.py
 │   └── 📄 WarmNode.py
 ├── 📁 utils/
 │   ├── 📄 __init__.py
 │   ├── 📄 logger.py
+│   ├── 📄 motivationalMessages.py
 │   ├── 📄 OSClickMonitor.py
+│   ├── 📄 session_manager.py
 │   ├── 📄 settings.py
 │   └── 📄 vision.py
 ├── 📁 widgets/
 │   ├── 📄 __init__.py
 │   ├── 📄 NoteEditor.py
-│   └── 📄 PrettyButton.py
+│   ├── 📄 PrettyButton.py
+│   └── 📄 PrettyCombo.py
 ├── 📄 .gitignore
+├── 📄 build.py
 ├── 📄 CLAUDE.md
 ├── 📄 cozy-tree.txt
 ├── 📄 Intricate.pyproj
@@ -65,9 +84,9 @@ Mode:      with cozy emojis
 ├── 📄 main.py
 ├── 📄 main_window.py
 ├── 📄 nodal_config.ini
+├── 📄 NotepadPlusPlusDuplexPlusTurbo.exe
 ├── 📄 README.md
 ├── 📄 requirements.txt
-├── 📄 settings.toml
 └── 📄 The Thurr - Palette.png
 
 ────────────────────────────────────────────────────────────
