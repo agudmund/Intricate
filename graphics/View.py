@@ -8,7 +8,7 @@
 
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QPainter, QColor
+from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath
 
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
@@ -87,6 +87,32 @@ class IntricateView(QGraphicsView):
         painter.save()
         painter.resetTransform()
         painter.fillRect(self.viewport().rect(), QColor(Theme.backDrop))
+        painter.restore()
+
+    def drawForeground(self, painter: QPainter, rect) -> None:
+        """Rounded border overlaying the viewport edges — matches node bevel style."""
+        painter.save()
+        painter.resetTransform()
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        vr = self.viewport().rect()
+        radius = Theme.nodeRoundRadius
+        bw = Theme.nodeBorderWidth
+
+        # Clip out the interior so only the border strip draws —
+        # avoids a translucent fill over the scene content.
+        outer = QPainterPath()
+        outer.addRoundedRect(vr.adjusted(0, 0, 0, 0), radius, radius)
+        inner = QPainterPath()
+        inner.addRoundedRect(
+            vr.adjusted(bw, bw, -bw, -bw),
+            max(0, radius - bw), max(0, radius - bw),
+        )
+        border_strip = outer.subtracted(inner)
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(Theme.primaryBorder))
+        painter.drawPath(border_strip)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────

@@ -122,13 +122,14 @@ class ImageNode(BaseNode):
         return QRectF(r.x(), r.bottom() - CAPTION_HEIGHT, r.width(), CAPTION_HEIGHT)
 
     def _image_rect(self) -> QRectF:
-        """The padded image display area above the caption band."""
+        """The padded image display area below the button shelf, above the caption band."""
         r = self.rect()
+        top = r.y() + self._BUTTON_ZONE_H + IMAGE_PADDING
         return QRectF(
-            r.x()      + IMAGE_PADDING,
-            r.y()      + IMAGE_PADDING,
-            r.width()  - IMAGE_PADDING * 2,
-            r.height() - IMAGE_PADDING * 2 - CAPTION_HEIGHT,
+            r.x()     + IMAGE_PADDING,
+            top,
+            r.width() - IMAGE_PADDING * 2,
+            r.height() - (top - r.y()) - IMAGE_PADDING - CAPTION_HEIGHT,
         )
 
     def _start_caption_edit(self) -> None:
@@ -218,11 +219,6 @@ class ImageNode(BaseNode):
 
         self._encode_to_b64()
         self.update()
-
-        # Fire Vision worker — identifies the image and updates caption on response.
-        # Uses SingleSharedBraincell_ApiKey env var. Degrades silently if key is
-        # absent or API is unreachable — filename stem stays as caption.
-        self._run_vision(path)
 
     def _run_vision(self, path: Path) -> None:
         """
@@ -331,8 +327,8 @@ class ImageNode(BaseNode):
     def _build_buttons(self) -> None:
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
-        vision_pix = Theme.icon(Theme.imageVisionIcon, fallback_color="#9ab8d9")
-        self._buttons.append(NodeButton(self, vision_pix, self._trigger_vision))
+        eye_pix = Theme.icon(Theme.iconVisionEye, fallback_color="#9ab8d9")
+        self._buttons.append(NodeButton(self, eye_pix, self._vision_rename))
         trash_pix   = Theme.icon(Theme.iconDelete,  fallback_color="#c97b7b")
         confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
         self._buttons.append(NodeButton(self, trash_pix, self._delete_source_file, confirm_pix))
@@ -356,6 +352,22 @@ class ImageNode(BaseNode):
         if scene:
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: scene.removeItem(self))
+
+    def _vision_rename(self) -> None:
+        """Button action: call the vision API to identify this image and update its caption."""
+        src = self.data.source_path
+        if src:
+            self._run_vision(Path(src))
+        elif self.data.image_b64:
+            # No source file — write a temp PNG so the API has a path to read
+            import tempfile
+            tmp = Path(tempfile.mktemp(suffix=".png"))
+            try:
+                import base64
+                tmp.write_bytes(base64.b64decode(self.data.image_b64))
+                self._run_vision(tmp)
+            except Exception:
+                pass
 
     def _trigger_vision(self) -> None:
         """Send this node's image to a ClaudeNode's vision API."""

@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea, QMenu
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
@@ -120,14 +120,15 @@ class IntricateApp(QMainWindow):
         # centre.setContentsMargins(0, 0, 0, 0)
         # centre.setSpacing(6)
         centre.setAlignment(Qt.AlignVCenter)
-        centre.addWidget(self.setup_project_selector())
-        # Y offset from settings.toml — positive = push down, negative = push up
-        curtains_y = int(get("theme", "curtains_y_offset", 0) or 0)
+        centre.setSpacing(4)
+        combo = self.setup_project_selector()
+        centre.addWidget(combo)
         self._curtains_btn = self.setup_iconic_button(
             clicked=self.toggle_curtains,
-            margin_top=max(0, curtains_y),
-            margin_bottom=max(0, -curtains_y),
         )
+        # Match the curtains button height to the combo so they sit flush
+        combo_h = combo.maximumHeight() or combo.sizeHint().height()
+        self._curtains_btn.setFixedSize(self._curtains_btn.width(), combo_h)
         centre.addWidget(self._curtains_btn)
         layout.addLayout(centre)
 
@@ -529,23 +530,36 @@ class IntricateApp(QMainWindow):
         layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
         tools = [
-            (Theme.iconAbout, self._spawn_about_node, "Sticky note"),
-            (Theme.iconWarm, self._spawn_warm_node, "Warm and Comfortable Writing Node"),
-            (Theme.iconImage, self._spawn_image_node, "The Glorious Image Node"),
-            (Theme.iconBezier, self._spawn_bezier_node, "The Prestigious Bezier Node"),
-            (Theme.iconHealth, self._spawn_health_node, "The Oddly Important Health Node"),
-            (Theme.iconClaude, self._spawn_claude_node, "Claude Node"),
-            (Theme.iconText,  self._spawn_text_node,   "Text Node"),
-            (Theme.iconSequence, self._spawn_sequence_node, "Image Sequence Scrubber"),
-            (Theme.iconTree,    self._spawn_tree_node,     "Folder Structure"),
-            (Theme.iconHealth,  self._spawn_perf_node,     "Paint Performance Monitor"),
+            (Theme.iconAbout,   self._spawn_about_node,       "Sticky note"),
+            (Theme.iconWarm,    self._spawn_warm_node,        "Warm and Comfortable Writing Node"),
+            (Theme.iconBezier,  self._spawn_bezier_node,      "The Prestigious Bezier Node"),
+            (Theme.iconHealth,  self._spawn_health_node,      "The Oddly Important Health Node"),
+            (Theme.iconClaude,  self._spawn_claude_node,      "Claude Node"),
+            (Theme.iconHealth,  self._spawn_perf_node,        "Paint Performance Monitor"),
             (Theme.iconClaude,  self._spawn_claude_info_node, "Claude Token Census"),
         ]
 
         for icon, slot, description in tools:
-            btn = button(icon_name=icon, clicked=slot,tooltip=description)
+            btn = button(icon_name=icon, clicked=slot, tooltip=description)
             btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
             layout.addWidget(btn)
+
+        # ── Text group button (Text Node + README) ────────────────────────────
+        text_btn = button(icon_name=Theme.iconText, tooltip="Text")
+        text_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
+        text_btn.clicked.connect(lambda: self._show_text_menu(text_btn))
+        layout.addWidget(text_btn)
+
+        # ── Images group button (Image Node + Sequence Scrubber) ─────────────
+        images_btn = button(icon_name=Theme.iconImagesGroup, tooltip="Images")
+        images_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
+        images_btn.clicked.connect(lambda: self._show_images_menu(images_btn))
+        layout.addWidget(images_btn)
+
+        # ── Folder Structure — anchored below categories, above the bottom zone ──
+        tree_btn = button(icon_name=Theme.iconTree, clicked=self._spawn_tree_node, tooltip="Folder Structure")
+        tree_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
+        layout.addWidget(tree_btn)
 
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
         layout.addStretch()
@@ -632,7 +646,74 @@ class IntricateApp(QMainWindow):
     def _spawn_claude_node(self):      self._spawn(self.scene.add_claude_node,       "claude has entered the chat")
     def _spawn_image_node(self):       self._spawn(self.scene.add_image_node,        "a picture is worth everything")
     def _spawn_text_node(self):        self._spawn(self.scene.add_text_node,         "words, words, words")
+
+    def _spawn_readme_node(self) -> None:
+        """Spawn a text node pre-filled with README.md from the session project root."""
+        path = self._session_path()
+        if not path:
+            return
+        readme = path.parent / "README.md"
+        if not readme.exists():
+            self._status("no README.md found in project root")
+            return
+        try:
+            text = readme.read_text(encoding="utf-8")
+        except Exception:
+            self._status("could not read README.md")
+            return
+        self._spawn(self.scene.add_text_node, "the README has arrived", label=text)
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
+
+    def _styled_menu(self) -> QMenu:
+        """Create a QMenu styled to match the PrettyCombo dropdown."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background:    {Theme.backDrop};
+                color:         {Theme.textPrimary};
+                border:        1px solid {Theme.primaryBorder};
+                border-radius: 9px;
+                padding:       4px;
+                font-family:   '{Theme.healthFontFamily}';
+                font-size:     {Theme.healthFontSizeLabel}pt;
+            }}
+            QMenu::item {{
+                padding:       5px 16px;
+                border-radius: 5px;
+            }}
+            QMenu::item:selected {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1e1e1e, stop:0.4 #5c3e4f,
+                    stop:0.7 #a56a85, stop:1 #d87a9e);
+            }}
+        """)
+        return menu
+
+    def _show_text_menu(self, btn: QPushButton) -> None:
+        """Pop a styled context menu under the text group button."""
+        menu = self._styled_menu()
+        act_text = menu.addAction(QIcon(Theme.icon(Theme.iconText)), "Text Node")
+        act_read = menu.addAction(QIcon(Theme.icon(Theme.iconTree)), "README.md")
+        act_text.triggered.connect(self._spawn_text_node)
+        act_read.triggered.connect(self._spawn_readme_node)
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _show_images_menu(self, btn: QPushButton) -> None:
+        """Pop a styled context menu under the images group button."""
+        menu = self._styled_menu()
+
+        img_action = menu.addAction(
+            QIcon(Theme.icon(Theme.iconImage)), "Image Node"
+        )
+        seq_action = menu.addAction(
+            QIcon(Theme.icon(Theme.iconSequence)), "Image Sequence Scrubber"
+        )
+
+        img_action.triggered.connect(self._spawn_image_node)
+        seq_action.triggered.connect(self._spawn_sequence_node)
+
+        # Show below the button, left-aligned
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
     def _spawn_perf_node(self):        self._spawn(self.scene.add_perf_node,         "watching the paint loop")
     def _spawn_claude_info_node(self): self._spawn(self.scene.add_claude_info_node,  "counting every token with pride")
 

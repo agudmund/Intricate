@@ -62,7 +62,14 @@ def main():
         logger.log(TRACE, "Trace mode active — verbose diagnostics will appear in console")
     print(f"{appName} is generally so happy that you are here. ✨")
 
+    # Qt warnings that are known-harmless and too noisy to keep in the log
+    _QT_SUPPRESSED = (
+        "SamplesPerPixel",   # TIFF ExtraSamples mismatch — cosmetic, not our files
+    )
+
     def _qt_message_handler(msg_type, context, message):
+        if any(s in message for s in _QT_SUPPRESSED):
+            return
         level_map = {
             QtMsgType.QtDebugMsg:    logger.debug,
             QtMsgType.QtInfoMsg:     logger.info,

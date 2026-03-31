@@ -79,7 +79,7 @@ class Theme(metaclass=_ThemeMeta):
     toolbarBorder       = primaryBorder
     toolbarBg           = windowBg
     layoutMargins       = (10, 5, 10, 5)
-    handleHeightTop     = 35
+    handleHeightTop     = 25
     handleHeightBottom  = 100
     windowRollTiming    = 600
 
@@ -104,7 +104,7 @@ class Theme(metaclass=_ThemeMeta):
     buttonFontFamily         = "Reey"
     buttonFontSize           = 22
     buttonFontBold           = False
-    buttonTextVerticalOffset = -2
+    buttonTextVerticalOffset = -10
     buttonBorderWidth        = 1
     buttonBorderEnabled      = False
     buttonMinWidth           = 160
@@ -120,7 +120,7 @@ class Theme(metaclass=_ThemeMeta):
 
     iconButtonSize  = handleHeightTop - 3
     iconPadding     = 12
-    iconSize        = 32
+    iconSize        = 16
 
     # =========================================================================
     # COMBOBOX

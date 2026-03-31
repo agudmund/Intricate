@@ -1,7 +1,23 @@
 {
   "version": "1.0",
-  "nodes": [],
+  "nodes": [
+    {
+      "node_id": 0,
+      "node_type": "text",
+      "title": "Text",
+      "uuid": "3808cd42222440afbed0cdaa1226bc9a",
+      "x": -521.5873015873015,
+      "y": -486.82539682539675,
+      "width": 548.2657300210898,
+      "height": 843.731087745253,
+      "z_value": -9.999,
+      "ports_visible": false,
+      "emoji": "\ud83c\udf3f",
+      "label": "# Intricate\n\n**Intricate** is a frameless, always-on-top node-based visual canvas built with PySide6. You place nodes on an infinite zoomable canvas, connect them via ports, and arrange your thoughts spatially rather than linearly. It is part of a \"Single Shared Braincell\" family of apps that share live configuration via a common `settings.toml` file and a set of environment variables.\n\nCurrent node types: **WarmNode** (free-form text with emoji accent), **HealthNode** (live system monitor \u2014 GC census and OS-level click tracking), **BezierNode** (interactive bezier curve with draggable control handles), **ImageNode** (drag-and-drop or browse images with editable caption), and **AboutNode** (sticky note for labelling groups of nodes).\n\nThe canvas supports cursor-anchored zoom, middle-mouse pan, and drag-and-drop of image files directly from Explorer. Nodes have ambient hover pulse animations driven by a separate `NodeBehaviour` personality system. The entire theme \u2014 colors, icons, layout \u2014 hot-reloads the moment `settings.toml` is saved by any app in the family.\n\n## Architecture\n\n```\n\ud83d\udcc4 main.py\n\u2514\u2500\u2500 \ud83d\udcc4 main_window.py (IntricateApp \u2014 QMainWindow)\n      \u251c\u2500\u2500 \ud83d\udcc1 graphics/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 Scene.py          \u2014 IntricateScene, canvas and node factory\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 View.py           \u2014 IntricateView, pan / zoom / drag-drop\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 Theme.py          \u2014 all visual values, icons, live reload\n      \u251c\u2500\u2500 \ud83d\udcc1 nodes/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 BaseNode.py       \u2014 base class every node builds on\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeBehaviour.py  \u2014 hover pulse and personality system\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeButton.py     \u2014 node-embedded controls\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 Port.py           \u2014 connection ports\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 WarmNode.py       \u2014 text + emoji content node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 HealthNode.py     \u2014 live system monitor node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 BezierNode.py     \u2014 bezier curve node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 ImageNode.py      \u2014 image display node\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 AboutNode.py      \u2014 sticky note node\n      \u251c\u2500\u2500 \ud83d\udcc1 data/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeData.py       \u2014 base dataclass, no Qt\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 XxxNodeData.py    \u2014 one per node type, state + serialization\n      \u251c\u2500\u2500 \ud83d\udcc1 widgets/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NoteEditor.py     \u2014 text editor dialog\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 PrettyButton.py   \u2014 themed button\n      \u2514\u2500\u2500 \ud83d\udcc1 utils/\n            \u251c\u2500\u2500 \ud83d\udcc4 settings.py       \u2014 TOML loader + file watcher\n            \u251c\u2500\u2500 \ud83d\udcc4 logger.py         \u2014 3-slot rotating log\n            \u251c\u2500\u2500 \ud83d\udcc4 vision.py         \u2014 image processing\n            \u2514\u2500\u2500 \ud83d\udcc4 OSClickMonitor.py \u2014 global Windows mouse hook\n```\n\n---\n*It is what it is*\n",
+      "depth_front": false
+    }
+  ],
   "connections": [],
   "viewport": {},
-  "checksum": "0d0d99adfd936bd1"
+  "checksum": "7ff622737ae4311a"
 }

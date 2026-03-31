@@ -118,6 +118,58 @@ When removing a node, `BaseNode._prepare_for_removal()` must be called first. It
 3. If your node adds signal connections, override `_prepare_for_removal()` and disconnect them before `super()`
 4. Add a factory method to `IntricateScene` (e.g., `add_xxx_node(pos)`)
 5. Wire a sidebar button in `main_window.py`
+6. Create an icon (see below) and register it in `[theme.icons]` in `settings.toml`
+
+### Creating Node Icons with Pillow
+
+Icons live in `./icons/` and are registered in `[theme.icons]` in `settings.toml`. The Theme metaclass maps e.g. `sequence = "sequence_node.ico"` → `Theme.iconSequence`. Use `.ico` files so Qt picks the sharpest resolution layer at render time.
+
+**Philosophy:** minimal-maximalist, functional form over complexity, strong clear silhouette. Warm cream colour `(225, 213, 198, 255)` on transparent background, outer circle ring matching `iconic.png`.
+
+**Recipe — run once as a standalone Python script:**
+
+```python
+from PIL import Image, ImageDraw
+import math
+
+S  = 2048          # render at 2× for smooth LANCZOS downsample
+cx = cy = S // 2
+C  = (225, 213, 198, 255)   # warm cream — matches the icon family palette
+
+img  = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+draw = ImageDraw.Draw(img)
+
+# Outer ring — keep these values identical across all icons for visual consistency
+draw.ellipse([cx-800, cy-800, cx+800, cy+800], outline=C, width=52)
+
+# ── Draw your symbol here in the centre ──────────────────────────────────
+# Use draw.line(), draw.ellipse(), draw.rounded_rectangle() etc.
+# Work in 2048-space; the LANCZOS downsample handles antialiasing.
+# Stroke width ~20–30px at 2048 reads as ~10–15px at 1024.
+# Keep all geometry well inside the ring (roughly cx±550, cy±350).
+
+# Downsample → 1024px PNG
+out = img.resize((1024, 1024), Image.LANCZOS)
+out.save('icons/xxx_node.png')
+
+# Multi-resolution ICO (Qt picks the best layer automatically)
+sizes  = [16, 24, 32, 48, 64, 128, 256]
+frames = [out.resize((s, s), Image.LANCZOS) for s in sizes]
+frames[0].save(
+    'icons/xxx_node.ico',
+    format='ICO',
+    sizes=[(s, s) for s in sizes],
+    append_images=frames[1:]
+)
+```
+
+Then in `settings.toml`:
+```toml
+[theme.icons]
+xxx = "xxx_node.ico"
+```
+
+`Theme.iconXxx` resolves automatically via the metaclass — no code change needed.
 
 ### Logging
 

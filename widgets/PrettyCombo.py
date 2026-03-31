@@ -64,21 +64,27 @@ class PrettyCombo(QComboBox):
         font      = settings.get("theme", "ui_font",        "Lato")
         font_size = int(settings.get("theme", "ui_font_size", 11))
         # border_v drives the outer frame height independently of text clearance.
-        # Qt's Fusion sizeHint does not automatically inflate for stylesheet padding.
+        # setFixedHeight clamps both min and max — stylesheet padding lives
+        # inside this fixed height, not on top of it.
         fm      = QFontMetrics(QFont(font, font_size))
         min_h   = fm.height() + border_v * 2
         self.setMinimumHeight(min_h)
+        self.setMaximumHeight(min_h)
+        # Cap border-radius to half the height — Qt Fusion drops rounding
+        # entirely if the radius exceeds half the widget's actual height.
+        radius  = min(Theme.nodeRoundRadius, min_h / 2)
         self.setStyleSheet(
             f"""
             QComboBox {{
                 background:    transparent;
                 border:        1px solid {Theme.primaryBorder};
-                border-radius: {Theme.nodeRoundRadius}px;
+                border-radius: {radius}px;
                 color:         {color};
                 font-family:   '{font}';
                 font-size:     {font_size}pt;
-                padding:       {closed_v}px {closed_h}px;
+                padding:       0px {closed_h}px;
                 min-height:    {min_h}px;
+                max-height:    {min_h}px;
                 margin:        0px;
             }}
             QComboBox::drop-down {{ border: none; }}

@@ -21,8 +21,9 @@ class TreeNodeData(NodeData):
 
     node_type:    str   = field(default="tree")
     title:        str   = field(default="Tree")
+    emoji:        str   = field(default="✨")
     width:        float = field(default=360.0)
-    height:       float = field(default=450.0)
+    height:       float = field(default=492.0)
     tree_text:    str   = field(default="")
     project_path: str   = field(default="")
 
@@ -42,7 +43,7 @@ class TreeNodeData(NodeData):
             x             = float(data.get("x",       0.0)),
             y             = float(data.get("y",       0.0)),
             width         = float(data.get("width",   360.0)),
-            height        = float(data.get("height",  450.0)),
+            height        = float(data.get("height",  492.0)),
             ports_visible = data.get("ports_visible", False),
             tree_text     = data.get("tree_text",    ""),
             project_path  = data.get("project_path", ""),
