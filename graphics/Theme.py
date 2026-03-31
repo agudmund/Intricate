@@ -251,9 +251,21 @@ class Theme(metaclass=_ThemeMeta):
         Local always wins over the vault so per-project overrides are respected.
         Returns None if the file is not found in either location.
         """
+        import sys as _sys
         from utils.logger import TRACE
 
-        # 1. Local project icons/ — always checked first
+        # 1. Local / bundled icons/ — checked first.
+        #    --onefile bundles extract to sys._MEIPASS; __file__ there resolves
+        #    correctly relative to that temp dir so the same path expression works
+        #    for both dev and frozen.  When frozen we also try sys._MEIPASS directly
+        #    as a belt-and-suspenders guard against any __file__ resolution quirk.
+        if getattr(_sys, "_MEIPASS", None):
+            bundled = Path(_sys._MEIPASS) / "icons" / filename
+            _log.log(TRACE, f"[icon resolve] '{filename}' → checking bundle: {bundled}")
+            if bundled.exists():
+                _log.debug(f"[icon resolve] '{filename}' → found in bundle: {bundled}")
+                return bundled
+
         local = Path(__file__).parent.parent / "icons" / filename
         _log.log(TRACE, f"[icon resolve] '{filename}' → checking local: {local}")
         if local.exists():

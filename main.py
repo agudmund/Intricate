@@ -11,6 +11,13 @@ import signal
 import socket
 import argparse
 import ctypes
+
+# Reconfigure stdout/stderr to UTF-8 so emoji in log lines don't crash on
+# Windows consoles that default to cp1252 (e.g. plain cmd.exe or PowerShell).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from utils.logger import setup_logger, set_log_level, TRACE

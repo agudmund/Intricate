@@ -166,6 +166,13 @@ class Connection(QGraphicsPathItem):
                 # First draw — snap both ends directly, no glide
                 self._anim_p1, self._anim_d1x, self._anim_d1y = tgt_p1, tgt_d1x, tgt_d1y
                 self._anim_p2, self._anim_d2x, self._anim_d2y = tgt_p2, tgt_d2x, tgt_d2y
+            elif self._anim_p2 is None:
+                # Completing a previously floating wire — source end was tracking the
+                # mouse so _anim_p1 is set, but the target end was never initialised.
+                # Snap it now so _build_bezier always receives two valid QPointFs.
+                self._anim_p2, self._anim_d2x, self._anim_d2y = tgt_p2, tgt_d2x, tgt_d2y
+                if not self._glide_timer.isActive():
+                    self._glide_timer.start()
             elif not self._glide_timer.isActive():
                 self._glide_timer.start()
 

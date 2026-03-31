@@ -58,8 +58,8 @@ class PrettyCombo(QComboBox):
                 border:        1px solid {Theme.primaryBorder};
                 border-radius: 6px;
                 color:         {color};
-                font-family:   {font};
-                font-size:     {font_size}px;
+                font-family:   '{font}';
+                font-size:     {font_size}pt;
                 padding:       2px 6px;
             }}
             QComboBox::drop-down {{ border: none; }}

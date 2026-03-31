@@ -192,6 +192,9 @@ class ImageNode(BaseNode):
 
         self._pixmap = pixmap
 
+        # Record the resolved absolute path so sync_project_images can skip it next load
+        self.data.source_path = str(path.resolve())
+
         # Set filename stem as initial caption — Vision will update it if available
         if not self.data.caption:
             self.data.caption = path.stem

@@ -29,13 +29,15 @@ class ImageNodeData(NodeData):
     width:     float = field(default=280.0)
     height:    float = field(default=220.0)
 
-    image_b64: str  = field(default="")    # Base64-encoded PNG — empty until loaded
-    caption:   str  = field(default="")    # Editable label shown on the node
+    image_b64:   str  = field(default="")    # Base64-encoded PNG — empty until loaded
+    caption:     str  = field(default="")    # Editable label shown on the node
+    source_path: str  = field(default="")    # Absolute path to the source file on disk (empty for pasted/dropped images)
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data["image_b64"] = self.image_b64
-        data["caption"]   = self.caption
+        data["image_b64"]   = self.image_b64
+        data["caption"]     = self.caption
+        data["source_path"] = self.source_path
         return data
 
     @classmethod
@@ -50,6 +52,7 @@ class ImageNodeData(NodeData):
             width         = float(data.get("width",   280.0)),
             height        = float(data.get("height",  220.0)),
             ports_visible = data.get("ports_visible", False),
-            image_b64     = data.get("image_b64", ""),
-            caption       = data.get("caption",   ""),
+            image_b64     = data.get("image_b64",   ""),
+            caption       = data.get("caption",     ""),
+            source_path   = data.get("source_path", ""),
         )

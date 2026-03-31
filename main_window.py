@@ -499,8 +499,10 @@ class IntricateApp(QMainWindow):
         self.scene.changed.connect(self._schedule_autosave)
 
         path = self._session_path()
-        if path and path.exists():
-            self.scene.load_session(path)
+        if path:
+            if path.exists():
+                self.scene.load_session(path)
+            self.scene.sync_project_images(path.parent)
 
     def on_session_changed(self) -> None:
         """Save the outgoing session, swap to a fresh scene, load incoming."""
@@ -520,10 +522,12 @@ class IntricateApp(QMainWindow):
         # Fresh scene — avoids re-entrant Qt teardown on live nodes
         self._swap_scene()
 
-        # Populate the new canvas from disk if a session exists
+        # Restore session then sync any new images from ./Images/ on disk
         path = self._session_path(new_project)
-        if path and path.exists():
-            self.scene.load_session(path)
+        if path:
+            if path.exists():
+                self.scene.load_session(path)
+            self.scene.sync_project_images(path.parent)
 
     def populate_sessions(self) -> None:
         import utils.settings as _s

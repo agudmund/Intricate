@@ -30,13 +30,20 @@ from PySide6.QtCore import QFileSystemWatcher, QObject, Signal
 # Falls back to settings.toml next to main.py for development convenience.
 #   Windows:  set SingleSharedBraincell_SettingsFile=C:\Users\you\Shared\settings.toml
 import os as _os
-_ENV_VAR       = "SingleSharedBraincell_SettingsFile"
-_SETTINGS_PATH = Path(
-    _os.environ.get(
-        _ENV_VAR,
-        str(Path(__file__).resolve().parent.parent / "settings.toml")
-    )
+import sys as _sys
+
+_ENV_VAR = "SingleSharedBraincell_SettingsFile"
+
+# When running as a PyInstaller bundle, __file__ points into the temp extraction
+# dir (sys._MEIPASS), not the folder the exe lives in.  settings.toml must sit
+# next to the exe — use sys.executable.parent so the watcher finds the real
+# shared file regardless of whether we're frozen or running from source.
+_default_settings = (
+    Path(_sys.executable).resolve().parent / "settings.toml"
+    if getattr(_sys, "frozen", False)
+    else Path(__file__).resolve().parent.parent / "settings.toml"
 )
+_SETTINGS_PATH = Path(_os.environ.get(_ENV_VAR, str(_default_settings)))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

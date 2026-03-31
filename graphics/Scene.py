@@ -199,6 +199,68 @@ class IntricateScene(QGraphicsScene):
         return node
 
     # ─────────────────────────────────────────────────────────────────────────
+    # PROJECT IMAGE SYNC
+    # ─────────────────────────────────────────────────────────────────────────
+
+    _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+
+    def sync_project_images(self, project_folder) -> None:
+        """
+        Reconcile the canvas against the project's ./Images/ folder.
+
+        Reads session data first (already loaded) — any ImageNode whose
+        source_path resolves to a file in ./Images/ is considered tracked.
+        New files found on disk that aren't tracked yet each get a fresh
+        ImageNode spawned below the existing canvas content.
+
+        Called after every session load (including blank sessions) so that
+        dropping a file into ./Images/ on disk surfaces it automatically
+        the next time that project is opened.
+        """
+        from pathlib import Path
+        from nodes.ImageNode import ImageNode
+
+        project_folder = Path(project_folder)
+        images_dir = project_folder / "Images"
+        if not images_dir.is_dir():
+            return
+
+        # Collect paths already tracked by existing ImageNodes in the scene
+        tracked = set()
+        for item in self.items():
+            if isinstance(item, ImageNode):
+                sp = item.data.source_path
+                if sp:
+                    try:
+                        tracked.add(Path(sp).resolve())
+                    except Exception:
+                        pass
+
+        # Find image files in ./Images/ not yet on canvas
+        new_files = [
+            p for p in sorted(images_dir.iterdir())
+            if p.is_file()
+            and p.suffix.lower() in self._IMAGE_EXTS
+            and p.resolve() not in tracked
+        ]
+
+        if not new_files:
+            return
+
+        # Place new nodes in a grid below all existing canvas content
+        W, H, GAP, COLS = 280.0, 220.0, 20.0, 4
+        bounds = self.itemsBoundingRect()
+        start_x = bounds.left()  if not bounds.isNull() else 20.0
+        start_y = bounds.bottom() + GAP * 2 if not bounds.isNull() else 20.0
+
+        for i, path in enumerate(new_files):
+            col = i % COLS
+            row = i // COLS
+            x = start_x + col * (W + GAP)
+            y = start_y + row * (H + GAP)
+            self.add_image_node(pos=QPointF(x, y), path=str(path))
+
+    # ─────────────────────────────────────────────────────────────────────────
     # SESSION PERSISTENCE
     # ─────────────────────────────────────────────────────────────────────────
 
