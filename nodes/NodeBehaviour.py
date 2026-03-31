@@ -9,6 +9,7 @@
 import random
 import warnings
 from PySide6.QtCore import QVariantAnimation, QEasingCurve
+from PySide6.QtGui import QColor, QBrush
 from graphics.Theme import Theme
 
 
@@ -77,23 +78,84 @@ class NodeBehaviour:
         # finished drives the reverse — one connection, lives for the node's lifetime
         self.pulse_anim.finished.connect(self._on_pulse_finished)
 
+        # ── Background glow ───────────────────────────────────────────────────
+        # Blends the node's own resting brush color toward the accent on hover/select.
+        # _bg_base is captured lazily on first use — after subclass __init__ has set
+        # its own brush — so HealthNode, ClaudeNode etc. all return to their own color.
+        self._bg_base:    QColor | None = None   # set on first animation
+        self._current_bg: QColor | None = None   # tracks live animated value
+        self.bg_anim = QVariantAnimation()
+        self.bg_anim.setEasingCurve(QEasingCurve.InOutSine)
+        self.bg_anim.valueChanged.connect(self._on_bg_changed)
+
     # ─────────────────────────────────────────────────────────────────────────
     # PERSONALITY — hover pulse
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # COLOR HELPERS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _blend(a, b, t: float) -> QColor:
+        """Linear interpolate between two colors (hex str or QColor) at factor t."""
+        if isinstance(a, str): a = QColor(a)
+        if isinstance(b, str): b = QColor(b)
+        return QColor(
+            int(a.red()   + (b.red()   - a.red())   * t),
+            int(a.green() + (b.green() - a.green()) * t),
+            int(a.blue()  + (b.blue()  - a.blue())  * t),
+        )
+
+    def _ensure_base(self) -> QColor:
+        """Return the node's resting brush color, capturing it on first call."""
+        if self._bg_base is None:
+            self._bg_base    = QColor(self._node.brush().color())
+            self._current_bg = QColor(self._bg_base)
+        return self._bg_base
+
+    def _bg_normal(self)   -> QColor: return QColor(self._ensure_base())
+    def _bg_hover(self)    -> QColor: return self._blend(self._ensure_base(), Theme.primaryBorder, 0.015)
+    def _bg_selected(self) -> QColor: return self._blend(self._ensure_base(), Theme.primaryBorder, 0.03)
+
+    def _animate_bg_to(self, target: QColor, duration: int) -> None:
+        self._ensure_base()   # guarantee _current_bg is initialised before use
+        self.bg_anim.stop()
+        self.bg_anim.setStartValue(QColor(self._current_bg))
+        self.bg_anim.setEndValue(target)
+        self.bg_anim.setDuration(duration)
+        self.bg_anim.start()
+
+    def _on_bg_changed(self, color: QColor) -> None:
+        self._current_bg = color
+        try:
+            self._node.setBrush(QBrush(color))
+        except RuntimeError:
+            pass
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # PERSONALITY — hover pulse + background glow
+    # ─────────────────────────────────────────────────────────────────────────
+
     def on_hover_enter(self):
-        """Breathe in — the node notices it's being looked at."""
+        """Breathe in — scale swells, background warms toward the accent."""
         if self.pulse_anim.state() == QVariantAnimation.Stopped:
             self.pulse_anim.setDirection(QVariantAnimation.Forward)
             self.pulse_anim.start()
+        self._animate_bg_to(self._bg_hover(), 320)
 
     def on_hover_leave(self):
         """
-        Breathe out — the node settles back into itself.
-        The reverse is handled by _on_pulse_finished so the breath
-        completes naturally rather than snapping back.
+        Breathe out — scale settles via _on_pulse_finished.
+        Background returns to selected tint if selected, otherwise to normal.
         """
-        pass
+        target = self._bg_selected() if self._node.isSelected() else self._bg_normal()
+        self._animate_bg_to(target, 450)
+
+    def on_selected(self, is_selected: bool) -> None:
+        """Background shifts to the selected tint (or back to normal on deselect)."""
+        target = self._bg_selected() if is_selected else self._bg_normal()
+        self._animate_bg_to(target, 180)
 
     def _on_pulse_finished(self):
         """When the forward breath completes, exhale back to rest."""
@@ -126,4 +188,9 @@ class NodeBehaviour:
                 self.pulse_anim.finished.disconnect(self._on_pulse_finished)
             except RuntimeError:
                 pass
+            try:
+                self.bg_anim.valueChanged.disconnect(self._on_bg_changed)
+            except RuntimeError:
+                pass
         self.pulse_anim.stop()
+        self.bg_anim.stop()

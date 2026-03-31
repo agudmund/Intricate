@@ -80,6 +80,12 @@ def main():
     app.setOrganizationName(orgName)
     logger.log(TRACE, "[boot:2] QApplication created — Qt event loop ready")
 
+    # Raise Qt's image allocation cap — the default 256 MB is hit by any modern
+    # photo or 4K screenshot.  0 = no limit; we keep a generous hard ceiling so
+    # a corrupted file can't exhaust all RAM.
+    from PySide6.QtGui import QImageReader
+    QImageReader.setAllocationLimit(1024)   # MB — plenty for any canvas image
+
     logger.log(TRACE, "[boot:3] importing utils.settings")
     import utils.settings as settings
     logger.log(TRACE, "[boot:4] utils.settings imported")

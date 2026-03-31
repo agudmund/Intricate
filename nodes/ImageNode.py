@@ -21,6 +21,9 @@ from nodes.BaseNode import BaseNode
 from data.ImageNodeData import ImageNodeData
 from graphics.Theme import Theme
 import utils.settings as settings
+from utils.logger import setup_logger
+
+logger = setup_logger("imagenode")
 
 
 # Layout constants
@@ -190,6 +193,16 @@ class ImageNode(BaseNode):
         if pixmap.isNull():
             return
 
+        # Scale down large images at load time — keeps session base64 small and
+        # paint calls fast.  2048px on the longest side is sharp at any node size.
+        _MAX = 2048
+        if pixmap.width() > _MAX or pixmap.height() > _MAX:
+            pixmap = pixmap.scaled(
+                _MAX, _MAX,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+
         self._pixmap = pixmap
 
         # Record the resolved absolute path so sync_project_images can skip it next load
@@ -293,6 +306,29 @@ class ImageNode(BaseNode):
         super()._build_buttons()
         vision_pix = Theme.icon(Theme.imageVisionIcon, fallback_color="#9ab8d9")
         self._buttons.append(NodeButton(self, vision_pix, self._trigger_vision))
+        trash_pix   = Theme.icon(Theme.iconDelete,  fallback_color="#c97b7b")
+        confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
+        self._buttons.append(NodeButton(self, trash_pix, self._delete_source_file, confirm_pix))
+
+    def _delete_source_file(self) -> None:
+        """
+        Send the source file to the recycle bin, then remove this node.
+
+        Uses send2trash so the file is recoverable — not a permanent delete.
+        If source_path is empty (image was pasted / has no file behind it),
+        the node is removed without touching the filesystem.
+        """
+        path = self.data.source_path
+        if path:
+            try:
+                from send2trash import send2trash
+                send2trash(path)
+            except Exception as e:
+                logger.warning(f"[ImageNode] Could not trash '{path}': {e}")
+        scene = self.scene()
+        if scene:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: scene.removeItem(self))
 
     def _trigger_vision(self) -> None:
         """Send this node's image to a ClaudeNode's vision API."""

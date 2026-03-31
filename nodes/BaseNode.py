@@ -7,7 +7,7 @@
 """
 
 import uuid as _uuid
-from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsDropShadowEffect
+from PySide6.QtWidgets import QGraphicsRectItem
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
 
@@ -27,9 +27,6 @@ _BORDER_SELECTED = _c(Theme.nodeBorderSelected)
 _BORDER_WIDTH    = Theme.nodeBorderWidth
 _BORDER_SELECTED_SCALE = Theme.nodeBorderSelectedScale
 _ROUND_RADIUS    = Theme.nodeRoundRadius
-_SHADOW_BLUR     = Theme.nodeShadowBlur
-_SHADOW_COLOR    = _c(Theme.nodeShadowColor)
-_SHADOW_OFFSET   = (Theme.nodeShadowOffsetX, Theme.nodeShadowOffsetY)
 _SHADOW_MARGIN   = Theme.nodeShadowMargin
 _MIN_WIDTH       = Theme.nodeMinWidth
 _MIN_HEIGHT      = Theme.nodeMinHeight
@@ -132,11 +129,6 @@ class BaseNode(QGraphicsRectItem):
         self.setAcceptHoverEvents(True)
         self.setTransformOriginPoint(self.rect().center())
 
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(_SHADOW_BLUR)
-        shadow.setColor(_SHADOW_COLOR)
-        shadow.setOffset(*_SHADOW_OFFSET)
-        self.setGraphicsEffect(shadow)
 
         # ── Button strip ──────────────────────────────────────────────────────
         # Built last — geometry must be final before positioning.
@@ -154,6 +146,10 @@ class BaseNode(QGraphicsRectItem):
         if (change == QGraphicsRectItem.GraphicsItemChange.ItemSceneChange
                 and value is None):
             self._prepare_for_removal()
+
+        if change == QGraphicsRectItem.GraphicsItemChange.ItemSelectedHasChanged:
+            if hasattr(self, 'behaviour') and self.behaviour:
+                self.behaviour.on_selected(bool(value))
 
         if change == QGraphicsRectItem.GraphicsItemChange.ItemPositionHasChanged:
             new_pos = self.scenePos()
@@ -252,10 +248,11 @@ class BaseNode(QGraphicsRectItem):
         if self._pending_update:
             for conn in self.connections:
                 conn.update_path()
-            # Repaint wires that pass under this node so their opacity gradient
-            # reflects the new position — they don't know this node moved.
-            own = set(self.connections)
-            for item in self.scene().items():
+            # Repaint only the wires whose bounding rect overlaps this node —
+            # they may need to update their opacity fade as this node moved under them.
+            own      = set(self.connections)
+            node_rect = self.mapRectToScene(self.boundingRect())
+            for item in self.scene().items(node_rect):
                 if hasattr(item, 'start_node') and item not in own:
                     item.update()
             self._pending_update = False

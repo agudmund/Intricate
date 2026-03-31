@@ -33,6 +33,10 @@ class Connection(QGraphicsPathItem):
         if self.end_node:
             self.end_node.connections.append(self)
 
+        # Cached clip path — rebuilt in update_path(), reused every paint().
+        # Avoids an expensive QPainterPath boolean subtraction per frame.
+        self._clip_path: QPainterPath | None = None
+
         # Animated departure state (source end)
         self._anim_p1  = None
         self._anim_d1x =  1.0
@@ -143,6 +147,33 @@ class Connection(QGraphicsPathItem):
         path.moveTo(p1)
         path.cubicTo(ctrl1, ctrl2, p2)
         self.setPath(path)
+        self._rebuild_clip_path()
+
+    def _rebuild_clip_path(self) -> None:
+        """
+        Recompute the endpoint clip path and cache it.
+
+        Called once per path update (node move / wire snap), not per frame.
+        paint() reads self._clip_path directly — zero subtraction cost at draw time.
+        """
+        clip = QPainterPath()
+        clip.addRect(self.boundingRect())
+        for ep in (self.start_node, self.end_node):
+            if ep is None:
+                continue
+            try:
+                rr     = ep.round_radius if hasattr(ep, 'round_radius') else 0
+                bw     = ep.current_pen.widthF() if hasattr(ep, 'current_pen') else 2.0
+                margin = bw / 2.0
+                cutout = QPainterPath()
+                cutout.addRoundedRect(
+                    ep.rect().adjusted(-margin, -margin, margin, margin),
+                    rr + margin, rr + margin,
+                )
+                clip = clip.subtracted(ep.sceneTransform().map(cutout))
+            except RuntimeError:
+                pass
+        self._clip_path = clip
 
     def update_path(self, mouse_pos=None):
         """Called whenever a connected node moves. Refreshes targets and path."""
@@ -268,7 +299,7 @@ class Connection(QGraphicsPathItem):
     # Rendering
     # ------------------------------------------------------------------
 
-    _TAPER_SEGMENTS = 96
+    _TAPER_SEGMENTS = 32      # 96 → 32: 3× fewer draw calls, visually indistinguishable
     _FADE_OUTSIDE   = 10.0
     _FADE_INSIDE    = 22.0
 
@@ -292,25 +323,12 @@ class Connection(QGraphicsPathItem):
 
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Clip out the interior of both endpoint nodes so the wire is never
-        # visible inside them regardless of node background transparency.
-        # The cutout is expanded by half the border width so the wire tucks
-        # cleanly behind the border stroke rather than terminating flush with it.
-        clip = QPainterPath()
-        clip.addRect(self.boundingRect())
-        for ep in (self.start_node, self.end_node):
-            if ep is None:
-                continue
-            rr  = ep.round_radius if hasattr(ep, 'round_radius') else 0
-            bw  = ep.current_pen.widthF() if hasattr(ep, 'current_pen') else 2.0
-            margin = bw / 2.0   # clip at outer border edge so the stroke covers the wire tip
-            cutout = QPainterPath()
-            cutout.addRoundedRect(
-                ep.rect().adjusted(-margin, -margin, margin, margin),
-                rr + margin, rr + margin,
-            )
-            clip = clip.subtracted(ep.sceneTransform().map(cutout))
-        painter.setClipPath(clip)
+        # Use the pre-built clip path — recomputed only when update_path() fires,
+        # not on every frame. Falls back to the full bounding rect if not ready.
+        if self._clip_path is not None:
+            painter.setClipPath(self._clip_path)
+        else:
+            painter.setClipRect(self.boundingRect())
 
         covering_nodes = []
         scene = self.scene()

@@ -188,34 +188,29 @@ class IntricateApp(QMainWindow):
     def toggle_curtains(self):
         """Animate the window into a sleek HUD strip."""
         self.setMinimumHeight(0)
-        self.curtain_anim = QPropertyAnimation(self, b"geometry")
-        self.curtain_anim.setDuration(450)
-        self.curtain_anim.setEasingCurve(QEasingCurve.OutExpo)
-
         start_rect = self.geometry()
-        
-        if not self.is_collapsed:
 
-            # --- Pull up the Curtains ---
+        if not self.is_collapsed:
             self.original_height = self.height()
-            # Collapse to exactly the draggable top-bar height
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
-            
-            # Fade out the canvas to keep the HUD clean
             self.central.hide()
             self.bottomToolbar.hide()
-
         else:
-            # --- Open the Curtains ---
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), self.original_height)
             self.central.show()
             self.bottomToolbar.show()
 
+        self._animate_curtains(start_rect, end_rect)
+        self.is_collapsed = not self.is_collapsed
+
+    def _animate_curtains(self, start_rect: QRect, end_rect: QRect) -> None:
+        """Drive the geometry animation for curtain collapse / expand."""
+        self.curtain_anim = QPropertyAnimation(self, b"geometry")
+        self.curtain_anim.setDuration(450)
+        self.curtain_anim.setEasingCurve(QEasingCurve.OutExpo)
         self.curtain_anim.setStartValue(start_rect)
         self.curtain_anim.setEndValue(end_rect)
         self.curtain_anim.start()
-        
-        self.is_collapsed = not self.is_collapsed
 
 
     # =================================================================================
@@ -451,10 +446,6 @@ class IntricateApp(QMainWindow):
     # Sessions
     # =========================================================================
 
-    # =========================================================================
-    # Sessions
-    # =========================================================================
-
     def _session_path(self, project: str | None = None) -> 'Path | None':
         """Return the session.json path for a project folder name."""
         from pathlib import Path
@@ -491,13 +482,16 @@ class IntricateApp(QMainWindow):
         """Debounce scene changes — save 2 s after the last modification."""
         self._autosave_timer.start(2000)
 
-    def _load_initial_session(self) -> None:
-        """Load the session for the startup-selected project and wire autosave."""
+    def _init_autosave(self) -> None:
+        """Create the debounce timer and wire the scene-change signal."""
         self._autosave_timer = QTimer()
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.timeout.connect(self._autosave)
         self.scene.changed.connect(self._schedule_autosave)
 
+    def _load_initial_session(self) -> None:
+        """Load the session for the startup-selected project and wire autosave."""
+        self._init_autosave()
         path = self._session_path()
         if path:
             if path.exists():
@@ -586,18 +580,17 @@ class IntricateApp(QMainWindow):
         This ensures the window fades in as the Star that it is rather than just popping into existence.
         """
         super().showEvent(event)
+        self._animate_fade_in()
+        QTimer.singleShot(600, self._check_vaporize_restart)
 
-        # We use a ParallelAnimationGroup to ensure the opacity
-        # is driven specifically and cleanly
+    def _animate_fade_in(self) -> None:
+        """Fade the window opacity from 0 → 1 on show."""
         self.fadeIn = QPropertyAnimation(self, b"windowOpacity")
         self.fadeIn.setDuration(500)
         self.fadeIn.setStartValue(0.0)
         self.fadeIn.setEndValue(1.0)
-        self.fadeIn.setEasingCurve(QEasingCurve.OutCubic) # Smooth deceleration
+        self.fadeIn.setEasingCurve(QEasingCurve.OutCubic)
         self.fadeIn.start()
-
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(600, self._check_vaporize_restart)
 
     def _check_vaporize_restart(self):
         """Spawn a response node if the previous session ended via 'then vaporize'."""
@@ -710,7 +703,11 @@ class IntricateApp(QMainWindow):
         self._save_geometry()
         self._run_exit_script()
         event.ignore()
+        self._animate_fade_out()
+        logger.info(f"Exid: {appName} will be back as soon as we can! ✨")
 
+    def _animate_fade_out(self) -> None:
+        """Fade the window opacity from current → 0 and trigger close on finish."""
         self.fadeOut = QPropertyAnimation(self, b"windowOpacity")
         self.fadeOut.setDuration(300)
         self.fadeOut.setStartValue(self.windowOpacity())
@@ -718,5 +715,3 @@ class IntricateApp(QMainWindow):
         self.fadeOut.setEasingCurve(QEasingCurve.InCubic)
         self.fadeOut.finished.connect(self.close)
         self.fadeOut.start()
-
-        logger.info(f"Exid: {appName} will be back as soon as we can! ✨")
