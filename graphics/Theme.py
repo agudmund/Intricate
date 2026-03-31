@@ -190,6 +190,15 @@ class Theme(metaclass=_ThemeMeta):
     healthWarnThreshold  = 50
     healthHighThreshold  = 150
     healthPollIntervalMs = 2000
+
+    # =========================================================================
+    # PERF NODE
+    # =========================================================================
+
+    perfNodeBg     = "#1a2020"
+    perfNodeWidth  = 260.0
+    perfNodeHeight = 240.0
+
     claudeBgColor            = windowBg
     claudeBgColorFront       = "#2a2a2a"
     claudeBgColorBack        = windowBg

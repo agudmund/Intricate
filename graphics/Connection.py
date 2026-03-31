@@ -7,15 +7,20 @@
 """
 
 from PySide6.QtWidgets import QGraphicsPathItem
-from PySide6.QtGui import QPainterPath, QPen, QColor, QPainter, QLinearGradient, QBrush
+from PySide6.QtGui import QPainterPath, QPen, QColor, QPainter
 from PySide6.QtCore import Qt, QPointF, QTimer
 
 
 class Connection(QGraphicsPathItem):
 
-    # Fraction of the remaining gap closed per ~16 ms frame (~60 fps).
-    # 0.15 gives a smooth ~0.4 s ease-out glide between corners.
-    _GLIDE_SPEED = 0.15
+    # Fraction of the remaining tangent gap closed per frame (controls curve shape flex).
+    # 0.07 gives a gentle ~0.8 s ease-out; feels rubbery without being sluggish.
+    _GLIDE_SPEED = 0.07
+
+    # Separate, slower lerp for endpoint positions — port-to-port slides cover
+    # more distance than tangent rotations so they need a lower fraction to feel
+    # as unhurried as the curve deformation.
+    _PORT_GLIDE_SPEED = 0.04
 
     # Pixels past the node border the wire endpoint is placed.
     # The wire is then faded out over this same distance so it is only
@@ -72,25 +77,46 @@ class Connection(QGraphicsPathItem):
         bezier terminates well inside the node.  The wire is then faded out
         over that same distance in paint() so it is only visible up to the edge.
 
-        The outward direction drives both ctrl1 (departure) and ctrl2 (arrival)
-        so the bezier arcs in/out at the correct diagonal angle for each corner.
+        Outward direction is determined by port classification, not raw geometry,
+        so the tangent is always consistent with the node border:
+          - Mid-edge ports  →  pure perpendicular to that edge (0,±1 or ±1,0)
+          - Corner ports    →  true 45° diagonal regardless of node aspect ratio
+        This matches the curvature flow of the rounded-rect border at every port.
         """
         port_local = port.pos()
         r  = node.rect()
         px, py = port_local.x(), port_local.y()
+        half_w = r.width()  / 2 if r.width()  > 1e-6 else 1.0
+        half_h = r.height() / 2 if r.height() > 1e-6 else 1.0
 
-        # Unit vector: port → node centre (inward direction)
-        cx = r.width()  / 2 - px
-        cy = r.height() / 2 - py
-        length = (cx * cx + cy * cy) ** 0.5
-        if length > 0:
-            nx, ny = cx / length, cy / length
+        # Normalised position relative to node centre.
+        # |rel| > 1 means the port is outside the rect on that axis.
+        rel_x = (px - half_w) / half_w
+        rel_y = (py - half_h) / half_h
+        ax, ay = abs(rel_x), abs(rel_y)
+
+        # Classify: corner port if both axes are at the boundary (> 0.5),
+        # mid-edge port if only one axis is at the boundary.
+        if ax > 0.5 and ay > 0.5:
+            # Corner — use a true 45° diagonal so the wire honours the bevel arc
+            # regardless of node width/height ratio.
+            odx = 1.0 if rel_x > 0 else -1.0
+            ody = 1.0 if rel_y > 0 else -1.0
+            inv = (odx * odx + ody * ody) ** -0.5
+            odx *= inv
+            ody *= inv
+        elif ax >= ay:
+            # Mid-edge on left or right face
+            odx = 1.0 if rel_x > 0 else -1.0
+            ody = 0.0
         else:
-            nx, ny = 1.0, 0.0
+            # Mid-edge on top or bottom face
+            odx = 0.0
+            ody = 1.0 if rel_y > 0 else -1.0
 
-        # Parametric t at which the ray (px + t·nx, py + t·ny) first enters
-        # the node rect.  The port sits outside so both t values are positive;
-        # the larger one is when the point is inside on both axes.
+        # Inward direction drives the parametric border-crossing calculation.
+        nx, ny = -odx, -ody
+
         t_x = ((r.left()   - px) / nx) if nx > 1e-6  else \
               ((r.right()  - px) / nx) if nx < -1e-6 else 0.0
         t_y = ((r.top()    - py) / ny) if ny > 1e-6  else \
@@ -101,7 +127,7 @@ class Connection(QGraphicsPathItem):
             px + nx * (t_border + self._INSIDE),
             py + ny * (t_border + self._INSIDE),
         ))
-        return pos, -nx, -ny   # outward = opposite of inward
+        return pos, odx, ody
 
     def _compute_source(self, ref_scene_pos):
         """Pick the output corner of start_node closest to ref_scene_pos."""
@@ -208,31 +234,32 @@ class Connection(QGraphicsPathItem):
             self._glide_timer.stop()
             return
 
-        s = self._GLIDE_SPEED
+        sp = self._PORT_GLIDE_SPEED   # slower — for endpoint positions
+        st = self._GLIDE_SPEED        # faster — for tangent directions (curve flex)
 
-        def _lerp(a, b):
+        def _lerp(a, b, s):
             return a + (b - a) * s
 
         # Departure (source end)
-        ax1 = _lerp(self._anim_p1.x(), self._tgt_p1.x())
-        ay1 = _lerp(self._anim_p1.y(), self._tgt_p1.y())
-        dx1 = _lerp(self._anim_d1x,    self._tgt_d1x)
-        dy1 = _lerp(self._anim_d1y,    self._tgt_d1y)
+        ax1 = _lerp(self._anim_p1.x(), self._tgt_p1.x(), sp)
+        ay1 = _lerp(self._anim_p1.y(), self._tgt_p1.y(), sp)
+        dx1 = _lerp(self._anim_d1x,    self._tgt_d1x,    st)
+        dy1 = _lerp(self._anim_d1y,    self._tgt_d1y,    st)
 
         # Arrival (target end)
         if self._anim_p2 is not None and self._tgt_p2 is not None:
-            ax2 = _lerp(self._anim_p2.x(), self._tgt_p2.x())
-            ay2 = _lerp(self._anim_p2.y(), self._tgt_p2.y())
-            dx2 = _lerp(self._anim_d2x,    self._tgt_d2x)
-            dy2 = _lerp(self._anim_d2y,    self._tgt_d2y)
+            ax2 = _lerp(self._anim_p2.x(), self._tgt_p2.x(), sp)
+            ay2 = _lerp(self._anim_p2.y(), self._tgt_p2.y(), sp)
+            dx2 = _lerp(self._anim_d2x,    self._tgt_d2x,    st)
+            dy2 = _lerp(self._anim_d2y,    self._tgt_d2y,    st)
         else:
             ax2, ay2, dx2, dy2 = None, None, self._anim_d2x, self._anim_d2y
 
         # Settle check — stop the timer when both ends are close enough
-        p1_settled = (self._tgt_p1.x() - ax1) ** 2 + (self._tgt_p1.y() - ay1) ** 2 < 0.25
+        p1_settled = (self._tgt_p1.x() - ax1) ** 2 + (self._tgt_p1.y() - ay1) ** 2 < 0.04
         d1_settled = (self._tgt_d1x - dx1) ** 2    + (self._tgt_d1y - dy1) ** 2    < 0.0001
         if ax2 is not None and self._tgt_p2 is not None:
-            p2_settled = (self._tgt_p2.x() - ax2) ** 2 + (self._tgt_p2.y() - ay2) ** 2 < 0.25
+            p2_settled = (self._tgt_p2.x() - ax2) ** 2 + (self._tgt_p2.y() - ay2) ** 2 < 0.04
             d2_settled = (self._tgt_d2x - dx2) ** 2    + (self._tgt_d2y - dy2) ** 2    < 0.0001
         else:
             p2_settled = d2_settled = True
@@ -268,40 +295,21 @@ class Connection(QGraphicsPathItem):
     # Rendering
     # ------------------------------------------------------------------
 
-    _TAPER_SEGMENTS = 32      # 96 → 32: 3× fewer draw calls, visually indistinguishable
-    _FADE_OUTSIDE   = 18.0    # gradient zone outside the node edge
-    _FADE_INSIDE    =  2.0    # fully invisible just past the edge
-
-    def _segment_opacity(self, pt, covering_nodes):
-        if not covering_nodes:
-            return 1.0
-        min_opacity = 1.0
-        for node in covering_nodes:
-            r     = node.mapRectToScene(node.rect())   # visible body, not shadow margin
-            ix    = min(pt.x() - r.left(), r.right()  - pt.x())
-            iy    = min(pt.y() - r.top(),  r.bottom() - pt.y())
-            inset = min(ix, iy)
-            span  = self._FADE_OUTSIDE + self._FADE_INSIDE
-            fade  = max(0.0, min(1.0, (inset + self._FADE_OUTSIDE) / span))
-            min_opacity = min(min_opacity, 1.0 - fade)
-        return min_opacity
-
     def paint(self, painter, option, widget):
         if self.start_node is None or not self.path():
             return
 
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Clip out the interior of both endpoint nodes so the wire is never
-        # visible inside them regardless of node background transparency.
+        # Clip out the interior of both endpoint nodes.
         clip = QPainterPath()
         clip.addRect(self.boundingRect())
         for ep in (self.start_node, self.end_node):
             if ep is None:
                 continue
             try:
-                rr  = ep.round_radius if hasattr(ep, 'round_radius') else 0
-                bw  = ep.current_pen.widthF() if hasattr(ep, 'current_pen') else 2.0
+                rr     = ep.round_radius if hasattr(ep, 'round_radius') else 0
+                bw     = ep.current_pen.widthF() if hasattr(ep, 'current_pen') else 2.0
                 margin = bw / 2.0
                 cutout = QPainterPath()
                 cutout.addRoundedRect(
@@ -313,65 +321,58 @@ class Connection(QGraphicsPathItem):
                 pass
         painter.setClipPath(clip)
 
-        covering_nodes = []
-        scene = self.scene()
-        if scene:
-            for item in scene.items(self.boundingRect()):
-                if (hasattr(item, 'connections')
-                        and item is not self.start_node
-                        and item is not self.end_node):
-                    covering_nodes.append(item)
+        def _ep_color(node):
+            if node is not None and node.isSelected():
+                return QColor(Theme.nodeBorderSelected)
+            return QColor(Theme.nodeBorder)
 
-        def _wire_color(node):
-            c = node.brush().color()
-            h = c.hsvHueF()
-            s = c.hsvSaturationF()
-            v = c.valueF()
-            if h < 0:
-                from graphics.Theme import Theme as _T
-                ref = QColor(_T.primaryBorder)
-                h, s = ref.hsvHueF(), ref.hsvSaturationF() * 0.6
-            return QColor.fromHsvF(
-                max(0.0, h),
-                min(1.0, s + 0.2),
-                min(1.0, max(0.65, v * 3.0)),
+        c_start = _ep_color(self.start_node)
+        c_end   = _ep_color(self.end_node)
+        c_mid   = QColor(Theme.nodeBorder)
+
+        # If no endpoint is selected both colors equal c_mid — draw solid, skip segments.
+        if c_start.rgb() == c_mid.rgb() and c_end.rgb() == c_mid.rgb():
+            pen = QPen(c_mid, Theme.nodeBorderWidth, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            painter.setPen(pen)
+            painter.drawPath(self.path())
+            return
+
+        # QPen gradient-brush strokes are unreliable in Qt — segment the bezier instead.
+        # SquareCap extends each segment by half line-width at both ends, sealing joints
+        # so there are no gaps or bumps between segments.  64 steps keeps per-step color
+        # delta below ~2 RGB units in the transition zone — visually continuous.
+        SEGMENTS  = 64
+        FADE      = 0.30   # fraction of path at each end that carries the glow
+        path      = self.path()
+        bw        = Theme.nodeBorderWidth
+
+        def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
+            t = max(0.0, min(1.0, t))
+            return QColor(
+                int(a.red()   + (b.red()   - a.red())   * t),
+                int(a.green() + (b.green() - a.green()) * t),
+                int(a.blue()  + (b.blue()  - a.blue())  * t),
             )
 
-        c_start = _wire_color(self.start_node)
-        c_end   = QColor(Theme.primaryBorder) if self.end_node else c_start
+        def _color_at(t: float) -> QColor:
+            if t <= FADE:
+                return _lerp_color(c_start, c_mid, t / FADE)
+            if t >= 1.0 - FADE:
+                return _lerp_color(c_mid, c_end, (t - (1.0 - FADE)) / FADE)
+            return c_mid
 
-        N = self._TAPER_SEGMENTS
-        for i in range(N):
-            t0  = i / N
-            t1  = (i + 1) / N
-            t   = (t0 + t1) / 2
-            pt0 = self.path().pointAtPercent(t0)
-            pt1 = self.path().pointAtPercent(t1)
-            pt  = self.path().pointAtPercent(t)
-
-            seg = QPainterPath()
-            seg.moveTo(pt0)
-            seg.lineTo(pt1)
-
-            seg_opacity = self._segment_opacity(pt, covering_nodes)
-            glow_color  = QColor(
-                int(c_start.red()   + (c_end.red()   - c_start.red())   * t),
-                int(c_start.green() + (c_end.green() - c_start.green()) * t),
-                int(c_start.blue()  + (c_end.blue()  - c_start.blue())  * t),
-                int(255 * seg_opacity),
-            )
-            glow_pen = QPen(glow_color, 1.0 + t * 5.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-            painter.setPen(glow_pen)
+        prev = path.pointAtPercent(0.0)
+        for i in range(1, SEGMENTS + 1):
+            t    = i / SEGMENTS
+            curr = path.pointAtPercent(t)
+            seg  = QPainterPath()
+            seg.moveTo(prev)
+            seg.lineTo(curr)
+            pen = QPen(_color_at(t - 0.5 / SEGMENTS), bw,
+                       Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin)
+            painter.setPen(pen)
             painter.drawPath(seg)
-
-        p_start   = self.path().pointAtPercent(0)
-        p_end     = self.path().pointAtPercent(1)
-        core_grad = QLinearGradient(p_start, p_end)
-        core_grad.setColorAt(0, QColor(255, 255, 255, 80))
-        core_grad.setColorAt(1, QColor(255, 255, 255, 160))
-        core_pen  = QPen(QBrush(core_grad), 1.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        painter.setPen(core_pen)
-        painter.drawPath(self.path())
+            prev = curr
 
 
 # Deferred — avoids circular import since Connection lives in graphics/

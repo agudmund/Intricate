@@ -81,9 +81,109 @@ class ClaudeNode(BaseNode):
         self._reply_done_timer.setSingleShot(True)
         self._reply_done_timer.setInterval(1500)
         self._reply_done_timer.timeout.connect(self._on_reply_done)
+
+        # Debounce JSONL watcher — coalesces rapid burst writes during tool use
+        self._jsonl_debounce = QTimer()
+        self._jsonl_debounce.setSingleShot(True)
+        self._jsonl_debounce.setInterval(150)
+        self._jsonl_debounce.timeout.connect(self._process_jsonl_change)
+        self._pending_jsonl_path: str = ""
+
+        self._greeted: bool = False   # prevent double-greeting across session loads
+
         self._build_body()
         self._build_input()
         self._auto_connect()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SCENE LIFECYCLE — greeting on entry
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def itemChange(self, change, value):
+        if (change == self.GraphicsItemChange.ItemSceneHasChanged
+                and value is not None
+                and not self._greeted):
+            # Give the event loop a moment to settle, then consider greeting.
+            QTimer.singleShot(5000, self._attempt_greeting)
+        return super().itemChange(change, value)
+
+    def _attempt_greeting(self) -> None:
+        """
+        Send a quiet, hospitable greeting if the body is still empty and no
+        user input has been sent yet.  Retries up to twice if the session
+        UUID isn't wired yet (e.g. slow startup).
+        """
+        if self._greeted:
+            return
+        # Only greet when the body has no prior conversation content
+        body_text = self.data.body_text.strip() if self.data.body_text else ""
+        if body_text:
+            self._greeted = True   # session loaded with content — no greeting needed
+            return
+        if not self._current_uuid:
+            # UUID not ready yet — retry once more after another 4 s
+            retries = getattr(self, '_greeting_retries', 0)
+            if retries < 2:
+                self._greeting_retries = retries + 1
+                QTimer.singleShot(4000, self._attempt_greeting)
+            return
+        self._greeted = True
+        self._send_greeting()
+
+    def _send_greeting(self) -> None:
+        """
+        Fire a hidden greeting prompt — doesn't update the node title or
+        body, just lets Claude say something warm into a response node.
+        """
+        _GREETING_PROMPT = (
+            "The user has just opened or returned to their Intricate canvas — "
+            "a personal node-based visual workspace. Offer a brief, warm, civil "
+            "greeting. One or two sentences at most. Be natural and unhurried, "
+            "as if you're a thoughtful presence in the room rather than a chatbot."
+        )
+        import tempfile
+        _tf = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", encoding="utf-8", delete=False
+        )
+        _tf.write(_GREETING_PROMPT)
+        _tf.close()
+        _tmp = _tf.name.replace("\\", "/")
+        _ps_cmd = (
+            f"$p = [System.IO.File]::ReadAllText('{_tmp}', "
+            f"[System.Text.Encoding]::UTF8); "
+            f"Remove-Item '{_tmp}' -ErrorAction SilentlyContinue; "
+            f"claude --resume={self._current_uuid} --print $p"
+        )
+        _project_cwd = str(Path(__file__).resolve().parent.parent)
+
+        self._reply_received = False
+        self._stdout_accumulated = ""
+        self._last_response_node = None
+        self._suppress_body_append = True   # greeting text only goes to response node
+        jsonl_path = Path(self.data.folder_path) / f"{self._current_uuid}.jsonl"
+        try:
+            self._file_offset = jsonl_path.stat().st_size
+        except OSError:
+            pass
+
+        self._stream_q = queue.SimpleQueue()
+        self._status_q = queue.SimpleQueue()
+
+        proc = subprocess.Popen(
+            ["powershell.exe", "-Command", _ps_cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            cwd=_project_cwd,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        threading.Thread(target=self._read_proc_stdout, args=(proc,), daemon=True).start()
+        threading.Thread(target=self._read_proc_stderr, args=(proc,), daemon=True).start()
+        self._stream_timer = QTimer()
+        self._stream_timer.timeout.connect(self._flush_stream_title)
+        self._stream_timer.start(150)
 
     # ─────────────────────────────────────────────────────────────────────────
     # AUTO CONNECT
@@ -92,7 +192,8 @@ class ClaudeNode(BaseNode):
     def _auto_connect(self) -> None:
         """
         Find the 'Intricate Claude Node' session (or most recent) and connect.
-        If no sessions exist for this project, create a fresh one via `claude`.
+        If no sessions exist yet, _current_uuid stays None — the first prompt
+        sent via _send_input will create the session implicitly.
         """
         p = Path(self.data.folder_path)
         target_uuid = None
@@ -123,59 +224,6 @@ class ClaudeNode(BaseNode):
         if uuid:
             self._current_uuid = uuid
             self._start_watching(uuid)
-        else:
-            # No sessions found for this project — create a new one.
-            threading.Thread(target=self._create_new_session, daemon=True).start()
-
-    def _create_new_session(self) -> None:
-        """
-        Bootstrap a fresh Claude session for this project by running `claude`
-        without --resume. Discovers the new JSONL UUID and wires up the watcher.
-        Runs on a background thread; connects back to the main thread via QTimer.
-        """
-        p = Path(self.data.folder_path)
-        # Snapshot existing JSONL stems before the new session is created
-        existing = set(f.stem for f in p.glob("*.jsonl")) if p.exists() else set()
-
-        # A silent seed prompt — the node checks this sentinel and won't spawn a response node.
-        # Run with the project dir as CWD so Claude maps the session to the right folder.
-        import os
-        project_cwd = os.getcwd()   # main thread already chdir'd to the project folder
-        _ps_cmd = "claude --print 'no response requested'"
-        try:
-            subprocess.run(
-                ["powershell.exe", "-Command", _ps_cmd],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                cwd=project_cwd,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                timeout=60,
-            )
-        except Exception:
-            return
-
-        # Find the JSONL that appeared after the run
-        def _on_main():
-            if not p.exists():
-                return
-            new_uuid = None
-            newest_mtime = 0.0
-            for jsonl_file in p.glob("*.jsonl"):
-                if jsonl_file.stem in existing:
-                    continue
-                try:
-                    mtime = jsonl_file.stat().st_mtime
-                    if mtime > newest_mtime:
-                        newest_mtime = mtime
-                        new_uuid = jsonl_file.stem
-                except OSError:
-                    pass
-            if new_uuid:
-                self._current_uuid = new_uuid
-                self._start_watching(new_uuid)
-
-        QTimer.singleShot(0, _on_main)
 
     # ─────────────────────────────────────────────────────────────────────────
     # SESSION WATCHER
@@ -193,6 +241,19 @@ class ClaudeNode(BaseNode):
         self._watcher.fileChanged.connect(self._on_file_changed)
 
     def _on_file_changed(self, path: str) -> None:
+        # Debounce: restart the 150 ms window on every write event so rapid
+        # tool-use bursts collapse into a single _process_jsonl_change call.
+        self._pending_jsonl_path = path
+        self._jsonl_debounce.start()
+        # Re-add path immediately — some writers remove and recreate the file
+        if self._watcher and path not in self._watcher.files():
+            self._watcher.addPath(path)
+
+    def _process_jsonl_change(self) -> None:
+        """Read new JSONL lines after the debounce window settles."""
+        path = self._pending_jsonl_path
+        if not path:
+            return
         try:
             with open(path, encoding="utf-8", errors="ignore") as f:
                 f.seek(self._file_offset)
@@ -218,9 +279,6 @@ class ClaudeNode(BaseNode):
                             self._reply_done_timer.start()
             except json.JSONDecodeError:
                 pass
-        # Re-add path — some writers remove and recreate the file
-        if self._watcher and path not in self._watcher.files():
-            self._watcher.addPath(path)
 
     def _scan_jsonl_for_reply(self) -> None:
         """
@@ -230,11 +288,35 @@ class ClaudeNode(BaseNode):
         QFileSystemWatcher doesn't fire (common on Windows). If no JSONL text
         is found but stdout accumulated content, that is used instead so that
         a response node always spawns on success.
+
+        When _current_uuid was None at send time, discovers the newly created
+        JSONL, wires the watcher, and picks up its UUID for future sends.
         """
         if self._reply_received:
             return   # file watcher already handled it
+
+        # If we started without a UUID, find the new JSONL the process created
         if not self._current_uuid:
-            return
+            p = Path(self.data.folder_path)
+            if p.exists():
+                existing = getattr(self, '_pre_send_jsonl_stems', set())
+                new_uuid = None
+                newest_mtime = 0.0
+                for jsonl_file in p.glob("*.jsonl"):
+                    if jsonl_file.stem in existing:
+                        continue
+                    try:
+                        mtime = jsonl_file.stat().st_mtime
+                        if mtime > newest_mtime:
+                            newest_mtime = mtime
+                            new_uuid = jsonl_file.stem
+                    except OSError:
+                        pass
+                if new_uuid:
+                    self._current_uuid = new_uuid
+                    self._start_watching(new_uuid)
+            if not self._current_uuid:
+                return   # session creation failed entirely
         jsonl_path = Path(self.data.folder_path) / f"{self._current_uuid}.jsonl"
         try:
             with open(jsonl_path, encoding="utf-8", errors="ignore") as f:
@@ -349,6 +431,8 @@ class ClaudeNode(BaseNode):
             self.setRect(QRectF(r.left(), r.top(), r.width(), collapsed))
 
     def _append_body(self, text: str) -> None:
+        if getattr(self, '_suppress_body_append', False):
+            return
         self._body.append(text)
         self.data.body_text = self._body.toPlainText()
 
@@ -412,53 +496,85 @@ class ClaudeNode(BaseNode):
         self._apply_depth()
 
     def _spawn_response_node(self, text: str) -> None:
-        """Spawn a ClaudeResponseNode with text and wire it to this node."""
+        """Spawn a ClaudeResponseNode with text and wire it to this node.
+
+        Placement strategy:
+          1. Create the node off-screen so its real dimensions are known.
+          2. Spiral outward from the current camera centre, probing a rect the
+             exact size of the node (+ padding) against all existing scene nodes.
+          3. Move the node to the first clear slot — no viewport clamping, so
+             the chain flows wherever the canvas has space.
+        """
         import random
+        import math
         from PySide6.QtCore import QPointF, QRectF
+
         scene = self.scene()
         if not scene:
             return
+
+        # Build the node off-screen first so we know its real size.
+        from nodes.BaseNode import BaseNode as _BaseNode
+        _OFFSCREEN = QPointF(-999_999, -999_999)
+        node = scene.add_claude_response_node(pos=_OFFSCREEN, label=text)
+        nr   = node.rect()           # actual width × height after text layout
+        NW, NH = nr.width(), nr.height()
+        PADDING = 28                 # breathing room around each candidate rect
+
+        def _clear(p: QPointF) -> bool:
+            """True if placing the node at p would not overlap any existing node."""
+            candidate_rect = QRectF(p.x() - PADDING, p.y() - PADDING,
+                                    NW + PADDING * 2, NH + PADDING * 2)
+            for item in scene.items(candidate_rect):
+                if item is node:
+                    continue
+                if isinstance(item, _BaseNode):
+                    return False
+            return True
+
         views = scene.views()
         if views:
             view   = views[0]
             vr     = view.mapToScene(view.viewport().rect()).boundingRect()
-            margin = 40
+            origin = vr.center()
 
-            def _pick_pos():
-                return QPointF(
-                    random.uniform(vr.left() + margin, vr.right()  - margin),
-                    random.uniform(vr.top()  + margin, vr.bottom() - margin),
+            # Spiral outward: ring step = half the longer node dimension so
+            # we never skip a gap wider than the node itself.
+            STEP            = max(1, int(max(NW, NH)) // 2)
+            MAX_RADIUS      = int(max(vr.width(), vr.height()) * 2.5)
+            PROBES_PER_RING = 16   # more angles = fewer blind spots per ring
+
+            pos   = origin
+            found = _clear(origin)
+            if not found:
+                for radius in range(STEP, MAX_RADIUS, STEP):
+                    base = random.uniform(0, 2 * math.pi)
+                    for k in range(PROBES_PER_RING):
+                        angle = base + k * (2 * math.pi / PROBES_PER_RING)
+                        candidate = QPointF(
+                            origin.x() + math.cos(angle) * radius,
+                            origin.y() + math.sin(angle) * radius,
+                        )
+                        if _clear(candidate):
+                            pos   = candidate
+                            found = True
+                            break
+                    if found:
+                        break
+
+            if not found:
+                # Canvas fully packed — nudge right of the chain tail
+                wire_src = (
+                    self._last_response_node
+                    if self._last_response_node is not None
+                       and self._last_response_node.scene()
+                    else self
                 )
-
-            def _node_under(p):
-                probe = QRectF(p.x() - 4, p.y() - 4, 8, 8)
-                for item in scene.items(probe):
-                    if hasattr(item, 'data'):
-                        return item
-                return None
-
-            pos = _pick_pos()
-            for _ in range(20):
-                occupant = _node_under(pos)
-                if occupant is None:
-                    break
-                if getattr(occupant.data, 'node_type', '') == 'claude_response':
-                    break
-                pos = _pick_pos()
+                pos = wire_src.pos() + QPointF(wire_src.rect().width() + 40, 0)
         else:
-            vr  = None
             pos = self.pos() + QPointF(0, self.rect().height() + 16)
 
-        node = scene.add_claude_response_node(pos=pos, label=text)
-
-        if views and vr is not None:
-            nr = node.rect()
-            margin = 40
-            cx = max(vr.left() + margin,
-                     min(node.pos().x(), vr.right()  - margin - nr.width()))
-            cy = max(vr.top()  + margin,
-                     min(node.pos().y(), vr.bottom() - margin - nr.height()))
-            node.setPos(QPointF(cx, cy))
+        node.setPos(pos)
 
         # Chain: wire from the previous response node if it still exists,
         # otherwise anchor back to the ClaudeNode as the chain root.
@@ -633,12 +749,9 @@ class ClaudeNode(BaseNode):
         text = self._preprocess_input(text)
         if self._handle_local_command(text):
             return
-        if not self._current_uuid:
-            return
-        # Prepend context from any nodes wired into the input ports
-        context = self._connected_input_context()
-        if context:
-            text = context + text
+
+        # Update UI immediately — before any async work so the node feels responsive
+        self._suppress_body_append = False   # user is talking; restore normal body logging
         self._append_body(f"\n› {display_text}\n")
         import textwrap
         self._title_question = textwrap.fill(display_text.capitalize(), width=84)
@@ -646,16 +759,33 @@ class ClaudeNode(BaseNode):
         self.update()
         self.data.depth_front = False
         self._apply_depth()
-        jsonl_path = Path(self.data.folder_path) / f"{self._current_uuid}.jsonl"
-        try:
-            self._file_offset = jsonl_path.stat().st_size
-        except OSError:
-            pass
+
+        # Prepend context from any nodes wired into the input ports
+        context = self._connected_input_context()
+        if context:
+            text = context + text
+
+        # Snapshot JSONL size so the watcher only picks up new content.
+        # When _current_uuid is None this is a brand-new session — snapshot existing
+        # stems so we can identify the new JSONL after the process exits.
+        self._pre_send_jsonl_stems: set = set()
+        if self._current_uuid:
+            jsonl_path = Path(self.data.folder_path) / f"{self._current_uuid}.jsonl"
+            try:
+                self._file_offset = jsonl_path.stat().st_size
+            except OSError:
+                pass
+        else:
+            p = Path(self.data.folder_path)
+            self._pre_send_jsonl_stems = set(f.stem for f in p.glob("*.jsonl")) if p.exists() else set()
+            self._file_offset = 0
+
         self._reply_received = False
         self._stdout_accumulated = ""
         self._last_response_node = None   # reset chain — new question anchors back to ClaudeNode
         self._stream_q  = queue.SimpleQueue()
         self._status_q  = queue.SimpleQueue()
+
         # Write prompt to a temp file so PowerShell can read it back into $p —
         # this avoids both the Windows 32K command-line length limit and all
         # special-character escaping issues (brackets, dollar signs, backticks).
@@ -666,12 +796,22 @@ class ClaudeNode(BaseNode):
         _tf.write(text)
         _tf.close()
         _tmp = _tf.name.replace("\\", "/")
+
+        # --resume if we have a session, plain `claude` otherwise (creates one)
+        if self._current_uuid:
+            resume_flag = f"--resume={self._current_uuid} "
+        else:
+            resume_flag = ""
+
         _ps_cmd = (
             f"$p = [System.IO.File]::ReadAllText('{_tmp}', "
             f"[System.Text.Encoding]::UTF8); "
             f"Remove-Item '{_tmp}' -ErrorAction SilentlyContinue; "
-            f"claude --resume={self._current_uuid} --print $p"
+            f"claude {resume_flag}--print $p"
         )
+        # CWD must match the project the session was created in —
+        # claude --resume maps sessions by project directory.
+        _project_cwd = str(Path(__file__).resolve().parent.parent)
         proc = subprocess.Popen(
             ["powershell.exe", "-Command", _ps_cmd],
             stdout=subprocess.PIPE,
@@ -679,13 +819,14 @@ class ClaudeNode(BaseNode):
             stdin=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
+            cwd=_project_cwd,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         threading.Thread(target=self._read_proc_stdout, args=(proc,), daemon=True).start()
         threading.Thread(target=self._read_proc_stderr, args=(proc,), daemon=True).start()
         self._stream_timer = QTimer()
         self._stream_timer.timeout.connect(self._flush_stream_title)
-        self._stream_timer.start(80)
+        self._stream_timer.start(150)
 
     def _read_proc_stdout(self, proc) -> None:
         try:
@@ -736,8 +877,10 @@ class ClaudeNode(BaseNode):
             segments = [_ANSI_RE.sub('', s).strip() for s in re.split(r'[\r\n]+', buf)]
             last = next((s for s in reversed(segments) if s), None)
             if last:
-                self.data.title = last[-80:]
-                self.update()
+                new_title = last[-80:]
+                if new_title != self.data.title:
+                    self.data.title = new_title
+                    self.update()
 
         if done:
             self._stream_timer.stop()
@@ -889,6 +1032,7 @@ class ClaudeNode(BaseNode):
                 settings.watcher.changed.disconnect(self._on_theme_reload)
             except RuntimeError:
                 pass
+        self._jsonl_debounce.stop()
         if self._watcher:
             self._watcher.fileChanged.disconnect()
             self._watcher.deleteLater()

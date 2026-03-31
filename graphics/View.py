@@ -42,6 +42,7 @@ class IntricateView(QGraphicsView):
 
         self.current_zoom  = 1.0
         self._last_pan_pos: QPointF | None = None
+        self._on_zoom_changed = None   # optional callback, set by main_window
 
         self._configure()
 
@@ -62,14 +63,11 @@ class IntricateView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.NoAnchor)
         self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
 
-        # ── Transparency ──────────────────────────────────────────────────────
-        self.viewport().setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("background: transparent;")
-
         # ── Paint quality ─────────────────────────────────────────────────────
-        # FullViewportUpdate required with TranslucentBackground —
-        # partial updates leave artifacts.
-        self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
+        # MinimalViewportUpdate: only repaints dirty regions.  During pan, Qt
+        # uses a bitblt scroll (very cheap) plus repaints only the newly-exposed
+        # strip — no full-viewport repaint on every mouse-move tick.
+        self.setViewportUpdateMode(QGraphicsView.MinimalViewportUpdate)
         self.setRenderHint(QPainter.Antialiasing)
 
         # ── Focus ─────────────────────────────────────────────────────────────
@@ -115,6 +113,8 @@ class IntricateView(QGraphicsView):
             self.scale(factor, factor)
 
         self.current_zoom = new_zoom
+        if self._on_zoom_changed:
+            self._on_zoom_changed()
 
     def wheelEvent(self, event) -> None:
         """Zoom anchored to the cursor position."""
@@ -128,7 +128,7 @@ class IntricateView(QGraphicsView):
         self.setFocus()
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = event.position()
-            self.setCursor(Qt.ClosedHandCursor)
+            self.setRenderHint(QPainter.Antialiasing, False)
             event.accept()
             return
         scene = self.scene()
@@ -185,7 +185,7 @@ class IntricateView(QGraphicsView):
         """End pan; expand the scene rect if a node was dragged outside it."""
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = None
-            self.setCursor(Qt.ArrowCursor)
+            self.setRenderHint(QPainter.Antialiasing, True)
             event.accept()
             return
         super().mouseReleaseEvent(event)

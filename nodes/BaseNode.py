@@ -11,6 +11,7 @@ import uuid as _uuid
 from PySide6.QtWidgets import QGraphicsRectItem
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
+from PySide6.QtWidgets import QGraphicsItem
 
 from data.NodeData import NodeData
 from nodes.NodeBehaviour import NodeBehaviour
@@ -135,6 +136,10 @@ class BaseNode(QGraphicsRectItem):
         self.setFiltersChildEvents(True)   # route right-clicks through sceneEventFilter
         self.setTransformOriginPoint(self.rect().center())
 
+        # Cache the rendered node in device space — during pan the cached pixmap
+        # is reused instead of repainting every node on every frame.
+        self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
+
 
         # ── Button strip ──────────────────────────────────────────────────────
         # Built last — geometry must be final before positioning.
@@ -167,6 +172,8 @@ class BaseNode(QGraphicsRectItem):
         if change == QGraphicsRectItem.GraphicsItemChange.ItemSelectedHasChanged:
             if hasattr(self, 'behaviour') and self.behaviour:
                 self.behaviour.on_selected(bool(value))
+            for conn in self.connections:
+                conn.update()
 
         if change == QGraphicsRectItem.GraphicsItemChange.ItemPositionHasChanged:
             new_pos = self.scenePos()
@@ -363,8 +370,8 @@ class BaseNode(QGraphicsRectItem):
     def _create_ports(self):
         """Instantiate ports as child items, hidden until wiring mode is enabled."""
         from nodes.Port import Port
-        self.input_ports  = [Port(self, is_output=False) for _ in range(4)]
-        self.output_ports = [Port(self, is_output=True)  for _ in range(4)]
+        self.input_ports  = [Port(self, is_output=False) for _ in range(8)]
+        self.output_ports = [Port(self, is_output=True)  for _ in range(8)]
         self.input_port   = self.input_ports[0]   # backwards-compat alias
         self.output_port  = self.output_ports[0]  # backwards-compat alias
         self._place_ports()
@@ -372,19 +379,27 @@ class BaseNode(QGraphicsRectItem):
             p.hide()
 
     def _place_ports(self):
-        """All ports sit at the four corners, just outside the node edge."""
+        """
+        8 ports per side — 4 corners + 4 mid-edges (N S W E).
+        The Connection's _corner_tangent computes the correct inward/outward
+        direction for any port position, so mid-edge ports just work.
+        """
         r  = self.rect()
         w, h = r.width(), r.height()
         ox = 10   # how far outside the node edge the port sits
-        corners = [
-            (-ox,    -ox   ),   # TL
-            (w + ox, -ox   ),   # TR
-            (-ox,    h + ox),   # BL
-            (w + ox, h + ox),   # BR
+        positions = [
+            (-ox,      -ox     ),   # TL corner
+            (w + ox,   -ox     ),   # TR corner
+            (-ox,      h + ox  ),   # BL corner
+            (w + ox,   h + ox  ),   # BR corner
+            (w / 2,    -ox     ),   # N  mid-edge
+            (w / 2,    h + ox  ),   # S  mid-edge
+            (-ox,      h / 2   ),   # W  mid-edge
+            (w + ox,   h / 2   ),   # E  mid-edge
         ]
-        for port, (cx, cy) in zip(self.input_ports, corners):
+        for port, (cx, cy) in zip(self.input_ports, positions):
             port.setPos(cx, cy)
-        for port, (cx, cy) in zip(self.output_ports, corners):
+        for port, (cx, cy) in zip(self.output_ports, positions):
             port.setPos(cx, cy)
 
     def closest_input_port(self, scene_pos: 'QPointF'):
@@ -570,9 +585,6 @@ class BaseNode(QGraphicsRectItem):
         self.data.height = self.rect().height()
         super().mouseReleaseEvent(event)
 
-        # Wire splice — if the node was dropped on top of a wire, insert it
-        if event.button() == Qt.LeftButton:
-            self._try_splice_into_wire()
 
     def _try_splice_into_wire(self) -> None:
         """

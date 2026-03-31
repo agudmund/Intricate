@@ -6,8 +6,8 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame
-from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
@@ -232,6 +232,7 @@ class IntricateApp(QMainWindow):
         self.central = QWidget()
         self.scene   = IntricateScene()
         self.view    = IntricateView(self.scene)
+        self.view._on_zoom_changed = lambda: self._sync_zoom_slider()
 
         # ── Left sidebar ──────────────────────────────────────────────────────
         self.sidebar_layout = QHBoxLayout(self.central)
@@ -239,12 +240,8 @@ class IntricateApp(QMainWindow):
         self.sidebar_layout.setSpacing(0)
         self.sidebar = self._build_sidebar()
 
-        # ── Right panel — empty QFrame for the future VIP zone ─────────────
-        self.rightPanel = QFrame()
-        self.rightPanel.setFrameShape(QFrame.NoFrame)
-        self.rightPanel.setFixedWidth(0)      # Collapsed until needed
-        self.rightPanel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self.rightPanel.setStyleSheet(f"background: {Theme.windowBg};")
+        # ── Right panel — image preview zone ──────────────────────────────────
+        self.rightPanel = self._build_preview_panel()
 
         # ── Splitter ──────────────────────────────────────────────────────────
         self.splitter = QSplitter(Qt.Horizontal)
@@ -258,15 +255,222 @@ class IntricateApp(QMainWindow):
         self.splitter.addWidget(self.view)
         self.splitter.addWidget(self.rightPanel)
 
-        # Canvas takes all available slack — sidebar and right zone are fixed
+        # Canvas takes all slack; sidebar and preview zone follow their own minimums
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
         self.splitter.setStretchFactor(2, 0)
+
+        # Allow the right panel to collapse fully to zero width when dragged shut
+        self.splitter.setCollapsible(2, True)
+
+        # Restore saved preview panel width, default to 0 (collapsed)
+        QTimer.singleShot(0, self._restore_preview_width)
 
         
         self.sidebar_layout.addWidget(self.splitter)
 
         self.grid.addWidget(self.central, 1, 0)
+
+    # =================================================================================
+    # Right panel — image preview
+    # =================================================================================
+
+    def _build_preview_panel(self) -> QFrame:
+        """
+        Right splitter zone — shows a scaled preview of the selected ImageNode.
+
+        Layout:
+            ┌──────────────────────┐
+            │  caption label       │
+            │  ┌────────────────┐  │
+            │  │                │  │
+            │  │   QLabel img   │  │
+            │  │  (scaled fit)  │  │
+            │  │                │  │
+            │  └────────────────┘  │
+            │  dim label           │
+            └──────────────────────┘
+
+        Starts at zero width (collapsed). Drag the splitter handle to reveal it.
+        """
+        panel = QFrame()
+        panel.setFrameShape(QFrame.NoFrame)
+        panel.setMinimumWidth(0)
+        panel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+        panel.setStyleSheet(f"background: {Theme.windowBg};")
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
+
+        # ── Top bar: caption + pin button ────────────────────────────────────
+        top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(0, 0, 0, 0)
+        top_bar.setSpacing(4)
+
+        self._preview_caption = QLabel("")
+        self._preview_caption.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self._preview_caption.setWordWrap(True)
+        self._preview_caption.setMinimumWidth(0)
+        self._preview_caption.setStyleSheet(f"""
+            QLabel {{
+                color: {Theme.textPrimary};
+                font-family: {Theme.healthFontFamily};
+                font-size: 9pt;
+                padding: 2px 4px;
+            }}
+        """)
+        top_bar.addWidget(self._preview_caption, stretch=1)
+
+        self._pin_btn = QPushButton("○")
+        self._pin_btn.setCheckable(True)
+        self._pin_btn.setChecked(False)
+        self._pin_btn.setFixedSize(22, 22)
+        self._pin_btn.setToolTip("Pin preview — keeps this image while you select other nodes")
+        self._pin_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {Theme.primaryBorder};
+                border: 1px solid {Theme.primaryBorder};
+                border-radius: 11px;
+                font-size: 10pt;
+                padding: 0;
+            }}
+            QPushButton:checked {{
+                background: {Theme.primaryBorder};
+                color: {Theme.windowBg};
+            }}
+            QPushButton:hover {{
+                border-color: {Theme.textPrimary};
+                color: {Theme.textPrimary};
+            }}
+        """)
+        self._pin_btn.toggled.connect(self._on_pin_toggled)
+        top_bar.addWidget(self._pin_btn)
+
+        layout.addLayout(top_bar)
+
+        # Image label — fills remaining space, scales the pixmap to fit
+        self._preview_label = QLabel()
+        self._preview_label.setAlignment(Qt.AlignCenter)
+        self._preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self._preview_label.setMinimumSize(0, 0)
+        self._preview_label.setStyleSheet("background: transparent;")
+        layout.addWidget(self._preview_label, stretch=1)
+
+        # Dimensions hint
+        self._preview_dims = QLabel("")
+        self._preview_dims.setAlignment(Qt.AlignCenter)
+        self._preview_dims.setMinimumWidth(0)
+        self._preview_dims.setStyleSheet(f"""
+            QLabel {{
+                color: {Theme.primaryBorder};
+                font-family: {Theme.healthFontFamily};
+                font-size: 8pt;
+            }}
+        """)
+        layout.addWidget(self._preview_dims)
+
+        self._preview_pinned: bool = False
+        self._preview_pixmap: QPixmap | None = None
+        self._pinned_source_path: str = ""
+        panel.resizeEvent = lambda e, orig=panel.resizeEvent: (orig(e), self._refresh_preview_scale())
+
+        return panel
+
+    def _restore_preview_width(self) -> None:
+        """Restore saved splitter sizes (sidebar and preview panel widths persisted in settings)."""
+        saved_preview = get("ui", "preview_width", 0)
+        saved_sidebar = get("ui", "sidebar_width", 0)
+        sizes = self.splitter.sizes()
+        if len(sizes) == 3:
+            new_sidebar  = saved_sidebar if saved_sidebar > 0 else sizes[0]
+            new_preview  = saved_preview if saved_preview > 0 else sizes[2]
+            slack        = sizes[0] + sizes[1] + sizes[2] - new_sidebar - new_preview
+            self.splitter.setSizes([new_sidebar, max(0, slack), new_preview])
+        self.splitter.splitterMoved.connect(self._on_splitter_moved)
+
+    def _on_splitter_moved(self, _pos: int, _index: int) -> None:
+        """Persist sidebar and preview panel widths whenever the splitter moves."""
+        sizes = self.splitter.sizes()
+        if len(sizes) == 3:
+            set_value("ui", "sidebar_width", sizes[0])
+            set_value("ui", "preview_width", sizes[2])
+
+    def _on_pin_toggled(self, pinned: bool) -> None:
+        self._preview_pinned = pinned
+        self._pin_btn.setText("●" if pinned else "○")
+        if not pinned:
+            # Re-evaluate immediately so deselecting clears stale preview
+            self._on_selection_changed()
+        if pinned and self._preview_pixmap:
+            # Persist which image is pinned so it survives a restart
+            set_value("ui", "preview_pinned", True)
+            set_value("ui", "preview_pinned_path", self._pinned_source_path or "")
+        else:
+            set_value("ui", "preview_pinned", False)
+            set_value("ui", "preview_pinned_path", "")
+
+    def _update_preview(self, pixmap: QPixmap | None, caption: str = "", dims: str = "") -> None:
+        """Push a new image into the preview panel."""
+        self._preview_pixmap = pixmap
+        self._preview_caption.setText(caption)
+        self._preview_dims.setText(dims)
+        self._refresh_preview_scale()
+
+    def _refresh_preview_scale(self) -> None:
+        """Re-scale the stored pixmap to the current label size (called on resize too)."""
+        if not self._preview_pixmap or self._preview_pixmap.isNull():
+            self._preview_label.clear()
+            return
+        size = self._preview_label.size()
+        if size.width() < 2 or size.height() < 2:
+            return
+        scaled = self._preview_pixmap.scaled(
+            size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        self._preview_label.setPixmap(scaled)
+
+    def _on_selection_changed(self) -> None:
+        """Update the preview panel when selection changes — skipped while pinned."""
+        if self._preview_pinned:
+            return
+        from nodes.ImageNode import ImageNode
+        selected = self.scene.selectedItems()
+        for item in selected:
+            if isinstance(item, ImageNode) and item._pixmap and not item._pixmap.isNull():
+                px = item._pixmap
+                caption = item.data.caption or item.data.title
+                dims = f"{px.width()} × {px.height()}"
+                self._pinned_source_path = item.data.source_path or ""
+                self._update_preview(px, caption, dims)
+                return
+        self._pinned_source_path = ""
+        self._update_preview(None)
+
+    def _restore_pinned_preview(self) -> None:
+        """After session load: re-pin the previously pinned image if still present."""
+        if not get("ui", "preview_pinned", False):
+            return
+        saved_path = get("ui", "preview_pinned_path", "")
+        if not saved_path:
+            return
+        from nodes.ImageNode import ImageNode
+        for item in self.scene.items():
+            if isinstance(item, ImageNode) and item._pixmap and not item._pixmap.isNull():
+                if item.data.source_path == saved_path:
+                    px = item._pixmap
+                    caption = item.data.caption or item.data.title
+                    dims = f"{px.width()} × {px.height()}"
+                    self._pinned_source_path = saved_path
+                    self._update_preview(px, caption, dims)
+                    # Activate pin button without triggering _on_pin_toggled's save
+                    self._preview_pinned = True
+                    self._pin_btn.blockSignals(True)
+                    self._pin_btn.setChecked(True)
+                    self._pin_btn.setText("●")
+                    self._pin_btn.blockSignals(False)
+                    return
 
     # =================================================================================
     # The actual sidebar
@@ -306,6 +510,8 @@ class IntricateApp(QMainWindow):
             (Theme.iconText,  self._spawn_text_node,   "Text Node"),
             (Theme.iconSequence, self._spawn_sequence_node, "Image Sequence Scrubber"),
             (Theme.iconTree,    self._spawn_tree_node,     "Folder Structure"),
+            (Theme.iconHealth,  self._spawn_perf_node,     "Paint Performance Monitor"),
+            (Theme.iconClaude,  self._spawn_claude_info_node, "Claude Token Census"),
         ]
 
         for icon, slot, description in tools:
@@ -403,9 +609,7 @@ class IntricateApp(QMainWindow):
         self._status("checking in on things")
 
     def _spawn_claude_node(self):
-        from pathlib import Path
-        project_path = Path.home() / "Desktop" / self._active_project
-        self.scene.add_claude_node(pos=self._viewport_center(), project_path=project_path)
+        self.scene.add_claude_node(pos=self._viewport_center())
         self._status("claude has entered the chat")
 
     def _spawn_image_node(self):
@@ -426,7 +630,13 @@ class IntricateApp(QMainWindow):
         self.scene.add_tree_node(pos=self._viewport_center(), project_path=project_path)
         self._status("mapping the territory")
 
+    def _spawn_perf_node(self):
+        self.scene.add_perf_node(pos=self._viewport_center())
+        self._status("watching the paint loop")
 
+    def _spawn_claude_info_node(self):
+        self.scene.add_claude_info_node(pos=self._viewport_center())
+        self._status("counting every token with pride")
 
     # =========================================================================
     # The buttons and stuff at the bottom of the Ui
@@ -447,11 +657,57 @@ class IntricateApp(QMainWindow):
 
         layout.addStretch()
 
+        # ── Zoom slider — horizontal, maps 0.1–5.0 to integer range ──────
+        self._zoom_label = pretty_label("100%")
+        self._zoom_label.setFixedWidth(42)
+        layout.addWidget(self._zoom_label, alignment=Qt.AlignVCenter)
+
+        self._zoom_slider = QSlider(Qt.Horizontal)
+        self._zoom_slider.setFixedWidth(120)
+        self._zoom_slider.setMinimum(10)    # 0.1× zoom × 100
+        self._zoom_slider.setMaximum(500)   # 5.0× zoom × 100
+        self._zoom_slider.setValue(100)
+        self._zoom_slider.setSingleStep(5)
+        self._zoom_slider.setPageStep(25)
+        self._zoom_slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 3px;
+                background: {Theme.primaryBorder};
+                border-radius: 1px;
+            }}
+            QSlider::handle:horizontal {{
+                width: 10px;
+                margin: -4px 0;
+                background: {Theme.textPrimary};
+                border-radius: 5px;
+            }}
+        """)
+        self._zoom_slider.valueChanged.connect(self._on_zoom_slider)
+        layout.addWidget(self._zoom_slider, alignment=Qt.AlignVCenter)
+
         # Exid button — lower-right anchor, styled via PrettyButton
         self._exid_btn = button("Exid", clicked=self.close)
         layout.addWidget(self._exid_btn, alignment=Qt.AlignVCenter)
 
         self.grid.addWidget(self.bottomToolbar, 2, 0)
+
+    def _on_zoom_slider(self, value: int) -> None:
+        """Slider dragged — set the view zoom to the slider's value."""
+        target = value / 100.0
+        current = self.view.current_zoom
+        if abs(target - current) < 0.001:
+            return
+        factor = target / current
+        self.view._apply_zoom(factor)
+        self._zoom_label.setText(f"{value}%")
+
+    def _sync_zoom_slider(self) -> None:
+        """Called after wheel-zoom to keep the slider in sync with the view."""
+        value = int(round(self.view.current_zoom * 100))
+        self._zoom_slider.blockSignals(True)
+        self._zoom_slider.setValue(max(10, min(500, value)))
+        self._zoom_slider.blockSignals(False)
+        self._zoom_label.setText(f"{value}%")
 
     def _open_settings_dialog(self):
         # Because it's a QWidget now, we need to ensure it doesn't get garbage collected
@@ -473,10 +729,6 @@ class IntricateApp(QMainWindow):
     def _status(self, text: str) -> None:
         """Show a warm status message in the bottom toolbar."""
         self._selection_label.setText(text)
-
-    def _on_selection_changed(self) -> None:
-        """Clear status when selection changes — status is event-driven, not live."""
-        pass
 
     # =========================================================================
     # Sessions
@@ -546,6 +798,8 @@ class IntricateApp(QMainWindow):
             if path.exists():
                 self.scene.load_session(path)
             self.scene.sync_project_images(path.parent)
+        QTimer.singleShot(0, self._restore_camera)
+        QTimer.singleShot(0, self._restore_pinned_preview)
 
     def on_session_changed(self) -> None:
         """Save the outgoing session, swap to a fresh scene, load incoming."""
@@ -669,6 +923,28 @@ class IntricateApp(QMainWindow):
             pos  = self._viewport_center()
             self.scene.add_claude_response_node(pos=pos, label=reply)
 
+    def _restore_camera(self) -> None:
+        """Restore the saved viewport centre and zoom level.
+
+        Must run after session load.  Expands the scene rect to cover all loaded
+        nodes first so centerOn has the full canvas to work with — otherwise the
+        default (-500,-500,1000,1000) rect clamps the camera position.
+        """
+        cx   = get("window", "camera_x",    None)
+        cy   = get("window", "camera_y",    None)
+        zoom = get("window", "camera_zoom", None)
+        if cx is None or cy is None:
+            return
+        # Expand scene to encompass all loaded nodes before positioning the camera
+        self.view._expand_scene_rect()
+        if zoom is not None and zoom > 0:
+            self.view.resetTransform()
+            self.view.scale(zoom, zoom)
+            self.view.current_zoom = zoom
+        from PySide6.QtCore import QPointF
+        self.view.centerOn(QPointF(cx, cy))
+        self._sync_zoom_slider()
+
     def _restore_geometry(self) -> None:
         x  = get("window", "x",      100)
         y  = get("window", "y",      100)
@@ -689,6 +965,14 @@ class IntricateApp(QMainWindow):
         set_value("window", "width",      r.width())
         set_value("window", "height",     r.height())
         set_value("window", "fullscreen", self._is_fullscreen)
+        # Persist camera so the view reopens exactly where it was left
+        try:
+            vp_center = self.view.mapToScene(self.view.viewport().rect().center())
+            set_value("window", "camera_x",    vp_center.x())
+            set_value("window", "camera_y",    vp_center.y())
+            set_value("window", "camera_zoom", self.view.current_zoom)
+        except (RuntimeError, AttributeError):
+            pass
 
     def _cleanup_pycache(self) -> None:
         """
@@ -755,12 +1039,22 @@ class IntricateApp(QMainWindow):
         It should be a joyful moment because now we can look forward to seeing each other later.
         """
         if self.windowOpacity() <= 0.0:
-            self._cleanup_pycache()
-            self._persist_claude_node_size()
+            try:
+                self._cleanup_pycache()
+                self._persist_claude_node_size()
+            except (RuntimeError, Exception):
+                pass
             event.accept()
             return
 
-        self._save_geometry()
+        try:
+            self._autosave()
+        except (RuntimeError, Exception):
+            pass
+        try:
+            self._save_geometry()
+        except (RuntimeError, Exception):
+            pass
         self._run_exit_script()
         event.ignore()
         self._animate_fade_out()

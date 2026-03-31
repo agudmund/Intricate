@@ -112,6 +112,19 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_perf_node(self, pos: QPointF | None = None):
+        """Add a PerfNode at pos. One per scene — returns existing if present."""
+        from nodes.PerfNode import PerfNode
+        for item in self.items():
+            if isinstance(item, PerfNode):
+                return item
+        node = PerfNode()
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_warm_node(self, pos: QPointF | None = None):
         """Add a WarmNode at pos."""
         from nodes.WarmNode import WarmNode
@@ -147,7 +160,7 @@ class IntricateScene(QGraphicsScene):
         return node
 
     @staticmethod
-    def _claude_folder_for(project_path: 'Path | None') -> str:
+    def _claude_folder_for(project_path: 'Path | None' = None) -> str:
         """Derive the ~/.claude/projects/... folder path for a given Desktop project path."""
         from pathlib import Path
         if project_path is None:
@@ -156,21 +169,34 @@ class IntricateScene(QGraphicsScene):
         slug = str(project_path).replace(":", "-").replace("\\", "-").replace("/", "-")
         return str(Path.home() / ".claude" / "projects" / slug)
 
-    def add_claude_node(self, pos: QPointF | None = None, project_path: 'Path | None' = None):
-        """Add a ClaudeNode at pos, wired to the given project's Claude session folder."""
+    def add_claude_node(self, pos: QPointF | None = None, **_):
+        """Add a ClaudeNode at pos. Always connects to the default session folder."""
         from nodes.ClaudeNode import ClaudeNode
         from data.ClaudeNodeData import ClaudeNodeData
         from graphics.Theme import Theme
-        folder = self._claude_folder_for(project_path)
         data = ClaudeNodeData(
             width=Theme.claudeDefaultWidth,
             height=Theme.claudeDefaultHeight,
-            folder_path=folder,
         )
         node = ClaudeNode(data)
         if pos is not None:
             r = node.rect()
             node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
+    def add_claude_info_node(self, pos: QPointF | None = None):
+        """Add a ClaudeInfoNode at pos. One per scene — returns existing if present."""
+        from nodes.ClaudeInfoNode import ClaudeInfoNode
+        from data.ClaudeInfoNodeData import ClaudeInfoNodeData
+        for item in self.items():
+            if isinstance(item, ClaudeInfoNode):
+                return item
+        data = ClaudeInfoNodeData(folder_path=self._claude_folder_for())
+        node = ClaudeInfoNode(data)
+        if pos is not None:
+            node.setPos(pos)
         self.addItem(node)
         self.raise_node(node)
         return node
@@ -484,6 +510,16 @@ class IntricateScene(QGraphicsScene):
             from nodes.TreeNode import TreeNode
             from data.TreeNodeData import TreeNodeData
             node = TreeNode(TreeNodeData.from_dict(d))
+
+        elif node_type == "perf":
+            from nodes.PerfNode import PerfNode
+            from data.PerfNodeData import PerfNodeData
+            node = PerfNode(PerfNodeData.from_dict(d))
+
+        elif node_type == "claude_info":
+            from nodes.ClaudeInfoNode import ClaudeInfoNode
+            from data.ClaudeInfoNodeData import ClaudeInfoNodeData
+            node = ClaudeInfoNode(ClaudeInfoNodeData.from_dict(d))
 
         if node is not None:
             node.setPos(QPointF(d.get("x", 0.0), d.get("y", 0.0)))
