@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
 from nodes.BaseNode import BaseNode
@@ -62,7 +62,6 @@ class TreeNode(BaseNode):
 
     def _build_tree_view(self) -> None:
         self._editor = QTextEdit()
-        self._editor.setReadOnly(True)
         self._editor.setFrameStyle(0)
         self._editor.setStyleSheet(f"""
             QTextEdit {{
@@ -102,7 +101,14 @@ class TreeNode(BaseNode):
     _SNAPSHOT_SCRIPT = "cozy-snapshot.py"
 
     def refresh(self) -> None:
-        """Run cozy-snapshot.py for the project and load cozy-tree.txt."""
+        """
+        Run cozy-snapshot.py and spawn a *new* TreeNode with the result.
+
+        The current node is left untouched (it may have been manually edited).
+        The new node is placed 20px to the right and 20px below this one.
+        On first load (no existing tree_text) the result goes directly into
+        this node instead so there is something to show immediately.
+        """
         project = Path(self.data.project_path)
         if not project.is_dir():
             self._set_text(f"[project not found: {project}]")
@@ -125,14 +131,37 @@ class TreeNode(BaseNode):
             return
 
         tree_file = project / "cozy-tree.txt"
-        if tree_file.exists():
-            try:
-                text = tree_file.read_text(encoding="utf-8")
-                self._set_text(text)
-            except Exception as e:
-                self._set_text(f"[read error: {e}]")
-        else:
+        if not tree_file.exists():
             self._set_text("[cozy-tree.txt not generated]")
+            return
+
+        try:
+            text = tree_file.read_text(encoding="utf-8")
+        except Exception as e:
+            self._set_text(f"[read error: {e}]")
+            return
+
+        # First-time population — fill this node directly
+        if not self.data.tree_text:
+            self._set_text(text)
+            return
+
+        # Subsequent refreshes — spawn a sibling node so edits are preserved
+        scene = self.scene()
+        if scene is None:
+            self._set_text(text)
+            return
+
+        from data.TreeNodeData import TreeNodeData
+        new_data = TreeNodeData(
+            project_path=self.data.project_path,
+            tree_text=text,
+        )
+        new_node = TreeNode(new_data)
+        offset = self.pos() + self.rect().bottomRight() + QPointF(20, 20)
+        new_node.setPos(offset)
+        scene.addItem(new_node)
+        scene.raise_node(new_node)
 
     def _set_text(self, text: str) -> None:
         self.data.tree_text = text

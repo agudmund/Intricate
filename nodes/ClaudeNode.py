@@ -152,7 +152,7 @@ class ClaudeNode(BaseNode):
             f"$p = [System.IO.File]::ReadAllText('{_tmp}', "
             f"[System.Text.Encoding]::UTF8); "
             f"Remove-Item '{_tmp}' -ErrorAction SilentlyContinue; "
-            f"claude --resume={self._current_uuid} --print $p"
+            f"$p | claude --resume={self._current_uuid} --print"
         )
         _project_cwd = str(Path(__file__).resolve().parent.parent)
 
@@ -166,6 +166,9 @@ class ClaudeNode(BaseNode):
         except OSError:
             pass
 
+        # Stop any in-flight stream before starting a new one
+        if hasattr(self, '_stream_timer') and self._stream_timer:
+            self._stream_timer.stop()
         self._stream_q = queue.SimpleQueue()
         self._status_q = queue.SimpleQueue()
 
@@ -179,8 +182,8 @@ class ClaudeNode(BaseNode):
             cwd=_project_cwd,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
-        threading.Thread(target=self._read_proc_stdout, args=(proc,), daemon=True).start()
-        threading.Thread(target=self._read_proc_stderr, args=(proc,), daemon=True).start()
+        threading.Thread(target=self._read_proc_stdout, args=(proc, self._stream_q), daemon=True).start()
+        threading.Thread(target=self._read_proc_stderr, args=(proc, self._status_q), daemon=True).start()
         self._stream_timer = QTimer()
         self._stream_timer.timeout.connect(self._flush_stream_title)
         self._stream_timer.start(150)
@@ -392,8 +395,11 @@ class ClaudeNode(BaseNode):
         self.setPen(self.normal_pen)
 
     def _on_theme_reload(self) -> None:
-        self._rebuild_pens()
-        self.update()
+        try:
+            self._rebuild_pens()
+            self.update()
+        except RuntimeError:
+            pass
 
     # ─────────────────────────────────────────────────────────────────────────
     # BODY
@@ -807,11 +813,16 @@ class ClaudeNode(BaseNode):
             f"$p = [System.IO.File]::ReadAllText('{_tmp}', "
             f"[System.Text.Encoding]::UTF8); "
             f"Remove-Item '{_tmp}' -ErrorAction SilentlyContinue; "
-            f"claude {resume_flag}--print $p"
+            f"$p | claude {resume_flag}--print"
         )
         # CWD must match the project the session was created in —
         # claude --resume maps sessions by project directory.
         _project_cwd = str(Path(__file__).resolve().parent.parent)
+
+        # Stop any in-flight stream (e.g. greeting still running) before starting a new one
+        if hasattr(self, '_stream_timer') and self._stream_timer:
+            self._stream_timer.stop()
+
         proc = subprocess.Popen(
             ["powershell.exe", "-Command", _ps_cmd],
             stdout=subprocess.PIPE,
@@ -822,27 +833,27 @@ class ClaudeNode(BaseNode):
             cwd=_project_cwd,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
-        threading.Thread(target=self._read_proc_stdout, args=(proc,), daemon=True).start()
-        threading.Thread(target=self._read_proc_stderr, args=(proc,), daemon=True).start()
+        threading.Thread(target=self._read_proc_stdout, args=(proc, self._stream_q), daemon=True).start()
+        threading.Thread(target=self._read_proc_stderr, args=(proc, self._status_q), daemon=True).start()
         self._stream_timer = QTimer()
         self._stream_timer.timeout.connect(self._flush_stream_title)
         self._stream_timer.start(150)
 
-    def _read_proc_stdout(self, proc) -> None:
+    def _read_proc_stdout(self, proc, q) -> None:
         try:
             for chunk in iter(lambda: proc.stdout.read(64), ""):
                 if chunk:
-                    self._stream_q.put(chunk)
+                    q.put(chunk)
         finally:
-            self._stream_q.put(None)
+            q.put(None)
 
-    def _read_proc_stderr(self, proc) -> None:
+    def _read_proc_stderr(self, proc, q) -> None:
         try:
             for chunk in iter(lambda: proc.stderr.read(64), ""):
                 if chunk:
-                    self._status_q.put(chunk)
+                    q.put(chunk)
         finally:
-            self._status_q.put(None)
+            q.put(None)
 
     def _flush_stream_title(self) -> None:
         # Stdout — append response text to body as it streams

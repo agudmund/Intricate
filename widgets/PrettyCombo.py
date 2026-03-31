@@ -8,7 +8,7 @@
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QFont, QFontMetrics
-from PySide6.QtWidgets import QComboBox, QListView, QStyledItemDelegate, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QListView, QStyledItemDelegate, QStyleFactory, QVBoxLayout, QWidget
 from graphics.Theme import Theme
 import utils.settings as settings
 
@@ -21,7 +21,7 @@ class _TightDelegate(QStyledItemDelegate):
     """
     def sizeHint(self, option, index):
         sh  = super().sizeHint(option, index)
-        pad = int(settings.get_nested("theme", "combo", "item_padding_v", 2))
+        pad = int(settings.get_nested("theme", "combo", "list_padding_v", 4) or 0)
         return QSize(sh.width(), option.fontMetrics.height() + pad * 2)
 
 
@@ -39,28 +39,47 @@ class PrettyCombo(QComboBox):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Fusion style fully honours stylesheet border-radius and padding.
+        # The Windows native style overrides both, leaving a plain tight box
+        # regardless of what the stylesheet says.
+        self.setStyle(QStyleFactory.create("Fusion"))
         # Replace the native OS popup with a plain QListView so Qt renders
         # the entire dropdown itself — stylesheet, font, and scrollbar all apply.
         self.setView(QListView())
         self.setItemDelegate(_TightDelegate(self))
         self._apply_stylesheet()
+        if settings.watcher:
+            settings.watcher.changed.connect(self.update_style)
 
     def _apply_stylesheet(self) -> None:
-        pad_v     = int(settings.get_nested("theme", "combo", "item_padding_v", 2))
-        pad_h     = int(settings.get_nested("theme", "combo", "item_padding_h", 16))
+        # Closed combobox: text clearance inside the border
+        closed_v  = int(settings.get_nested("theme", "combo", "closed_padding_v", 2) or 0)
+        closed_h  = int(settings.get_nested("theme", "combo", "closed_padding_h", 8) or 0)
+        # Closed combobox: how much the border frame grows beyond the font height
+        border_v  = int(settings.get_nested("theme", "combo", "closed_border_v",  4) or 0)
+        # Dropdown list item padding
+        list_v    = int(settings.get_nested("theme", "combo", "list_padding_v", 4) or 0)
+        list_h    = int(settings.get_nested("theme", "combo", "list_padding_h", 16) or 0)
         color     = settings.get("theme", "ui_label_color", "") or Theme.textPrimary
         font      = settings.get("theme", "ui_font",        "Lato")
         font_size = int(settings.get("theme", "ui_font_size", 11))
+        # border_v drives the outer frame height independently of text clearance.
+        # Qt's Fusion sizeHint does not automatically inflate for stylesheet padding.
+        fm      = QFontMetrics(QFont(font, font_size))
+        min_h   = fm.height() + border_v * 2
+        self.setMinimumHeight(min_h)
         self.setStyleSheet(
             f"""
             QComboBox {{
                 background:    transparent;
                 border:        1px solid {Theme.primaryBorder};
-                border-radius: 6px;
+                border-radius: {Theme.nodeRoundRadius}px;
                 color:         {color};
                 font-family:   '{font}';
                 font-size:     {font_size}pt;
-                padding:       2px 6px;
+                padding:       {closed_v}px {closed_h}px;
+                min-height:    {min_h}px;
+                margin:        0px;
             }}
             QComboBox::drop-down {{ border: none; }}
             QComboBox::down-arrow {{ image: none; width: 0; }}
@@ -76,7 +95,7 @@ class PrettyCombo(QComboBox):
                 outline:       0;
             }}
             QComboBox QAbstractItemView::item {{
-                padding:       {pad_v}px {pad_h}px;
+                padding:       {list_v}px {list_h}px;
                 border-radius: 5px;
                 border:        none;
             }}
@@ -122,18 +141,18 @@ class PrettyCombo(QComboBox):
         )
 
     def showPopup(self) -> None:
-        """Size the dropdown to fit the widest item text exactly."""
-        f  = QFont("My Olivin (Nabana)", 11)
+        """Size the dropdown to fit the widest item text + list_padding_h on each side."""
+        f = QFont("My Olivin (Nabana)")
+        f.setPixelSize(11)   # match the stylesheet's 11px, not 11pt
         fm = QFontMetrics(f)
         max_text_w = max(
             (fm.horizontalAdvance(self.itemText(i)) for i in range(self.count())),
             default=0,
         )
-        pad_h   = int(settings.get_nested("theme", "combo", "item_padding_h", 16))
-        popup_w = max_text_w + pad_h * 2 + 8
+        list_h  = max(0, int(settings.get_nested("theme", "combo", "list_padding_h", 16) or 0))
+        list_w_extra = int(settings.get_nested("theme", "combo", "list_width_extra", 20) or 0)
+        popup_w = max_text_w + list_h * 2 + list_w_extra
 
-        # Fix the view width before Qt opens the popup so the container
-        # is sized correctly from the first paint — no stretch flash.
         self.view().setFixedWidth(popup_w)
         super().showPopup()
 

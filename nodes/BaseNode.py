@@ -286,11 +286,13 @@ class BaseNode(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     _has_depth_toggle = False   # set to True in subclasses that want the front/back button
+    _show_ports_btn   = False   # set to True in subclasses that want the ports toggle button
 
     def _build_buttons(self) -> None:
         """
         Construct the button strip. Base adds the universal delete button,
-        and optionally a depth toggle if _has_depth_toggle is True.
+        and optionally a ports toggle (_show_ports_btn) or depth toggle
+        (_has_depth_toggle) if the respective class flag is True.
 
         Subclasses that need additional buttons override and call super():
             def _build_buttons(self) -> None:
@@ -304,11 +306,12 @@ class BaseNode(QGraphicsRectItem):
         delete_pix         = Theme.icon(Theme.iconDelete,  fallback_color="#c97b7b")
         delete_confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
         self._delete_btn   = NodeButton(self, delete_pix, self._delete_self, delete_confirm_pix)
-        ports_off_pix = Theme.icon(Theme.portsIconOff, fallback_color="#7a8a9a")
-        ports_on_pix  = Theme.icon(Theme.portsIconOn,  fallback_color="#9ab8c9")
-        ports_btn = NodeButton(self, ports_off_pix, self._toggle_ports, ports_on_pix, toggle=True)
-        ports_btn._in_confirm = self.data.ports_visible
-        self._buttons.append(ports_btn)
+        if self._show_ports_btn:
+            ports_off_pix = Theme.icon(Theme.portsIconOff, fallback_color="#7a8a9a")
+            ports_on_pix  = Theme.icon(Theme.portsIconOn,  fallback_color="#9ab8c9")
+            ports_btn = NodeButton(self, ports_off_pix, self._toggle_ports, ports_on_pix, toggle=True)
+            ports_btn._in_confirm = self.data.ports_visible
+            self._buttons.append(ports_btn)
         if self._has_depth_toggle:
             depth_off_pix = Theme.icon(Theme.aboutDepthIconOff, fallback_color="#7b9bc9")
             depth_on_pix  = Theme.icon(Theme.aboutDepthIconOn,  fallback_color="#9bc97b")
@@ -330,7 +333,7 @@ class BaseNode(QGraphicsRectItem):
 
     def _position_buttons(self) -> None:
         """
-        Left strip: ports toggle + depth toggle (and any subclass buttons).
+        Left strip: depth toggle (and any subclass buttons); ports toggle if _show_ports_btn.
         Delete button: pinned to the top-right corner.
         """
         pad     = 4.0
@@ -449,10 +452,7 @@ class BaseNode(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event):
-        # Raise to top of its z-tier so the clicked node always appears in front
         scene = self.scene()
-        if scene and hasattr(scene, 'raise_node'):
-            scene.raise_node(self)
 
         if event.button() == Qt.RightButton:
             if scene and hasattr(scene, 'begin_connection'):
@@ -565,7 +565,7 @@ class BaseNode(QGraphicsRectItem):
 
         # Visual celebration — particles burst from the freed node
         from graphics.Particles import sprinkle
-        sprinkle(scene, self.mapToScene(self.rect().center()))
+        sprinkle(scene, self.mapToScene(self.rect().center()), count=162)
 
         # Heal the chain: bridge every source → target pair
         for src in sources:
@@ -711,6 +711,18 @@ class BaseNode(QGraphicsRectItem):
         ty  = r.top() + self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop
         return QRectF(r.left() + pad, ty, self._EMOJI_SIZE, self._EMOJI_SIZE)
 
+    def _title_rect(self) -> QRectF:
+        """Text area to the right of the emoji in the title row."""
+        r   = self.rect()
+        pad = Theme.nodeTextPaddingLeft
+        er  = self._emoji_rect()
+        return QRectF(
+            er.right() + 6.0,
+            er.top(),
+            r.right() - er.right() - pad - 6.0,
+            r.height() - self._BUTTON_ZONE_H,
+        )
+
     def paint_content(self, painter: QPainter):
         """
         Specialist paint handoff — override in subclasses.
@@ -734,14 +746,8 @@ class BaseNode(QGraphicsRectItem):
         painter.drawText(er, Qt.AlignCenter, self.data.emoji)
 
         # ── Title — starts to the right of the emoji ──────────────────────────
-        title_rect = QRectF(
-            er.right() + 6.0,
-            er.top(),
-            r.right() - er.right() - pad - 6.0,
-            r.height() - self._BUTTON_ZONE_H,
-        )
         painter.setFont(QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize)))
-        painter.drawText(title_rect, Qt.AlignLeft | Qt.AlignTop, self.data.title)
+        painter.drawText(self._title_rect(), Qt.AlignLeft | Qt.AlignTop, self.data.title)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -759,6 +765,7 @@ class BaseNode(QGraphicsRectItem):
         self.data.y             = self.pos().y()
         self.data.width         = self.rect().width()
         self.data.height        = self.rect().height()
+        self.data.z_value       = self.zValue()
         self.data.ports_visible = self.ports_visible
 
     def to_dict(self) -> dict:

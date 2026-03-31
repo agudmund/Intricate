@@ -45,6 +45,10 @@ class NodeData:
     width:  float = 300.0
     height: float = 200.0
 
+    # ── Z-order ───────────────────────────────────────────────────────────────
+    # Saved so layer arrangement survives session save/load.
+    z_value: float = 0.0
+
     # ── Port state ────────────────────────────────────────────────────────────
     # Persisted so wiring mode survives session save/load.
     ports_visible: bool = False
@@ -73,6 +77,7 @@ class NodeData:
             "y":             self.y,
             "width":         self.width,
             "height":        self.height,
+            "z_value":       self.z_value,
             "ports_visible": self.ports_visible,
             "emoji":         self.emoji,
         }
@@ -94,6 +99,7 @@ class NodeData:
             y             = float(data.get("y",       0.0)),
             width         = float(data.get("width",   300.0)),
             height        = float(data.get("height",  200.0)),
+            z_value       = float(data.get("z_value",   0.0)),
             ports_visible = data.get("ports_visible", False),
             emoji         = data.get("emoji",         "🌿"),
         )

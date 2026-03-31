@@ -147,7 +147,7 @@ class PrettyButton(QPushButton):
                border: {border_width}px solid {Theme.buttonBorder};
                border-radius: 6px;
                color: {color};
-               padding: 5px 1px {bottom_padding}px 10px;
+               padding: 5px 1px {bottom_padding}px 1px;
            }}
         """)
 

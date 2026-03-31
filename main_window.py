@@ -6,15 +6,26 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import json
+import os
+import random
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QSize, QRect, QEvent, QTimer
+from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
 from graphics.Theme import Theme
+from nodes.ClaudeNode import ClaudeNode
+from nodes.ImageNode import ImageNode
 from widgets.PrettyButton import button
 from utils.logger import setup_logger
-from utils.settings import appName, set_nested, set_value, get
+from utils.motivationalMessages import motivationalMessages
+from utils.settings import appName, set_nested, get_nested, set_value, get
 from widgets.PrettyCombo import combo as pretty_combo
 from widgets.PrettyLabel import label as pretty_label
 
@@ -97,22 +108,29 @@ class IntricateApp(QMainWindow):
         self.top_toolbar.setStyleSheet(f"background-color: {Theme.windowBg};")
 
         layout = QHBoxLayout(self.top_toolbar)
-        layout.setContentsMargins(*Theme.layoutMargins)
-        layout.setSpacing(8)
-        layout.setAlignment(Qt.AlignVCenter)
+        layout.setContentsMargins(0, 2, 0, 2)
+        # layout.setSpacing(20)
 
-        # Stretch pushes combo to center
         layout.addStretch()
 
-        # Centered project selector — acts as the window title
-        layout.addWidget(self.setup_project_selector(), alignment=Qt.AlignVCenter)
+        # ── Centre group: combo + curtains in a tight sub-layout
+        #    so they share a single vertical axis regardless of Qt's
+        #    per-widget alignment quirks.
+        centre = QHBoxLayout()
+        # centre.setContentsMargins(0, 0, 0, 0)
+        # centre.setSpacing(6)
+        centre.setAlignment(Qt.AlignVCenter)
+        centre.addWidget(self.setup_project_selector())
+        # Y offset from settings.toml — positive = push down, negative = push up
+        curtains_y = int(get("theme", "curtains_y_offset", 0) or 0)
+        self._curtains_btn = self.setup_iconic_button(
+            clicked=self.toggle_curtains,
+            margin_top=max(0, curtains_y),
+            margin_bottom=max(0, -curtains_y),
+        )
+        centre.addWidget(self._curtains_btn)
+        layout.addLayout(centre)
 
-        layout.addSpacing(6)
-
-        # Curtains button — sits right of the combo
-        layout.addWidget(self.setup_iconic_button(clicked=self.toggle_curtains))
-
-        # Stretch balances right side
         layout.addStretch()
 
         # ── Exit button: absolute child of top_toolbar, pinned to top-right ──────
@@ -147,20 +165,31 @@ class IntricateApp(QMainWindow):
 
         return self.project_selector
 
-    def setup_iconic_button(self, clicked=None, icon: str | None = None) -> QPushButton:
-            """Creates a square icon-only button. icon= filename string via Theme.icon()."""
-            icon_name = icon if icon is not None else Theme.iconCurtains
-            btn = button("", icon_name=icon_name)
-            btn.setFixedSize(QSize(Theme.iconButtonSize, Theme.iconButtonSize))
-            btn.setIconSize(QSize(
-                Theme.iconButtonSize - Theme.iconPadding,
-                Theme.iconButtonSize - Theme.iconPadding
-            ))
-            btn.setStyleSheet(btn.styleSheet())
-            if clicked is not None:
-                btn.clicked.connect(clicked)
-            return btn
-
+    def setup_iconic_button(self, clicked=None, icon: str | None = None,
+                            margin_top: int = 0, margin_bottom: int = 0) -> QPushButton:
+        """Creates a square icon-only button. icon= filename string via Theme.icon()."""
+        icon_name = icon if icon is not None else Theme.iconCurtains
+        btn = button("", icon_name=icon_name)
+        sz = Theme.iconButtonSize
+        btn.setFixedSize(QSize(sz, sz))
+        btn.setIconSize(QSize(sz - Theme.iconPadding, sz - Theme.iconPadding))
+        bw = Theme.buttonBorderWidth if Theme.buttonBorderEnabled else 0
+        margins = ""
+        if margin_top:    margins += f"margin-top: {margin_top}px; "
+        if margin_bottom: margins += f"margin-bottom: {margin_bottom}px; "
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.buttonBg};
+                border: {bw}px solid {Theme.buttonBorder};
+                border-radius: 6px;
+                color: {Theme.textPrimary};
+                padding: 0px;
+                {margins}
+            }}
+        """)
+        if clicked is not None:
+            btn.clicked.connect(clicked)
+        return btn
     # =========================================================================
     # Fullscreen toggle — double-click the top toolbar
     # =========================================================================
@@ -245,11 +274,11 @@ class IntricateApp(QMainWindow):
 
         # ── Splitter ──────────────────────────────────────────────────────────
         self.splitter = QSplitter(Qt.Horizontal)
-        self.splitter.setHandleWidth(1)
-        self.splitter.setStyleSheet(f"""
-            QSplitter::handle {{
-                background-color: {Theme.primaryBorder};
-            }}
+        self.splitter.setHandleWidth(4)
+        self.splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: transparent;
+            }
         """)
         self.splitter.addWidget(self.sidebar)
         self.splitter.addWidget(self.view)
@@ -297,7 +326,7 @@ class IntricateApp(QMainWindow):
         panel.setFrameShape(QFrame.NoFrame)
         panel.setMinimumWidth(0)
         panel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
-        panel.setStyleSheet(f"background: {Theme.windowBg};")
+        panel.setStyleSheet("background: transparent;")
 
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -431,19 +460,23 @@ class IntricateApp(QMainWindow):
         )
         self._preview_label.setPixmap(scaled)
 
+    def _show_node_preview(self, node: ImageNode) -> None:
+        """Push one ImageNode's pixmap into the preview panel."""
+        px = node._pixmap
+        self._pinned_source_path = node.data.source_path or ""
+        self._update_preview(
+            px,
+            node.data.caption or node.data.title,
+            f"{px.width()} × {px.height()}",
+        )
+
     def _on_selection_changed(self) -> None:
         """Update the preview panel when selection changes — skipped while pinned."""
         if self._preview_pinned:
             return
-        from nodes.ImageNode import ImageNode
-        selected = self.scene.selectedItems()
-        for item in selected:
+        for item in self.scene.selectedItems():
             if isinstance(item, ImageNode) and item._pixmap and not item._pixmap.isNull():
-                px = item._pixmap
-                caption = item.data.caption or item.data.title
-                dims = f"{px.width()} × {px.height()}"
-                self._pinned_source_path = item.data.source_path or ""
-                self._update_preview(px, caption, dims)
+                self._show_node_preview(item)
                 return
         self._pinned_source_path = ""
         self._update_preview(None)
@@ -455,15 +488,10 @@ class IntricateApp(QMainWindow):
         saved_path = get("ui", "preview_pinned_path", "")
         if not saved_path:
             return
-        from nodes.ImageNode import ImageNode
         for item in self.scene.items():
             if isinstance(item, ImageNode) and item._pixmap and not item._pixmap.isNull():
                 if item.data.source_path == saved_path:
-                    px = item._pixmap
-                    caption = item.data.caption or item.data.title
-                    dims = f"{px.width()} × {px.height()}"
-                    self._pinned_source_path = saved_path
-                    self._update_preview(px, caption, dims)
+                    self._show_node_preview(item)
                     # Activate pin button without triggering _on_pin_toggled's save
                     self._preview_pinned = True
                     self._pin_btn.blockSignals(True)
@@ -490,7 +518,7 @@ class IntricateApp(QMainWindow):
 
         sidebar = QWidget()
         sidebar.setFixedWidth(Theme.sidebarWidth())
-        sidebar.setStyleSheet(f"background-color: {Theme.windowBg};")
+        sidebar.setStyleSheet("background-color: transparent;")
 
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(
@@ -592,51 +620,26 @@ class IntricateApp(QMainWindow):
         vp = self.view.viewport()
         return self.view.mapToScene(vp.width() // 2, vp.height() // 2)
 
-    def _spawn_warm_node(self):
-        self.scene.add_warm_node(pos=self._viewport_center())
-        self._status("a warm thought arrives")
+    def _spawn(self, add_fn, status_msg: str, **kwargs) -> None:
+        """Place a node at the viewport centre and update the status bar."""
+        add_fn(pos=self._viewport_center(), **kwargs)
+        self._status(status_msg)
 
-    def _spawn_about_node(self):
-        self.scene.add_about_node(pos=self._viewport_center())
-        self._status("a little note for later")
-
-    def _spawn_bezier_node(self):
-        self.scene.add_bezier_node(pos=self._viewport_center())
-        self._status("curves ahead")
-
-    def _spawn_health_node(self):
-        self.scene.add_health_node(pos=self._viewport_center())
-        self._status("checking in on things")
-
-    def _spawn_claude_node(self):
-        self.scene.add_claude_node(pos=self._viewport_center())
-        self._status("claude has entered the chat")
-
-    def _spawn_image_node(self):
-        self.scene.add_image_node(pos=self._viewport_center())
-        self._status("a picture is worth everything")
-
-    def _spawn_text_node(self):
-        self.scene.add_text_node(pos=self._viewport_center())
-        self._status("words, words, words")
-
-    def _spawn_sequence_node(self):
-        self.scene.add_sequence_node(pos=self._viewport_center())
-        self._status("ready to scrub")
+    def _spawn_warm_node(self):        self._spawn(self.scene.add_warm_node,         "a warm thought arrives")
+    def _spawn_about_node(self):       self._spawn(self.scene.add_about_node,        "a little note for later")
+    def _spawn_bezier_node(self):      self._spawn(self.scene.add_bezier_node,       "curves ahead")
+    def _spawn_health_node(self):      self._spawn(self.scene.add_health_node,       "checking in on things")
+    def _spawn_claude_node(self):      self._spawn(self.scene.add_claude_node,       "claude has entered the chat")
+    def _spawn_image_node(self):       self._spawn(self.scene.add_image_node,        "a picture is worth everything")
+    def _spawn_text_node(self):        self._spawn(self.scene.add_text_node,         "words, words, words")
+    def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
+    def _spawn_perf_node(self):        self._spawn(self.scene.add_perf_node,         "watching the paint loop")
+    def _spawn_claude_info_node(self): self._spawn(self.scene.add_claude_info_node,  "counting every token with pride")
 
     def _spawn_tree_node(self):
         path = self._session_path()
-        project_path = str(path.parent) if path else ""
-        self.scene.add_tree_node(pos=self._viewport_center(), project_path=project_path)
-        self._status("mapping the territory")
-
-    def _spawn_perf_node(self):
-        self.scene.add_perf_node(pos=self._viewport_center())
-        self._status("watching the paint loop")
-
-    def _spawn_claude_info_node(self):
-        self.scene.add_claude_info_node(pos=self._viewport_center())
-        self._status("counting every token with pride")
+        self._spawn(self.scene.add_tree_node, "mapping the territory",
+                    project_path=str(path.parent) if path else "")
 
     # =========================================================================
     # The buttons and stuff at the bottom of the Ui
@@ -734,9 +737,8 @@ class IntricateApp(QMainWindow):
     # Sessions
     # =========================================================================
 
-    def _session_path(self, project: str | None = None) -> 'Path | None':
+    def _session_path(self, project: str | None = None) -> Path | None:
         """Return the session.json path for a project folder name."""
-        from pathlib import Path
         name = project if project is not None else self.project_selector.currentText()
         if not name:
             return None
@@ -765,6 +767,19 @@ class IntricateApp(QMainWindow):
         self.scene.changed.connect(self._schedule_autosave)
         self.scene.selectionChanged.connect(self._on_selection_changed)
 
+    def _load_session_into_scene(self, path: Path | None) -> None:
+        """Change cwd to the project folder, load its session, and sync images."""
+        if not path:
+            return
+        if path.parent.exists():
+            try:
+                os.chdir(str(path.parent))
+            except OSError:
+                pass
+        if path.exists():
+            self.scene.load_session(path)
+        self.scene.sync_project_images(path.parent)
+
     def _autosave(self) -> None:
         """Save the current canvas to the active project's session.json."""
         path = self._session_path()
@@ -786,24 +801,13 @@ class IntricateApp(QMainWindow):
 
     def _load_initial_session(self) -> None:
         """Load the session for the startup-selected project and wire autosave."""
-        import os
         self._init_autosave()
-        path = self._session_path()
-        if path and path.parent.exists():
-            try:
-                os.chdir(str(path.parent))
-            except OSError:
-                pass
-        if path:
-            if path.exists():
-                self.scene.load_session(path)
-            self.scene.sync_project_images(path.parent)
+        self._load_session_into_scene(self._session_path())
         QTimer.singleShot(0, self._restore_camera)
         QTimer.singleShot(0, self._restore_pinned_preview)
 
     def on_session_changed(self) -> None:
         """Save the outgoing session, swap to a fresh scene, load incoming."""
-        import utils.settings as _s
         new_project = self.project_selector.currentText()
 
         # Save whatever was on canvas for the previous project
@@ -814,39 +818,21 @@ class IntricateApp(QMainWindow):
                 self.scene.save_session(prev_path)
 
         self._active_project = new_project
-        _s.set_value("ui", "selected_project", new_project)
-
-        # Change working directory to the new project folder
-        import os
-        from pathlib import Path
-        new_project_dir = Path.home() / "Desktop" / new_project
-        if new_project_dir.exists():
-            try:
-                os.chdir(str(new_project_dir))
-            except OSError:
-                pass
+        set_value("ui", "selected_project", new_project)
 
         # Fresh scene — avoids re-entrant Qt teardown on live nodes
         self._swap_scene()
-
-        # Restore session then sync any new images from ./Images/ on disk
-        path = self._session_path(new_project)
-        if path:
-            if path.exists():
-                self.scene.load_session(path)
-            self.scene.sync_project_images(path.parent)
+        self._load_session_into_scene(self._session_path(new_project))
         self._status(f"welcome back to {new_project}")
 
     def populate_sessions(self) -> None:
-        import utils.settings as _s
-        from pathlib import Path
         desktop = Path.home() / "Desktop"
         desktop_folders = sorted(
             p.name for p in desktop.iterdir()
             if p.is_dir() and not p.name.startswith(".")
         ) if desktop.exists() else []
         self.project_selector.addItems(desktop_folders)
-        saved = _s.get("ui", "selected_project", "")
+        saved = get("ui", "selected_project", "")
         if saved in desktop_folders:
             self.project_selector.setCurrentText(saved)
         self._active_project = self.project_selector.currentText()
@@ -897,19 +883,25 @@ class IntricateApp(QMainWindow):
         self._animate_fade_in()
         QTimer.singleShot(600, self._check_vaporize_restart)
 
+    def _animate_opacity(self, start: float, end: float, duration: int,
+                          easing, on_finish=None) -> QPropertyAnimation:
+        """Create, start, and return a windowOpacity animation."""
+        anim = QPropertyAnimation(self, b"windowOpacity")
+        anim.setDuration(duration)
+        anim.setStartValue(start)
+        anim.setEndValue(end)
+        anim.setEasingCurve(easing)
+        if on_finish is not None:
+            anim.finished.connect(on_finish)
+        anim.start()
+        return anim
+
     def _animate_fade_in(self) -> None:
         """Fade the window opacity from 0 → 1 on show."""
-        self.fadeIn = QPropertyAnimation(self, b"windowOpacity")
-        self.fadeIn.setDuration(500)
-        self.fadeIn.setStartValue(0.0)
-        self.fadeIn.setEndValue(1.0)
-        self.fadeIn.setEasingCurve(QEasingCurve.OutCubic)
-        self.fadeIn.start()
+        self.fadeIn = self._animate_opacity(0.0, 1.0, 500, QEasingCurve.OutCubic)
 
     def _check_vaporize_restart(self):
         """Spawn a response node if the previous session ended via 'then vaporize'."""
-        import json
-        from pathlib import Path
         flag = Path(__file__).resolve().parent / ".vaporize_restart.json"
         if not flag.exists():
             return
@@ -941,7 +933,6 @@ class IntricateApp(QMainWindow):
             self.view.resetTransform()
             self.view.scale(zoom, zoom)
             self.view.current_zoom = zoom
-        from PySide6.QtCore import QPointF
         self.view.centerOn(QPointF(cx, cy))
         self._sync_zoom_slider()
 
@@ -981,8 +972,6 @@ class IntricateApp(QMainWindow):
         Always runs fresh on next launch — no stale bytecode, no surprises.
         Non-fatal: if cleanup fails for any reason the app still exits cleanly.
         """
-        import shutil
-        from pathlib import Path
         root = Path(__file__).resolve().parent
         cleaned = 0
         try:
@@ -996,7 +985,6 @@ class IntricateApp(QMainWindow):
             pass
 
     def _persist_claude_node_size(self) -> None:
-        from nodes.ClaudeNode import ClaudeNode
         nodes = [n for n in self.scene.items() if isinstance(n, ClaudeNode)]
         if nodes:
             node = nodes[-1]
@@ -1006,11 +994,6 @@ class IntricateApp(QMainWindow):
             set_nested("node", "claude", "default_height", h)
 
     def _run_exit_script(self) -> None:
-        import subprocess
-        import random
-        import sys
-        from pathlib import Path
-        from utils.motivationalMessages import motivationalMessages
         word = random.choice(motivationalMessages)
         result = subprocess.run(
             f"@echo off & echo {word}",
@@ -1020,8 +1003,7 @@ class IntricateApp(QMainWindow):
         )
         if result.stdout.strip():
             logger.info(result.stdout.strip())
-        import sys as _sys
-        _main_module = _sys.modules.get('__main__')
+        _main_module = sys.modules.get('__main__')
         if _main_module is not None and getattr(_main_module, '_instance_lock', None) is not None:
             try:
                 _main_module._instance_lock.close()
@@ -1062,10 +1044,6 @@ class IntricateApp(QMainWindow):
 
     def _animate_fade_out(self) -> None:
         """Fade the window opacity from current → 0 and trigger close on finish."""
-        self.fadeOut = QPropertyAnimation(self, b"windowOpacity")
-        self.fadeOut.setDuration(300)
-        self.fadeOut.setStartValue(self.windowOpacity())
-        self.fadeOut.setEndValue(0.0)
-        self.fadeOut.setEasingCurve(QEasingCurve.InCubic)
-        self.fadeOut.finished.connect(self.close)
-        self.fadeOut.start()
+        self.fadeOut = self._animate_opacity(
+            self.windowOpacity(), 0.0, 300, QEasingCurve.InCubic, on_finish=self.close
+        )

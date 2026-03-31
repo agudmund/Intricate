@@ -7,6 +7,7 @@
 """
 
 import base64
+import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -73,6 +74,8 @@ class ImageNode(BaseNode):
         super().__init__(data)
 
         self._pixmap: QPixmap | None = None   # Full-resolution source pixmap
+        self._scaled_cache: QPixmap | None = None          # Cached scaled pixmap
+        self._scaled_cache_size: tuple[int, int] | None = None  # (w, h) key
 
         # ── Caption editor ────────────────────────────────────────────────────
         self._editor_proxy: QGraphicsProxyWidget | None = None
@@ -204,6 +207,7 @@ class ImageNode(BaseNode):
             )
 
         self._pixmap = pixmap
+        self._scaled_cache = None  # invalidate on new image
 
         # Record the resolved absolute path so sync_project_images can skip it next load
         self.data.source_path = str(path.resolve())
@@ -224,13 +228,24 @@ class ImageNode(BaseNode):
         """
         Spin up a VisionWorker to identify the image content.
 
+        Checks the PNG's tEXt metadata first — if the file was already
+        processed (even under a different name), the stored caption is used
+        directly and no API call is made.
+
         Prompt is intentionally brief — we want a short descriptive label
         suitable as a node caption, not a full description.
         Worker is parented to this node so it's cleaned up on removal.
         """
         try:
-            from utils.vision import VisionWorker
+            from utils.vision import VisionWorker, read_png_vision_stamp
             import os
+
+            # Fast path: PNG already stamped — use the embedded caption as-is
+            cached = read_png_vision_stamp(path)
+            if cached:
+                self._on_vision_result(cached)
+                return
+
             if not os.environ.get("SingleSharedBraincell_ApiKey", "").strip():
                 return  # No key — skip silently, filename stem stays
 
@@ -250,12 +265,21 @@ class ImageNode(BaseNode):
             pass  # Vision is a convenience — never crash the canvas over it
 
     def _on_vision_result(self, text: str) -> None:
-        """Update caption with Vision result and repaint."""
+        """Update caption with Vision result, repaint, and stamp the source PNG."""
         caption = text.strip().strip(".")
         if caption:
             self.data.caption = caption
             if self._editor and not self._editor_proxy.isVisible():
                 self.update()
+            # Stamp the PNG so future loads skip the API call, even after rename
+            src = self.data.source_path
+            if src:
+                from utils.vision import write_png_vision_stamp
+                threading.Thread(
+                    target=write_png_vision_stamp,
+                    args=(Path(src), caption),
+                    daemon=True,
+                ).start()
 
     def _on_vision_failed(self, error: str) -> None:
         """Log Vision failure quietly — filename stem caption stays."""
@@ -272,6 +296,7 @@ class ImageNode(BaseNode):
             img = QImage.fromData(raw, "PNG")
             if not img.isNull():
                 self._pixmap = QPixmap.fromImage(img)
+                self._scaled_cache = None  # invalidate on new image
         except Exception:
             pass
 
@@ -414,12 +439,18 @@ class ImageNode(BaseNode):
             painter.setClipPath(clip_path)
 
             # ── Scale pixmap to fit, preserving aspect ratio ──────────────────
-            scaled = self._pixmap.scaled(
-                ir.width(),
-                ir.height(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
+            # Cache the scaled result — SmoothTransformation on a 2048px source
+            # is expensive; skip it on every pan-frame repaint.
+            ir_size = (int(ir.width()), int(ir.height()))
+            if self._scaled_cache is None or self._scaled_cache_size != ir_size:
+                self._scaled_cache = self._pixmap.scaled(
+                    ir.width(),
+                    ir.height(),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+                self._scaled_cache_size = ir_size
+            scaled = self._scaled_cache
             # Centre the scaled pixmap within the image rect
             draw_x = ir.x() + (ir.width()  - scaled.width())  / 2.0
             draw_y = ir.y() + (ir.height() - scaled.height()) / 2.0

@@ -524,6 +524,13 @@ class IntricateScene(QGraphicsScene):
         if node is not None:
             node.setPos(QPointF(d.get("x", 0.0), d.get("y", 0.0)))
             self.addItem(node)
-            self.raise_node(node)
+            z = float(d.get("z_value", 0.0))
+            node.setZValue(z)
+            # Keep scene z-counters above all restored values so new nodes
+            # always land on top regardless of what was saved.
+            if z >= 0:
+                self._front_z_top = max(self._front_z_top, z)
+            else:
+                self._back_z_top  = max(self._back_z_top,  z)
 
         return node

@@ -115,23 +115,32 @@ class WarmNode(BaseNode):
         if not editor_path:
             editor_path = "NotepadPlusPlusDuplexPlusTurbo.exe"
         try:
-            subprocess.Popen([editor_path])
-        except FileNotFoundError:
-            # Editor not found — log quietly, don't crash the canvas
-            try:
-                from utils.logger import setup_logger
-                setup_logger("warmnnode").warning(
-                    f"[WarmNode] Editor not found: '{editor_path}' — "
-                    f"update [apps] warm_editor in settings.toml"
-                )
-            except Exception:
-                pass
+            from utils.logger import setup_logger
+            _log = setup_logger("warmnode")
+        except Exception:
+            _log = None
+
+        try:
+            subprocess.Popen(editor_path, shell=True)
+            if _log:
+                _log.debug(f"[WarmNode] Launched editor: '{editor_path}'")
+            # Roll up the canvas so the editor gets focus
+            self._roll_up_curtains()
         except Exception as e:
-            try:
-                from utils.logger import setup_logger
-                setup_logger("warmnode").error(f"[WarmNode] Failed to launch editor: {e}")
-            except Exception:
-                pass
+            if _log:
+                _log.warning(f"[WarmNode] Failed to launch '{editor_path}': {e}")
+
+    def _roll_up_curtains(self) -> None:
+        """Collapse the main window to its HUD strip so the editor gets focus."""
+        try:
+            views = self.scene().views() if self.scene() else []
+            if not views:
+                return
+            win = views[0].window()
+            if hasattr(win, 'is_collapsed') and not win.is_collapsed:
+                win.toggle_curtains()
+        except Exception:
+            pass
 
     def mouseDoubleClickEvent(self, event) -> None:
         """

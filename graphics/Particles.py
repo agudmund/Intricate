@@ -6,7 +6,9 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import math
 import random
+import time
 from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene
 from PySide6.QtCore import Qt, QPointF, QTimer
 from PySide6.QtGui import QPixmap
@@ -20,65 +22,99 @@ SIZE_STD_DEV = 8        # natural variation
 MIN_SIZE     = 10
 MAX_SIZE     = 32
 
-# ── Fade tuning ───────────────────────────────────────────────────────────
-LINGER_MS    = 600      # how long the particle is fully visible before fading
-FADE_STEPS   = 12       # number of opacity steps during fade-out
-FADE_MS      = 25       # ms between fade steps
-STAGGER_MS   = 90       # ms between each particle spawn in a burst
+# ── Lifetime tuning ───────────────────────────────────────────────────────
+LINGER_MS    = 150      # fully visible after spawning before fade begins
+FADE_MS      = 300      # fade-out duration per particle
+
+# ── Burst timing ──────────────────────────────────────────────────────────
+BURST_MS     = 2000     # total window from first to last particle spawn
+BURST_EASE   = 2.0      # exponent — >1 means fast start, decelerates outward
+
+# ── Spiral tuning ─────────────────────────────────────────────────────────
+SPIRAL_RADIUS = 480     # outer edge of the sunflower spiral
+SPIRAL_JITTER = 30      # px of organic noise layered on each position
+_GOLDEN_ANGLE = math.pi * (3.0 - math.sqrt(5.0))   # ≈ 137.5° in radians
+
+# ── Global tick ───────────────────────────────────────────────────────────
+_TICK_MS = 16           # ~60 fps — one timer drives every living particle
+
+_alive: list = []
+_tick_timer: QTimer | None = None
 
 
-_alive: set = set()   # prevent GC until fade completes
+def _global_tick() -> None:
+    now  = time.monotonic() * 1000.0
+    dead = [p for p in _alive if not p._update(now)]
+    for p in dead:
+        _alive.remove(p)
+    if not _alive and _tick_timer is not None:
+        _tick_timer.stop()
+
+
+def _ensure_ticking() -> None:
+    global _tick_timer
+    if _tick_timer is None:
+        _tick_timer = QTimer()
+        _tick_timer.setInterval(_TICK_MS)
+        _tick_timer.timeout.connect(_global_tick)
+    if not _tick_timer.isActive():
+        _tick_timer.start()
 
 
 class _FadingParticle:
-    """One particle — placed, shown, faded, removed. Fire and forget."""
+    """One particle — timestamped spawn, linger, fade. No per-particle timers."""
 
-    def __init__(self, scene: QGraphicsScene, center: QPointF, pixmap: QPixmap):
-        _alive.add(self)
-        size = max(MIN_SIZE, min(MAX_SIZE, int(random.gauss(MEAN_SIZE, SIZE_STD_DEV))))
+    def __init__(self, scene: QGraphicsScene, center: QPointF, pixmap: QPixmap,
+                 index: int, total: int, spawn_delay_ms: float):
+        now               = time.monotonic() * 1000.0
+        self._scene       = scene
+        self._spawn_at    = now + spawn_delay_ms
+        self._linger_end  = self._spawn_at + LINGER_MS
+        self._fade_end    = self._linger_end + FADE_MS
+        self._removed     = False
+
+        size   = max(MIN_SIZE, min(MAX_SIZE, int(random.gauss(MEAN_SIZE, SIZE_STD_DEV))))
         scaled = pixmap.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         self._item = QGraphicsPixmapItem(scaled)
-        self._item.setZValue(9999)   # always on top
+        self._item.setZValue(9999)
+        self._item.setOpacity(0.0)   # invisible until spawn_at
 
-        # Gaussian scatter around the center — 83% cluster tight, 17% wander
-        if random.random() < 0.83:
-            ox = random.gauss(0, 28)
-            oy = random.gauss(0, 28)
-        else:
-            ox = random.uniform(-80, 80)
-            oy = random.uniform(-80, 80)
+        # Sunflower / phyllotaxis spiral position
+        t      = (index + 0.5) / max(total, 1)
+        radius = SPIRAL_RADIUS * math.sqrt(t)
+        angle  = index * _GOLDEN_ANGLE
+        ox     = radius * math.cos(angle) + random.gauss(0, SPIRAL_JITTER)
+        oy     = radius * math.sin(angle) + random.gauss(0, SPIRAL_JITTER)
 
         self._item.setPos(center.x() + ox - size / 2,
                           center.y() + oy - size / 2)
         scene.addItem(self._item)
-        self._scene = scene
 
-        # Linger fully visible, then fade
-        self._step = 0
-        self._fade_timer = QTimer()
-        self._fade_timer.setInterval(FADE_MS)
-        self._fade_timer.timeout.connect(self._tick)
-
-        self._linger = QTimer()
-        self._linger.setSingleShot(True)
-        self._linger.timeout.connect(self._fade_timer.start)
-        self._linger.start(LINGER_MS)
-
-    def _tick(self) -> None:
-        self._step += 1
-        opacity = max(0.0, 1.0 - self._step / FADE_STEPS)
+    def _update(self, now_ms: float) -> bool:
+        """Tick. Returns True while alive, False when done and removed."""
         try:
-            if self._item.scene():
-                self._item.setOpacity(opacity)
-            if self._step >= FADE_STEPS:
-                self._fade_timer.stop()
+            if now_ms < self._spawn_at:
+                return True                          # not yet visible
+
+            if now_ms < self._linger_end:
+                self._item.setOpacity(1.0)
+                return True
+
+            if now_ms < self._fade_end:
+                t = (now_ms - self._linger_end) / FADE_MS
+                self._item.setOpacity(max(0.0, 1.0 - t))
+                return True
+
+            # Lifetime over
+            if not self._removed:
+                self._removed = True
                 if self._item.scene():
                     self._scene.removeItem(self._item)
-                _alive.discard(self)
+            return False
+
         except RuntimeError:
-            self._fade_timer.stop()
-            _alive.discard(self)
+            return False
 
 
 def sprinkle(scene: QGraphicsScene, center: QPointF,
@@ -86,12 +122,15 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
     """
     Spawn a burst of fading particles around a scene position.
 
-    Each particle is staggered by STAGGER_MS so they cascade rather
-    than pop in all at once.  Uses Theme.icon for the pixmap — defaults
-    to the iconic.png fallback circle if no icon is specified.
+    All particles are registered immediately; a single global QTimer drives
+    every opacity update — no per-particle timers.
     """
     pixmap = Theme.icon(icon_name or "bezier_icon.png", fallback_color=Theme.primaryBorder)
 
+    n = max(count - 1, 1)
     for i in range(count):
-        QTimer.singleShot(i * STAGGER_MS,
-                          lambda c=center, p=pixmap: _FadingParticle(scene, c, p))
+        t     = i / n
+        delay = BURST_MS * math.pow(t, BURST_EASE)
+        _alive.append(_FadingParticle(scene, center, pixmap, i, count, delay))
+
+    _ensure_ticking()
