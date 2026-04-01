@@ -6,12 +6,14 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import json as _json
+
 from PySide6.QtWidgets import (
     QGraphicsProxyWidget, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QFrame, QPushButton, QScrollArea, QLabel,
 )
-from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QPainter, QColor
+from PySide6.QtCore import Qt, QRectF, QMimeData, QPoint, QByteArray
+from PySide6.QtGui import QPainter, QColor, QDrag, QPixmap
 
 from nodes.BaseNode import BaseNode
 from data.PaletteNodeData import PaletteNodeData
@@ -24,6 +26,7 @@ SWATCH_W     = 110
 SWATCH_H     = 70
 CELL_SPACING = 10
 COLUMNS      = 2
+_MIME_TYPE   = "application/x-intricate-palette-color"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -68,6 +71,7 @@ class _SwatchCell(QWidget):
         # ── Swatch ────────────────────────────────────────────────────────────
         self._swatch = QFrame()
         self._swatch.setFixedSize(SWATCH_W, SWATCH_H)
+        self._swatch.setCursor(Qt.OpenHandCursor)
         self._update_swatch(hex_color)
         layout.addWidget(self._swatch, 0, Qt.AlignHCenter)
 
@@ -111,6 +115,51 @@ class _SwatchCell(QWidget):
         self._hex.textChanged.connect(lambda _: on_change())
         self._label.textChanged.connect(lambda _: on_change())
 
+    # ── Drag support — drag the swatch to reorder or move between palettes ──
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and self._swatch.geometry().contains(event.pos()):
+            self._drag_start = event.pos()
+            event.accept()
+            return
+        self._drag_start = None
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (self._drag_start is not None
+                and (event.buttons() & Qt.LeftButton)
+                and (event.pos() - self._drag_start).manhattanLength() > 15):
+            self._initiate_drag()
+            self._drag_start = None
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_start = None
+        super().mouseReleaseEvent(event)
+
+    def _initiate_drag(self) -> None:
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setData(_MIME_TYPE, QByteArray(_json.dumps(self.get_data()).encode()))
+        drag.setMimeData(mime)
+
+        # Render swatch as drag pixmap
+        pix = QPixmap(self._swatch.size())
+        self._swatch.render(pix)
+        drag.setPixmap(pix)
+
+        result = drag.exec(Qt.MoveAction | Qt.CopyAction)
+        if result == Qt.MoveAction:
+            # Walk up to the parent _PaletteWidget and remove this cell
+            p = self.parent()
+            while p and not isinstance(p, _PaletteWidget):
+                p = p.parent()
+            if p:
+                p._remove_cell(self)
+
+    _drag_start = None
+
     def _on_hex_changed(self, text: str) -> None:
         c = QColor(text)
         if c.isValid():
@@ -149,6 +198,7 @@ class _PaletteWidget(QWidget):
 
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setStyleSheet("background: transparent;")
+        self.setAcceptDrops(True)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -173,6 +223,12 @@ class _PaletteWidget(QWidget):
         self._container = QWidget()
         self._container.setAttribute(Qt.WA_TranslucentBackground)
         self._container.setStyleSheet("background: transparent;")
+        self._container.setAcceptDrops(True)
+        self._container.dragEnterEvent = self.dragEnterEvent
+        self._container.dragMoveEvent  = self.dragMoveEvent
+        self._container.dropEvent      = self.dropEvent
+        self._scroll.setAcceptDrops(True)
+        self._scroll.viewport().setAcceptDrops(True)
         self._grid = QGridLayout(self._container)
         self._grid.setContentsMargins(4, 4, 4, 4)
         self._grid.setHorizontalSpacing(CELL_SPACING)
@@ -205,6 +261,45 @@ class _PaletteWidget(QWidget):
 
         for c in colors:
             self._append_cell(c.get("label", "Color"), c.get("hex", "#888888"))
+
+    # ── Drag and drop ──────────────────────────────────────────────────────────
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(_MIME_TYPE):
+            event.setDropAction(Qt.MoveAction)
+            event.accept()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(_MIME_TYPE):
+            event.setDropAction(Qt.MoveAction)
+            event.accept()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasFormat(_MIME_TYPE):
+            return
+        data = _json.loads(bytes(event.mimeData().data(_MIME_TYPE)).decode())
+        idx = self._index_at_pos(event.position().toPoint())
+        self._insert_cell_at(data.get("label", "Color"), data.get("hex", "#888888"), idx)
+        event.setDropAction(Qt.MoveAction)
+        event.accept()
+
+    def _index_at_pos(self, pos: QPoint) -> int:
+        """Find the grid insertion index closest to the drop position."""
+        container_pos = self._container.mapFrom(self, pos)
+        for i, cell in enumerate(self._cells):
+            geo = cell.geometry()
+            if container_pos.y() < geo.center().y():
+                return i
+            if (container_pos.y() < geo.bottom()
+                    and container_pos.x() < geo.center().x()):
+                return i
+        return len(self._cells)
+
+    def _insert_cell_at(self, label: str, hex_color: str, index: int) -> None:
+        cell = _SwatchCell(label, hex_color, self._fire_change, self._remove_cell)
+        self._cells.insert(index, cell)
+        self._relayout()
+        self._fire_change()
 
     # ── Cell management ───────────────────────────────────────────────────────
 
