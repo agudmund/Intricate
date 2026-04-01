@@ -338,7 +338,7 @@ class BaseNode(QGraphicsRectItem):
             btn._in_confirm = getattr(self.data, 'depth_front', False)
             self._buttons.append(btn)
 
-        tint_pix = Theme.icon(Theme.iconCurtains, fallback_color="#c0a888")
+        tint_pix = Theme.icon(Theme.iconTint, fallback_color="#c0a888")
         self._buttons.append(NodeButton(self, tint_pix, self._toggle_node_tint))
 
     def _toggle_node_tint(self) -> None:

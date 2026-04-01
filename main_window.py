@@ -569,7 +569,7 @@ class IntricateApp(QMainWindow):
         layout.addWidget(restore_btn)
 
         # ── Wire snip ────────────────────────────────────────────────────────
-        snip_btn = button(icon_name=Theme.iconDelete, clicked=self._start_wire_snip, tooltip="Snip a wire connection")
+        snip_btn = button(icon_name=Theme.iconSnip, clicked=self._start_wire_snip, tooltip="Snip a wire connection")
         snip_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
         layout.addWidget(snip_btn)
 

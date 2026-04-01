@@ -154,7 +154,7 @@ class PerfNode(BaseNode):
     def _build_buttons(self) -> None:
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
-        reset_pix = Theme.icon(Theme.iconDelete, fallback_color="#7a9aaa")
+        reset_pix = Theme.icon(Theme.iconReset, fallback_color="#7a9aaa")
         self._buttons.append(NodeButton(self, reset_pix, self._reset_stats))
 
     def _reset_stats(self) -> None:
