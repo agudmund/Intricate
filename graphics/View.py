@@ -166,7 +166,7 @@ class IntricateView(QGraphicsView):
     def start_snip_mode(self) -> None:
         """Enter wire-snip mode: cursor becomes the delete icon, next wire click removes it."""
         self._snip_mode = True
-        cursor_pix = Theme.icon(Theme.iconSnip, fallback_color="#c07070") \
+        cursor_pix = Theme.icon(Theme.iconSnipCursor, fallback_color="#c07070") \
                          .scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.viewport().setCursor(QCursor(cursor_pix, 16, 16))
 
