@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea, QMenu
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea, QMenu, QGraphicsOpacityEffect
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
@@ -748,14 +748,47 @@ class IntricateApp(QMainWindow):
         self.bottomToolbar = QWidget()
         self.bottomToolbar.setFixedHeight(Theme.handleHeightBottom)
 
-        layout = QHBoxLayout(self.bottomToolbar)
-        layout.setContentsMargins(*Theme.layoutMargins)
+        outer = QVBoxLayout(self.bottomToolbar)
+        outer.setContentsMargins(*Theme.layoutMargins)
+        outer.setSpacing(2)
+
+        # ── Info bar row ──────────────────────────────────────────────────────
+        _info_bar_row = QWidget()
+        _info_bar_row.setFixedHeight(26)
+        _info_bar_row.setStyleSheet("background: transparent;")
+        _info_bar_layout = QHBoxLayout(_info_bar_row)
+        _info_bar_layout.setContentsMargins(0, 0, 0, 0)
+        _info_bar_layout.setSpacing(0)
+
+        self.info_label = pretty_label("", alignment=Qt.AlignCenter)
+        self.info_label.setStyleSheet(
+            f"background: transparent; border: none; padding: 0px 4px;"
+            f" color: {Theme.textPrimary}; font-family: Chandler42; font-size: 16px;"
+        )
+        self.info_label.setFixedHeight(26)
+
+        self._info_opacity = QGraphicsOpacityEffect()
+        self._info_opacity.setOpacity(0.0)
+        self.info_label.setGraphicsEffect(self._info_opacity)
+        self._info_anim         = None
+        self._info_click_action = None
+        self._info_timer = QTimer(self)
+        self._info_timer.setSingleShot(True)
+        self._info_timer.timeout.connect(self._fade_info_out)
+        self.info_label.mousePressEvent = (
+            lambda e: self._info_click_action() if self._info_click_action else None
+        )
+
+        _info_bar_layout.addWidget(self.info_label, stretch=1)
+        outer.addWidget(_info_bar_row)
+
+        # ── Buttons row ───────────────────────────────────────────────────────
+        buttons_row = QWidget()
+        buttons_row.setStyleSheet("background: transparent;")
+        layout = QHBoxLayout(buttons_row)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignVCenter)
-
-        # ── Selection info label — left side ─────────────────────────
-        self._selection_label = pretty_label("")
-        layout.addWidget(self._selection_label, alignment=Qt.AlignVCenter)
 
         layout.addStretch()
 
@@ -791,6 +824,8 @@ class IntricateApp(QMainWindow):
         self._exid_btn = button("Exid", clicked=self.close)
         layout.addWidget(self._exid_btn, alignment=Qt.AlignVCenter)
 
+        outer.addWidget(buttons_row, stretch=1)
+
         self.grid.addWidget(self.bottomToolbar, 2, 0)
 
     def _on_zoom_slider(self, value: int) -> None:
@@ -802,6 +837,57 @@ class IntricateApp(QMainWindow):
         factor = target / current
         self.view._apply_zoom(factor)
         self._zoom_label.setText(f"{value}%")
+
+    def show_info(self, message: str, on_click=None) -> None:
+        """Typewriter reveal with simultaneous fade-in, hold 3 s, then fade out."""
+        self._info_timer.stop()
+        if hasattr(self, '_tw_timer') and self._tw_timer is not None:
+            self._tw_timer.stop()
+
+        self._tw_full    = message
+        self._tw_index   = 0
+        self._info_click_action = on_click
+        self.info_label.setText("")
+        self.info_label.setCursor(
+            Qt.PointingHandCursor if on_click else Qt.ArrowCursor
+        )
+
+        # Fade in over the expected typing duration so opacity climbs with the text
+        fade_ms = max(400, len(message) * 55)
+        self._animate_info_opacity(0.0, 1.0, fade_ms)
+
+        self._tw_timer = QTimer(self)
+        self._tw_timer.setSingleShot(True)
+        self._tw_timer.timeout.connect(self._typewriter_tick)
+        self._tw_timer.start(random.randint(20, 60))
+
+    def _typewriter_tick(self) -> None:
+        self._tw_index += 1
+        self.info_label.setText(self._tw_full[:self._tw_index])
+        if self._tw_index < len(self._tw_full):
+            # Irregular delay: short for most chars, occasional longer pause
+            delay = random.choices(
+                [random.randint(25, 65), random.randint(80, 160)],
+                weights=[85, 15]
+            )[0]
+            self._tw_timer.start(delay)
+        else:
+            self._tw_timer = None
+            self._info_timer.start(3000)
+
+    def _fade_info_out(self) -> None:
+        self._info_click_action = None
+        self.info_label.setCursor(Qt.ArrowCursor)
+        self._animate_info_opacity(1.0, 0.0, 600)
+
+    def _animate_info_opacity(self, start: float, end: float, duration: int) -> None:
+        if self._info_anim:
+            self._info_anim.stop()
+        self._info_anim = QPropertyAnimation(self._info_opacity, b"opacity")
+        self._info_anim.setDuration(duration)
+        self._info_anim.setStartValue(start)
+        self._info_anim.setEndValue(end)
+        self._info_anim.start()
 
     def _sync_zoom_slider(self) -> None:
         """Called after wheel-zoom to keep the slider in sync with the view."""
@@ -829,8 +915,8 @@ class IntricateApp(QMainWindow):
     # =========================================================================
 
     def _status(self, text: str) -> None:
-        """Show a warm status message in the bottom toolbar."""
-        self._selection_label.setText(text)
+        """Show a warm status message in the bottom info bar."""
+        self.show_info(text.capitalize())
 
     # =========================================================================
     # Sessions

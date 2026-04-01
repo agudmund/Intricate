@@ -264,12 +264,20 @@ class IntricateView(QGraphicsView):
             if any(Path(p).suffix.lower() in _IMAGE_EXTENSIONS for p in paths):
                 event.acceptProposedAction()
                 return
+        # Let Qt route internal drags (e.g. palette swatches) to proxy widgets.
+        if event.mimeData().hasFormat("application/x-intricate-palette-color"):
+            super().dragEnterEvent(event)
+            return
         event.ignore()
 
     def dragMoveEvent(self, event) -> None:
         """Keep accepting during the drag so the cursor stays correct."""
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
+            return
+        if event.mimeData().hasFormat("application/x-intricate-palette-color"):
+            super().dragMoveEvent(event)
+            return
 
     def dropEvent(self, event) -> None:
         """
@@ -278,6 +286,9 @@ class IntricateView(QGraphicsView):
         Multiple files are staggered by DROP_STAGGER so they don't pile up.
         Non-image files in a multi-file drop are silently skipped.
         """
+        if event.mimeData().hasFormat("application/x-intricate-palette-color"):
+            super().dropEvent(event)
+            return
         if not event.mimeData().hasUrls():
             event.ignore()
             return

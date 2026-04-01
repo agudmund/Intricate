@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QGraphicsProxyWidget, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QFrame, QPushButton, QScrollArea, QLabel,
 )
-from PySide6.QtCore import Qt, QRectF, QMimeData, QPoint, QByteArray
+from PySide6.QtCore import Qt, QRectF, QMimeData, QPoint, QByteArray, QEvent
 from PySide6.QtGui import QPainter, QColor, QDrag, QPixmap
 
 from nodes.BaseNode import BaseNode
@@ -71,7 +71,6 @@ class _SwatchCell(QWidget):
         # ── Swatch ────────────────────────────────────────────────────────────
         self._swatch = QFrame()
         self._swatch.setFixedSize(SWATCH_W, SWATCH_H)
-        self._swatch.setCursor(Qt.OpenHandCursor)
         self._update_swatch(hex_color)
         layout.addWidget(self._swatch, 0, Qt.AlignHCenter)
 
@@ -223,12 +222,11 @@ class _PaletteWidget(QWidget):
         self._container = QWidget()
         self._container.setAttribute(Qt.WA_TranslucentBackground)
         self._container.setStyleSheet("background: transparent;")
-        self._container.setAcceptDrops(True)
-        self._container.dragEnterEvent = self.dragEnterEvent
-        self._container.dragMoveEvent  = self.dragMoveEvent
-        self._container.dropEvent      = self.dropEvent
+        # Viewport intercepts drag events before the container — install an
+        # event filter so we catch drops without subclassing QScrollArea.
         self._scroll.setAcceptDrops(True)
         self._scroll.viewport().setAcceptDrops(True)
+        self._scroll.viewport().installEventFilter(self)
         self._grid = QGridLayout(self._container)
         self._grid.setContentsMargins(4, 4, 4, 4)
         self._grid.setHorizontalSpacing(CELL_SPACING)
@@ -264,34 +262,39 @@ class _PaletteWidget(QWidget):
 
     # ── Drag and drop ──────────────────────────────────────────────────────────
 
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat(_MIME_TYPE):
-            event.setDropAction(Qt.MoveAction)
-            event.accept()
+    def eventFilter(self, obj, event):
+        """Intercept drag events on the scroll-area viewport."""
+        if obj is self._scroll.viewport():
+            t = event.type()
+            if t == QEvent.DragEnter:
+                if event.mimeData().hasFormat(_MIME_TYPE):
+                    event.setDropAction(Qt.MoveAction)
+                    event.accept()
+                return True
+            if t == QEvent.DragMove:
+                if event.mimeData().hasFormat(_MIME_TYPE):
+                    event.setDropAction(Qt.MoveAction)
+                    event.accept()
+                return True
+            if t == QEvent.Drop:
+                if event.mimeData().hasFormat(_MIME_TYPE):
+                    data = _json.loads(bytes(event.mimeData().data(_MIME_TYPE)).decode())
+                    vp_pos = event.position().toPoint()
+                    cpos   = self._container.mapFrom(self._scroll.viewport(), vp_pos)
+                    idx    = self._index_at_container_pos(cpos)
+                    self._insert_cell_at(data.get("label", "Color"), data.get("hex", "#888888"), idx)
+                    event.setDropAction(Qt.MoveAction)
+                    event.accept()
+                return True
+        return super().eventFilter(obj, event)
 
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat(_MIME_TYPE):
-            event.setDropAction(Qt.MoveAction)
-            event.accept()
-
-    def dropEvent(self, event):
-        if not event.mimeData().hasFormat(_MIME_TYPE):
-            return
-        data = _json.loads(bytes(event.mimeData().data(_MIME_TYPE)).decode())
-        idx = self._index_at_pos(event.position().toPoint())
-        self._insert_cell_at(data.get("label", "Color"), data.get("hex", "#888888"), idx)
-        event.setDropAction(Qt.MoveAction)
-        event.accept()
-
-    def _index_at_pos(self, pos: QPoint) -> int:
-        """Find the grid insertion index closest to the drop position."""
-        container_pos = self._container.mapFrom(self, pos)
+    def _index_at_container_pos(self, pos: QPoint) -> int:
+        """Insertion index from a position already in _container coordinates."""
         for i, cell in enumerate(self._cells):
             geo = cell.geometry()
-            if container_pos.y() < geo.center().y():
+            if pos.y() < geo.center().y():
                 return i
-            if (container_pos.y() < geo.bottom()
-                    and container_pos.x() < geo.center().x()):
+            if pos.y() < geo.bottom() and pos.x() < geo.center().x():
                 return i
         return len(self._cells)
 
@@ -419,6 +422,12 @@ class PaletteNode(BaseNode):
         path = out_dir / f"{title}.png"
         img.save(str(path))
 
+        views = scene.views()
+        if views:
+            win = views[0].window()
+            if hasattr(win, 'show_info'):
+                win.show_info(f"{title}.png exported")
+
     # ─────────────────────────────────────────────────────────────────────────
     # LAYOUT
     # ─────────────────────────────────────────────────────────────────────────
@@ -440,6 +449,7 @@ class PaletteNode(BaseNode):
         )
         self._palette_proxy = QGraphicsProxyWidget(self)
         self._palette_proxy.setWidget(self._palette)
+        self._palette_proxy.setAcceptDrops(True)
         self._palette_proxy.setGeometry(self._body_rect())
         self._palette_proxy.show()
 
