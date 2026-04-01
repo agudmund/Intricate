@@ -564,7 +564,7 @@ class IntricateApp(QMainWindow):
         layout.addWidget(tree_btn)
 
         # ── Restore last deleted node ─────────────────────────────────────────
-        restore_btn = button(icon_name=Theme.iconConfirm, clicked=self._restore_deleted, tooltip="Restore last deleted node")
+        restore_btn = button(icon_name=Theme.iconRestore, clicked=self._restore_deleted, tooltip="Restore last deleted node")
         restore_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
         layout.addWidget(restore_btn)
 
