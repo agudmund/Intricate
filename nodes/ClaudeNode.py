@@ -501,16 +501,70 @@ class ClaudeNode(BaseNode):
         self.data.depth_front = True
         self._apply_depth()
 
-    def _spawn_response_node(self, text: str) -> None:
-        """Spawn a ClaudeResponseNode with text and wire it to this node.
+    # ── Node spawn directives ────────────────────────────────────────────────
+    # Replies may contain <!--node:TYPE JSON--> directives. These are parsed
+    # out before the response node is created, then executed after placement
+    # to spawn companion nodes (palette, about, etc.) wired to the chain.
 
-        Placement strategy:
-          1. Create the node off-screen so its real dimensions are known.
-          2. Spiral outward from the current camera centre, probing a rect the
+    _NODE_DIRECTIVE_RE = re.compile(r'<!--node:(\w+)\s+(.*?)-->', re.DOTALL)
+
+    def _extract_node_directives(self, text: str):
+        """Return (clean_text, [(type, kwargs), ...]) with directives stripped."""
+        directives = []
+        def _collect(match):
+            try:
+                directives.append((match.group(1), json.loads(match.group(2))))
+            except (json.JSONDecodeError, ValueError):
+                pass
+            return ""
+        clean = self._NODE_DIRECTIVE_RE.sub(_collect, text).strip()
+        return clean, directives
+
+    def _execute_node_directives(self, directives, anchor_node) -> None:
+        """Spawn nodes described by directives and wire them to anchor_node."""
+        scene = self.scene()
+        if not scene:
+            return
+        from PySide6.QtCore import QPointF
+        from graphics.Connection import Connection
+        offset_y = 0.0
+        for node_type, kwargs in directives:
+            factory = getattr(scene, f'add_{node_type}_node', None)
+            if factory is None:
+                continue
+            pos = anchor_node.pos() + QPointF(
+                anchor_node.rect().width() + 30,
+                offset_y,
+            )
+            spawned = factory(pos=pos, **kwargs)
+            conn = Connection(anchor_node, spawned)
+            scene.addItem(conn)
+            offset_y += spawned.rect().height() + 20
+
+    def _spawn_response_node(self, text: str) -> None:
+        """Spawn ClaudeResponseNode(s) with text and wire them into the chain.
+
+        If the text contains <!--chain--> markers, each segment becomes its own
+        response node — chained in order, each with its own directives.
+
+        Placement strategy per segment:
+          1. Extract <!--node:TYPE JSON--> directives from the segment.
+          2. Create the node off-screen so its real dimensions are known.
+          3. Spiral outward from the current camera centre, probing a rect the
              exact size of the node (+ padding) against all existing scene nodes.
-          3. Move the node to the first clear slot — no viewport clamping, so
-             the chain flows wherever the canvas has space.
+          4. Move the node to the first clear slot.
+          5. Wire to the previous node in the chain.
+          6. Spawn any directive nodes and wire them to the response node.
         """
+        segments = text.split('<!--chain-->')
+        for segment in segments:
+            segment = segment.strip()
+            if not segment:
+                continue
+            self._spawn_single_response(segment)
+
+    def _spawn_single_response(self, text: str) -> None:
+        """Spawn one ClaudeResponseNode, place it, wire it, execute directives."""
         import random
         import math
         from PySide6.QtCore import QPointF, QRectF
@@ -519,10 +573,15 @@ class ClaudeNode(BaseNode):
         if not scene:
             return
 
+        # Strip spawn directives before creating the visible response node.
+        clean_text, directives = self._extract_node_directives(text)
+        if not clean_text and not directives:
+            return
+
         # Build the node off-screen first so we know its real size.
         from nodes.BaseNode import BaseNode as _BaseNode
         _OFFSCREEN = QPointF(-999_999, -999_999)
-        node = scene.add_claude_response_node(pos=_OFFSCREEN, label=text)
+        node = scene.add_claude_response_node(pos=_OFFSCREEN, label=clean_text or "(spawned nodes)")
         nr   = node.rect()           # actual width × height after text layout
         NW, NH = nr.width(), nr.height()
         PADDING = 28                 # breathing room around each candidate rect
@@ -593,6 +652,10 @@ class ClaudeNode(BaseNode):
         conn = Connection(wire_source, node)
         scene.addItem(conn)
         self._last_response_node = node
+
+        # Spawn any companion nodes requested by directives in the reply.
+        if directives:
+            self._execute_node_directives(directives, node)
 
     def process_vision(self, image_b64: str, caption: str) -> None:
         """

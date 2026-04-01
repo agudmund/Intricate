@@ -537,6 +537,7 @@ class IntricateApp(QMainWindow):
             (Theme.iconClaude,  self._spawn_claude_node,      "Claude Node"),
             (Theme.iconHealth,  self._spawn_perf_node,        "Paint Performance Monitor"),
             (Theme.iconClaude,  self._spawn_claude_info_node, "Claude Token Census"),
+            (Theme.iconPalette, self._spawn_palette_node,     "Palette"),
         ]
 
         for icon, slot, description in tools:
@@ -664,6 +665,7 @@ class IntricateApp(QMainWindow):
         self._spawn(self.scene.add_text_node, "the README has arrived", label=text)
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
     def _spawn_value_node(self):       self._spawn(self.scene.add_value_node,        "dialing in the value")
+    def _spawn_palette_node(self):     self._spawn(self.scene.add_palette_node,      "mixing colors")
 
     def _styled_menu(self) -> QMenu:
         """Create a QMenu styled to match the PrettyCombo dropdown."""

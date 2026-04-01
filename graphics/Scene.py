@@ -268,6 +268,20 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_palette_node(self, pos: QPointF | None = None, colors: list | None = None):
+        """Add a PaletteNode at pos, optionally pre-filled with colors."""
+        from nodes.PaletteNode import PaletteNode
+        from data.PaletteNodeData import PaletteNodeData
+        data = PaletteNodeData()
+        if colors is not None:
+            data.colors = colors
+        node = PaletteNode(data)
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_value_node(self, pos: QPointF | None = None):
         """Add a ValueNode that scrubs through ./Images/Value/ with a slider."""
         from nodes.ValueNode import ValueNode
@@ -523,6 +537,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.TreeNode import TreeNode
             from data.TreeNodeData import TreeNodeData
             node = TreeNode(TreeNodeData.from_dict(d))
+
+        elif node_type == "palette":
+            from nodes.PaletteNode import PaletteNode
+            from data.PaletteNodeData import PaletteNodeData
+            node = PaletteNode(PaletteNodeData.from_dict(d))
 
         elif node_type == "value":
             from nodes.ValueNode import ValueNode
