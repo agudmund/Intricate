@@ -94,15 +94,17 @@ class ValueNode(BaseNode):
     # ── Ports — single W input only ───────────────────────────────────────────
 
     def _create_ports(self) -> None:
-        """One input port on the W (left-center) edge. No output ports."""
+        """One W input port and one E output port, both at the same calibrated Y."""
         from nodes.Port import Port
-        port = Port(self, is_output=False)
-        self.input_ports  = [port]
-        self.output_ports = []
-        self.input_port   = port
-        self.output_port  = None
+        in_port  = Port(self, is_output=False)
+        out_port = Port(self, is_output=True)
+        self.input_ports  = [in_port]
+        self.output_ports = [out_port]
+        self.input_port   = in_port
+        self.output_port  = out_port
         self._place_ports()
-        port.hide()
+        in_port.hide()
+        out_port.hide()
 
     def _place_ports(self) -> None:
         if not self.input_ports:
@@ -112,10 +114,16 @@ class ValueNode(BaseNode):
         ox     = 10
         y_off  = float(_s.get_nested("node", "value", "input_port_y_offset", 0))
         x_off  = float(_s.get_nested("node", "value", "input_port_x_offset", 0))
-        self.input_ports[0].setPos(-ox + self._CAL_PORT_X + x_off, r.height() / 2 + self._CAL_PORT_Y + y_off)
+        port_y = r.height() / 2 + self._CAL_PORT_Y + y_off
+        self.input_ports[0].setPos(-ox + self._CAL_PORT_X + x_off, port_y)
+        if self.output_ports:
+            self.output_ports[0].setPos(r.width() + ox - self._CAL_PORT_X - x_off, port_y)
 
     def closest_input_port(self, scene_pos):
         return self.input_ports[0]
+
+    def closest_output_port(self, scene_pos):
+        return self.output_ports[0]
 
     # ── Slider style ──────────────────────────────────────────────────────────
 
