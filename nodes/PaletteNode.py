@@ -46,8 +46,8 @@ class _SwatchCell(QWidget):
         self.setStyleSheet("background: transparent;")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(3)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(2)
         layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
         # ── Label ─────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ class _SwatchCell(QWidget):
 
         # ── Hex input ─────────────────────────────────────────────────────────
         self._hex = QLineEdit(hex_color)
-        self._hex.setAlignment(Qt.AlignCenter)
+        self._hex.setAlignment(Qt.AlignRight)
         self._hex.setMaxLength(9)
         self._hex.setStyleSheet(f"""
             QLineEdit {{
@@ -263,10 +263,20 @@ class PaletteNode(BaseNode):
     Colors are arranged in a 2-column grid matching the Photoshop palette style.
     """
 
+    _MIN_PALETTE_W = 280.0
+    _MIN_PALETTE_H = 300.0
+
     def __init__(self, data: PaletteNodeData | None = None):
         if data is None:
             data = PaletteNodeData()
+        # Enforce minimum size for the 2-column layout on session restore
+        if data.width < self._MIN_PALETTE_W:
+            data.width = 300.0
+        if data.height < self._MIN_PALETTE_H:
+            data.height = 420.0
         super().__init__(data)
+        self._min_width  = self._MIN_PALETTE_W
+        self._min_height = self._MIN_PALETTE_H
 
         self._palette: _PaletteWidget | None = None
         self._palette_proxy: QGraphicsProxyWidget | None = None

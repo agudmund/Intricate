@@ -1,0 +1,16 @@
+# Normalize all text files to LF in the repo, native on checkout
+* text=auto eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.qss text eol=lf
+*.json text eol=lf
+
+# Binary — leave untouched
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.psd binary
