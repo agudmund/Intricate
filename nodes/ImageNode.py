@@ -24,7 +24,7 @@ from graphics.Theme import Theme
 import utils.settings as settings
 from utils.logger import setup_logger
 
-logger = setup_logger("Intricate")
+logger = setup_logger("image")
 
 
 # Layout constants
@@ -283,10 +283,7 @@ class ImageNode(BaseNode):
 
     def _on_vision_failed(self, error: str) -> None:
         """Log Vision failure quietly — filename stem caption stays."""
-        try:
-            logger.debug(f"[Vision] caption skipped: {error[:80]}")
-        except Exception:
-            pass
+        logger.debug(f"vision caption skipped: {error[:80]}")
 
     def _restore_from_path(self, path: Path) -> None:
         """Load pixmap from path for session restore — no b64 encode, render context not ready yet."""
@@ -361,7 +358,7 @@ class ImageNode(BaseNode):
                 from send2trash import send2trash
                 send2trash(path)
             except Exception as e:
-                logger.warning(f"[ImageNode] Could not trash '{path}': {e}")
+                logger.warning(f"could not trash '{path}': {e}")
         scene = self.scene()
         if scene:
             from PySide6.QtCore import QTimer

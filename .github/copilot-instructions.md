@@ -37,4 +37,4 @@
 - Always use PowerShell commands exclusively. Do not use Unix/bash commands. The development environment is Windows-based with PowerShell as the shell.
 
 ## Logging
-- Use COZYLOG as the default global log location across the solution; fall back to relative ./logs only when COZYLOG is not set.
+- Log directory is set via `[shared] log_dir` in `settings.toml`; falls back to `./logs/` when not set.

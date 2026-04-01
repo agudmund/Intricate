@@ -173,7 +173,7 @@ xxx = "xxx_node.ico"
 
 ### Logging
 
-Logs go to `$COZYLOG/nodal.log` if set, otherwise `./logs/nodal.log`. Three-slot rotation (current → previous → archive → recycle bin). TRACE (5) is the lowest level — used for per-frame diagnostics in file only.
+Logs go to the directory set in `[shared] log_dir` in `settings.toml`, falling back to `./logs/nodal.log`. Three-slot rotation (current → previous → archive → recycle bin). TRACE (5) is the lowest level — used for per-frame diagnostics in file only.
 
 ## Settings File Structure
 
@@ -214,7 +214,6 @@ Current sections:
 | `SingleSharedBraincell_ApiKey` | Anthropic API key (required for image extraction) |
 | `SingleSharedBraincell_AssetVault` | Optional personal icon/theme vault (overrides bundled assets) |
 | `SingleSharedBraincell_ChatHistory` | Primary chat log folder (e.g. `$project/_doc/Chat`). OS Documents is always written as a second copy regardless. |
-| `COZYLOG` | Log directory (defaults to `./logs/`) |
 
 ## Linguistic Conventions
 

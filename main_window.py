@@ -45,6 +45,7 @@ class IntricateApp(QMainWindow):
         self._drag_pos = None
         self.is_collapsed = False
         self._is_fullscreen = False
+        self._shown_once = False
 
         # 3.  Window OS Defaults
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -1074,11 +1075,18 @@ class IntricateApp(QMainWindow):
         This ensures the window fades in as the Star that it is rather than just popping into existence.
         """
         super().showEvent(event)
-        self._animate_fade_in()
-        QTimer.singleShot(250, lambda: self.show_info(
-            f"{appName} is generally so happy that you are here. ✨"
-        ))
-        QTimer.singleShot(600, self._check_vaporize_restart)
+        if not self._shown_once:
+            self._shown_once = True
+            self._animate_fade_in()
+            QTimer.singleShot(250, lambda: self.show_info(
+                f"{appName} is generally so happy that you are here. ✨"
+            ))
+            QTimer.singleShot(600, self._check_vaporize_restart)
+            if getattr(self, '_pending_fullscreen', False):
+                self._pending_fullscreen = False
+                QTimer.singleShot(0, self.showFullScreen)
+        else:
+            self.setWindowOpacity(1.0)
 
     def _animate_opacity(self, start: float, end: float, duration: int,
                           easing, on_finish=None) -> QPropertyAnimation:
@@ -1141,7 +1149,7 @@ class IntricateApp(QMainWindow):
         self.setGeometry(x, y, w, h)
         if get("window", "fullscreen", False):
             self._is_fullscreen = True
-            self.showFullScreen()
+            self._pending_fullscreen = True  # applied in showEvent after first show
 
     def _save_geometry(self) -> None:
         if self._is_fullscreen and hasattr(self, '_pre_fullscreen_geometry'):

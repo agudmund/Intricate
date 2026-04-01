@@ -73,19 +73,23 @@ def setup_logger(name: str = "nodal") -> logging.Logger:
 
     logger.setLevel(logging.DEBUG)
 
-    # 1. Setup Paths with Environment Variable Priority
-    # Check for $COZYLOG first. If it's not set, use the smart fallback.
-    cozy_env = os.environ.get("COZYLOG")
-
-    if cozy_env:
-        logs_dir = Path(cozy_env)
-    else:
+    # 1. Resolve log directory — [shared] log_dir in settings.toml is the
+    #    single source of truth across the app family. Falls back to ./logs/.
+    logs_dir = None
+    try:
+        from utils.settings import get as _get_setting
+        _val = _get_setting("shared", "log_dir", default=None)
+        if _val:
+            logs_dir = Path(_val)
+    except Exception:
+        pass
+    if logs_dir is None:
         logs_dir = get_base_dir() / "logs"
 
     try:
         logs_dir.mkdir(exist_ok=True, parents=True)
     except Exception:
-        # Emergency fallback if the chosen directory isn't writable
+        # Emergency fallback if the resolved directory isn't writable
         logs_dir = Path(os.path.expanduser("~")) / ".nodal_logs"
         logs_dir.mkdir(exist_ok=True)
 
@@ -111,29 +115,37 @@ def setup_logger(name: str = "nodal") -> logging.Logger:
     # 5. File Handler — plain, rotation is handled manually at startup
     file_handler = logging.FileHandler(log_file, encoding='utf-8')  # Ensures the Sparkle ✨ is saved correctly to disk
     file_handler.setFormatter(formatter)
-    file_handler.setLevel(TRACE)
+    file_handler.setLevel(logging.INFO)   # Elevated to DEBUG/TRACE by set_log_level when --debug/--trace is passed
     logger.addHandler(file_handler)
 
     return logger
 
 
 def set_log_level(debug: bool, trace: bool = False):
-    """Switch console verbosity: INFO (default) → DEBUG (--debug) → TRACE (--trace).
-    FileHandlers are always kept at TRACE so sub-DEBUG diagnostics are
-    preserved in nodal.log without ever surfacing in the console unless --trace is passed.
+    """Switch verbosity across all app loggers: INFO (default) → DEBUG (--debug) → TRACE (--trace).
+    Both the console and file handlers are updated so the log file stays clean in normal mode.
     """
-    logger = logging.getLogger("nodal")
     if trace:
         console_level = TRACE
+        file_level    = TRACE
         logger_level  = TRACE
     elif debug:
         console_level = logging.DEBUG
-        logger_level  = TRACE
+        file_level    = logging.DEBUG
+        logger_level  = logging.DEBUG
     else:
         console_level = logging.INFO
+        file_level    = logging.INFO
         logger_level  = logging.INFO
 
-    logger.setLevel(logger_level)
-    for handler in logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
-            handler.setLevel(console_level)
+    # Update every logger created by setup_logger, not just "nodal" —
+    # otherwise "theme", "imagenode" etc. ignore the level change.
+    for name, lgr in logging.Logger.manager.loggerDict.items():
+        if not isinstance(lgr, logging.Logger):
+            continue
+        lgr.setLevel(logger_level)
+        for handler in lgr.handlers:
+            if isinstance(handler, logging.FileHandler):
+                handler.setLevel(file_level)
+            elif isinstance(handler, logging.StreamHandler):
+                handler.setLevel(console_level)

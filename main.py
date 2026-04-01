@@ -11,6 +11,7 @@ import signal
 import socket
 import argparse
 import ctypes
+import logging
 
 # Reconfigure stdout/stderr to UTF-8 so emoji in log lines don't crash on
 # Windows consoles that default to cp1252 (e.g. plain cmd.exe or PowerShell).
@@ -60,7 +61,13 @@ def main():
     set_log_level(args.debug, args.trace)
     if args.trace:
         logger.log(TRACE, "Trace mode active — verbose diagnostics will appear in console")
-    print(f"{appName} is generally so happy that you are here. ✨")
+    _greeting = f"{appName} is generally so happy that you are here. ✨"
+    print(_greeting)
+    for _h in logger.handlers:
+        if isinstance(_h, logging.FileHandler):
+            _h.stream.write(_greeting + "\n")
+            _h.stream.flush()
+            break
 
     # Qt warnings that are known-harmless and too noisy to keep in the log
     _QT_SUPPRESSED = (

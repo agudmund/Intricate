@@ -48,7 +48,12 @@
       "Bash(C:/python/python.exe -c \":*)",
       "Bash(C:/python/python.exe main.py)",
       "Bash(echo:*)",
-      "Bash(head -5 grep -rn \"iconSequence\\\\|sequence.*icon\\\\|icon.*sequence\" \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Intricate\" --include=\"*.py\")"
+      "Bash(head -5 grep -rn \"iconSequence\\\\|sequence.*icon\\\\|icon.*sequence\" \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Intricate\" --include=\"*.py\")",
+      "Bash(dir \"%COZYLOG%\")",
+      "Bash(dir \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Intricate\\\\logs\")",
+      "Bash(powershell:*)",
+      "Bash(dir C:\\\\Users\\\\thisg\\\\Desktop\\\\Cozy Times\\\\Nodal\\\\logs:*)",
+      "Bash(dir \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Cozy Times\\\\Nodal\\\\logs\")"
     ]
   }
 }
