@@ -563,15 +563,11 @@ class IntricateApp(QMainWindow):
         tree_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
         layout.addWidget(tree_btn)
 
-        # ── Restore last deleted node ─────────────────────────────────────────
-        restore_btn = button(icon_name=Theme.iconRestore, clicked=self._restore_deleted, tooltip="Restore last deleted node")
-        restore_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
-        layout.addWidget(restore_btn)
-
-        # ── Wire snip ────────────────────────────────────────────────────────
-        snip_btn = button(icon_name=Theme.iconSnip, clicked=self._start_wire_snip, tooltip="Snip a wire connection")
-        snip_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
-        layout.addWidget(snip_btn)
+        # ── Tools group (Snip + Restore) ─────────────────────────────────────
+        tools_btn = button(icon_name=Theme.iconToolsGroup, tooltip="Tools")
+        tools_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
+        tools_btn.clicked.connect(lambda: self._show_tools_menu(tools_btn))
+        layout.addWidget(tools_btn)
 
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
         layout.addStretch()
@@ -723,6 +719,15 @@ class IntricateApp(QMainWindow):
         act_text.triggered.connect(self._spawn_text_node)
         act_read.triggered.connect(self._spawn_readme_node)
         act_log.triggered.connect(self._spawn_log_node)
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _show_tools_menu(self, btn: QPushButton) -> None:
+        """Pop a styled context menu under the tools group button."""
+        menu = self._styled_menu()
+        act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "Snip a Wire")
+        act_restore = menu.addAction(QIcon(Theme.icon(Theme.iconRestore, fallback_color="#8aaa88")), "Restore Last Deleted")
+        act_snip.triggered.connect(self._start_wire_snip)
+        act_restore.triggered.connect(self._restore_deleted)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_images_menu(self, btn: QPushButton) -> None:
