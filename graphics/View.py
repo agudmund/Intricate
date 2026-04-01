@@ -99,10 +99,19 @@ class IntricateView(QGraphicsView):
         radius = Theme.nodeRoundRadius
         bw = Theme.nodeBorderWidth
 
-        # Clip out the interior so only the border strip draws —
-        # avoids a translucent fill over the scene content.
         outer = QPainterPath()
         outer.addRoundedRect(vr.adjusted(0, 0, 0, 0), radius, radius)
+
+        # Paint the four corner slivers (outside the rounded rect) with the
+        # window background so nodes dragged near the edge don't bleed through.
+        full = QPainterPath()
+        full.addRect(vr)
+        corners = full.subtracted(outer)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(Theme.windowBg))
+        painter.drawPath(corners)
+
+        # Border strip — drawn on top of the corners.
         inner = QPainterPath()
         inner.addRoundedRect(
             vr.adjusted(bw, bw, -bw, -bw),
@@ -110,7 +119,6 @@ class IntricateView(QGraphicsView):
         )
         border_strip = outer.subtracted(inner)
 
-        painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(Theme.primaryBorder))
         painter.drawPath(border_strip)
         painter.restore()
