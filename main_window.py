@@ -567,6 +567,11 @@ class IntricateApp(QMainWindow):
         restore_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
         layout.addWidget(restore_btn)
 
+        # ── Wire snip ────────────────────────────────────────────────────────
+        snip_btn = button(icon_name=Theme.iconDelete, clicked=self._start_wire_snip, tooltip="Snip a wire connection")
+        snip_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
+        layout.addWidget(snip_btn)
+
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
         layout.addStretch()
 
@@ -677,6 +682,10 @@ class IntricateApp(QMainWindow):
             self._status("restored from the ashes")
         else:
             self._status("nothing to restore")
+
+    def _start_wire_snip(self) -> None:
+        self.view.start_snip_mode()
+        self._status("click a wire to snip it")
 
     def _styled_menu(self) -> QMenu:
         """Create a QMenu styled to match the PrettyCombo dropdown."""

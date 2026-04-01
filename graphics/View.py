@@ -8,7 +8,7 @@
 
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath
+from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QCursor
 
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
@@ -157,8 +157,57 @@ class IntricateView(QGraphicsView):
         self._apply_zoom(factor, anchor=anchor)
         event.accept()
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # SNIP MODE  — one-shot wire deletion
+    # ─────────────────────────────────────────────────────────────────────────
+
+    _snip_mode = False
+
+    def start_snip_mode(self) -> None:
+        """Enter wire-snip mode: cursor becomes the delete icon, next wire click removes it."""
+        self._snip_mode = True
+        cursor_pix = Theme.icon(Theme.iconDelete, fallback_color="#c07070") \
+                         .scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.viewport().setCursor(QCursor(cursor_pix, 16, 16))
+
+    def end_snip_mode(self) -> None:
+        """Exit wire-snip mode and restore the default cursor."""
+        self._snip_mode = False
+        self.viewport().unsetCursor()
+
+    def _try_snip_at(self, scene_pos) -> bool:
+        """Hit-test for a Connection near scene_pos, remove it, return True if found."""
+        from graphics.Connection import Connection
+        from PySide6.QtCore import QRectF
+        # Wires are thin bezier paths — use a tolerance rect so the click doesn't
+        # have to land on the exact sub-pixel centre of the curve.
+        tol = 10.0 / self.current_zoom
+        hit_rect = QRectF(scene_pos.x() - tol, scene_pos.y() - tol, tol * 2, tol * 2)
+        conn = next(
+            (item for item in self.scene().items(hit_rect)
+             if isinstance(item, Connection)),
+            None,
+        )
+        if conn is None:
+            return False
+        try:    conn.start_node.connections.remove(conn)
+        except ValueError: pass
+        try:    conn.end_node.connections.remove(conn)
+        except (ValueError, AttributeError): pass
+        self.scene().removeItem(conn)
+        return True
+
     def mousePressEvent(self, event) -> None:
         """Start pan on middle mouse. Route clicks when a floating wire is active."""
+        if self._snip_mode:
+            if event.button() in (Qt.LeftButton, Qt.RightButton):
+                if event.button() == Qt.LeftButton:
+                    scene_pos = self.mapToScene(event.position().toPoint())
+                    self._try_snip_at(scene_pos)
+                self.end_snip_mode()
+                event.accept()
+                return
+
         self.setFocus()
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = event.position()

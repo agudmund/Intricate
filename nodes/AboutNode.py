@@ -62,6 +62,19 @@ class AboutNode(BaseNode):
     # BUTTONS
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _build_buttons(self) -> None:
+        from nodes.NodeButton import NodeButton
+        super()._build_buttons()
+        pix = Theme.icon(Theme.iconCurtains, fallback_color="#c0a888")
+        self._buttons.append(NodeButton(self, pix, self._shuffle_color))
+
+    def _shuffle_color(self) -> None:
+        scene = self.scene()
+        color = scene._random_palette_color() if scene and hasattr(scene, '_random_palette_color') else ''
+        if color:
+            self.data.accent_color = color
+            self._apply_depth()
+
     def _bg_color(self) -> QColor:
         acc = getattr(self.data, 'accent_color', '')
         if acc:
@@ -76,6 +89,12 @@ class AboutNode(BaseNode):
     def _apply_depth(self) -> None:
         super()._apply_depth()
         self.setBrush(self._bg_color())
+        # Invalidate NodeBehaviour's cached base so the next hover re-captures
+        # the current brush color rather than the stale pre-shuffle value.
+        beh = getattr(self, 'behaviour', None)
+        if beh:
+            beh._bg_base    = None
+            beh._current_bg = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # EDITOR
