@@ -7,6 +7,7 @@
 """
 
 import re
+import time as _time
 from pathlib import Path
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
@@ -20,8 +21,12 @@ import widgets.PrettySlider as pretty_slider
 
 
 _IMAGES_DIR = Path(__file__).resolve().parent.parent / "Images" / "Value"
-_SLIDER_H   = 28
+_SLIDER_H   = 32   # tall enough for the 28px handle icon + 2px each side
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+
+# Cooldown prevents cascade-deletes when the mouse grab transfers after removal
+_SHAKE_COOLDOWN_S   = 0.8
+_shake_cooldown_until: float = 0.0   # module-level, shared across all ValueNode instances
 
 
 def _natural_key(p: Path):
@@ -46,6 +51,8 @@ class ValueNode(BaseNode):
 
         self._frames: list[Path] = self._scan_frames()
         self._pixmap: QPixmap | None = None
+        self._shake_press_active: bool = False
+        self._last_crop: tuple = (self._crop_left(), self._crop_right(), self._crop_top(), self._crop_bottom())
 
         # ── Slider ────────────────────────────────────────────────────────────
         self._slider = pretty_slider.slider(
@@ -59,8 +66,18 @@ class ValueNode(BaseNode):
         self._slider_proxy.setWidget(self._slider)
         self._slider_proxy.setGeometry(self._slider_rect())
 
-        # Transparent fill, border stays visible
+        self.setZValue(self._Z_FLOOR)
+
+        # Transparent fill, border stays visible.
+        # DeviceCoordinateCache renders to an opaque pixmap — disable it so
+        # NoBrush actually lets the scene background show through.
+        from PySide6.QtWidgets import QGraphicsItem
+        self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
         self.setBrush(Qt.NoBrush)
+
+        # Proxy widget background must also be transparent
+        self._slider.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._slider.setAutoFillBackground(False)
 
         # Restore persisted frame without triggering a second valueChanged
         frame = min(data.current_frame, max(len(self._frames) - 1, 0))
@@ -69,14 +86,17 @@ class ValueNode(BaseNode):
         self._slider.blockSignals(False)
         self._seek(frame)
 
+    # ── No button strip — deletion is via shake ───────────────────────────────
+
+    def _build_buttons(self) -> None:
+        pass
+
     # ── Slider style ──────────────────────────────────────────────────────────
 
     def _apply_slider_style(self) -> None:
-        """Transparent rail, value_node.png as the handle icon."""
-        icon_path = Path(__file__).resolve().parent.parent / "icons" / "value_node.png"
-        url  = str(icon_path).replace("\\", "/")
-        size = 20
-        side = -(size // 2 - 2)   # centre the icon on the invisible groove
+        """Invisible rail and handle — interaction area only."""
+        size = 28
+        side = -(size // 2)   # centre the hit area on the zero-height groove
         self._slider.setStyleSheet(f"""
             QSlider::groove:horizontal {{
                 background:    transparent;
@@ -84,10 +104,11 @@ class ValueNode(BaseNode):
                 border:        none;
             }}
             QSlider::handle:horizontal {{
-                image:  url({url});
-                width:  {size}px;
-                height: {size}px;
-                margin: {side}px 0px;
+                background: transparent;
+                border:     none;
+                width:      {size}px;
+                height:     {size}px;
+                margin:     {side}px 0px;
             }}
             QSlider::add-page:horizontal  {{ background: transparent; border: none; }}
             QSlider::sub-page:horizontal  {{ background: transparent; border: none; }}
@@ -104,15 +125,50 @@ class ValueNode(BaseNode):
             key=_natural_key,
         )
 
+    # ── Calibrated crop — baked from source image alpha padding ──────────────
+    # These trim the transparent padding in ./Images/Value/ PNGs so the node
+    # border sits flush against the visible content at any stored node size.
+    # TOML [node.value] crop_* settings add on top for additional fine-tuning.
+    _CAL_LEFT   = 0
+    _CAL_RIGHT  = 15
+    _CAL_TOP    = 0
+    _CAL_BOTTOM = 7
+
     # ── Geometry helpers ──────────────────────────────────────────────────────
 
+    def _crop_left(self) -> float:
+        import utils.settings as _s
+        return float(_s.get_nested("node", "value", "crop_left", 0))
+
+    def _crop_right(self) -> float:
+        import utils.settings as _s
+        return float(_s.get_nested("node", "value", "crop_right", 0))
+
+    def _crop_top(self) -> float:
+        import utils.settings as _s
+        return float(_s.get_nested("node", "value", "crop_top", 0))
+
+    def _crop_bottom(self) -> float:
+        import utils.settings as _s
+        return float(_s.get_nested("node", "value", "crop_bottom", 0))
+
+    def _cropped_rect(self) -> QRectF:
+        r  = self.rect()
+        cl = self._CAL_LEFT   + self._crop_left()
+        cr = self._CAL_RIGHT  + self._crop_right()
+        ct = self._CAL_TOP    + self._crop_top()
+        cb = self._CAL_BOTTOM + self._crop_bottom()
+        return QRectF(r.left() + cl, r.top() + ct, r.width() - cl - cr, r.height() - ct - cb)
+
     def _slider_rect(self) -> QRectF:
-        r = self.rect()
+        r = self._cropped_rect()
         return QRectF(r.left(), r.bottom() - _SLIDER_H, r.width(), _SLIDER_H)
 
     def _image_rect(self) -> QRectF:
+        # Full node width and height above the slider — no button-zone reservation
+        # (ValueNode has no buttons, so that 24px was dead space)
         r = self.rect()
-        return QRectF(r.left(), r.top() + self._BUTTON_ZONE_H, r.width(), r.height() - self._BUTTON_ZONE_H - _SLIDER_H)
+        return QRectF(r.left(), r.top(), r.width(), r.height() - _SLIDER_H)
 
     # ── Frame seek ────────────────────────────────────────────────────────────
 
@@ -127,18 +183,55 @@ class ValueNode(BaseNode):
         self._pixmap = QPixmap(str(self._frames[index]))
         self.update()
 
+    # ── Z depth ───────────────────────────────────────────────────────────────
+
+    _Z_FLOOR = 100.0   # always in front of regular nodes
+
+    def setZValue(self, z: float) -> None:
+        super().setZValue(max(z, self._Z_FLOOR))
+
+    # ── Transparency guard ────────────────────────────────────────────────────
+
+    def setBrush(self, brush):
+        """Always transparent — NodeBehaviour bg-glow must not fill this node."""
+        super().setBrush(Qt.NoBrush)
+
     # ── Paint ─────────────────────────────────────────────────────────────────
 
+    def paint(self, painter, option, widget=None):
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        self.paint_content(painter)
+        painter.restore()
+
+    def shape(self):
+        path = QPainterPath()
+        path.addRoundedRect(self._cropped_rect(), self.round_radius, self.round_radius)
+        return path
+
+    def boundingRect(self):
+        return self._cropped_rect().adjusted(
+            -Theme.nodeShadowMargin, -Theme.nodeShadowMargin,
+             Theme.nodeShadowMargin,  Theme.nodeShadowMargin,
+        )
+
     def paint_content(self, painter: QPainter) -> None:
+        # Reposition slider proxy whenever the crop settings change
+        crop = (self._crop_left(), self._crop_right(), self._crop_top(), self._crop_bottom())
+        if crop != self._last_crop:
+            self._last_crop = crop
+            if hasattr(self, '_slider_proxy') and self._slider_proxy:
+                self._slider_proxy.setGeometry(self._slider_rect())
+
         if not self._pixmap or self._pixmap.isNull():
             return
 
         clip = QPainterPath()
-        clip.addRoundedRect(self.rect(), self.round_radius, self.round_radius)
+        clip.addRoundedRect(self._cropped_rect(), self.round_radius, self.round_radius)
         painter.setClipPath(clip)
 
         img_rect  = self._image_rect()
-        scaled    = self._pixmap.size().scaled(img_rect.size().toSize(), Qt.KeepAspectRatio)
+        scaled    = self._pixmap.size().scaled(img_rect.size().toSize(), Qt.KeepAspectRatioByExpanding)
         x         = img_rect.x() + (img_rect.width()  - scaled.width())  / 2
         y         = img_rect.y() + (img_rect.height() - scaled.height()) / 2
         dest      = QRectF(x, y, scaled.width(), scaled.height())
@@ -150,6 +243,70 @@ class ValueNode(BaseNode):
         super().setRect(rect)
         if hasattr(self, '_slider_proxy') and self._slider_proxy:
             self._slider_proxy.setGeometry(self._slider_rect())
+
+    # ── Mouse press/release guards ────────────────────────────────────────────
+
+    def mousePressEvent(self, event):
+        self._shake_press_active = True
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._shake_press_active = False
+        super().mouseReleaseEvent(event)
+        if getattr(self, '_pending_shake_delete', False):
+            self._pending_shake_delete = False
+            scene = self.scene()
+            if scene:
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: scene.removeItem(self))
+
+    # ── Shake tracking (always active, with or without connections) ───────────
+
+    def _track_shake(self) -> None:
+        """Same as BaseNode but without the `not self.connections` early-out.
+        Gated on _shake_press_active so stray move events after another node's
+        removal can't trigger shake on this node without a proper press first.
+        Also gated on a module-level cooldown that blocks cascade-deletes when
+        Qt transfers the mouse grab after the previous ValueNode was removed."""
+        global _shake_cooldown_until
+        if _time.monotonic() < _shake_cooldown_until:
+            return
+        if not self._shake_press_active:
+            return
+        if self._shake_triggered:
+            return
+        now = _time.monotonic()
+        if self._shake_samples and (now - self._shake_samples[-1][0]) < self._SHAKE_SAMPLE_INTERVAL:
+            return
+        from PySide6.QtCore import QPointF as _QPointF
+        self._shake_samples.append((now, _QPointF(self.scenePos())))
+        cutoff = now - self._SHAKE_WINDOW
+        self._shake_samples = [(t, p) for t, p in self._shake_samples if t >= cutoff]
+        if self._detect_shake():
+            self._shake_triggered = True
+            self._shake_detach()
+
+    # ── Shake-to-delete (unconnected) ────────────────────────────────────────
+
+    def _shake_detach(self) -> None:
+        """When unconnected, a shake deletes the node with a heart burst."""
+        if self.connections:
+            super()._shake_detach()
+            return
+        scene = self.scene()
+        if not scene:
+            return
+        global _shake_cooldown_until
+        _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
+        from graphics.Particles import sprinkle
+        sprinkle(scene, self.mapToScene(self.rect().center()), count=162)
+        # Do NOT call setVisible(False) here — Qt silently ungrabs the mouse
+        # when an item is hidden, so mouseReleaseEvent never fires and
+        # _pending_shake_delete is never processed, leaving an invisible
+        # Z=100 node in the scene that intercepts every subsequent click.
+        # The hearts give sufficient visual feedback; the border is gone
+        # the moment the user releases the mouse.
+        self._pending_shake_delete = True
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
