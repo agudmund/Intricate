@@ -91,6 +91,32 @@ class ValueNode(BaseNode):
     def _build_buttons(self) -> None:
         pass
 
+    # ── Ports — single W input only ───────────────────────────────────────────
+
+    def _create_ports(self) -> None:
+        """One input port on the W (left-center) edge. No output ports."""
+        from nodes.Port import Port
+        port = Port(self, is_output=False)
+        self.input_ports  = [port]
+        self.output_ports = []
+        self.input_port   = port
+        self.output_port  = None
+        self._place_ports()
+        port.hide()
+
+    def _place_ports(self) -> None:
+        if not self.input_ports:
+            return
+        import utils.settings as _s
+        r      = self.rect()
+        ox     = 10
+        y_off  = float(_s.get_nested("node", "value", "input_port_y_offset", 0))
+        x_off  = float(_s.get_nested("node", "value", "input_port_x_offset", 0))
+        self.input_ports[0].setPos(-ox + self._CAL_PORT_X + x_off, r.height() / 2 + self._CAL_PORT_Y + y_off)
+
+    def closest_input_port(self, scene_pos):
+        return self.input_ports[0]
+
     # ── Slider style ──────────────────────────────────────────────────────────
 
     def _apply_slider_style(self) -> None:
@@ -133,6 +159,8 @@ class ValueNode(BaseNode):
     _CAL_RIGHT  = 15
     _CAL_TOP    = 0
     _CAL_BOTTOM = 7
+    _CAL_PORT_Y = -12   # vertical offset from rect center to the input tip
+    _CAL_PORT_X =  10   # horizontal offset added to the base -ox left-edge position
 
     # ── Geometry helpers ──────────────────────────────────────────────────────
 
@@ -185,7 +213,9 @@ class ValueNode(BaseNode):
 
     # ── Z depth ───────────────────────────────────────────────────────────────
 
-    _Z_FLOOR = 100.0   # always in front of regular nodes
+    _Z_FLOOR       = 100.0   # always in front of regular nodes
+    _wire_clip     = False   # no border to tuck into — skip endpoint wire clipping
+    _wire_at_port  = True    # wire terminates exactly at port position, no _INSIDE projection
 
     def setZValue(self, z: float) -> None:
         super().setZValue(max(z, self._Z_FLOOR))
@@ -241,6 +271,10 @@ class ValueNode(BaseNode):
 
     def setRect(self, rect):
         super().setRect(rect)
+        # BaseNode.setRect gates _place_ports on output_ports — we have none,
+        # so re-anchor the single W port manually.
+        if self.input_ports:
+            self._place_ports()
         if hasattr(self, '_slider_proxy') and self._slider_proxy:
             self._slider_proxy.setGeometry(self._slider_rect())
 

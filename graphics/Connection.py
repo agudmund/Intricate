@@ -114,6 +114,11 @@ class Connection(QGraphicsPathItem):
             odx = 0.0
             ody = 1.0 if rel_y > 0 else -1.0
 
+        # Borderless nodes (e.g. ValueNode) skip the _INSIDE projection entirely —
+        # the wire terminates exactly at the port's position.
+        if getattr(node, '_wire_at_port', False):
+            return node.mapToScene(port.pos()), odx, ody
+
         # Inward direction drives the parametric border-crossing calculation.
         nx, ny = -odx, -ody
 
@@ -301,11 +306,13 @@ class Connection(QGraphicsPathItem):
 
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Clip out the interior of both endpoint nodes.
+        # Clip out the interior of the two endpoint nodes only — the wire
+        # disappears seamlessly into its own connected node borders, but
+        # remains visible under any other node it passes beneath.
         clip = QPainterPath()
         clip.addRect(self.boundingRect())
         for ep in (self.start_node, self.end_node):
-            if ep is None:
+            if ep is None or getattr(ep, '_wire_clip', True) is False:
                 continue
             try:
                 rr     = ep.round_radius if hasattr(ep, 'round_radius') else 0
