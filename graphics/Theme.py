@@ -81,7 +81,8 @@ class Theme(metaclass=_ThemeMeta):
     layoutMargins       = (10, 5, 10, 5)
     handleHeightTop     = 25
     handleHeightBottom  = 100
-    windowRollTiming    = 600
+    windowRollTiming    = 450
+    windowRollEasing    = "OutExpo"
 
     # =========================================================================
     # SIDEBAR
@@ -464,6 +465,13 @@ class Theme(metaclass=_ThemeMeta):
             cls.aboutFontVerticalOffset = float(about["font_vertical_offset"])
         if "editor_vertical_offset" in about:
             cls.aboutEditorVerticalOffset = float(about["editor_vertical_offset"])
+
+        # ── Curtains animation ────────────────────────────────────────────────
+        curtains = settings.get_section("theme").get("curtains", {})
+        if "pace_ms" in curtains:
+            cls.windowRollTiming = int(curtains["pace_ms"])
+        if "easing" in curtains:
+            cls.windowRollEasing = curtains["easing"]
 
         # ── Colors ────────────────────────────────────────────────────────────
         colors = settings.get_section("theme").get("colors", {})

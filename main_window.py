@@ -240,8 +240,10 @@ class IntricateApp(QMainWindow):
         from PySide6.QtWidgets import QGraphicsView
         self.view.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.curtain_anim = QPropertyAnimation(self, b"geometry")
-        self.curtain_anim.setDuration(450)
-        self.curtain_anim.setEasingCurve(QEasingCurve.OutExpo)
+        self.curtain_anim.setDuration(Theme.windowRollTiming)
+        self.curtain_anim.setEasingCurve(
+            getattr(QEasingCurve, Theme.windowRollEasing, QEasingCurve.OutExpo)
+        )
         self.curtain_anim.setStartValue(start_rect)
         self.curtain_anim.setEndValue(end_rect)
         self.curtain_anim.finished.connect(
@@ -563,12 +565,7 @@ class IntricateApp(QMainWindow):
         images_btn.clicked.connect(lambda: self._show_images_menu(images_btn))
         layout.addWidget(images_btn)
 
-        # ── Folder Structure — anchored below categories, above the bottom zone ──
-        tree_btn = button(icon_name=Theme.iconTree, clicked=self._spawn_tree_node, tooltip="Folder Structure")
-        tree_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
-        layout.addWidget(tree_btn)
-
-        # ── Tools group (Snip + Restore) ─────────────────────────────────────
+        # ── Tools group (Snip + Restore + Folder Structure) ──────────────────
         tools_btn = button(icon_name=Theme.iconToolsGroup, tooltip="Tools")
         tools_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
         tools_btn.clicked.connect(lambda: self._show_tools_menu(tools_btn))
@@ -731,8 +728,10 @@ class IntricateApp(QMainWindow):
         menu = self._styled_menu()
         act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "Snip a Wire")
         act_restore = menu.addAction(QIcon(Theme.icon(Theme.iconRestore, fallback_color="#8aaa88")), "Restore Last Deleted")
+        act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "Folder Structure")
         act_snip.triggered.connect(self._start_wire_snip)
         act_restore.triggered.connect(self._restore_deleted)
+        act_tree.triggered.connect(self._spawn_tree_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_images_menu(self, btn: QPushButton) -> None:
