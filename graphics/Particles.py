@@ -125,7 +125,7 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
     All particles are registered immediately; a single global QTimer drives
     every opacity update — no per-particle timers.
     """
-    pixmap = Theme.icon(icon_name or "bezier_icon.png", fallback_color=Theme.primaryBorder)
+    pixmap = Theme.icon(icon_name or "heart.png", fallback_color=Theme.primaryBorder)
 
     n = max(count - 1, 1)
     for i in range(count):

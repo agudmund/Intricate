@@ -663,6 +663,7 @@ class IntricateApp(QMainWindow):
             return
         self._spawn(self.scene.add_text_node, "the README has arrived", label=text)
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
+    def _spawn_value_node(self):       self._spawn(self.scene.add_value_node,        "dialing in the value")
 
     def _styled_menu(self) -> QMenu:
         """Create a QMenu styled to match the PrettyCombo dropdown."""
@@ -708,9 +709,13 @@ class IntricateApp(QMainWindow):
         seq_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconSequence)), "Image Sequence Scrubber"
         )
+        val_action = menu.addAction(
+            QIcon(Theme.icon(Theme.iconValue)), "Value Node"
+        )
 
         img_action.triggered.connect(self._spawn_image_node)
         seq_action.triggered.connect(self._spawn_sequence_node)
+        val_action.triggered.connect(self._spawn_value_node)
 
         # Show below the button, left-aligned
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))

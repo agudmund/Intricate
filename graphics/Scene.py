@@ -268,6 +268,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_value_node(self, pos: QPointF | None = None):
+        """Add a ValueNode that scrubs through ./Images/Value/ with a slider."""
+        from nodes.ValueNode import ValueNode
+        from data.ValueNodeData import ValueNodeData
+        node = ValueNode(ValueNodeData())
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     # ─────────────────────────────────────────────────────────────────────────
     # PROJECT IMAGE SYNC
     # ─────────────────────────────────────────────────────────────────────────
@@ -512,6 +523,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.TreeNode import TreeNode
             from data.TreeNodeData import TreeNodeData
             node = TreeNode(TreeNodeData.from_dict(d))
+
+        elif node_type == "value":
+            from nodes.ValueNode import ValueNode
+            from data.ValueNodeData import ValueNodeData
+            node = ValueNode(ValueNodeData.from_dict(d))
 
         elif node_type == "perf":
             from nodes.PerfNode import PerfNode
