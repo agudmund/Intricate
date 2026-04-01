@@ -658,6 +658,7 @@ class IntricateApp(QMainWindow):
     def _spawn_claude_node(self):      self._spawn(self.scene.add_claude_node,       "claude has entered the chat")
     def _spawn_image_node(self):       self._spawn(self.scene.add_image_node,        "a picture is worth everything")
     def _spawn_text_node(self):        self._spawn(self.scene.add_text_node,         "words, words, words")
+    def _spawn_log_node(self):         self._spawn(self.scene.add_log_node,          "tailing the log")
 
     def _spawn_readme_node(self) -> None:
         """Spawn a text node pre-filled with README.md from the session project root."""
@@ -718,8 +719,10 @@ class IntricateApp(QMainWindow):
         menu = self._styled_menu()
         act_text = menu.addAction(QIcon(Theme.icon(Theme.iconText)), "Text Node")
         act_read = menu.addAction(QIcon(Theme.icon(Theme.iconTree)), "README.md")
+        act_log  = menu.addAction(QIcon(Theme.icon(Theme.iconLog,  fallback_color="#8aaa88")), "Log Tail")
         act_text.triggered.connect(self._spawn_text_node)
         act_read.triggered.connect(self._spawn_readme_node)
+        act_log.triggered.connect(self._spawn_log_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_images_menu(self, btn: QPushButton) -> None:

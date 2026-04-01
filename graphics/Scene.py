@@ -233,6 +233,18 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_log_node(self, pos: QPointF | None = None):
+        """Add a LogNode at pos — live tail of the current session log."""
+        from nodes.LogNode import LogNode
+        from data.LogNodeData import LogNodeData
+        node = LogNode(LogNodeData())
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_bezier_node(self, pos: QPointF | None = None):
         """Add a BezierNode at pos."""
         from nodes.BezierNode import BezierNode
@@ -550,6 +562,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.TextNode import TextNode
             from data.TextNodeData import TextNodeData
             node = TextNode(TextNodeData.from_dict(d))
+
+        elif node_type == "log":
+            from nodes.LogNode import LogNode
+            from data.LogNodeData import LogNodeData
+            node = LogNode(LogNodeData.from_dict(d))
 
         elif node_type == "image":
             from nodes.ImageNode import ImageNode
