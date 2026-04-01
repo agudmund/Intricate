@@ -27,6 +27,7 @@ class IntricateScene(QGraphicsScene):
         self.setSceneRect(-500.0, -500.0, 1000.0, 1000.0)
 
         self._floating_conn = None   # Connection being drawn, None when idle
+        self._last_deleted  = None   # dict snapshot of the most recently shake-deleted node
 
         # Monotonic counters — incremented each time a node is raised.
         # Keeps same-tier nodes ordered by recency without crossing z-tiers.
@@ -482,6 +483,15 @@ class IntricateScene(QGraphicsScene):
         # Reset z-counters so restored nodes start from a clean slate
         self._back_z_top  = -10.0
         self._front_z_top =  10.0
+
+    def restore_last_deleted(self) -> bool:
+        """Recreate the most recently shake-deleted node. Returns True on success."""
+        if not self._last_deleted:
+            return False
+        d = self._last_deleted
+        self._last_deleted = None
+        node = self._restore_node(d)
+        return node is not None
 
     def _restore_node(self, d: dict):
         """Recreate a single node from its serialized dict."""

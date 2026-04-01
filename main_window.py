@@ -562,6 +562,11 @@ class IntricateApp(QMainWindow):
         tree_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
         layout.addWidget(tree_btn)
 
+        # ── Restore last deleted node ─────────────────────────────────────────
+        restore_btn = button(icon_name=Theme.iconConfirm, clicked=self._restore_deleted, tooltip="Restore last deleted node")
+        restore_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
+        layout.addWidget(restore_btn)
+
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
         layout.addStretch()
 
@@ -666,6 +671,12 @@ class IntricateApp(QMainWindow):
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
     def _spawn_value_node(self):       self._spawn(self.scene.add_value_node,        "dialing in the value")
     def _spawn_palette_node(self):     self._spawn(self.scene.add_palette_node,      "mixing colors")
+
+    def _restore_deleted(self) -> None:
+        if self.scene.restore_last_deleted():
+            self._status("restored from the ashes")
+        else:
+            self._status("nothing to restore")
 
     def _styled_menu(self) -> QMenu:
         """Create a QMenu styled to match the PrettyCombo dropdown."""

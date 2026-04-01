@@ -21,6 +21,11 @@ from nodes.NodeButton import NodeButton, BUTTON_SIZE
 
 def _c(hex_str): return QColor(hex_str)   # local shorthand
 
+# Shake-to-delete cooldown — module-level, shared across all nodes.
+# Prevents cascade-deletes when Qt transfers the mouse grab after removal.
+_SHAKE_COOLDOWN_S       = 0.8
+_shake_cooldown_until: float = 0.0
+
 
 # Visual constants resolved from Theme at import time
 _BG              = _c(Theme.nodeBg)
@@ -104,9 +109,11 @@ class BaseNode(QGraphicsRectItem):
         self._pending_update        = False
         self._last_scene_pos        = QPointF(data.x, data.y)
 
-        # ── Shake-to-detach ──────────────────────────────────────────────────
-        self._shake_samples: list  = []    # [(monotonic_time, QPointF), ...]
-        self._shake_triggered: bool = False
+        # ── Shake-to-detach / shake-to-delete ────────────────────────────────
+        self._shake_samples: list       = []    # [(monotonic_time, QPointF), ...]
+        self._shake_triggered: bool     = False
+        self._shake_press_active: bool  = False
+        self._pending_shake_delete: bool = False
 
         # ── Behaviour ─────────────────────────────────────────────────────────
         # disconnect_all() is called in _prepare_for_removal — not optional.
@@ -303,9 +310,7 @@ class BaseNode(QGraphicsRectItem):
         If files are missing, Theme.icon() returns a coloured circle fallback
         so the layout holds without requiring assets to be present first.
         """
-        delete_pix         = Theme.icon(Theme.iconDelete,  fallback_color="#c97b7b")
-        delete_confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
-        self._delete_btn   = NodeButton(self, delete_pix, self._delete_self, delete_confirm_pix)
+        self._delete_btn   = None   # shake-to-delete replaces the icon button
         if self._show_ports_btn:
             ports_off_pix = Theme.icon(Theme.portsIconOff, fallback_color="#7a8a9a")
             ports_on_pix  = Theme.icon(Theme.portsIconOn,  fallback_color="#9ab8c9")
@@ -357,14 +362,6 @@ class BaseNode(QGraphicsRectItem):
         if self._delete_btn:
             self._delete_btn.detach()
             self._delete_btn = None
-
-    def _delete_self(self) -> None:
-        """Remove this node from the scene. Called by the delete button.
-        Deferred one event-loop tick so the button's mousePressEvent fully
-        unwinds before Qt tears down the node and its child items."""
-        scene = self.scene()
-        if scene:
-            QTimer.singleShot(0, lambda: scene.removeItem(self))
 
     # ─────────────────────────────────────────────────────────────────────────
     # PORTS
@@ -475,6 +472,7 @@ class BaseNode(QGraphicsRectItem):
         self._is_resizing = False
         self._shake_samples.clear()
         self._shake_triggered = False
+        self._shake_press_active = True
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -495,17 +493,28 @@ class BaseNode(QGraphicsRectItem):
             self._track_shake()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # SHAKE-TO-DETACH
+    # SHAKE-TO-DETACH / SHAKE-TO-DELETE
     # ─────────────────────────────────────────────────────────────────────────
 
     _SHAKE_SAMPLE_INTERVAL = 0.03   # seconds between position samples
     _SHAKE_WINDOW          = 0.40   # seconds of history to keep
-    _SHAKE_MIN_DELTA       = 5.0    # px — ignore jitter smaller than this
+    _SHAKE_MIN_DELTA       = 8.0    # screen-px — ignore jitter smaller than this
     _SHAKE_REVERSALS       = 3      # direction changes needed to trigger
 
     def _track_shake(self) -> None:
-        """Sample position during drag at ~30ms intervals and check for shake."""
-        if not self.connections or self._shake_triggered:
+        """Sample position during drag at ~30ms intervals and check for shake.
+
+        Gated on _shake_press_active so stray move events after another node's
+        removal can't trigger shake without a proper press first.
+        Also gated on a module-level cooldown that blocks cascade-deletes when
+        Qt transfers the mouse grab after the previous node was removed.
+        """
+        global _shake_cooldown_until
+        if _time.monotonic() < _shake_cooldown_until:
+            return
+        if not self._shake_press_active:
+            return
+        if self._shake_triggered:
             return
         now = _time.monotonic()
         if self._shake_samples and (now - self._shake_samples[-1][0]) < self._SHAKE_SAMPLE_INTERVAL:
@@ -518,17 +527,26 @@ class BaseNode(QGraphicsRectItem):
             self._shake_detach()
 
     def _detect_shake(self) -> bool:
-        """Count direction reversals on either axis — 3+ in the window = shake."""
+        """Count direction reversals on either axis — 3+ in the window = shake.
+
+        Deltas are converted to screen-space pixels so the same physical effort
+        is required regardless of zoom level.
+        """
         pts = self._shake_samples
         if len(pts) < 4:
             return False
+        zoom = 1.0
+        scene = self.scene()
+        if scene and scene.views():
+            zoom = getattr(scene.views()[0], 'current_zoom', 1.0)
         for axis in (0, 1):   # 0 = x, 1 = y
             reversals = 0
             prev_d = 0.0
             for i in range(1, len(pts)):
                 d = (pts[i][1].x() - pts[i-1][1].x()) if axis == 0 \
                     else (pts[i][1].y() - pts[i-1][1].y())
-                if abs(d) < self._SHAKE_MIN_DELTA:
+                # Compare in screen pixels — scene delta × zoom
+                if abs(d * zoom) < self._SHAKE_MIN_DELTA:
                     continue
                 if prev_d != 0.0 and d * prev_d < 0:
                     reversals += 1
@@ -538,19 +556,25 @@ class BaseNode(QGraphicsRectItem):
         return False
 
     def _shake_detach(self) -> None:
+        """Shake while connected → detach wires and bridge the gap.
+        Shake while unconnected → dissolve the node with a particle burst."""
+        if self.connections:
+            self._shake_detach_wires()
+        else:
+            self._shake_delete()
+
+    def _shake_detach_wires(self) -> None:
         """Detach all wires from this node and bridge the gap behind it."""
         scene = self.scene()
         if not scene or not self.connections:
             return
         from graphics.Connection import Connection
 
-        # Collect the other endpoints before tearing anything down
         sources = [c.start_node for c in self.connections
                    if c.end_node is self and c.start_node is not None]
         targets = [c.end_node   for c in self.connections
                    if c.start_node is self and c.end_node is not None]
 
-        # Remove every wire attached to this node
         for conn in list(self.connections):
             conn._glide_timer.stop()
             other = conn.end_node if conn.start_node is self else conn.start_node
@@ -563,11 +587,9 @@ class BaseNode(QGraphicsRectItem):
                 scene.removeItem(conn)
         self.connections.clear()
 
-        # Visual celebration — particles burst from the freed node
         from graphics.Particles import sprinkle
         sprinkle(scene, self.mapToScene(self.rect().center()), count=162)
 
-        # Heal the chain: bridge every source → target pair
         for src in sources:
             for tgt in targets:
                 if src is tgt:
@@ -576,14 +598,39 @@ class BaseNode(QGraphicsRectItem):
                 scene.addItem(new_conn)
                 new_conn.update_path()
 
+    def _shake_delete(self) -> None:
+        """Dissolve this node with a particle burst. Deferred to mouseRelease
+        so the mouse grab releases cleanly before the scene removes the item."""
+        global _shake_cooldown_until
+        scene = self.scene()
+        if not scene:
+            return
+        # Snapshot the node data before deletion so the sidebar can restore it.
+        try:
+            scene._last_deleted = self.to_dict()
+        except Exception:
+            pass
+        _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
+        from graphics.Particles import sprinkle
+        sprinkle(scene, self.mapToScene(self.rect().center()), count=162)
+        self._pending_shake_delete = True
+
     def mouseReleaseEvent(self, event):
         self._is_resizing = False
+        self._shake_press_active = False
         # Sync geometry back to data after a resize or move
         self.data.x      = self.pos().x()
         self.data.y      = self.pos().y()
         self.data.width  = self.rect().width()
         self.data.height = self.rect().height()
         super().mouseReleaseEvent(event)
+        # Deferred shake-delete — node stays in scene until mouse grab releases
+        # cleanly, preventing the cascade-delete bug.
+        if self._pending_shake_delete:
+            self._pending_shake_delete = False
+            scene = self.scene()
+            if scene:
+                QTimer.singleShot(0, lambda: scene.removeItem(self))
 
 
     def _try_splice_into_wire(self) -> None:

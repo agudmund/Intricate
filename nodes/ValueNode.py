@@ -7,7 +7,6 @@
 """
 
 import re
-import time as _time
 from pathlib import Path
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
@@ -23,10 +22,6 @@ import widgets.PrettySlider as pretty_slider
 _IMAGES_DIR = Path(__file__).resolve().parent.parent / "Images" / "Value"
 _SLIDER_H   = 32   # tall enough for the 28px handle icon + 2px each side
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
-
-# Cooldown prevents cascade-deletes when the mouse grab transfers after removal
-_SHAKE_COOLDOWN_S   = 0.8
-_shake_cooldown_until: float = 0.0   # module-level, shared across all ValueNode instances
 
 
 def _natural_key(p: Path):
@@ -51,7 +46,6 @@ class ValueNode(BaseNode):
 
         self._frames: list[Path] = self._scan_frames()
         self._pixmap: QPixmap | None = None
-        self._shake_press_active: bool = False
         self._last_crop: tuple = (self._crop_left(), self._crop_right(), self._crop_top(), self._crop_bottom())
 
         # ── Slider ────────────────────────────────────────────────────────────
@@ -285,70 +279,6 @@ class ValueNode(BaseNode):
             self._place_ports()
         if hasattr(self, '_slider_proxy') and self._slider_proxy:
             self._slider_proxy.setGeometry(self._slider_rect())
-
-    # ── Mouse press/release guards ────────────────────────────────────────────
-
-    def mousePressEvent(self, event):
-        self._shake_press_active = True
-        super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        self._shake_press_active = False
-        super().mouseReleaseEvent(event)
-        if getattr(self, '_pending_shake_delete', False):
-            self._pending_shake_delete = False
-            scene = self.scene()
-            if scene:
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(0, lambda: scene.removeItem(self))
-
-    # ── Shake tracking (always active, with or without connections) ───────────
-
-    def _track_shake(self) -> None:
-        """Same as BaseNode but without the `not self.connections` early-out.
-        Gated on _shake_press_active so stray move events after another node's
-        removal can't trigger shake on this node without a proper press first.
-        Also gated on a module-level cooldown that blocks cascade-deletes when
-        Qt transfers the mouse grab after the previous ValueNode was removed."""
-        global _shake_cooldown_until
-        if _time.monotonic() < _shake_cooldown_until:
-            return
-        if not self._shake_press_active:
-            return
-        if self._shake_triggered:
-            return
-        now = _time.monotonic()
-        if self._shake_samples and (now - self._shake_samples[-1][0]) < self._SHAKE_SAMPLE_INTERVAL:
-            return
-        from PySide6.QtCore import QPointF as _QPointF
-        self._shake_samples.append((now, _QPointF(self.scenePos())))
-        cutoff = now - self._SHAKE_WINDOW
-        self._shake_samples = [(t, p) for t, p in self._shake_samples if t >= cutoff]
-        if self._detect_shake():
-            self._shake_triggered = True
-            self._shake_detach()
-
-    # ── Shake-to-delete (unconnected) ────────────────────────────────────────
-
-    def _shake_detach(self) -> None:
-        """When unconnected, a shake deletes the node with a heart burst."""
-        if self.connections:
-            super()._shake_detach()
-            return
-        scene = self.scene()
-        if not scene:
-            return
-        global _shake_cooldown_until
-        _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
-        from graphics.Particles import sprinkle
-        sprinkle(scene, self.mapToScene(self.rect().center()), count=162)
-        # Do NOT call setVisible(False) here — Qt silently ungrabs the mouse
-        # when an item is hidden, so mouseReleaseEvent never fires and
-        # _pending_shake_delete is never processed, leaving an invisible
-        # Z=100 node in the scene that intercepts every subsequent click.
-        # The hearts give sufficient visual feedback; the border is gone
-        # the moment the user releases the mouse.
-        self._pending_shake_delete = True
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
