@@ -237,11 +237,16 @@ class IntricateApp(QMainWindow):
 
     def _animate_curtains(self, start_rect: QRect, end_rect: QRect) -> None:
         """Drive the geometry animation for curtain collapse / expand."""
+        from PySide6.QtWidgets import QGraphicsView
+        self.view.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.curtain_anim = QPropertyAnimation(self, b"geometry")
         self.curtain_anim.setDuration(450)
         self.curtain_anim.setEasingCurve(QEasingCurve.OutExpo)
         self.curtain_anim.setStartValue(start_rect)
         self.curtain_anim.setEndValue(end_rect)
+        self.curtain_anim.finished.connect(
+            lambda: self.view.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
+        )
         self.curtain_anim.start()
 
 
