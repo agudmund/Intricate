@@ -27,27 +27,30 @@ class AboutNodeData(NodeData):
     width:      float = field(default=0.0)   # 0 = auto-size from text at construction
     height:     float = field(default=0.0)   # 0 = use Theme.aboutDefaultHeight
 
-    label:      str   = field(default_factory=lambda: random.choice(motivationalMessages))
-    depth_front: bool = field(default=False)
+    label:        str   = field(default_factory=lambda: random.choice(motivationalMessages))
+    depth_front:  bool  = field(default=False)
+    accent_color: str   = field(default="")   # hex string; "" = use Theme default
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data["label"]       = self.label
-        data["depth_front"] = self.depth_front
+        data["label"]        = self.label
+        data["depth_front"]  = self.depth_front
+        data["accent_color"] = self.accent_color
         return data
 
     @classmethod
     def from_dict(cls, data: dict) -> 'AboutNodeData':
         import uuid as _uuid
         return cls(
-            node_id       = data.get("node_id",   0),
-            title         = data.get("title",     "Note"),
-            uuid          = data.get("uuid",      _uuid.uuid4().hex),
-            x             = float(data.get("x",       0.0)),
-            y             = float(data.get("y",       0.0)),
-            width         = float(data.get("width",     0.0)),
-            height        = float(data.get("height",    0.0)),
+            node_id       = data.get("node_id",      0),
+            title         = data.get("title",        "Note"),
+            uuid          = data.get("uuid",         _uuid.uuid4().hex),
+            x             = float(data.get("x",      0.0)),
+            y             = float(data.get("y",      0.0)),
+            width         = float(data.get("width",  0.0)),
+            height        = float(data.get("height", 0.0)),
             ports_visible = data.get("ports_visible", False),
-            label         = data.get("label",       ""),
-            depth_front   = data.get("depth_front", False),
+            label         = data.get("label",        ""),
+            depth_front   = data.get("depth_front",  False),
+            accent_color  = data.get("accent_color", ""),
         )

@@ -779,36 +779,73 @@ class ClaudeNode(BaseNode):
 
     def _connected_input_context(self) -> str:
         """
-        Collect context from every node wired into this ClaudeNode's input ports.
+        Collect context from nodes wired into this ClaudeNode, up to 2 hops deep.
         Returns a prefix string to prepend to the outgoing prompt, or "" if nothing
         is connected.  Each node type contributes what it knows:
             - All nodes: title and node_type
-            - WarmNode / AboutNode / TextNode: body_text
-            - ImageNode: caption (image bytes handled separately when vision is wired)
+            - WarmNode / AboutNode: body_text / label
+            - PaletteNode: list of hex colors
+            - ImageNode: caption
             - ClaudeResponseNode: label (the response text)
         """
-        parts = []
-        for conn in list(self.connections):
-            try:
-                end = conn.end_node
-                src = conn.start_node
-            except RuntimeError:
-                continue
-            if end is not self:
-                continue
-            if src is None or not hasattr(src, 'data'):
-                continue
+
+        def _node_text(src) -> str:
             if hasattr(src, 'sync_data'):
                 src.sync_data()
             d = src.data
-            section = [f"[{d.node_type}] {d.title}"]
-            if hasattr(d, 'body_text') and d.body_text.strip():
-                section.append(d.body_text.strip())
+            lines = [f"[{d.node_type}] {d.title}"]
+            if hasattr(d, 'colors') and d.colors:
+                for c in d.colors:
+                    h   = c.get('hex', '')
+                    lbl = c.get('label', '').strip()
+                    if h:
+                        lines.append(f"  {lbl}: {h}" if lbl else f"  {h}")
+            elif hasattr(d, 'body_text') and d.body_text.strip():
+                lines.append(d.body_text.strip())
             elif hasattr(d, 'label') and d.label.strip():
-                section.append(d.label.strip())
+                lines.append(d.label.strip())
             elif hasattr(d, 'caption') and d.caption.strip():
-                section.append(f"caption: {d.caption.strip()}")
-            parts.append("\n".join(section))
+                lines.append(f"caption: {d.caption.strip()}")
+            return "\n".join(lines)
+
+        def _input_nodes(node):
+            """Nodes wired into node's input ports (inbound only)."""
+            for conn in list(getattr(node, 'connections', [])):
+                try:
+                    end = conn.end_node
+                    src = conn.start_node
+                except RuntimeError:
+                    continue
+                if end is node and src is not None and hasattr(src, 'data'):
+                    yield src
+
+        def _neighbor_nodes(node):
+            """All nodes connected to node in either direction (for depth-2)."""
+            for conn in list(getattr(node, 'connections', [])):
+                try:
+                    end = conn.end_node
+                    src = conn.start_node
+                except RuntimeError:
+                    continue
+                other = src if (end is node) else end
+                if other is not None and hasattr(other, 'data'):
+                    yield other
+
+        parts = []
+        seen = {id(self)}   # never include ClaudeNode itself
+        for src in _input_nodes(self):
+            uid = id(src)
+            if uid in seen:
+                continue
+            seen.add(uid)
+            parts.append(_node_text(src))
+            for src2 in _neighbor_nodes(src):
+                uid2 = id(src2)
+                if uid2 in seen:
+                    continue
+                seen.add(uid2)
+                parts.append("  " + _node_text(src2).replace("\n", "\n  "))
+
         if not parts:
             return ""
         return "Connected nodes:\n" + "\n\n".join(parts) + "\n\n"

@@ -136,11 +136,30 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def _random_palette_color(self) -> str | None:
+        """Return a random hex string sampled from all PaletteNodes in the scene."""
+        import random
+        from PySide6.QtGui import QColor
+        hexes = []
+        for item in self.items():
+            d = getattr(item, 'data', None)
+            if d and hasattr(d, 'colors'):
+                if hasattr(item, 'sync_data'):
+                    item.sync_data()
+                for c in d.colors:
+                    h = c.get('hex', '')
+                    if h and QColor(h).isValid():
+                        hexes.append(h)
+        return random.choice(hexes) if hexes else None
+
     def add_about_node(self, pos: QPointF | None = None, label: str | None = None):
-        """Add an AboutNode at pos."""
+        """Add an AboutNode at pos, tinted with a random palette color if one exists."""
         from nodes.AboutNode import AboutNode
         from data.AboutNodeData import AboutNodeData
         data = AboutNodeData(label=label) if label is not None else AboutNodeData()
+        color = self._random_palette_color()
+        if color:
+            data.accent_color = color
         node = AboutNode(data)
         if pos is not None:
             node.setPos(pos)
