@@ -133,6 +133,20 @@ class BaseNode(QGraphicsRectItem):
         self.setBrush(QColor(Theme.nodeBg))
         self.setPen(self.current_pen)
 
+        # ── Node tint ─────────────────────────────────────────────────────────
+        # -1 = no tint (natural color); 0..N = index into ColorPicker palette.
+        # _untinted_brush is captured lazily on first button press so subclass
+        # setBrush calls that run after super().__init__() are always captured.
+        self._color_index    = -1
+        self._untinted_brush = None
+        _saved_tint = getattr(self.data, 'node_tint', '')
+        if _saved_tint:
+            from utils.ColorPicker import all_colors as _ac
+            try:
+                self._color_index = _ac().index(_saved_tint)
+            except ValueError:
+                self._color_index = 0
+
         self.setFlags(
             QGraphicsRectItem.ItemIsMovable      |
             QGraphicsRectItem.ItemIsSelectable   |
@@ -323,6 +337,47 @@ class BaseNode(QGraphicsRectItem):
             btn = NodeButton(self, depth_off_pix, self._depth_action, depth_on_pix, toggle=True)
             btn._in_confirm = getattr(self.data, 'depth_front', False)
             self._buttons.append(btn)
+
+        tint_pix = Theme.icon(Theme.iconCurtains, fallback_color="#c0a888")
+        self._buttons.append(NodeButton(self, tint_pix, self._toggle_node_tint))
+
+    def _toggle_node_tint(self) -> None:
+        """Cycle through ColorPicker palette colors as a temporary node highlight.
+        Pressing through all colors returns to the natural default."""
+        from utils.ColorPicker import get as _pick, all_colors as _ac
+        from PySide6.QtGui import QBrush
+        colors = _ac()
+
+        beh = getattr(self, 'behaviour', None)
+        if beh:
+            beh.bg_anim.stop()
+            beh._bg_base    = None
+            beh._current_bg = None
+
+        # Capture natural brush on very first press (after all subclass inits ran)
+        if self._color_index == -1 and self._untinted_brush is None:
+            self._untinted_brush = QBrush(self.brush())
+
+        # Advance: -1 → 0 → 1 → … → N-1 → -1 → …
+        self._color_index = 0 if self._color_index < 0 else (
+            -1 if self._color_index >= len(colors) - 1 else self._color_index + 1
+        )
+
+        if hasattr(self.data, 'node_tint'):
+            # Nodes that own their tint (AboutNode, ClaudeResponseNode): delegate
+            # to their _apply_depth which reads data.node_tint and applies alpha.
+            self.data.node_tint = _pick(self._color_index) if self._color_index >= 0 else ''
+            self._apply_depth()
+        else:
+            # All other nodes: direct brush manipulation; restore on cycle-back.
+            if self._color_index == -1:
+                if self._untinted_brush is not None:
+                    self.setBrush(self._untinted_brush)
+            else:
+                c = QColor(_pick(self._color_index))
+                c.setAlpha(180)
+                self.setBrush(c)
+            self.update()
 
     def _toggle_ports(self) -> None:
         self.set_ports_visible(not self.ports_visible)

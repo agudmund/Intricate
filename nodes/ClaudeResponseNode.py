@@ -59,7 +59,13 @@ class ClaudeResponseNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _bg_color(self) -> QColor:
-        c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
+        acc = getattr(self.data, 'node_tint', '')
+        if acc:
+            c = QColor(acc)
+            if not c.isValid():
+                c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
+        else:
+            c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
         c.setAlpha(Theme.aboutBgAlpha)
         return c
 

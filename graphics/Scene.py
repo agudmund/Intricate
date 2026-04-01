@@ -153,13 +153,12 @@ class IntricateScene(QGraphicsScene):
         return random.choice(hexes) if hexes else None
 
     def add_about_node(self, pos: QPointF | None = None, label: str | None = None):
-        """Add an AboutNode at pos, tinted with a random palette color if one exists."""
+        """Add an AboutNode at pos, tinted with a random color from the global palette."""
         from nodes.AboutNode import AboutNode
         from data.AboutNodeData import AboutNodeData
+        from utils.ColorPicker import random as pick_color
         data = AboutNodeData(label=label) if label is not None else AboutNodeData()
-        color = self._random_palette_color()
-        if color:
-            data.accent_color = color
+        data.node_tint = pick_color()
         node = AboutNode(data)
         if pos is not None:
             node.setPos(pos)
@@ -167,12 +166,12 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
-    def add_claude_response_node(self, pos: QPointF | None = None, label: str = ""):
+    def add_claude_response_node(self, pos: QPointF | None = None, label: str = "", node_tint: str = ""):
         """Add a ClaudeResponseNode (multiline reply sticky) at pos."""
         from nodes.ClaudeResponseNode import ClaudeResponseNode
         from data.ClaudeResponseNodeData import ClaudeResponseNodeData
         from PySide6.QtCore import QPointF
-        node = ClaudeResponseNode(ClaudeResponseNodeData(label=label))
+        node = ClaudeResponseNode(ClaudeResponseNodeData(label=label, node_tint=node_tint))
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)

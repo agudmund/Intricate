@@ -27,15 +27,15 @@ class AboutNodeData(NodeData):
     width:      float = field(default=0.0)   # 0 = auto-size from text at construction
     height:     float = field(default=0.0)   # 0 = use Theme.aboutDefaultHeight
 
-    label:        str   = field(default_factory=lambda: random.choice(motivationalMessages))
-    depth_front:  bool  = field(default=False)
-    accent_color: str   = field(default="")   # hex string; "" = use Theme default
+    label:      str   = field(default_factory=lambda: random.choice(motivationalMessages))
+    depth_front: bool  = field(default=False)
+    node_tint:  str   = field(default="")   # hex string; "" = use Theme default
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data["label"]        = self.label
-        data["depth_front"]  = self.depth_front
-        data["accent_color"] = self.accent_color
+        data["label"]       = self.label
+        data["depth_front"] = self.depth_front
+        data["node_tint"]   = self.node_tint
         return data
 
     @classmethod
@@ -52,5 +52,5 @@ class AboutNodeData(NodeData):
             ports_visible = data.get("ports_visible", False),
             label         = data.get("label",        ""),
             depth_front   = data.get("depth_front",  False),
-            accent_color  = data.get("accent_color", ""),
+            node_tint     = data.get("node_tint", data.get("accent_color", "")),
         )

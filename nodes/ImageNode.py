@@ -24,7 +24,7 @@ from graphics.Theme import Theme
 import utils.settings as settings
 from utils.logger import setup_logger
 
-logger = setup_logger("imagenode")
+logger = setup_logger("Intricate")
 
 
 # Layout constants
@@ -85,6 +85,10 @@ class ImageNode(BaseNode):
         # ── Restore image if session data carries one ─────────────────────────
         if data.image_b64:
             self._load_from_b64(data.image_b64)
+        elif data.source_path:
+            p = Path(data.source_path)
+            if p.exists():
+                self._restore_from_path(p)
 
     # ─────────────────────────────────────────────────────────────────────────
     # CAPTION EDITOR
@@ -280,10 +284,20 @@ class ImageNode(BaseNode):
     def _on_vision_failed(self, error: str) -> None:
         """Log Vision failure quietly — filename stem caption stays."""
         try:
-            from utils.logger import setup_logger
-            setup_logger("imagenode").debug(f"[Vision] caption skipped: {error[:80]}")
+            logger.debug(f"[Vision] caption skipped: {error[:80]}")
         except Exception:
             pass
+
+    def _restore_from_path(self, path: Path) -> None:
+        """Load pixmap from path for session restore — no b64 encode, render context not ready yet."""
+        pixmap = QPixmap(str(path))
+        if pixmap.isNull():
+            return
+        _MAX = 2048
+        if pixmap.width() > _MAX or pixmap.height() > _MAX:
+            pixmap = pixmap.scaled(_MAX, _MAX, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._pixmap = pixmap
+        self._scaled_cache = None
 
     def _load_from_b64(self, b64_str: str) -> None:
         """Reconstruct the pixmap from a base64 PNG string (session restore)."""
@@ -371,6 +385,9 @@ class ImageNode(BaseNode):
 
     def _trigger_vision(self) -> None:
         """Send this node's image to a ClaudeNode's vision API."""
+        if not self.data.image_b64:
+            # File-backed restore: encode on demand now that the render context is live.
+            self._encode_to_b64()
         if not self.data.image_b64:
             return
         from nodes.ClaudeNode import ClaudeNode

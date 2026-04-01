@@ -1075,6 +1075,9 @@ class IntricateApp(QMainWindow):
         """
         super().showEvent(event)
         self._animate_fade_in()
+        QTimer.singleShot(250, lambda: self.show_info(
+            f"{appName} is generally so happy that you are here. ✨"
+        ))
         QTimer.singleShot(600, self._check_vaporize_restart)
 
     def _animate_opacity(self, start: float, end: float, duration: int,
@@ -1092,7 +1095,7 @@ class IntricateApp(QMainWindow):
 
     def _animate_fade_in(self) -> None:
         """Fade the window opacity from 0 → 1 on show."""
-        self.fadeIn = self._animate_opacity(0.0, 1.0, 500, QEasingCurve.OutCubic)
+        self.fadeIn = self._animate_opacity(0.0, 1.0, 200, QEasingCurve.OutCubic)
 
     def _check_vaporize_restart(self):
         """Spawn a response node if the previous session ended via 'then vaporize'."""
@@ -1188,15 +1191,7 @@ class IntricateApp(QMainWindow):
             set_nested("node", "claude", "default_height", h)
 
     def _run_exit_script(self) -> None:
-        word = random.choice(motivationalMessages)
-        result = subprocess.run(
-            f"@echo off & echo {word}",
-            capture_output=True,
-            text=True,
-            shell=True,
-        )
-        if result.stdout.strip():
-            logger.info(result.stdout.strip())
+        logger.info(random.choice(motivationalMessages))
         _main_module = sys.modules.get('__main__')
         if _main_module is not None and getattr(_main_module, '_instance_lock', None) is not None:
             try:
@@ -1204,6 +1199,9 @@ class IntricateApp(QMainWindow):
             except OSError:
                 pass
             _main_module._instance_lock = None
+
+    def _spawn_restart(self) -> None:
+        """Launch the next session. Called after the fade-out completes."""
         main = Path(__file__).resolve().parent / "main.py"
         subprocess.Popen(
             [sys.executable, str(main)],
@@ -1216,13 +1214,19 @@ class IntricateApp(QMainWindow):
         """
         if self.windowOpacity() <= 0.0:
             try:
-                self._cleanup_pycache()
+                import threading
+                threading.Thread(target=self._cleanup_pycache).start()
                 self._persist_claude_node_size()
             except (RuntimeError, Exception):
                 pass
             event.accept()
             return
 
+        try:
+            import ctypes
+            ctypes.windll.kernel32.FreeConsole()
+        except Exception:
+            pass
         try:
             self._autosave()
         except (RuntimeError, Exception):
@@ -1237,7 +1241,10 @@ class IntricateApp(QMainWindow):
         logger.info(f"Exid: {appName} will be back as soon as we can! ✨")
 
     def _animate_fade_out(self) -> None:
-        """Fade the window opacity from current → 0 and trigger close on finish."""
+        """Fade the window opacity from current → 0, spawn the next session, then close."""
+        def _on_faded():
+            self._spawn_restart()
+            self.close()
         self.fadeOut = self._animate_opacity(
-            self.windowOpacity(), 0.0, 300, QEasingCurve.InCubic, on_finish=self.close
+            self.windowOpacity(), 0.0, 120, QEasingCurve.InCubic, on_finish=_on_faded
         )

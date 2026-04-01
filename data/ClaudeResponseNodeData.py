@@ -18,11 +18,13 @@ class ClaudeResponseNodeData(NodeData):
     height:      float = field(default=0.0)
     label:       str   = field(default="")
     depth_front: bool  = field(default=False)
+    node_tint:   str   = field(default="")
 
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["label"]       = self.label
         data["depth_front"] = self.depth_front
+        data["node_tint"]   = self.node_tint
         return data
 
     @classmethod
@@ -39,4 +41,5 @@ class ClaudeResponseNodeData(NodeData):
             ports_visible = data.get("ports_visible", False),
             label         = data.get("label",         ""),
             depth_front   = data.get("depth_front",   False),
+            node_tint     = data.get("node_tint", data.get("accent_color", "")),
         )

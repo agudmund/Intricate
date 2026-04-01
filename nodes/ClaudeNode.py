@@ -581,7 +581,7 @@ class ClaudeNode(BaseNode):
         # Build the node off-screen first so we know its real size.
         from nodes.BaseNode import BaseNode as _BaseNode
         _OFFSCREEN = QPointF(-999_999, -999_999)
-        node = scene.add_claude_response_node(pos=_OFFSCREEN, label=clean_text or "(spawned nodes)")
+        node = scene.add_claude_response_node(pos=_OFFSCREEN, label=clean_text or "(spawned nodes)", node_tint=getattr(self, '_chain_color', ''))
         nr   = node.rect()           # actual width × height after text layout
         NW, NH = nr.width(), nr.height()
         PADDING = 28                 # breathing room around each candidate rect
@@ -889,6 +889,8 @@ class ClaudeNode(BaseNode):
         self._reply_received = False
         self._stdout_accumulated = ""
         self._last_response_node = None   # reset chain — new question anchors back to ClaudeNode
+        from utils.ColorPicker import random as pick_color
+        self._chain_color = pick_color()
         self._stream_q  = queue.SimpleQueue()
         self._status_q  = queue.SimpleQueue()
 

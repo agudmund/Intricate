@@ -1,30 +1,38 @@
 ✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
-Generated: 2026-03-31 03:06:27
+Generated: 2026-04-01 21:29:24
 Location:  C:\Users\thisg\Desktop\Intricate
-Mode:      with cozy emojis
-────────────────────────────────────────────────────────────
-
 ├── 📁 .claude/
 │   └── 📄 settings.local.json
 ├── 📁 .github/
 │   └── 📄 copilot-instructions.md
+├── 📁 backup/
+│   ├── 📄 session_archive.json
+│   └── 📄 session_previous.json
 ├── 📁 data/
 │   ├── 📄 __init__.py
 │   ├── 📄 AboutNodeData.py
 │   ├── 📄 BezierNodeData.py
+│   ├── 📄 ClaudeInfoNodeData.py
 │   ├── 📄 ClaudeNodeData.py
 │   ├── 📄 ClaudeResponseNodeData.py
 │   ├── 📄 HealthNodeData.py
 │   ├── 📄 ImageNodeData.py
 │   ├── 📄 NodeData.py
+│   ├── 📄 PaletteNodeData.py
+│   ├── 📄 PerfNodeData.py
+│   ├── 📄 SequenceNodeData.py
 │   ├── 📄 TextNodeData.py
+│   ├── 📄 TreeNodeData.py
+│   ├── 📄 ValueNodeData.py
 │   └── 📄 WarmNodeData.py
 ├── 📁 Documents/
+│   ├── 📄 Build Version.md
 │   ├── 📄 Docstring Compliance Report.md
 │   └── 📄 Python Header Compliance Guide.md
 ├── 📁 graphics/
 │   ├── 📄 __init__.py
 │   ├── 📄 Connection.py
+│   ├── 📄 Particles.py
 │   ├── 📄 Scene.py
 │   ├── 📄 Theme.py
 │   └── 📄 View.py
@@ -38,31 +46,70 @@ Mode:      with cozy emojis
 │   ├── 📄 depth_off.png
 │   ├── 📄 depth_on.png
 │   ├── 📄 health_icon.png
+│   ├── 📄 heart.png
 │   ├── 📄 I Also Wrote This Poem Just For You.png
 │   ├── 📄 I took a photo of it to show you.png
 │   ├── 📄 iconic.png
 │   ├── 📄 image_icon.png
+│   ├── 📄 image_node.ico
+│   ├── 📄 image_node.png
+│   ├── 📄 images_group.ico
+│   ├── 📄 images_group.png
 │   ├── 📄 Our Love as Intricate as the patterns we impose.png
+│   ├── 📄 palette_node.ico
+│   ├── 📄 palette_node.png
 │   ├── 📄 ports_off.png
 │   ├── 📄 ports_on.png
+│   ├── 📄 sequence_node.ico
+│   ├── 📄 sequence_node.png
+│   ├── 📄 split_node.ico
+│   ├── 📄 split_node.png
 │   ├── 📄 tester.png
+│   ├── 📄 text_node.ico
+│   ├── 📄 text_node.png
+│   ├── 📄 tree_node.ico
+│   ├── 📄 tree_node.png
+│   ├── 📄 value_node.ico
+│   ├── 📄 value_node.png
+│   ├── 📄 vision_eye.ico
+│   ├── 📄 vision_eye.png
 │   └── 📄 warm_icon.PNG
+├── 📁 Images/
+│   └── 📁 Value/
+│       ├── 📄 bar00.png
+│       ├── 📄 bar01.png
+│       ├── 📄 bar02.png
+│       ├── 📄 bar03.png
+│       ├── 📄 bar04.png
+│       ├── 📄 bar05.png
+│       ├── 📄 bar06.png
+│       ├── 📄 bar07.png
+│       ├── 📄 bar08.png
+│       ├── 📄 bar09.png
+│       └── 📄 bar10.png
 ├── 📁 nodes/
 │   ├── 📄 __init__.py
 │   ├── 📄 AboutNode.py
 │   ├── 📄 BaseNode.py
 │   ├── 📄 BezierNode.py
+│   ├── 📄 ClaudeInfoNode.py
 │   ├── 📄 ClaudeNode.py
 │   ├── 📄 ClaudeResponseNode.py
 │   ├── 📄 HealthNode.py
 │   ├── 📄 ImageNode.py
 │   ├── 📄 NodeBehaviour.py
 │   ├── 📄 NodeButton.py
+│   ├── 📄 PaletteNode.py
+│   ├── 📄 PerfNode.py
 │   ├── 📄 Port.py
+│   ├── 📄 SequenceNode.py
 │   ├── 📄 TextNode.py
+│   ├── 📄 TreeNode.py
+│   ├── 📄 ValueNode.py
 │   └── 📄 WarmNode.py
 ├── 📁 utils/
 │   ├── 📄 __init__.py
+│   ├── 📄 ColorPicker.py
 │   ├── 📄 logger.py
 │   ├── 📄 motivationalMessages.py
 │   ├── 📄 OSClickMonitor.py
@@ -73,13 +120,18 @@ Mode:      with cozy emojis
 │   ├── 📄 __init__.py
 │   ├── 📄 NoteEditor.py
 │   ├── 📄 PrettyButton.py
-│   └── 📄 PrettyCombo.py
+│   ├── 📄 PrettyCombo.py
+│   ├── 📄 PrettyLabel.py
+│   └── 📄 PrettySlider.py
+├── 📄 .gitattributes
 ├── 📄 .gitignore
 ├── 📄 build.py
 ├── 📄 CLAUDE.md
 ├── 📄 cozy-tree.txt
+├── 📄 Intricate.exe
 ├── 📄 Intricate.pyproj
 ├── 📄 Intricate.sln
+├── 📄 Intricate.spec
 ├── 📄 main.lnk
 ├── 📄 main.py
 ├── 📄 main_window.py
@@ -87,6 +139,7 @@ Mode:      with cozy emojis
 ├── 📄 NotepadPlusPlusDuplexPlusTurbo.exe
 ├── 📄 README.md
 ├── 📄 requirements.txt
+├── 📄 session.json
 └── 📄 The Thurr - Palette.png
 
 ────────────────────────────────────────────────────────────

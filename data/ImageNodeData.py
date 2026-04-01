@@ -35,7 +35,9 @@ class ImageNodeData(NodeData):
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data["image_b64"]   = self.image_b64
+        # Skip the blob when we have a path — reloads from disk on next session open.
+        # Only fall back to the full b64 for clipboard/pasted images with no file.
+        data["image_b64"]   = "" if self.source_path else self.image_b64
         data["caption"]     = self.caption
         data["source_path"] = self.source_path
         return data
