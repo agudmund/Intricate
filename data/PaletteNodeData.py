@@ -30,7 +30,7 @@ class PaletteNodeData(NodeData):
 
     node_type: str        = field(default="palette")
     title:     str        = field(default="Palette")
-    emoji:     str        = field(default="🎨")
+    emoji:     str        = field(default="😍")
     width:     float      = field(default=300.0)
     height:    float      = field(default=420.0)
     colors:    list       = field(default_factory=_default_colors)

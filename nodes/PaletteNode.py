@@ -283,6 +283,48 @@ class PaletteNode(BaseNode):
         self._build_palette_view()
 
     # ─────────────────────────────────────────────────────────────────────────
+    # BUTTONS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_buttons(self) -> None:
+        from nodes.NodeButton import NodeButton
+        super()._build_buttons()
+        snap_pix = Theme.icon(Theme.iconConfirm, fallback_color="#8cbea0")
+        self._buttons.append(NodeButton(self, snap_pix, self._snapshot_to_png))
+
+    def _snapshot_to_png(self) -> None:
+        """Render the entire node (border, title, swatches) to a PNG."""
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QImage, QPainter as _P
+        from pathlib import Path
+        import utils.settings as _s
+
+        scene = self.scene()
+        if not scene:
+            return
+
+        # Map the node's bounding rect to scene coordinates
+        scene_rect = self.mapRectToScene(self.boundingRect())
+
+        # Render at 2× for crisp output
+        scale = 2
+        w = int(scene_rect.width() * scale)
+        h = int(scene_rect.height() * scale)
+        img = QImage(w, h, QImage.Format_ARGB32_Premultiplied)
+        img.fill(0)  # transparent
+
+        painter = _P(img)
+        painter.setRenderHint(_P.Antialiasing)
+        scene.render(painter, QRectF(0, 0, w, h), scene_rect)
+        painter.end()
+
+        out_dir = Path(_s.get("shared", "images_dir", default="."))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        title = self.data.title.strip() or "Palette"
+        path = out_dir / f"{title}.png"
+        img.save(str(path))
+
+    # ─────────────────────────────────────────────────────────────────────────
     # LAYOUT
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -313,7 +355,64 @@ class PaletteNode(BaseNode):
     # PAINT
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # TITLE EDITING
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        """Double-click on the title row → inline edit the node title."""
+        if event.pos().y() < self.rect().y() + self._BUTTON_ZONE_H + TITLE_GAP + PADDING:
+            self._start_title_edit()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def _start_title_edit(self) -> None:
+        if hasattr(self, '_title_proxy') and self._title_proxy and self._title_proxy.isVisible():
+            return
+        from PySide6.QtWidgets import QLineEdit as _QLE
+        tr = self._title_rect()
+        edit = _QLE(self.data.title)
+        edit.setStyleSheet(f"""
+            QLineEdit {{
+                background: transparent;
+                color:      {Theme.textPrimary};
+                border:     none;
+                font-family: '{Theme.aboutFontFamily}';
+                font-size:   {max(1, Theme.aboutFontSize)}pt;
+                padding:     0;
+            }}
+        """)
+        edit.selectAll()
+
+        self._title_proxy = QGraphicsProxyWidget(self)
+        self._title_proxy.setWidget(edit)
+        self._title_proxy.setGeometry(tr)
+        self._title_proxy.show()
+        edit.setFocus()
+
+        def _commit():
+            self.data.title = edit.text().strip() or "Palette"
+            self._title_proxy.hide()
+            self._title_proxy = None
+            self.update()
+
+        edit.editingFinished.connect(_commit)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # PAINT
+    # ─────────────────────────────────────────────────────────────────────────
+
     def paint_content(self, painter: QPainter) -> None:
+        if hasattr(self, '_title_proxy') and self._title_proxy and self._title_proxy.isVisible():
+            # Draw emoji only — title is handled by the inline editor
+            painter.save()
+            from PySide6.QtGui import QFont
+            painter.setFont(QFont(Theme.healthFontFamily, 14))
+            painter.setPen(QColor(Theme.aboutFontColor))
+            painter.drawText(self._emoji_rect(), Qt.AlignCenter, self.data.emoji)
+            painter.restore()
+            return
         super().paint_content(painter)
 
     # ─────────────────────────────────────────────────────────────────────────
