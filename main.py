@@ -71,7 +71,9 @@ def main():
 
     # Qt warnings that are known-harmless and too noisy to keep in the log
     _QT_SUPPRESSED = (
-        "SamplesPerPixel",   # TIFF ExtraSamples mismatch — cosmetic, not our files
+        "SamplesPerPixel",          # TIFF ExtraSamples mismatch — cosmetic, not our files
+        "engine == 0, type: 3",     # QPixmap.save → internal QPainter on QImage before render context
+        "Painter not active",       # cascade warnings from the above
     )
 
     def _qt_message_handler(msg_type, context, message):

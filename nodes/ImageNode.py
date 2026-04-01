@@ -191,8 +191,6 @@ class ImageNode(BaseNode):
         Load an image from a file path.
 
         Sets the caption to the filename stem if no caption exists yet.
-        Fires a VisionWorker to identify the image content — on response
-        the caption updates automatically. Fire and forget, no blocking.
         Encodes to base64 PNG for session persistence.
         Public — called by file browser and by View.dropEvent.
         """
@@ -221,6 +219,7 @@ class ImageNode(BaseNode):
         if not self.data.caption:
             self.data.caption = path.stem
 
+        logger.info(f"image loaded: {path.name} ({pixmap.width()}x{pixmap.height()}px)")
         self._encode_to_b64()
         self.update()
 
@@ -528,7 +527,10 @@ class ImageNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
-        self._encode_to_b64()   # Ensure b64 is current before serializing
+        # File-backed images: data layer saves source_path and discards b64 anyway —
+        # no need to encode. Paste-only images (no source_path): encode so b64 is fresh.
+        if not self.data.source_path:
+            self._encode_to_b64()
         self.sync_data()
         return self.data.to_dict()
 
