@@ -994,7 +994,7 @@ class IntricateApp(QMainWindow):
         name = project if project is not None else self.project_selector.currentText()
         if not name:
             return None
-        return Path.home() / "Desktop" / name / "session.json"
+        return Path.home() / "Desktop" / name / "Documents" / "data" / "session.json"
 
     def _swap_scene(self) -> None:
         """Replace the current scene with a fresh one on the view.
@@ -1020,17 +1020,47 @@ class IntricateApp(QMainWindow):
         self.scene.selectionChanged.connect(self._on_selection_changed)
 
     def _load_session_into_scene(self, path: Path | None) -> None:
-        """Change cwd to the project folder, load its session, and sync images."""
+        """Change cwd to the project folder, load its session, and sync images.
+
+        Migration: if session.json still sits in the project root (old layout)
+        and Documents/data/ doesn't have one yet, move it there automatically.
+        The backup/ folder beside it migrates too.
+        """
         if not path:
             return
-        if path.parent.exists():
+
+        # project_root is ~/Desktop/{project}/ — two levels above Documents/data/
+        project_root = path.parent.parent.parent
+
+        # ── Migrate legacy root-level session.json ────────────────────────────
+        old_session = project_root / "session.json"
+        if old_session.exists() and not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
             try:
-                os.chdir(str(path.parent))
+                old_session.rename(path)
+                logger.info(f"migrated session.json → {path.relative_to(project_root)}")
+            except OSError as e:
+                logger.warning(f"session migration failed: {e}")
+
+            # Move the old backup/ folder too if it exists
+            old_backup = project_root / "backup"
+            new_backup = path.parent / "backup"
+            if old_backup.exists() and old_backup.is_dir() and not new_backup.exists():
+                try:
+                    old_backup.rename(new_backup)
+                    logger.info("migrated backup/ → Documents/data/backup/")
+                except OSError as e:
+                    logger.warning(f"backup migration failed: {e}")
+
+        # cwd stays at project root — image paths, README, etc. are relative to it
+        if project_root.exists():
+            try:
+                os.chdir(str(project_root))
             except OSError:
                 pass
         if path.exists():
             self.scene.load_session(path)
-        self.scene.sync_project_images(path.parent)
+        self.scene.sync_project_images(project_root)
 
     def _autosave(self) -> None:
         """Save the current canvas to the active project's session.json."""
@@ -1109,10 +1139,28 @@ class IntricateApp(QMainWindow):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        """Move window gently when dragging the top bar."""
+        """Move window gently when dragging the top bar.
+
+        When curtains are rolled up the strip acts as a vertical slider —
+        horizontal position is locked so it only glides up and down.
+        """
         if self._dragging_window:
             new_pos = event.globalPosition().toPoint()
-            self.move(self.pos() + (new_pos - self._drag_pos))
+            delta = new_pos - self._drag_pos
+            if self.is_collapsed:
+                delta.setX(0)
+                # Clamp so the strip never leaves the visible desktop.
+                # Reserve space at the bottom for an auto-hide taskbar —
+                # the difference between full screen and available geometry
+                # tells us the taskbar height; fall back to 48px if it's hidden.
+                full   = self.screen().geometry()
+                avail  = self.screen().availableGeometry()
+                taskbar_h = max(full.height() - avail.height(), 48)
+                new_y = max(avail.top(), self.pos().y() + delta.y())
+                new_y = min(new_y, full.bottom() - self.height() - taskbar_h + 5)
+                self.move(self.pos().x(), new_y)
+            else:
+                self.move(self.pos() + delta)
             self._drag_pos = new_pos
             event.accept()
         else:
