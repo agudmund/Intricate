@@ -15,13 +15,13 @@ from typing import Iterator, List, Optional
 from PySide6.QtWidgets import (
     QGraphicsProxyWidget, QWidget, QVBoxLayout, QPushButton,
 )
-from widgets.PrettyMenu import StyledTextEdit as QTextEdit, StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QIcon
 
 from nodes.BaseNode import BaseNode
 from data.TreeNodeData import TreeNodeData
 from graphics.Theme import Theme
+from widgets.PrettyEdit import PrettyEdit
 
 
 PADDING      = 6.0
@@ -211,11 +211,9 @@ class TreeNode(BaseNode):
             data = TreeNodeData()
         super().__init__(data)
 
-        self._editor: QTextEdit | None = None
-        self._editor_proxy: QGraphicsProxyWidget | None = None
+        self._editor: PrettyEdit | None = None
         self._toolbar_proxy: QGraphicsProxyWidget | None = None
-        self._name_proxy: QGraphicsProxyWidget | None = None
-        self._name_editor: QLineEdit | None = None
+        self._name_editor: PrettyEdit | None = None
         self._build_toolbar()
         self._build_name_input()
         self._build_tree_view()
@@ -310,12 +308,16 @@ class TreeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_name_input(self) -> None:
-        self._name_editor = QLineEdit()
-        self._name_editor.setAlignment(Qt.AlignLeft)
-        self._name_editor.setPlaceholderText("folder name…")
-        self._name_editor.setFrame(False)
+        self._name_editor = PrettyEdit(
+            self,
+            font_family=Theme.healthFontFamily,
+            font_size=9,
+            font_color=Theme.textPrimary,
+            placeholder="folder name\u2026",
+        )
+        # Override stylesheet — this input has a visible background and border
         self._name_editor.setStyleSheet(f"""
-            QLineEdit {{
+            QTextEdit {{
                 background: {Theme.nodeBg};
                 color: {Theme.textPrimary};
                 font-family: {Theme.healthFontFamily};
@@ -326,32 +328,14 @@ class TreeNode(BaseNode):
                 selection-background-color: {Theme.primaryBorder};
             }}
         """)
-        self._name_editor.returnPressed.connect(self._commit_new_folder)
-
-        self._name_proxy = QGraphicsProxyWidget(self)
-        self._name_proxy.setWidget(self._name_editor)
-        self._name_proxy.setGeometry(self._name_input_rect())
-        self._name_proxy.hide()
-        self._name_proxy.setZValue(10)  # float above the tree text
+        self._name_editor.committed.connect(self._on_name_committed)
+        self._name_editor.position(self._name_input_rect())
+        self._name_editor.proxy.setZValue(10)  # float above the tree text
 
     def _show_name_input(self) -> None:
-        self._name_proxy.setGeometry(self._name_input_rect())
-        self._name_editor.clear()
+        self._name_editor.start_edit("", self._name_input_rect(), select_all=False)
 
-        # Lift view focus policy so the embedded QLineEdit can receive keys
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
-
-        self._name_proxy.show()
-        self._name_proxy.setFocus()
-        self._name_editor.setFocus(Qt.MouseFocusReason)
-
-    def _commit_new_folder(self) -> None:
-        name = self._name_editor.text().strip()
-        self._name_proxy.hide()
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
-
+    def _on_name_committed(self, name: str) -> None:
         if not name or not self.data.project_path:
             return
 
@@ -399,38 +383,16 @@ class TreeNode(BaseNode):
         QTimer.singleShot(0, lambda: scene.removeItem(self))
 
     def _build_tree_view(self) -> None:
-        self._editor = QTextEdit()
-        self._editor.setFrameStyle(0)
-        self._editor.setStyleSheet(f"""
-            QTextEdit {{
-                background: transparent;
-                color: {Theme.textPrimary};
-                font-family: 'Cascadia Mono', 'Consolas', monospace;
-                font-size: 8pt;
-                border: none;
-                padding: 2px;
-                selection-background-color: {Theme.primaryBorder};
-            }}
-            QScrollBar:vertical {{
-                background: transparent;
-                width: 6px;
-                margin: 0;
-            }}
-            QScrollBar::handle:vertical {{
-                background: {Theme.primaryBorder};
-                border-radius: 3px;
-                min-height: 20px;
-            }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {{
-                height: 0;
-            }}
-        """)
-
-        self._editor_proxy = QGraphicsProxyWidget(self)
-        self._editor_proxy.setWidget(self._editor)
-        self._editor_proxy.setGeometry(self._body_rect())
-        self._editor_proxy.show()
+        self._editor = PrettyEdit(
+            self,
+            font_family="Cascadia Mono",
+            font_size=8,
+            font_color=Theme.textPrimary,
+            always_visible=True,
+            scrollbar=True,
+            scrollbar_width=6,
+        )
+        self._editor.position(self._body_rect())
 
     # ─────────────────────────────────────────────────────────────────────────
     # SNAPSHOT / REFRESH
@@ -519,11 +481,9 @@ class TreeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def keyPressEvent(self, event) -> None:
-        if self._name_proxy and self._name_proxy.isVisible():
+        if self._name_editor and self._name_editor.proxy.isVisible():
             if event.key() == Qt.Key_Escape:
-                self._name_proxy.hide()
-                if self.scene() and self.scene().views():
-                    self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
+                self._name_editor.cancel()
                 event.accept()
                 return
             event.accept()
@@ -557,22 +517,22 @@ class TreeNode(BaseNode):
         super().setRect(rect)
         if self._toolbar_proxy:
             self._toolbar_proxy.setGeometry(self._toolbar_rect())
-        if self._editor_proxy:
-            self._editor_proxy.setGeometry(self._body_rect())
-        if self._name_proxy:
-            self._name_proxy.setGeometry(self._name_input_rect())
+        if self._editor:
+            self._editor.position(self._body_rect())
+        if self._name_editor:
+            self._name_editor.position(self._name_input_rect())
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
-        if self._name_proxy and self._name_proxy.isVisible():
-            self._name_proxy.hide()
+        if self._name_editor:
+            self._name_editor.teardown()
         if self._toolbar_proxy:
             self._toolbar_proxy.hide()
-        if self._editor_proxy:
-            self._editor_proxy.hide()
+        if self._editor:
+            self._editor.teardown()
         self._editor = None
         self._name_editor = None
         super()._prepare_for_removal()

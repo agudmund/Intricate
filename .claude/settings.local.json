@@ -56,7 +56,8 @@
       "Bash(dir \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Cozy Times\\\\Nodal\\\\logs\")",
       "Bash(C:/python/python.exe -)",
       "Bash(xargs ls:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python build.py)"
     ]
   }
 }

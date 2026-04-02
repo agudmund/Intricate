@@ -13,7 +13,6 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QGraphicsProxyWidget, QFileDialog, QGraphicsItem
 )
-from widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QPointF, QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath
@@ -22,6 +21,7 @@ from PySide6.QtGui import (
 from nodes.BaseNode import BaseNode
 from data.ImageNodeData import ImageNodeData
 from graphics.Theme import Theme
+from widgets.PrettyEdit import PrettyEdit
 import utils.settings as settings
 from utils.logger import setup_logger
 
@@ -79,8 +79,7 @@ class ImageNode(BaseNode):
         self._scaled_cache_size: tuple[int, int] | None = None  # (w, h) key
 
         # ── Caption editor ────────────────────────────────────────────────────
-        self._editor_proxy: QGraphicsProxyWidget | None = None
-        self._editor: QLineEdit | None = None
+        self._editor: PrettyEdit | None = None
         self._build_caption_editor()
 
         # ── Restore image if session data carries one ─────────────────────────
@@ -97,29 +96,17 @@ class ImageNode(BaseNode):
 
     def _build_caption_editor(self) -> None:
         """
-        Construct the QLineEdit proxy and hide it.
+        Construct the PrettyEdit proxy and hide it.
         Built once at node creation, shown/hidden on demand.
         """
-        self._editor = QLineEdit()
-        self._editor.setAlignment(Qt.AlignCenter)
-        self._editor.setFrame(False)
-        self._editor.setStyleSheet(f"""
-            QLineEdit {{
-                background: transparent;
-                color: {Theme.textPrimary};
-                font-family: {Theme.healthFontFamily};
-                font-size: 9pt;
-                border: none;
-                padding: 0px;
-                selection-background-color: {Theme.primaryBorder};
-            }}
-        """)
-        self._editor.returnPressed.connect(self._commit_caption)
-        self._editor.editingFinished.connect(self._commit_caption)
-
-        self._editor_proxy = QGraphicsProxyWidget(self)
-        self._editor_proxy.setWidget(self._editor)
-        self._editor_proxy.hide()
+        self._editor = PrettyEdit(
+            self,
+            font_family=Theme.healthFontFamily,
+            font_size=9,
+            font_color=Theme.textPrimary,
+            commit_on_focus_loss=True,
+        )
+        self._editor.committed.connect(self._on_caption_committed)
 
     def _caption_rect(self) -> QRectF:
         """The caption band at the bottom of the node."""
@@ -138,50 +125,18 @@ class ImageNode(BaseNode):
         )
 
     def _start_caption_edit(self) -> None:
-        """
-        Show the inline editor positioned over the caption band.
+        """Show the inline editor positioned over the caption band."""
+        self._editor.start_edit(self.data.caption, self._caption_rect())
 
-        The view is set to Qt.NoFocus by design so it never steals keyboard
-        focus from toolbar widgets. That same policy blocks the QLineEdit
-        from receiving focus when requested from within the scene.
-
-        Solution: temporarily lift the view to StrongFocus while editing,
-        restore NoFocus on commit or cancel. The window behaves correctly
-        in both states — this is a narrow, deterministic switch.
-        """
-        cr = self._caption_rect()
-        self._editor_proxy.setGeometry(cr)
-        self._editor.setText(self.data.caption)
-        self._editor.selectAll()
-
-        # Lift view focus policy so the embedded QLineEdit can receive keys
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
-
-        self._editor_proxy.show()
-        self._editor_proxy.setFocus()
-        self._editor.setFocus(Qt.MouseFocusReason)
-
-    def _commit_caption(self) -> None:
-        """Save the edited caption, restore view focus policy, hide editor."""
-        if not self._editor_proxy.isVisible():
-            return
-        text = self._editor.text().strip()
+    def _on_caption_committed(self, text: str) -> None:
+        """Save the edited caption text."""
         self.data.caption = text
-        self._editor_proxy.hide()
-        self._restore_view_focus()
         self.update()
 
     def _cancel_caption_edit(self) -> None:
         """Discard edits, restore view focus policy, hide editor."""
-        self._editor_proxy.hide()
-        self._restore_view_focus()
+        self._editor.cancel()
         self.update()
-
-    def _restore_view_focus(self) -> None:
-        """Return the view to NoFocus — editing is done."""
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
 
     # ─────────────────────────────────────────────────────────────────────────
     # IMAGE LOADING
@@ -269,7 +224,7 @@ class ImageNode(BaseNode):
         caption = text.strip().strip(".")
         if caption:
             self.data.caption = caption
-            if self._editor and not self._editor_proxy.isVisible():
+            if self._editor and not self._editor.proxy.isVisible():
                 self.update()
             # Stamp the PNG so future loads skip the API call, even after rename
             src = self.data.source_path
@@ -433,7 +388,7 @@ class ImageNode(BaseNode):
         Backspace/Delete are fully contained here — they never reach the
         scene's delete handler while editing is active.
         """
-        if self._editor_proxy and self._editor_proxy.isVisible():
+        if self._editor and self._editor.proxy.isVisible():
             if event.key() == Qt.Key_Escape:
                 self._cancel_caption_edit()
                 event.accept()
@@ -501,7 +456,7 @@ class ImageNode(BaseNode):
             painter.drawText(ir, Qt.AlignCenter, "double-click\nto load image")
 
         # ── Caption band ──────────────────────────────────────────────────────
-        if not self._editor_proxy or not self._editor_proxy.isVisible():
+        if not self._editor or not self._editor.proxy.isVisible():
             caption_text = self.data.caption or self.data.title
             painter.setPen(QColor(Theme.textPrimary))
             painter.drawText(cr, Qt.AlignCenter, caption_text)
@@ -517,9 +472,8 @@ class ImageNode(BaseNode):
         Clean up ImageNode-specific resources before scene departure.
         Caption editor hidden, view focus restored, pixmap released.
         """
-        if self._editor_proxy and self._editor_proxy.isVisible():
-            self._editor_proxy.hide()
-            self._restore_view_focus()
+        if self._editor:
+            self._editor.teardown()
         self._pixmap = None
         super()._prepare_for_removal()
 

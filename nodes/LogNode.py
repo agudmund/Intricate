@@ -9,13 +9,13 @@
 from pathlib import Path
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
-from widgets.PrettyMenu import StyledTextEdit as QTextEdit
 from PySide6.QtCore import Qt, QRectF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
 from nodes.BaseNode import BaseNode
 from data.LogNodeData import LogNodeData
 from graphics.Theme import Theme
+from widgets.PrettyEdit import PrettyEdit
 
 
 _BUTTON_ZONE_H = 40.0
@@ -51,8 +51,7 @@ class LogNode(BaseNode):
         self._min_height  = Theme.aboutMinHeight
         self._apply_depth()
 
-        self._editor: QTextEdit | None = None
-        self._editor_proxy: QGraphicsProxyWidget | None = None
+        self._editor: PrettyEdit | None = None
         self._build_editor()
 
         # ── File tail ─────────────────────────────────────────────────────────
@@ -87,41 +86,21 @@ class LogNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_editor(self) -> None:
-        self._editor = QTextEdit()
-        self._editor.setReadOnly(True)
-        self._editor.setFrameShape(QTextEdit.NoFrame)
-        self._editor.setFont(QFont("Consolas", 7))
-        self._editor.setStyleSheet(f"""
-            QTextEdit {{
-                background: transparent;
-                color: {Theme.aboutFontColor};
-                font-family: Consolas, "Courier New", monospace;
-                font-size: 7pt;
-                border: none;
-                padding: 0px;
-            }}
-            QScrollBar:vertical {{
-                width: 4px;
-                background: transparent;
-            }}
-            QScrollBar::handle:vertical {{
-                background: {Theme.primaryBorder};
-                border-radius: 2px;
-                min-height: 20px;
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0px;
-            }}
-        """)
-
-        self._editor_proxy = QGraphicsProxyWidget(self)
-        self._editor_proxy.setWidget(self._editor)
+        self._editor = PrettyEdit(
+            self,
+            font_family="Consolas",
+            font_size=7,
+            font_color=Theme.aboutFontColor,
+            always_visible=True,
+            read_only=True,
+            scrollbar=True,
+            scrollbar_width=4,
+        )
         self._position_editor()
-        self._editor_proxy.show()
 
     def _position_editor(self) -> None:
         r = self.rect()
-        self._editor_proxy.setGeometry(QRectF(
+        self._editor.position(QRectF(
             r.left()  + _PAD,
             r.top()   + _BUTTON_ZONE_H,
             r.width() - _PAD * 2,
@@ -185,7 +164,7 @@ class LogNode(BaseNode):
 
     def setRect(self, rect) -> None:
         super().setRect(rect)
-        if hasattr(self, '_editor_proxy') and self._editor_proxy:
+        if hasattr(self, '_editor') and self._editor:
             self._position_editor()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -198,8 +177,8 @@ class LogNode(BaseNode):
             self._watcher.fileChanged.disconnect(self._on_file_changed)
         except RuntimeError:
             pass
-        if self._editor_proxy:
-            self._editor_proxy.hide()
+        if self._editor:
+            self._editor.teardown()
         self._editor = None
         super()._prepare_for_removal()
 

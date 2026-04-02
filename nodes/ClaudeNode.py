@@ -94,7 +94,8 @@ class ClaudeNode(BaseNode):
 
         self._build_body()
         self._build_input()
-        self._auto_connect()
+        # Fresh session each time — _current_uuid stays None until first prompt
+        # self._auto_connect()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SCENE LIFECYCLE — greeting on entry
@@ -105,7 +106,7 @@ class ClaudeNode(BaseNode):
                 and value is not None
                 and not self._greeted):
             # Give the event loop a moment to settle, then consider greeting.
-            QTimer.singleShot(5000, self._attempt_greeting)
+            QTimer.singleShot(2000, self._attempt_greeting)
         return super().itemChange(change, value)
 
     def _attempt_greeting(self) -> None:
@@ -126,7 +127,7 @@ class ClaudeNode(BaseNode):
             retries = getattr(self, '_greeting_retries', 0)
             if retries < 2:
                 self._greeting_retries = retries + 1
-                QTimer.singleShot(4000, self._attempt_greeting)
+                QTimer.singleShot(2000, self._attempt_greeting)
             return
         self._greeted = True
         self._send_greeting()
@@ -149,11 +150,12 @@ class ClaudeNode(BaseNode):
         _tf.write(_GREETING_PROMPT)
         _tf.close()
         _tmp = _tf.name.replace("\\", "/")
+        resume_flag = f"--resume={self._current_uuid} " if self._current_uuid else ""
         _ps_cmd = (
             f"$p = [System.IO.File]::ReadAllText('{_tmp}', "
             f"[System.Text.Encoding]::UTF8); "
             f"Remove-Item '{_tmp}' -ErrorAction SilentlyContinue; "
-            f"$p | claude --resume={self._current_uuid} --print"
+            f"$p | claude {resume_flag}--print"
         )
         _project_cwd = str(Path(__file__).resolve().parent.parent)
 

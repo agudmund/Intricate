@@ -9,7 +9,6 @@
 import random
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
-from widgets.PrettyMenu import StyledTextEdit as QTextEdit
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
 
@@ -25,6 +24,7 @@ _PAD_V          = 8.0    # vertical padding inside text area
 from nodes.BaseNode import BaseNode
 from data.ClaudeResponseNodeData import ClaudeResponseNodeData
 from graphics.Theme import Theme
+from widgets.PrettyEdit import PrettyEdit
 
 
 class ClaudeResponseNode(BaseNode):
@@ -58,8 +58,7 @@ class ClaudeResponseNode(BaseNode):
         self._min_height  = Theme.aboutMinHeight
         self._apply_depth()
 
-        self._editor: QTextEdit | None = None
-        self._editor_proxy: QGraphicsProxyWidget | None = None
+        self._editor: PrettyEdit | None = None
         self._build_editor()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -101,49 +100,30 @@ class ClaudeResponseNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_editor(self) -> None:
-        self._editor = QTextEdit()
-        self._editor.setFrameShape(QTextEdit.NoFrame)
-        self._editor.setStyleSheet(f"""
-            QTextEdit {{
-                background: transparent;
-                color: {Theme.aboutFontColor};
-                font-family: {Theme.aboutFontFamily};
-                font-size: {Theme.aboutFontSize}pt;
-                border: none;
-                padding: 0px;
-                selection-background-color: {Theme.primaryBorder};
-            }}
-        """)
-        self._editor.focusOutEvent = lambda e: (self._commit(), QTextEdit.focusOutEvent(self._editor, e))
+        self._editor = PrettyEdit(
+            self,
+            font_family=Theme.aboutFontFamily,
+            font_size=Theme.aboutFontSize,
+            font_color=Theme.aboutFontColor,
+            commit_on_focus_loss=True,
+        )
+        self._editor.committed.connect(self._on_committed)
 
-        self._editor_proxy = QGraphicsProxyWidget(self)
-        self._editor_proxy.setWidget(self._editor)
-        self._editor_proxy.hide()
-
-    def _start_edit(self) -> None:
+    def _edit_rect(self) -> QRectF:
         r   = self.rect()
         pad = Theme.aboutTextPaddingLeft
         content_top = r.top() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V
-        text_rect = QRectF(r.left() + pad,
-                           content_top,
-                           r.width() - pad * 2,
-                           r.height() - (content_top - r.top()) - _PAD_V)
-        self._editor_proxy.setGeometry(text_rect)
-        self._editor.setPlainText(self.data.label)
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
-        self._editor_proxy.show()
-        self._editor.setFocus(Qt.MouseFocusReason)
+        return QRectF(r.left() + pad,
+                      content_top,
+                      r.width() - pad * 2,
+                      r.height() - (content_top - r.top()) - _PAD_V)
 
-    def _commit(self) -> None:
-        if not self._editor_proxy or not self._editor_proxy.isVisible():
-            return
-        text = self._editor.toPlainText().strip()
+    def _start_edit(self) -> None:
+        self._editor.start_edit(self.data.label, self._edit_rect(), select_all=False)
+
+    def _on_committed(self, text: str) -> None:
         if text:
             self.data.label = text
-        self._editor_proxy.hide()
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
         self.update()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -155,11 +135,9 @@ class ClaudeResponseNode(BaseNode):
         event.accept()
 
     def keyPressEvent(self, event) -> None:
-        if self._editor_proxy and self._editor_proxy.isVisible():
+        if self._editor and self._editor.proxy.isVisible():
             if event.key() == Qt.Key_Escape:
-                self._editor_proxy.hide()
-                if self.scene() and self.scene().views():
-                    self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
+                self._editor.cancel()
                 self.update()
                 event.accept()
                 return
@@ -172,7 +150,7 @@ class ClaudeResponseNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
-        if self._editor_proxy and self._editor_proxy.isVisible():
+        if self._editor and self._editor.proxy.isVisible():
             return
         painter.save()
 
@@ -195,10 +173,8 @@ class ClaudeResponseNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
-        if self._editor_proxy and self._editor_proxy.isVisible():
-            self._editor_proxy.hide()
-            if self.scene() and self.scene().views():
-                self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
+        if self._editor:
+            self._editor.teardown()
         self._editor = None
         super()._prepare_for_removal()
 

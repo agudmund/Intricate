@@ -7,7 +7,6 @@
 """
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
-from widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QSizeF
 from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
 
@@ -18,6 +17,7 @@ _Z_BACK        = -10.0
 from nodes.BaseNode import BaseNode
 from data.AboutNodeData import AboutNodeData
 from graphics.Theme import Theme
+from widgets.PrettyEdit import PrettyEdit
 
 
 class AboutNode(BaseNode):
@@ -56,8 +56,7 @@ class AboutNode(BaseNode):
         self._min_height = Theme.aboutMinHeight / 2 + 5
         self._apply_depth()
 
-        self._editor: QLineEdit | None = None
-        self._editor_proxy: QGraphicsProxyWidget | None = None
+        self._editor: PrettyEdit | None = None
         self._build_editor()
 
         # Button row starts hidden — double-click the top strip to reveal
@@ -101,50 +100,28 @@ class AboutNode(BaseNode):
         return _BUTTON_ZONE_H if self._buttons_visible else 6.0
 
     def _build_editor(self) -> None:
-        self._editor = QLineEdit()
-        self._editor.setAlignment(Qt.AlignLeft)
-        self._editor.setFrame(False)
-        self._editor.setStyleSheet(f"""
-            QLineEdit {{
-                background: transparent;
-                color: {Theme.aboutFontColor};
-                font-family: {Theme.aboutFontFamily};
-                font-size: {Theme.aboutFontSize}pt;
-                border: none;
-                padding: 0px;
-                selection-background-color: {Theme.primaryBorder};
-            }}
-        """)
-        self._editor.returnPressed.connect(self._commit)
-        self._editor.editingFinished.connect(self._commit)
+        self._editor = PrettyEdit(
+            self,
+            font_family=Theme.aboutFontFamily,
+            font_size=Theme.aboutFontSize,
+            font_color=Theme.aboutFontColor,
+            commit_on_focus_loss=True,
+        )
+        self._editor.committed.connect(self._on_committed)
 
-        self._editor_proxy = QGraphicsProxyWidget(self)
-        self._editor_proxy.setWidget(self._editor)
-        self._editor_proxy.hide()
-
-    def _start_edit(self) -> None:
+    def _edit_rect(self) -> QRectF:
         r = self.rect()
         pad = Theme.aboutTextPaddingLeft
         top = self._top_offset()
-        text_rect = QRectF(r.left() + pad, r.top() + top + Theme.aboutEditorVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - top)
-        self._editor_proxy.setGeometry(text_rect)
-        self._editor.setText(self.data.label or self.data.title)
-        self._editor.selectAll()
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
-        self._editor_proxy.show()
-        self._editor.setFocus(Qt.MouseFocusReason)
+        return QRectF(r.left() + pad, r.top() + top + Theme.aboutEditorVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - top)
 
-    def _commit(self) -> None:
-        if not self._editor_proxy.isVisible():
-            return
-        text = self._editor.text().strip()
+    def _start_edit(self) -> None:
+        self._editor.start_edit(self.data.label or self.data.title, self._edit_rect())
+
+    def _on_committed(self, text: str) -> None:
         if text:
             self.data.label = text
             self.data.title = text
-        self._editor_proxy.hide()
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
         self.update()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -163,11 +140,9 @@ class AboutNode(BaseNode):
         event.accept()
 
     def keyPressEvent(self, event) -> None:
-        if self._editor_proxy and self._editor_proxy.isVisible():
+        if self._editor and self._editor.proxy.isVisible():
             if event.key() == Qt.Key_Escape:
-                self._editor_proxy.hide()
-                if self.scene() and self.scene().views():
-                    self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
+                self._editor.cancel()
                 self.update()
                 event.accept()
                 return
@@ -180,7 +155,7 @@ class AboutNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
-        if self._editor_proxy and self._editor_proxy.isVisible():
+        if self._editor and self._editor.proxy.isVisible():
             return
         painter.save()
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
@@ -200,10 +175,8 @@ class AboutNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
-        if self._editor_proxy and self._editor_proxy.isVisible():
-            self._editor_proxy.hide()
-            if self.scene() and self.scene().views():
-                self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
+        if self._editor:
+            self._editor.teardown()
         self._editor = None
         super()._prepare_for_removal()
 

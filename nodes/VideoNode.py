@@ -11,7 +11,6 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QGraphicsProxyWidget, QFileDialog, QGraphicsItem
 )
-from widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QSizeF
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath, QFont
@@ -21,6 +20,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink, QVideoF
 from nodes.BaseNode import BaseNode
 from data.VideoNodeData import VideoNodeData
 from graphics.Theme import Theme
+from widgets.PrettyEdit import PrettyEdit
 import utils.settings as settings
 from utils.logger import setup_logger
 
@@ -100,8 +100,7 @@ class VideoNode(BaseNode):
         self._was_playing: bool = False   # track state across scrub
 
         # ── Caption editor ────────────────────────────────────────────────────
-        self._editor_proxy: QGraphicsProxyWidget | None = None
-        self._editor: QLineEdit | None = None
+        self._editor: PrettyEdit | None = None
         self._build_caption_editor()
 
         # ── Restore from session ──────────────────────────────────────────────
@@ -115,26 +114,14 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_caption_editor(self) -> None:
-        self._editor = QLineEdit()
-        self._editor.setAlignment(Qt.AlignCenter)
-        self._editor.setFrame(False)
-        self._editor.setStyleSheet(f"""
-            QLineEdit {{
-                background: transparent;
-                color: {Theme.textPrimary};
-                font-family: {Theme.healthFontFamily};
-                font-size: 9pt;
-                border: none;
-                padding: 0px;
-                selection-background-color: {Theme.primaryBorder};
-            }}
-        """)
-        self._editor.returnPressed.connect(self._commit_caption)
-        self._editor.editingFinished.connect(self._commit_caption)
-
-        self._editor_proxy = QGraphicsProxyWidget(self)
-        self._editor_proxy.setWidget(self._editor)
-        self._editor_proxy.hide()
+        self._editor = PrettyEdit(
+            self,
+            font_family=Theme.healthFontFamily,
+            font_size=9,
+            font_color=Theme.textPrimary,
+            commit_on_focus_loss=True,
+        )
+        self._editor.committed.connect(self._on_caption_committed)
 
     def _caption_rect(self) -> QRectF:
         r = self.rect()
@@ -160,32 +147,15 @@ class VideoNode(BaseNode):
         )
 
     def _start_caption_edit(self) -> None:
-        cr = self._caption_rect()
-        self._editor_proxy.setGeometry(cr)
-        self._editor.setText(self.data.caption)
-        self._editor.selectAll()
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
-        self._editor_proxy.show()
-        self._editor_proxy.setFocus()
-        self._editor.setFocus(Qt.MouseFocusReason)
+        self._editor.start_edit(self.data.caption, self._caption_rect())
 
-    def _commit_caption(self) -> None:
-        if not self._editor_proxy.isVisible():
-            return
-        self.data.caption = self._editor.text().strip()
-        self._editor_proxy.hide()
-        self._restore_view_focus()
+    def _on_caption_committed(self, text: str) -> None:
+        self.data.caption = text
         self.update()
 
     def _cancel_caption_edit(self) -> None:
-        self._editor_proxy.hide()
-        self._restore_view_focus()
+        self._editor.cancel()
         self.update()
-
-    def _restore_view_focus(self) -> None:
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
 
     # ─────────────────────────────────────────────────────────────────────────
     # MEDIA PLAYER
@@ -362,7 +332,7 @@ class VideoNode(BaseNode):
         super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event) -> None:
-        if self._editor_proxy and self._editor_proxy.isVisible():
+        if self._editor.proxy and self._editor.proxy.isVisible():
             if event.key() == Qt.Key_Escape:
                 self._cancel_caption_edit()
                 event.accept()
@@ -470,7 +440,7 @@ class VideoNode(BaseNode):
                 painter.drawPath(path)
 
         # ── Caption band ─────────────────────────────────────────────────────
-        if not self._editor_proxy or not self._editor_proxy.isVisible():
+        if not self._editor.proxy or not self._editor.proxy.isVisible():
             caption_text = self.data.caption or self.data.title
             painter.setPen(QColor(Theme.textPrimary))
             font = painter.font()
@@ -490,9 +460,8 @@ class VideoNode(BaseNode):
         self._player.durationChanged.disconnect(self._on_duration_changed)
         self._player.positionChanged.disconnect(self._on_position_changed)
         self._player.mediaStatusChanged.disconnect(self._on_media_status)
-        if self._editor_proxy and self._editor_proxy.isVisible():
-            self._editor_proxy.hide()
-            self._restore_view_focus()
+        if self._editor:
+            self._editor.teardown()
         self._frame_pixmap = None
         super()._prepare_for_removal()
 
