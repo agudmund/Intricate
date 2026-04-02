@@ -154,6 +154,7 @@ def buildApp():
         return
 
     # 2. Build Args
+    appIcon = projectRoot / iconsFolder / "intricate.ico"
     args = [
         entryPoint,
         f"--name={appName}",
@@ -162,7 +163,9 @@ def buildApp():
         "--noconfirm",
         "--clean",
         "--exclude-module=pygame",
+        f"--icon={appIcon}",
         f"--add-data={iconsFolder}{os.pathsep}{iconsFolder}",
+        f"--add-data=Images{os.pathsep}Images",
     ]
 
     # 3. PyInstaller Execution
@@ -196,6 +199,12 @@ def buildApp():
 
     finalExe = projectRoot / f"{appName}.exe"
     if finalExe.exists():
+        # Touch the exe so Explorer sees a fresh timestamp and re-reads the icon
+        os.utime(str(finalExe))
+        # Flush the Windows shell icon cache — desktop.ini customizations survive
+        subprocess.run(["ie4uinit.exe", "-show"], capture_output=True)
+        print("🔄 Windows icon cache refreshed")
+
         print(f"\n✨ Success! Launching {appName}.exe...")
         subprocess.Popen([str(finalExe)])
         print(f"Check your logs to see if the sparkle ✨ [{newSignature}] arrived safely.")
