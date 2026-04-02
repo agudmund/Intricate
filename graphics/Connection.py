@@ -149,16 +149,8 @@ class Connection(QGraphicsPathItem):
         return node.mapToScene(node.rect().center())
 
     def _sync_z(self):
-        """
-        Match the wire's z to its lowest endpoint node.  Same-z ties are broken
-        by scene insertion order — nodes are added before wires, so nodes still
-        paint over the wire without the sub-pixel render-order seam that
-        z - epsilon introduced at the thin source end of the taper.
-        """
-        z = self.start_node.zValue()
-        if self.end_node:
-            z = min(z, self.end_node.zValue())
-        self.setZValue(z)
+        """Place the wire above all nodes so it is always visible."""
+        self.setZValue(9999.0)
 
     # ------------------------------------------------------------------
     # Path construction
@@ -306,27 +298,7 @@ class Connection(QGraphicsPathItem):
 
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Clip out the interior of the two endpoint nodes only — the wire
-        # disappears seamlessly into its own connected node borders, but
-        # remains visible under any other node it passes beneath.
-        clip = QPainterPath()
-        clip.addRect(self.boundingRect())
-        for ep in (self.start_node, self.end_node):
-            if ep is None or getattr(ep, '_wire_clip', True) is False:
-                continue
-            try:
-                rr     = ep.round_radius if hasattr(ep, 'round_radius') else 0
-                bw     = ep.current_pen.widthF() if hasattr(ep, 'current_pen') else 2.0
-                margin = bw / 2.0
-                cutout = QPainterPath()
-                cutout.addRoundedRect(
-                    ep.rect().adjusted(-margin, -margin, margin, margin),
-                    rr + margin, rr + margin,
-                )
-                clip = clip.subtracted(ep.sceneTransform().map(cutout))
-            except RuntimeError:
-                pass
-        painter.setClipPath(clip)
+        # Wires render above all nodes — no clip cutout needed.
 
         def _ep_color(node):
             if node is not None and node.isSelected():

@@ -32,6 +32,7 @@ class VideoNodeData(NodeData):
     caption:     str   = field(default="")      # Editable label shown on the node
     volume:      int   = field(default=50)      # 0–100, persisted
     playback_pos: int  = field(default=0)       # Milliseconds into the video at save time
+    looping:      bool = field(default=False)   # Whether playback loops
 
     def to_dict(self) -> dict:
         data = super().to_dict()
@@ -39,6 +40,7 @@ class VideoNodeData(NodeData):
         data["caption"]       = self.caption
         data["volume"]        = self.volume
         data["playback_pos"]  = self.playback_pos
+        data["looping"]       = self.looping
         return data
 
     @classmethod
@@ -57,4 +59,5 @@ class VideoNodeData(NodeData):
             caption       = data.get("caption",       ""),
             volume        = data.get("volume",        50),
             playback_pos  = data.get("playback_pos",  0),
+            looping       = data.get("looping",       False),
         )

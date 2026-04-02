@@ -8,9 +8,10 @@
 
 import random
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QLabel,
-    QLineEdit, QGraphicsDropShadowEffect
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+    QGraphicsDropShadowEffect
 )
+from widgets.PrettyMenu import StyledTextEdit as QTextEdit, StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QFont
 from utils.spellchecker import DebouncedSpellHighlighter, show_spell_suggestions, SPELL_CHECKER_TYPE

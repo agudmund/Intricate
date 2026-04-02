@@ -10,8 +10,9 @@ import json as _json
 
 from PySide6.QtWidgets import (
     QGraphicsProxyWidget, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLineEdit, QFrame, QPushButton, QScrollArea, QLabel,
+    QFrame, QPushButton, QScrollArea, QLabel,
 )
+from widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QMimeData, QPoint, QByteArray, QEvent
 from PySide6.QtGui import QPainter, QColor, QDrag, QPixmap
 
@@ -476,9 +477,8 @@ class PaletteNode(BaseNode):
     def _start_title_edit(self) -> None:
         if hasattr(self, '_title_proxy') and self._title_proxy and self._title_proxy.isVisible():
             return
-        from PySide6.QtWidgets import QLineEdit as _QLE
         tr = self._title_rect()
-        edit = _QLE(self.data.title)
+        edit = QLineEdit(self.data.title)
         edit.setStyleSheet(f"""
             QLineEdit {{
                 background: transparent;

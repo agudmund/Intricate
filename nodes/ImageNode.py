@@ -11,8 +11,9 @@ import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QGraphicsProxyWidget, QLineEdit, QFileDialog, QGraphicsItem
+    QGraphicsProxyWidget, QFileDialog, QGraphicsItem
 )
+from widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QPointF, QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath

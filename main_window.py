@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea, QMenu, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
@@ -23,6 +23,7 @@ from graphics.Theme import Theme
 from nodes.ClaudeNode import ClaudeNode
 from nodes.ImageNode import ImageNode
 from widgets.PrettyButton import button
+from widgets.PrettyMenu import menu as pretty_menu
 from utils.logger import setup_logger
 from utils.PhrasePicker import motivationalMessages
 from utils.settings import appName, set_nested, get_nested, set_value, get
@@ -694,29 +695,9 @@ class IntricateApp(QMainWindow):
         self.view.start_snip_mode()
         self._status("click a wire to snip it")
 
-    def _styled_menu(self) -> QMenu:
-        """Create a QMenu styled to match the PrettyCombo dropdown."""
-        menu = QMenu(self)
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background:    {Theme.backDrop};
-                color:         {Theme.textPrimary};
-                border:        1px solid {Theme.primaryBorder};
-                border-radius: 9px;
-                padding:       4px;
-                font-family:   '{Theme.healthFontFamily}';
-                font-size:     {Theme.healthFontSizeLabel}pt;
-            }}
-            QMenu::item {{
-                padding:       5px 16px;
-                border-radius: 5px;
-            }}
-            QMenu::item:selected {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #1e1e1e, stop:0.4 #5c3e4f,
-                    stop:0.7 #a56a85, stop:1 #d87a9e);
-            }}
-        """)
+    def _styled_menu(self):
+        """Create a PrettyMenu styled to match the app's visual language."""
+        return pretty_menu(self)
         return menu
 
     def _show_text_menu(self, btn: QPushButton) -> None:

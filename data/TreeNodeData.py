@@ -21,7 +21,7 @@ class TreeNodeData(NodeData):
 
     node_type:    str   = field(default="tree")
     title:        str   = field(default="Tree")
-    emoji:        str   = field(default="✨")
+    emoji:        str   = field(default="")
     width:        float = field(default=360.0)
     height:       float = field(default=492.0)
     tree_text:    str   = field(default="")

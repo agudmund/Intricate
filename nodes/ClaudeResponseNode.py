@@ -8,7 +8,8 @@
 
 import random
 
-from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
+from PySide6.QtWidgets import QGraphicsProxyWidget
+from widgets.PrettyMenu import StyledTextEdit as QTextEdit
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
 

@@ -9,8 +9,9 @@
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QGraphicsProxyWidget, QLineEdit, QFileDialog, QGraphicsItem
+    QGraphicsProxyWidget, QFileDialog, QGraphicsItem
 )
+from widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QSizeF
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath, QFont
@@ -217,6 +218,10 @@ class VideoNode(BaseNode):
                 # Grab one frame so the node isn't blank
                 self._player.play()
                 self._player.pause()
+        elif status == QMediaPlayer.MediaStatus.EndOfMedia:
+            if self.data.looping:
+                self._player.setPosition(0)
+                self._player.play()
 
     def _on_frame(self, frame: QVideoFrame) -> None:
         """Convert each video frame to a QPixmap for painting."""
@@ -242,6 +247,9 @@ class VideoNode(BaseNode):
         else:
             self._player.play()
         self.update()
+
+    def _toggle_loop(self) -> None:
+        self.data.looping = not self.data.looping
 
     def _stop(self) -> None:
         self._player.stop()
@@ -279,6 +287,11 @@ class VideoNode(BaseNode):
     def _build_buttons(self) -> None:
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
+        loop_off_pix = Theme.icon(Theme.iconLoopOff, fallback_color="#7a8a9a")
+        loop_on_pix  = Theme.icon(Theme.iconLoopOn,  fallback_color="#8cbea0")
+        self._loop_btn = NodeButton(self, loop_off_pix, self._toggle_loop, loop_on_pix, toggle=True)
+        self._loop_btn._in_confirm = self.data.looping
+        self._buttons.append(self._loop_btn)
         trash_pix   = Theme.icon(Theme.iconDelete,  fallback_color="#c97b7b")
         confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
         self._buttons.append(NodeButton(self, trash_pix, self._delete_source_file, confirm_pix))

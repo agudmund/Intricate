@@ -10,6 +10,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import QComboBox, QListView, QStyledItemDelegate, QStyleFactory, QVBoxLayout, QWidget
 from graphics.Theme import Theme
+from widgets.PrettyMenu import menu_stylesheet
 import utils.settings as settings
 
 
@@ -110,24 +111,7 @@ class PrettyCombo(QComboBox):
                     stop:0 #1e1e1e, stop:0.4 #5c3e4f,
                     stop:0.7 #a56a85, stop:1 #d87a9e);
             }}
-            QMenu {{
-                background:    {Theme.backDrop};
-                color:         {Theme.textPrimary};
-                border:        1px solid {Theme.primaryBorder};
-                border-radius: 9px;
-                padding:       4px;
-                font-family:   'My Olivin (Nabana)';
-                font-size:     11px;
-            }}
-            QMenu::item {{
-                padding:       5px 16px;
-                border-radius: 5px;
-            }}
-            QMenu::item:selected {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #1e1e1e, stop:0.4 #5c3e4f,
-                    stop:0.7 #a56a85, stop:1 #d87a9e);
-            }}
+            {menu_stylesheet()}
             QScrollBar:vertical {{
                 background:   {Theme.backDrop};
                 width:        6px;

@@ -6,7 +6,8 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QGraphicsProxyWidget, QLineEdit
+from PySide6.QtWidgets import QGraphicsProxyWidget
+from widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QSizeF
 from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
 

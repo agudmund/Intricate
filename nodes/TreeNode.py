@@ -8,13 +8,14 @@
 
 import fnmatch
 import os
+import random
 from pathlib import Path
 from typing import Iterator, List, Optional
 
 from PySide6.QtWidgets import (
-    QGraphicsProxyWidget, QTextEdit, QWidget, QVBoxLayout, QPushButton,
-    QLineEdit,
+    QGraphicsProxyWidget, QWidget, QVBoxLayout, QPushButton,
 )
+from widgets.PrettyMenu import StyledTextEdit as QTextEdit, StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QIcon
 
@@ -203,6 +204,11 @@ class TreeNode(BaseNode):
     def __init__(self, data: TreeNodeData | None = None):
         if data is None:
             data = TreeNodeData()
+
+        from utils.IconPicker import emojiIcons
+        if not data.emoji or data.emoji == "✨":
+            data.emoji = random.choice(emojiIcons)
+
         super().__init__(data)
 
         self._editor: QTextEdit | None = None
