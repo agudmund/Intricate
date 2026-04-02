@@ -17,6 +17,7 @@ class ClaudeResponseNodeData(NodeData):
     width:       float = field(default=0.0)
     height:      float = field(default=0.0)
     label:       str   = field(default="")
+    emoji:       str   = field(default="")
     depth_front: bool  = field(default=False)
     node_tint:   str   = field(default="")
 

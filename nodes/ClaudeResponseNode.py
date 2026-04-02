@@ -6,10 +6,15 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import random
+
 from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
 
+from utils.IconPicker import emojiIcons
+
+_EMOJI_ROW_H   = 38.0  # space reserved for the top-left emoji accent
 _BUTTON_ZONE_H = 24.0
 _MAX_WIDTH      = 420.0
 _MIN_WIDTH      = 160.0
@@ -40,6 +45,9 @@ class ClaudeResponseNode(BaseNode):
             if data.height == 0.0:
                 data.height = bound.height() + _BUTTON_ZONE_H + _PAD_V * 2 + Theme.aboutMinHeight
 
+        if not data.emoji:
+            data.emoji = random.choice(emojiIcons)
+
         super().__init__(data)
 
         self.setBrush(self._bg_color())
@@ -68,6 +76,23 @@ class ClaudeResponseNode(BaseNode):
             c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
         c.setAlpha(Theme.claudeResponseBgAlpha)
         return c
+
+    def _position_buttons(self) -> None:
+        """Push the button strip below the emoji row."""
+        from nodes.NodeButton import BUTTON_SIZE
+        from PySide6.QtCore import QPointF
+        pad     = 4.0
+        spacing = 4.0
+        r       = self.rect()
+        y       = r.top() + _EMOJI_ROW_H + pad + 2
+
+        x = r.left() + pad
+        for btn in self._buttons:
+            btn.setPos(QPointF(x, y))
+            x += BUTTON_SIZE + spacing
+
+        if self._delete_btn:
+            self._delete_btn.setPos(QPointF(r.right() - pad - BUTTON_SIZE, y))
 
     def _apply_depth(self) -> None:
         super()._apply_depth()
@@ -100,10 +125,11 @@ class ClaudeResponseNode(BaseNode):
     def _start_edit(self) -> None:
         r   = self.rect()
         pad = Theme.aboutTextPaddingLeft
+        content_top = r.top() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V
         text_rect = QRectF(r.left() + pad,
-                           r.top() + _BUTTON_ZONE_H + _PAD_V,
+                           content_top,
                            r.width() - pad * 2,
-                           r.height() - _BUTTON_ZONE_H - _PAD_V)
+                           r.height() - (content_top - r.top()) - _PAD_V)
         self._editor_proxy.setGeometry(text_rect)
         self._editor.setPlainText(self.data.label)
         if self.scene() and self.scene().views():
@@ -151,15 +177,24 @@ class ClaudeResponseNode(BaseNode):
         if self._editor_proxy and self._editor_proxy.isVisible():
             return
         painter.save()
+
+        # ── Emoji accent — top-left corner ───────────────────────────────────
+        r   = self.rect()
+        pad = Theme.aboutTextPaddingLeft
+        er  = QRectF(r.left() + 2, r.top() - 1, _EMOJI_ROW_H, _EMOJI_ROW_H)
+        painter.setFont(QFont(Theme.healthFontFamily, 24))
+        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.drawText(er, Qt.AlignCenter, self.data.emoji)
+
+        # ── Label text — below emoji row + button strip ───────────────────────
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         painter.setFont(font)
         painter.setPen(QColor(Theme.aboutFontColor))
-        r         = self.rect()
-        pad       = Theme.aboutTextPaddingLeft
+        content_top = r.top() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V
         text_rect = QRectF(r.left() + pad,
-                           r.top() + _BUTTON_ZONE_H + _PAD_V,
+                           content_top,
                            r.width() - pad * 2,
-                           r.height() - _BUTTON_ZONE_H - _PAD_V)
+                           r.height() - (content_top - r.top()) - _PAD_V)
         painter.drawText(text_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, self.data.label)
         painter.restore()
 

@@ -218,8 +218,8 @@ class PrettyNoteEditor(QDialog):
 
     def _insert_random_emoji(self):
         """Sprinkle a little joy into the world ✨"""
-        emojis = ["🪴", "💭", "🌸", "✨", "🤗", "😍", "☕", "💛", "❤", "📌", "💖", "🌼"]
-        self.text_edit.insertPlainText(random.choice(emojis) + " ")
+        from utils.IconPicker import emojiIcons
+        self.text_edit.insertPlainText(random.choice(emojiIcons) + " ")
 
     # ─────────────────────────────────────────────────────────────────────────
     # DATA ACCESS

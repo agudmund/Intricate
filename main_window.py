@@ -24,7 +24,7 @@ from nodes.ClaudeNode import ClaudeNode
 from nodes.ImageNode import ImageNode
 from widgets.PrettyButton import button
 from utils.logger import setup_logger
-from utils.motivationalMessages import motivationalMessages
+from utils.PhrasePicker import motivationalMessages
 from utils.settings import appName, set_nested, get_nested, set_value, get
 from widgets.PrettyCombo import combo as pretty_combo
 from widgets.PrettyLabel import label as pretty_label
