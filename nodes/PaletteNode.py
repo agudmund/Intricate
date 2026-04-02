@@ -393,42 +393,14 @@ class PaletteNode(BaseNode):
 
     def _snapshot_to_png(self) -> None:
         """Render the entire node (border, title, swatches) to a PNG."""
-        from PySide6.QtCore import QRectF
-        from PySide6.QtGui import QImage, QPainter as _P
-        from pathlib import Path
-        import utils.settings as _s
-
-        scene = self.scene()
-        if not scene:
-            return
-
-        # Map the node's bounding rect to scene coordinates
-        scene_rect = self.mapRectToScene(self.boundingRect())
-
-        # Render at 2× for crisp output
-        scale = 2
-        w = int(scene_rect.width() * scale)
-        h = int(scene_rect.height() * scale)
-        img = QImage(w, h, QImage.Format_ARGB32_Premultiplied)
-        img.fill(0)  # transparent
-
-        painter = _P(img)
-        painter.setRenderHint(_P.Antialiasing)
-        scene.render(painter, QRectF(0, 0, w, h), scene_rect)
-        painter.end()
-
-        from utils.helpers import ensure_dir
-        out_dir = Path(_s.get("shared", "images_dir", default="."))
-        ensure_dir(out_dir)
-        title = self.data.title.strip() or "Palette"
-        path = out_dir / f"{title}.png"
-        img.save(str(path))
-
-        views = scene.views()
-        if views:
-            win = views[0].window()
-            if hasattr(win, 'show_info'):
-                win.show_info(f"{title}.png exported")
+        from utils.helpers import snapshot_node
+        path = snapshot_node(self)
+        if path:
+            views = self.scene().views() if self.scene() else []
+            if views:
+                win = views[0].window()
+                if hasattr(win, 'show_info'):
+                    win.show_info(f"{path.name} exported")
 
     # ─────────────────────────────────────────────────────────────────────────
     # LAYOUT
@@ -511,13 +483,6 @@ class PaletteNode(BaseNode):
 
     def paint_content(self, painter: QPainter) -> None:
         if hasattr(self, '_title_proxy') and self._title_proxy and self._title_proxy.isVisible():
-            # Draw emoji only — title is handled by the inline editor
-            painter.save()
-            from PySide6.QtGui import QFont
-            painter.setFont(QFont(Theme.healthFontFamily, 14))
-            painter.setPen(QColor(Theme.aboutFontColor))
-            painter.drawText(self._emoji_rect(), Qt.AlignCenter, self.data.emoji)
-            painter.restore()
             return
         super().paint_content(painter)
 

@@ -14,7 +14,7 @@ from graphics.Theme import Theme
 
 
 # Display size in logical pixels — source icons are 2x (32×32) for crispness
-BUTTON_SIZE     = 16.0
+BUTTON_SIZE     = 32.0
 CONFIRM_TIMEOUT = 2000      # ms — how long the confirm state holds before reset
 LOD_THRESHOLD   = 0.4       # Below this zoom the buttons disappear
 
@@ -147,3 +147,42 @@ class NodeButton(QGraphicsObject):
         Called by BaseNode._prepare_for_removal via _detach_buttons().
         """
         self._reset_timer.stop()
+
+
+class EmojiButton(QGraphicsObject):
+    """A small button that renders the node's current emoji and shuffles on click."""
+
+    def __init__(self, parent, get_emoji, set_emoji):
+        super().__init__(parent)
+        self._get_emoji = get_emoji
+        self._set_emoji = set_emoji
+        self.setAcceptHoverEvents(True)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(0.0, 0.0, BUTTON_SIZE, BUTTON_SIZE)
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        lod = option.levelOfDetailFromTransform(painter.worldTransform())
+        if lod < LOD_THRESHOLD:
+            return
+        from PySide6.QtGui import QFont
+        painter.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7)))
+        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.drawText(self.boundingRect(), Qt.AlignCenter, self._get_emoji())
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() != Qt.LeftButton:
+            event.ignore()
+            return
+        import random
+        from utils.IconPicker import emojiIcons
+        self._set_emoji(random.choice(emojiIcons))
+        self.update()
+        # Repaint the parent node so the title-row emoji updates too
+        if self.parentItem():
+            self.parentItem().update()
+        event.accept()
+
+    def detach(self) -> None:
+        pass

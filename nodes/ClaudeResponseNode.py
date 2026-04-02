@@ -16,7 +16,7 @@ from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
 from utils.IconPicker import emojiIcons
 
 _EMOJI_ROW_H   = 38.0  # space reserved for the top-left emoji accent
-_BUTTON_ZONE_H = 24.0
+_BUTTON_ZONE_H = 40.0
 _MAX_WIDTH      = 420.0
 _MIN_WIDTH      = 160.0
 _PAD_H          = 24.0   # horizontal padding total
@@ -45,9 +45,6 @@ class ClaudeResponseNode(BaseNode):
                 data.width  = wrap_width
             if data.height == 0.0:
                 data.height = bound.height() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V * 2 + Theme.aboutMinHeight
-
-        if not data.emoji:
-            data.emoji = random.choice(emojiIcons)
 
         super().__init__(data)
 
@@ -179,15 +176,9 @@ class ClaudeResponseNode(BaseNode):
             return
         painter.save()
 
-        # ── Emoji accent — top-left corner ───────────────────────────────────
+        # ── Label text — below button strip ──────────────────────────────────
         r   = self.rect()
         pad = Theme.aboutTextPaddingLeft
-        er  = QRectF(r.left() + 2, r.top() - 1, _EMOJI_ROW_H, _EMOJI_ROW_H)
-        painter.setFont(QFont(Theme.healthFontFamily, 24))
-        painter.setPen(QColor(Theme.aboutFontColor))
-        painter.drawText(er, Qt.AlignCenter, self.data.emoji)
-
-        # ── Label text — below emoji row + button strip ───────────────────────
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         painter.setFont(font)
         painter.setPen(QColor(Theme.aboutFontColor))

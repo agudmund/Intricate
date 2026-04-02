@@ -54,7 +54,7 @@ class NodeData:
     ports_visible: bool = False
 
     # ── Accent emoji ──────────────────────────────────────────────────────────
-    emoji: str = field(default="🌿")
+    emoji: str = field(default="")
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

@@ -152,7 +152,7 @@ class WarmNode(BaseNode):
         """
         pos = event.pos()
 
-        if self._title_rect().contains(pos) or self._emoji_rect().contains(pos):
+        if self._title_rect().contains(pos):
             self._launch_editor()
             event.accept()
             return

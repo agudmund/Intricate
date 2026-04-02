@@ -18,7 +18,7 @@ from data.LogNodeData import LogNodeData
 from graphics.Theme import Theme
 
 
-_BUTTON_ZONE_H = 24.0
+_BUTTON_ZONE_H = 40.0
 _PAD           = 8.0
 _MAX_LINES     = 400   # keep the last N lines to stay snappy
 

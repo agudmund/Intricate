@@ -19,7 +19,7 @@ from data.TextNodeData import TextNodeData
 from graphics.Theme import Theme
 
 
-_BUTTON_ZONE_H = 24.0
+_BUTTON_ZONE_H = 40.0
 _PAD           = 8.0
 
 

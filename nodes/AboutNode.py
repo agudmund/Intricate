@@ -11,7 +11,7 @@ from widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QSizeF
 from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
 
-_BUTTON_ZONE_H = 24.0   # px reserved for button strip (4 pad + 16 button + 4 gap)
+_BUTTON_ZONE_H = 40.0   # px reserved for button strip (4 pad + 32 button + 4 gap)
 _Z_FRONT       = 10.0
 _Z_BACK        = -10.0
 
@@ -22,6 +22,7 @@ from graphics.Theme import Theme
 
 class AboutNode(BaseNode):
     _has_depth_toggle = True
+    _show_emoji_btn   = False
     """
     A minimal sticky-note node.
 
@@ -37,11 +38,11 @@ class AboutNode(BaseNode):
         if data is None:
             data = AboutNodeData()
         if data.height == 0.0:
-            data.height = Theme.aboutMinHeight
+            data.height = Theme.aboutMinHeight / 2 + 5
         if data.width == 0.0:
             font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
             text_w = QFontMetrics(font).horizontalAdvance(data.label or data.title)
-            data.width = text_w + 48   # 24px padding each side
+            data.width = text_w + 28   # snug right edge
 
         super().__init__(data)
 
@@ -52,12 +53,17 @@ class AboutNode(BaseNode):
         self.selected_pen = QPen(QColor(Theme.aboutBorderSelectedColor), _w)
         self.current_pen  = self.normal_pen
         self.setPen(self.current_pen)
-        self._min_height = Theme.aboutMinHeight
+        self._min_height = Theme.aboutMinHeight / 2 + 5
         self._apply_depth()
 
         self._editor: QLineEdit | None = None
         self._editor_proxy: QGraphicsProxyWidget | None = None
         self._build_editor()
+
+        # Button row starts hidden — double-click the top strip to reveal
+        self._buttons_visible = False
+        for btn in self._buttons:
+            btn.hide()
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS
@@ -90,6 +96,10 @@ class AboutNode(BaseNode):
     # EDITOR
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _top_offset(self) -> float:
+        """Vertical space reserved above the text — full button zone or minimal pad."""
+        return _BUTTON_ZONE_H if self._buttons_visible else 6.0
+
     def _build_editor(self) -> None:
         self._editor = QLineEdit()
         self._editor.setAlignment(Qt.AlignLeft)
@@ -115,7 +125,8 @@ class AboutNode(BaseNode):
     def _start_edit(self) -> None:
         r = self.rect()
         pad = Theme.aboutTextPaddingLeft
-        text_rect = QRectF(r.left() + pad, r.top() + _BUTTON_ZONE_H + Theme.aboutEditorVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - _BUTTON_ZONE_H)
+        top = self._top_offset()
+        text_rect = QRectF(r.left() + pad, r.top() + top + Theme.aboutEditorVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - top)
         self._editor_proxy.setGeometry(text_rect)
         self._editor.setText(self.data.label or self.data.title)
         self._editor.selectAll()
@@ -141,6 +152,13 @@ class AboutNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
+        # Top strip above the text area — toggle button row
+        if event.pos().y() < self.rect().top() + _BUTTON_ZONE_H:
+            self._buttons_visible = not self._buttons_visible
+            for btn in self._buttons:
+                btn.setVisible(self._buttons_visible)
+            event.accept()
+            return
         self._start_edit()
         event.accept()
 
@@ -170,7 +188,8 @@ class AboutNode(BaseNode):
         painter.setPen(QColor(Theme.aboutFontColor))
         r = self.rect()
         pad = Theme.aboutTextPaddingLeft
-        text_rect = QRectF(r.left() + pad, r.top() + _BUTTON_ZONE_H + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - _BUTTON_ZONE_H)
+        top = self._top_offset()
+        text_rect = QRectF(r.left() + pad, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - top)
         label = self.data.label or self.data.title
         label = QFontMetrics(font).elidedText(label, Qt.ElideRight, int(text_rect.width()))
         painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignTop, label)

@@ -119,3 +119,43 @@ def clean_pycache(root: str | Path | None = None) -> int:
     except Exception:
         pass
     return cleaned
+
+
+def snapshot_node(node, filename: str | None = None, scale: int = 2) -> Path | None:
+    """Render a QGraphicsItem to a transparent PNG.
+
+    Args:
+        node:     Any QGraphicsItem (BaseNode subclass) currently in a scene.
+        filename: Output filename (without directory). Defaults to node title + .png.
+        scale:    Render multiplier for crisp output (default 2×).
+
+    Returns the Path of the saved PNG, or None on failure.
+    """
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QImage, QPainter
+    import utils.settings as _s
+
+    scene = node.scene()
+    if not scene:
+        return None
+
+    scene_rect = node.mapRectToScene(node.boundingRect())
+    w = int(scene_rect.width()  * scale)
+    h = int(scene_rect.height() * scale)
+    img = QImage(w, h, QImage.Format_ARGB32_Premultiplied)
+    img.fill(0)
+
+    painter = QPainter(img)
+    painter.setRenderHint(QPainter.Antialiasing)
+    scene.render(painter, QRectF(0, 0, w, h), scene_rect)
+    painter.end()
+
+    out_dir = Path(_s.get("shared", "images_dir", default="."))
+    ensure_dir(out_dir)
+    title = filename or (getattr(node.data, 'title', 'Node').strip() or "Node") + ".png"
+    if not title.lower().endswith(".png"):
+        title += ".png"
+    path = out_dir / title
+    img.save(str(path))
+    logger.info(f"📸 Snapshot saved: {path}")
+    return path

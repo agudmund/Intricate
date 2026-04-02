@@ -209,11 +209,6 @@ class TreeNode(BaseNode):
     def __init__(self, data: TreeNodeData | None = None):
         if data is None:
             data = TreeNodeData()
-
-        from utils.IconPicker import emojiIcons
-        if not data.emoji or data.emoji == "✨":
-            data.emoji = random.choice(emojiIcons)
-
         super().__init__(data)
 
         self._editor: QTextEdit | None = None

@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QGraphicsItem
 from data.NodeData import NodeData
 from nodes.NodeBehaviour import NodeBehaviour
 from graphics.Theme import Theme
-from nodes.NodeButton import NodeButton, BUTTON_SIZE
+from nodes.NodeButton import NodeButton, EmojiButton, BUTTON_SIZE
 
 
 def _c(hex_str): return QColor(hex_str)   # local shorthand
@@ -80,6 +80,11 @@ class BaseNode(QGraphicsRectItem):
 
         # ── Data ──────────────────────────────────────────────────────────────
         # The node's identity and state. Qt reads from here, never writes here.
+        # Assign a random accent emoji if none was persisted from a prior session.
+        if not data.emoji or data.emoji == "🌿":
+            import random
+            from utils.IconPicker import emojiIcons
+            data.emoji = random.choice(emojiIcons)
         self.data = data
         self.setPos(QPointF(data.x, data.y))
 
@@ -308,6 +313,7 @@ class BaseNode(QGraphicsRectItem):
 
     _has_depth_toggle = False   # set to True in subclasses that want the front/back button
     _show_ports_btn   = False   # set to True in subclasses that want the ports toggle button
+    _show_emoji_btn   = True    # set to False in subclasses that skip the emoji shuffler
 
     def _build_buttons(self) -> None:
         """
@@ -325,6 +331,13 @@ class BaseNode(QGraphicsRectItem):
         so the layout holds without requiring assets to be present first.
         """
         self._delete_btn   = None   # shake-to-delete replaces the icon button
+        if self._show_emoji_btn:
+            self._emoji_btn = EmojiButton(
+                self,
+                get_emoji=lambda: self.data.emoji,
+                set_emoji=lambda e: setattr(self.data, 'emoji', e),
+            )
+            self._buttons.append(self._emoji_btn)
         if self._show_ports_btn:
             ports_off_pix = Theme.icon(Theme.portsIconOff, fallback_color="#7a8a9a")
             ports_on_pix  = Theme.icon(Theme.portsIconOn,  fallback_color="#9ab8c9")
@@ -810,25 +823,17 @@ class BaseNode(QGraphicsRectItem):
 
         painter.restore()
 
-    _BUTTON_ZONE_H = 24.0   # px reserved for the button strip (4 pad + 16 button + 4 gap)
-    _EMOJI_SIZE    = 22.0   # emoji accent square in the title row
+    _BUTTON_ZONE_H = 40.0   # px reserved for the button strip (4 pad + 32 button + 4 gap)
 
-    def _emoji_rect(self) -> QRectF:
-        """Small square to the left of the title text, vertically centred in the title row."""
+    def _title_rect(self) -> QRectF:
+        """Text area below the button strip."""
         r   = self.rect()
         pad = Theme.nodeTextPaddingLeft
         ty  = r.top() + self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop
-        return QRectF(r.left() + pad, ty, self._EMOJI_SIZE, self._EMOJI_SIZE)
-
-    def _title_rect(self) -> QRectF:
-        """Text area to the right of the emoji in the title row."""
-        r   = self.rect()
-        pad = Theme.nodeTextPaddingLeft
-        er  = self._emoji_rect()
         return QRectF(
-            er.right() + 6.0,
-            er.top(),
-            r.right() - er.right() - pad - 6.0,
+            r.left() + pad,
+            ty,
+            r.width() - pad * 2,
             r.height() - self._BUTTON_ZONE_H,
         )
 
@@ -839,23 +844,14 @@ class BaseNode(QGraphicsRectItem):
         Called after the shell (background + border) is painted.
         Painter is in node-local coordinates.
 
-        Default implementation draws the accent emoji then the title to its
-        right, using Theme font/color/offset values. Subclasses that need
-        type-specific content override this entirely (no super() needed),
-        or call super() to inherit the standard title+emoji row.
+        Default implementation draws the title below the button strip.
+        The emoji is rendered by the EmojiButton in the button row.
+        Subclasses that need type-specific content override this entirely
+        (no super() needed), or call super() to inherit the title row.
         """
         painter.save()
-        r   = self.rect()
-        pad = Theme.nodeTextPaddingLeft
-        er  = self._emoji_rect()
-
-        # ── Accent emoji ──────────────────────────────────────────────────────
-        painter.setFont(QFont(Theme.healthFontFamily, 14))
-        painter.setPen(QColor(Theme.aboutFontColor))
-        painter.drawText(er, Qt.AlignCenter, self.data.emoji)
-
-        # ── Title — starts to the right of the emoji ──────────────────────────
         painter.setFont(QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize)))
+        painter.setPen(QColor(Theme.aboutFontColor))
         painter.drawText(self._title_rect(), Qt.AlignLeft | Qt.AlignTop, self.data.title)
         painter.restore()
 
