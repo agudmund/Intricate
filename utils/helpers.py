@@ -7,6 +7,7 @@
 """
 
 import os
+import shutil
 from pathlib import Path
 from utils.logger import setup_logger
 
@@ -92,3 +93,29 @@ def ensure_init_tree(root: str | Path) -> int:
         if ensure_init(dirpath, project_root=root):
             created += 1
     return created
+
+
+def clean_pycache(root: str | Path | None = None) -> int:
+    """Remove all __pycache__ folders and .pyc files under root.
+
+    Args:
+        root: Directory to clean. Defaults to the project root
+              (parent of utils/).
+
+    Returns the number of __pycache__ directories removed.
+    """
+    if root is None:
+        root = Path(__file__).resolve().parent.parent
+    root = Path(root)
+    cleaned = 0
+    try:
+        for item in root.rglob("__pycache__"):
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+                logger.info(f"🧹 Removed: {item}")
+                cleaned += 1
+        for item in root.rglob("*.pyc"):
+            item.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return cleaned

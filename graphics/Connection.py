@@ -23,9 +23,9 @@ class Connection(QGraphicsPathItem):
     _PORT_GLIDE_SPEED = 0.04
 
     # Pixels past the node border the wire endpoint is placed.
-    # The wire is then faded out over this same distance so it is only
-    # visible up to the edge — extending inside avoids a visible gap.
-    _INSIDE = 18.0
+    # Previously 18px inside the node with a paint-time clip fade — now that
+    # wires render above nodes the endpoint sits right at the border.
+    _INSIDE = 0.0
 
     def __init__(self, start_node, end_node=None):
         super().__init__()
@@ -128,9 +128,17 @@ class Connection(QGraphicsPathItem):
               ((r.bottom() - py) / ny) if ny < -1e-6 else 0.0
         t_border = max(t_x, t_y)
 
+        # Corner ports land on the square rect edge, but the visible border
+        # is beveled inward by round_radius.  Push the endpoint outward along
+        # the diagonal by the gap between the square corner and the arc.
+        bevel_offset = 0.0
+        if ax > 0.5 and ay > 0.5:
+            rr = node.round_radius if hasattr(node, 'round_radius') else 0.0
+            bevel_offset = rr * (1.0 - 0.7071)  # 1 - 1/√2
+
         pos = node.mapToScene(QPointF(
-            px + nx * (t_border + self._INSIDE),
-            py + ny * (t_border + self._INSIDE),
+            px + nx * (t_border + self._INSIDE) - odx * bevel_offset,
+            py + ny * (t_border + self._INSIDE) - ody * bevel_offset,
         ))
         return pos, odx, ody
 
@@ -299,6 +307,7 @@ class Connection(QGraphicsPathItem):
         painter.setRenderHint(QPainter.Antialiasing)
 
         # Wires render above all nodes — no clip cutout needed.
+        path = self.path()
 
         def _ep_color(node):
             if node is not None and node.isSelected():
@@ -313,45 +322,53 @@ class Connection(QGraphicsPathItem):
         if c_start.rgb() == c_mid.rgb() and c_end.rgb() == c_mid.rgb():
             pen = QPen(c_mid, Theme.nodeBorderWidth, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
             painter.setPen(pen)
-            painter.drawPath(self.path())
-            return
+            painter.drawPath(path)
+        else:
+            # QPen gradient-brush strokes are unreliable in Qt — segment the bezier instead.
+            # SquareCap extends each segment by half line-width at both ends, sealing joints
+            # so there are no gaps or bumps between segments.  64 steps keeps per-step color
+            # delta below ~2 RGB units in the transition zone — visually continuous.
+            SEGMENTS  = 64
+            FADE      = 0.30   # fraction of path at each end that carries the glow
+            bw        = Theme.nodeBorderWidth
 
-        # QPen gradient-brush strokes are unreliable in Qt — segment the bezier instead.
-        # SquareCap extends each segment by half line-width at both ends, sealing joints
-        # so there are no gaps or bumps between segments.  64 steps keeps per-step color
-        # delta below ~2 RGB units in the transition zone — visually continuous.
-        SEGMENTS  = 64
-        FADE      = 0.30   # fraction of path at each end that carries the glow
-        path      = self.path()
-        bw        = Theme.nodeBorderWidth
+            def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
+                t = max(0.0, min(1.0, t))
+                return QColor(
+                    int(a.red()   + (b.red()   - a.red())   * t),
+                    int(a.green() + (b.green() - a.green()) * t),
+                    int(a.blue()  + (b.blue()  - a.blue())  * t),
+                )
 
-        def _lerp_color(a: QColor, b: QColor, t: float) -> QColor:
-            t = max(0.0, min(1.0, t))
-            return QColor(
-                int(a.red()   + (b.red()   - a.red())   * t),
-                int(a.green() + (b.green() - a.green()) * t),
-                int(a.blue()  + (b.blue()  - a.blue())  * t),
-            )
+            def _color_at(t: float) -> QColor:
+                if t <= FADE:
+                    return _lerp_color(c_start, c_mid, t / FADE)
+                if t >= 1.0 - FADE:
+                    return _lerp_color(c_mid, c_end, (t - (1.0 - FADE)) / FADE)
+                return c_mid
 
-        def _color_at(t: float) -> QColor:
-            if t <= FADE:
-                return _lerp_color(c_start, c_mid, t / FADE)
-            if t >= 1.0 - FADE:
-                return _lerp_color(c_mid, c_end, (t - (1.0 - FADE)) / FADE)
-            return c_mid
+            prev = path.pointAtPercent(0.0)
+            for i in range(1, SEGMENTS + 1):
+                t    = i / SEGMENTS
+                curr = path.pointAtPercent(t)
+                seg  = QPainterPath()
+                seg.moveTo(prev)
+                seg.lineTo(curr)
+                pen = QPen(_color_at(t - 0.5 / SEGMENTS), bw,
+                           Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin)
+                painter.setPen(pen)
+                painter.drawPath(seg)
+                prev = curr
 
-        prev = path.pointAtPercent(0.0)
-        for i in range(1, SEGMENTS + 1):
-            t    = i / SEGMENTS
-            curr = path.pointAtPercent(t)
-            seg  = QPainterPath()
-            seg.moveTo(prev)
-            seg.lineTo(curr)
-            pen = QPen(_color_at(t - 0.5 / SEGMENTS), bw,
-                       Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin)
-            painter.setPen(pen)
-            painter.drawPath(seg)
-            prev = curr
+        # ── Anchor dots at each endpoint ─────────────────────────────────
+        dot_r = Theme.nodeBorderWidth * 3.0
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(c_start)
+        p0 = path.pointAtPercent(0.0)
+        painter.drawEllipse(p0, dot_r, dot_r)
+        p1 = path.pointAtPercent(1.0)
+        painter.setBrush(c_end)
+        painter.drawEllipse(p1, dot_r, dot_r)
 
 
 # Deferred — avoids circular import since Connection lives in graphics/

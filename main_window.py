@@ -9,7 +9,7 @@
 import json
 import os
 import random
-import shutil
+
 import subprocess
 import sys
 from pathlib import Path
@@ -1260,23 +1260,9 @@ class IntricateApp(QMainWindow):
             pass
 
     def _cleanup_pycache(self) -> None:
-        """
-        Remove all __pycache__ folders and .pyc files under the project root.
-        Equivalent to the 'housekeeping' PowerShell alias.
-        Always runs fresh on next launch — no stale bytecode, no surprises.
-        Non-fatal: if cleanup fails for any reason the app still exits cleanly.
-        """
-        root = Path(__file__).resolve().parent
-        cleaned = 0
-        try:
-            for item in root.rglob("__pycache__"):
-                if item.is_dir():
-                    shutil.rmtree(item, ignore_errors=True)
-                    cleaned += 1
-            for item in root.rglob("*.pyc"):
-                item.unlink(missing_ok=True)
-        except Exception:
-            pass
+        """Remove all __pycache__ folders and .pyc files under the project root."""
+        from utils.helpers import clean_pycache
+        clean_pycache()
 
     def _persist_claude_node_size(self) -> None:
         nodes = [n for n in self.scene.items() if isinstance(n, ClaudeNode)]
@@ -1312,7 +1298,7 @@ class IntricateApp(QMainWindow):
         if self.windowOpacity() <= 0.0:
             try:
                 import threading
-                threading.Thread(target=self._cleanup_pycache).start()
+                threading.Thread(target=self._cleanup_pycache, daemon=True).start()
                 self._persist_claude_node_size()
             except (RuntimeError, Exception):
                 pass
