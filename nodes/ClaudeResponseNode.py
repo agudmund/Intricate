@@ -43,7 +43,7 @@ class ClaudeResponseNode(BaseNode):
             if data.width == 0.0:
                 data.width  = wrap_width
             if data.height == 0.0:
-                data.height = bound.height() + _BUTTON_ZONE_H + _PAD_V * 2 + Theme.aboutMinHeight
+                data.height = bound.height() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V * 2 + Theme.aboutMinHeight
 
         if not data.emoji:
             data.emoji = random.choice(emojiIcons)

@@ -643,7 +643,7 @@ class BaseNode(QGraphicsRectItem):
         self.connections.clear()
 
         from graphics.Particles import sprinkle
-        sprinkle(scene, self.mapToScene(self.rect().center()), count=162)
+        sprinkle(scene, self.mapToScene(self.rect().center()), count=3000)
 
         for src in sources:
             for tgt in targets:
@@ -667,7 +667,7 @@ class BaseNode(QGraphicsRectItem):
             pass
         _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
         from graphics.Particles import sprinkle
-        sprinkle(scene, self.mapToScene(self.rect().center()), count=162)
+        sprinkle(scene, self.mapToScene(self.rect().center()), count=3000)
         self._pending_shake_delete = True
 
     def mouseReleaseEvent(self, event):
