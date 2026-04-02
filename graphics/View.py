@@ -12,6 +12,7 @@ from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QCursor
 
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
+_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv", ".flv", ".m4v"}
 
 
 class IntricateView(QGraphicsView):
@@ -315,10 +316,11 @@ class IntricateView(QGraphicsView):
     # ─────────────────────────────────────────────────────────────────────────
 
     def dragEnterEvent(self, event) -> None:
-        """Accept drags that contain at least one supported image file."""
+        """Accept drags that contain at least one supported image or video file."""
         if event.mimeData().hasUrls():
             paths = [u.toLocalFile() for u in event.mimeData().urls()]
-            if any(Path(p).suffix.lower() in _IMAGE_EXTENSIONS for p in paths):
+            supported = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS
+            if any(Path(p).suffix.lower() in supported for p in paths):
                 event.acceptProposedAction()
                 return
         # Let Qt route internal drags (e.g. palette swatches) to proxy widgets.
@@ -356,10 +358,17 @@ class IntricateView(QGraphicsView):
         offset = QPointF(0.0, 0.0)
         for url in event.mimeData().urls():
             path = url.toLocalFile()
-            if Path(path).suffix.lower() not in _IMAGE_EXTENSIONS:
-                continue
+            ext  = Path(path).suffix.lower()
             scene = self.scene()
-            if scene and hasattr(scene, 'add_image_node'):
+            if not scene:
+                continue
+            if ext in _VIDEO_EXTENSIONS and hasattr(scene, 'add_video_node'):
+                scene.add_video_node(
+                    pos  = drop_scene_pos + offset,
+                    path = path
+                )
+                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+            elif ext in _IMAGE_EXTENSIONS and hasattr(scene, 'add_image_node'):
                 scene.add_image_node(
                     pos  = drop_scene_pos + offset,
                     path = path

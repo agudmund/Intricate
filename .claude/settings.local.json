@@ -53,7 +53,10 @@
       "Bash(dir \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Intricate\\\\logs\")",
       "Bash(powershell:*)",
       "Bash(dir C:\\\\Users\\\\thisg\\\\Desktop\\\\Cozy Times\\\\Nodal\\\\logs:*)",
-      "Bash(dir \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Cozy Times\\\\Nodal\\\\logs\")"
+      "Bash(dir \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Cozy Times\\\\Nodal\\\\logs\")",
+      "Bash(C:/python/python.exe -)",
+      "Bash(xargs ls:*)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -275,6 +275,21 @@ class IntricateScene(QGraphicsScene):
 
         return node
 
+    def add_video_node(self, pos: QPointF | None = None, path: str | None = None):
+        """Add a VideoNode at pos, optionally loading a video from path."""
+        from nodes.VideoNode import VideoNode
+
+        node = VideoNode()
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+
+        if path:
+            node.load_from_path(path)
+
+        return node
+
     def add_sequence_node(self, pos: QPointF | None = None, folder_path: str | None = None):
         """Add a SequenceNode for scrubbing through an image sequence on disk."""
         from nodes.SequenceNode import SequenceNode
@@ -572,6 +587,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.ImageNode import ImageNode
             from data.ImageNodeData import ImageNodeData
             node = ImageNode(ImageNodeData.from_dict(d))
+
+        elif node_type == "video":
+            from nodes.VideoNode import VideoNode
+            from data.VideoNodeData import VideoNodeData
+            node = VideoNode(VideoNodeData.from_dict(d))
 
         elif node_type == "sequence":
             from nodes.SequenceNode import SequenceNode

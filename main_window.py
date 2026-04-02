@@ -660,6 +660,7 @@ class IntricateApp(QMainWindow):
     def _spawn_health_node(self):      self._spawn(self.scene.add_health_node,       "checking in on things")
     def _spawn_claude_node(self):      self._spawn(self.scene.add_claude_node,       "claude has entered the chat")
     def _spawn_image_node(self):       self._spawn(self.scene.add_image_node,        "a picture is worth everything")
+    def _spawn_video_node(self):       self._spawn(self.scene.add_video_node,        "lights, camera, action")
     def _spawn_text_node(self):        self._spawn(self.scene.add_text_node,         "words, words, words")
     def _spawn_log_node(self):         self._spawn(self.scene.add_log_node,          "tailing the log")
 
@@ -780,6 +781,9 @@ class IntricateApp(QMainWindow):
         img_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconImage)), "Image Node"
         )
+        vid_action = menu.addAction(
+            QIcon(Theme.icon(Theme.iconVideo)), "Video Node"
+        )
         seq_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconSequence)), "Image Sequence Scrubber"
         )
@@ -788,6 +792,7 @@ class IntricateApp(QMainWindow):
         )
 
         img_action.triggered.connect(self._spawn_image_node)
+        vid_action.triggered.connect(self._spawn_video_node)
         seq_action.triggered.connect(self._spawn_sequence_node)
         val_action.triggered.connect(self._spawn_value_node)
 
