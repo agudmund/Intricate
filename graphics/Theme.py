@@ -119,9 +119,9 @@ class Theme(metaclass=_ThemeMeta):
     buttonBorderInactive = buttonInactiveColor
     buttonTextHover      = "#ffffff"
 
-    iconButtonSize  = handleHeightTop - 3
-    iconPadding     = 12
-    iconSize        = 16
+    iconButtonSize  = 48
+    iconPadding     = 4
+    iconSize        = 256
 
     # =========================================================================
     # COMBOBOX
@@ -220,9 +220,9 @@ class Theme(metaclass=_ThemeMeta):
     aboutFontFamily          = "Chandler42"
     aboutFontSize            = 10
     aboutFontColor           = "#e8f0ff"
-    aboutBgColor             = "#2a2a2a"
-    aboutBgColorFront        = "#322a3a"
-    aboutBgAlpha             = 60
+    aboutBgColor             = "#6f7f6f"
+    aboutBgColorFront        = "#7a8f7a"
+    aboutBgAlpha             = 255
     claudeResponseBgAlpha    = 120   # independent of aboutBgAlpha — chain tints need to be readable
     aboutBorderColor         = "#6b5a47"
     aboutBorderHoverColor    = "#8a7560"
@@ -338,7 +338,16 @@ class Theme(metaclass=_ThemeMeta):
         pix = None
         resolved = cls._resolve_icon_path(filename)
         if resolved:
-            candidate = QPixmap(str(resolved))
+            path_str = str(resolved)
+            # .ico files contain multiple resolution layers — QPixmap picks the
+            # smallest. Load via QIcon.pixmap() which selects the best layer for
+            # the requested size, giving us a crisp pixmap at display resolution.
+            if path_str.lower().endswith('.ico'):
+                from PySide6.QtGui import QIcon as _QIcon
+                sz = max(cls.iconSize, cls.iconButtonSize, 64)
+                candidate = _QIcon(path_str).pixmap(sz, sz)
+            else:
+                candidate = QPixmap(path_str)
             if not candidate.isNull():
                 pix = candidate
                 _log.debug(f"[icon] '{filename}' → loaded from {resolved}")

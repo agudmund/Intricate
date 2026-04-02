@@ -121,7 +121,29 @@ class PrettyButton(QPushButton):
     # ── Icon ──────────────────────────────────────────────────────────────────
 
     def set_pretty_icon(self, icon_name):
-        """Fetches pixmap from Theme and applies it as a QIcon."""
+        """Resolve the icon file and apply it as a QIcon.
+
+        .ico files have a companion .png at 1024px — use that instead.
+        Qt's ICO loader picks an unpredictable layer from the multi-res
+        container, but a high-res PNG loaded as QPixmap downscales cleanly
+        into any button size.
+        """
+        resolved = Theme._resolve_icon_path(icon_name)
+        if resolved:
+            path = str(resolved)
+            # Prefer the high-res .png sibling over the .ico container
+            if path.lower().endswith('.ico'):
+                png_sibling = path[:-4] + '.png'
+                import os
+                if os.path.exists(png_sibling):
+                    path = png_sibling
+            from PySide6.QtGui import QPixmap
+            pix = QPixmap(path)
+            if not pix.isNull():
+                self.setIcon(QIcon(pix))
+                self.setIconSize(QSize(Theme.iconSize, Theme.iconSize))
+                return
+        # Fallback to Theme.icon() cache (circle sentinel etc.)
         pixmap = Theme.icon(icon_name)
         if pixmap:
             self.setIcon(QIcon(pixmap))
@@ -141,13 +163,19 @@ class PrettyButton(QPushButton):
         # No QPushButton:hover rule — the animation owns the color entirely.
         color = self._text_color.name() if hasattr(self, "_text_color") else Theme.textPrimary
 
+        # Icon-only buttons (no text) get zero padding so icons fill the space.
+        if self.text():
+            pad = f"padding: 5px 1px {bottom_padding}px 1px;"
+        else:
+            pad = "padding: 0px;"
+
         self.setStyleSheet(f"""
            QPushButton {{
                background-color: {Theme.buttonBg};
                border: {border_width}px solid {Theme.buttonBorder};
                border-radius: 6px;
                color: {color};
-               padding: 5px 1px {bottom_padding}px 1px;
+               {pad}
            }}
         """)
 

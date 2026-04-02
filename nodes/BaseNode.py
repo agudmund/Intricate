@@ -679,8 +679,15 @@ class BaseNode(QGraphicsRectItem):
         self.data.width  = self.rect().width()
         self.data.height = self.rect().height()
         super().mouseReleaseEvent(event)
-        # Deferred shake-delete — node stays in scene until mouse grab releases
-        # cleanly, preventing the cascade-delete bug.
+        # Release the scene mouse grab only if THIS item still holds it.
+        # ungrabMouse() is NOT a safe no-op on non-grabbers — it touches Qt's
+        # internal dispatch state and can break selection on neighboring items
+        # that received a transferred grab after a shake-delete.
+        if not event.buttons():
+            scene = self.scene()
+            if scene and scene.mouseGrabberItem() is self:
+                self.ungrabMouse()
+        # Deferred shake-delete — item must already be ungrabbed before removal.
         if self._pending_shake_delete:
             self._pending_shake_delete = False
             scene = self.scene()

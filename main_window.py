@@ -219,6 +219,9 @@ class IntricateApp(QMainWindow):
 
     def toggle_curtains(self):
         """Animate the window into a sleek HUD strip."""
+        fw = self.focusWidget()
+        if fw:
+            fw.clearFocus()
         self.setMinimumHeight(0)
         start_rect = self.geometry()
 
@@ -246,10 +249,28 @@ class IntricateApp(QMainWindow):
         )
         self.curtain_anim.setStartValue(start_rect)
         self.curtain_anim.setEndValue(end_rect)
-        self.curtain_anim.finished.connect(
-            lambda: self.view.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
-        )
+        self.curtain_anim.finished.connect(self._on_curtains_settled)
         self.curtain_anim.start()
+
+    def _on_curtains_settled(self) -> None:
+        """Called when the curtains animation finishes (both collapse and restore).
+
+        The view is configured with NoAnchor and must stay that way — AnchorViewCenter
+        causes Qt to call centerOn() after every translate(), which cancels every pan
+        stroke and makes the canvas appear frozen. Scrub any stale grabber too.
+        """
+        # NoAnchor is the view's native state (set in _configure). Restoring
+        # AnchorViewCenter here was the root cause of pan being dead after curtains.
+        from PySide6.QtWidgets import QGraphicsView
+        self.view.setTransformationAnchor(QGraphicsView.NoAnchor)
+        scene = self.scene
+        if scene:
+            grabber = scene.mouseGrabberItem()
+            if grabber:
+                grabber.ungrabMouse()
+        # Reset pan state — a stale non-None _last_pan_pos after a
+        # visibility change would lock the view into phantom-pan mode.
+        self.view._last_pan_pos = None
 
 
     # =================================================================================
@@ -537,39 +558,23 @@ class IntricateApp(QMainWindow):
         layout.setSpacing(Theme.sidebarButtonGap)
         layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
-        tools = [
-            (Theme.iconAbout,   self._spawn_about_node,       "Sticky note"),
-            (Theme.iconWarm,    self._spawn_warm_node,        "Warm and Comfortable Writing Node"),
-            (Theme.iconBezier,  self._spawn_bezier_node,      "The Prestigious Bezier Node"),
-            (Theme.iconHealth,  self._spawn_health_node,      "The Oddly Important Health Node"),
-            (Theme.iconClaude,  self._spawn_claude_node,      "Claude Node"),
-            (Theme.iconHealth,  self._spawn_perf_node,        "Paint Performance Monitor"),
-            (Theme.iconClaude,  self._spawn_claude_info_node, "Claude Token Census"),
-            (Theme.iconPalette, self._spawn_palette_node,     "Palette"),
-        ]
+        def _cat_btn(icon_name, tooltip, menu_fn):
+            """Category button — icon fills the entire button, no Qt frame overhead."""
+            sz = Theme.iconButtonSize
+            b = button(icon_name=icon_name, tooltip=tooltip)
+            b.setFixedSize(sz, sz)
+            b.setIconSize(QSize(sz, sz))
+            b.setFlat(True)
+            b.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
+            b.clicked.connect(lambda _=None, btn=b: menu_fn(btn))
+            layout.addWidget(b)
 
-        for icon, slot, description in tools:
-            btn = button(icon_name=icon, clicked=slot, tooltip=description)
-            btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
-            layout.addWidget(btn)
-
-        # ── Text group button (Text Node + README) ────────────────────────────
-        text_btn = button(icon_name=Theme.iconText, tooltip="Text")
-        text_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
-        text_btn.clicked.connect(lambda: self._show_text_menu(text_btn))
-        layout.addWidget(text_btn)
-
-        # ── Images group button (Image Node + Sequence Scrubber) ─────────────
-        images_btn = button(icon_name=Theme.iconImagesGroup, tooltip="Images")
-        images_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
-        images_btn.clicked.connect(lambda: self._show_images_menu(images_btn))
-        layout.addWidget(images_btn)
-
-        # ── Tools group (Snip + Restore + Folder Structure) ──────────────────
-        tools_btn = button(icon_name=Theme.iconToolsGroup, tooltip="Tools")
-        tools_btn.setFixedSize(Theme.iconButtonSize, Theme.iconButtonSize)
-        tools_btn.clicked.connect(lambda: self._show_tools_menu(tools_btn))
-        layout.addWidget(tools_btn)
+        _cat_btn(Theme.iconText,        "Text",   self._show_text_menu)
+        _cat_btn(Theme.iconImagesGroup,  "Images", self._show_images_menu)
+        _cat_btn(Theme.iconVisualGroup,  "Visual", self._show_visual_menu)
+        _cat_btn(Theme.iconHealthGroup,  "Health", self._show_health_menu)
+        _cat_btn(Theme.iconToolsGroup,   "Tools",  self._show_tools_menu)
+        _cat_btn(Theme.iconClaude,       "Claude", self._show_claude_menu)
 
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
         layout.addStretch()
@@ -715,11 +720,33 @@ class IntricateApp(QMainWindow):
     def _show_text_menu(self, btn: QPushButton) -> None:
         """Pop a styled context menu under the text group button."""
         menu = self._styled_menu()
-        act_text = menu.addAction(QIcon(Theme.icon(Theme.iconText)), "Text Node")
-        act_read = menu.addAction(QIcon(Theme.icon(Theme.iconTree)), "README.md")
-        act_log  = menu.addAction(QIcon(Theme.icon(Theme.iconLog,  fallback_color="#8aaa88")), "Log Tail")
+        act_about = menu.addAction(QIcon(Theme.icon(Theme.iconAbout)), "The Glorious About Node")
+        act_warm  = menu.addAction(QIcon(Theme.icon(Theme.iconWarm)),  "The Comfortable Warm Node")
+        act_text  = menu.addAction(QIcon(Theme.icon(Theme.iconText)),  "The Simple Text Node")
+        act_read  = menu.addAction(QIcon(Theme.icon(Theme.iconTree)),  "The Read Me")
+        act_about.triggered.connect(self._spawn_about_node)
+        act_warm.triggered.connect(self._spawn_warm_node)
         act_text.triggered.connect(self._spawn_text_node)
         act_read.triggered.connect(self._spawn_readme_node)
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _show_visual_menu(self, btn: QPushButton) -> None:
+        """Pop a styled context menu under the visual group button."""
+        menu = self._styled_menu()
+        act_bezier  = menu.addAction(QIcon(Theme.icon(Theme.iconBezier)),  "The Prestigious Bezier Node")
+        act_palette = menu.addAction(QIcon(Theme.icon(Theme.iconPalette)), "Palette")
+        act_bezier.triggered.connect(self._spawn_bezier_node)
+        act_palette.triggered.connect(self._spawn_palette_node)
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _show_health_menu(self, btn: QPushButton) -> None:
+        """Pop a styled context menu under the health group button."""
+        menu = self._styled_menu()
+        act_health = menu.addAction(QIcon(Theme.icon(Theme.iconHealth)), "Health Node")
+        act_perf   = menu.addAction(QIcon(Theme.icon(Theme.iconPerf)), "Paint Performance Monitor")
+        act_log    = menu.addAction(QIcon(Theme.icon(Theme.iconLog, fallback_color="#8aaa88")), "Tinkerbells Tail")
+        act_health.triggered.connect(self._spawn_health_node)
+        act_perf.triggered.connect(self._spawn_perf_node)
         act_log.triggered.connect(self._spawn_log_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
@@ -732,6 +759,18 @@ class IntricateApp(QMainWindow):
         act_snip.triggered.connect(self._start_wire_snip)
         act_restore.triggered.connect(self._restore_deleted)
         act_tree.triggered.connect(self._spawn_tree_node)
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _show_claude_menu(self, btn: QPushButton) -> None:
+        """Pop a styled context menu under the Claude group button."""
+        menu = self._styled_menu()
+        act_claude   = menu.addAction(QIcon(Theme.icon(Theme.iconClaudeNode,     fallback_color="#7a9a7a")), "Claude Node")
+        act_census   = menu.addAction(QIcon(Theme.icon(Theme.iconClaudeCensus,   fallback_color="#7a9a7a")), "Claude Token Census")
+        act_response = menu.addAction(QIcon(Theme.icon(Theme.iconClaudeResponse, fallback_color="#555566")), "Claude Response Node")
+        act_response.setEnabled(False)
+        act_response.setToolTip("This node is invoked from inside the Claude Node")
+        act_claude.triggered.connect(self._spawn_claude_node)
+        act_census.triggered.connect(self._spawn_claude_info_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_images_menu(self, btn: QPushButton) -> None:
@@ -857,7 +896,8 @@ class IntricateApp(QMainWindow):
         if abs(target - current) < 0.001:
             return
         factor = target / current
-        self.view._apply_zoom(factor)
+        centre = self.view.mapToScene(self.view.viewport().rect().center())
+        self.view._apply_zoom(factor, anchor=centre)
         self._zoom_label.setText(f"{value}%")
 
     def show_info(self, message: str, on_click=None) -> None:

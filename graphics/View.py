@@ -210,6 +210,14 @@ class IntricateView(QGraphicsView):
 
         self.setFocus()
         if event.button() == Qt.MiddleButton:
+            # Safety net: clear any stale scene mouse grabber. A shake-deleted node
+            # that didn't fully release its grab can leave the scene routing events
+            # to a dead item, which silently breaks pan until the app restarts.
+            scene = self.scene()
+            if scene:
+                grabber = scene.mouseGrabberItem()
+                if grabber:
+                    grabber.ungrabMouse()
             self._last_pan_pos = event.position()
             self.setRenderHint(QPainter.Antialiasing, False)
             event.accept()
