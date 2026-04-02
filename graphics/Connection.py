@@ -10,17 +10,10 @@ from PySide6.QtWidgets import QGraphicsPathItem
 from PySide6.QtGui import QPainterPath, QPen, QColor, QPainter
 from PySide6.QtCore import Qt, QPointF, QTimer
 
+from utils.MotionCurves import GlideEngine
+
 
 class Connection(QGraphicsPathItem):
-
-    # Fraction of the remaining tangent gap closed per frame (controls curve shape flex).
-    # 0.07 gives a gentle ~0.8 s ease-out; feels rubbery without being sluggish.
-    _GLIDE_SPEED = 0.07
-
-    # Separate, slower lerp for endpoint positions — port-to-port slides cover
-    # more distance than tangent rotations so they need a lower fraction to feel
-    # as unhurried as the curve deformation.
-    _PORT_GLIDE_SPEED = 0.04
 
     # Pixels past the node border the wire endpoint is placed.
     # Previously 18px inside the node with a paint-time clip fade — now that
@@ -38,25 +31,8 @@ class Connection(QGraphicsPathItem):
         if self.end_node:
             self.end_node.connections.append(self)
 
-        # Animated departure state (source end)
-        self._anim_p1  = None
-        self._anim_d1x =  1.0
-        self._anim_d1y =  0.0
-
-        # Target departure state
-        self._tgt_p1   = None
-        self._tgt_d1x  =  1.0
-        self._tgt_d1y  =  0.0
-
-        # Animated arrival state (target end)
-        self._anim_p2  = None
-        self._anim_d2x = -1.0
-        self._anim_d2y =  0.0
-
-        # Target arrival state
-        self._tgt_p2   = None
-        self._tgt_d2x  = -1.0
-        self._tgt_d2y  =  0.0
+        # Motion engine — owns all animated/target state and the glide math
+        self._engine = GlideEngine()
 
         # Timer drives the glide animation independently of node-move events
         self._glide_timer = QTimer()
@@ -180,6 +156,7 @@ class Connection(QGraphicsPathItem):
         if self.start_node is None:
             return
         self.floating_point = mouse_pos
+        e = self._engine
 
         if self.end_node:
             # Use node centres as stable references for corner selection —
@@ -190,18 +167,18 @@ class Connection(QGraphicsPathItem):
             tgt_p1, tgt_d1x, tgt_d1y = self._compute_source(end_centre)
             tgt_p2, tgt_d2x, tgt_d2y = self._compute_target(src_centre)
 
-            self._tgt_p1, self._tgt_d1x, self._tgt_d1y = tgt_p1, tgt_d1x, tgt_d1y
-            self._tgt_p2, self._tgt_d2x, self._tgt_d2y = tgt_p2, tgt_d2x, tgt_d2y
+            e.set_source_target(tgt_p1, tgt_d1x, tgt_d1y)
+            e.set_target_target(tgt_p2, tgt_d2x, tgt_d2y)
 
-            if self._anim_p1 is None:
+            if e.anim_p1 is None:
                 # First draw — snap both ends directly, no glide
-                self._anim_p1, self._anim_d1x, self._anim_d1y = tgt_p1, tgt_d1x, tgt_d1y
-                self._anim_p2, self._anim_d2x, self._anim_d2y = tgt_p2, tgt_d2x, tgt_d2y
-            elif self._anim_p2 is None:
+                e.snap_source(tgt_p1, tgt_d1x, tgt_d1y)
+                e.snap_target(tgt_p2, tgt_d2x, tgt_d2y)
+            elif e.anim_p2 is None:
                 # Completing a previously floating wire — source end was tracking the
-                # mouse so _anim_p1 is set, but the target end was never initialised.
+                # mouse so anim_p1 is set, but the target end was never initialised.
                 # Snap it now so _build_bezier always receives two valid QPointFs.
-                self._anim_p2, self._anim_d2x, self._anim_d2y = tgt_p2, tgt_d2x, tgt_d2y
+                e.snap_target(tgt_p2, tgt_d2x, tgt_d2y)
                 if not self._glide_timer.isActive():
                     self._glide_timer.start()
             elif not self._glide_timer.isActive():
@@ -210,17 +187,17 @@ class Connection(QGraphicsPathItem):
         elif self.floating_point:
             # Floating wire: source corner tracks the mouse, target is the cursor
             tgt_p1, tgt_d1x, tgt_d1y = self._compute_source(self.floating_point)
-            self._tgt_p1, self._tgt_d1x, self._tgt_d1y = tgt_p1, tgt_d1x, tgt_d1y
+            e.set_source_target(tgt_p1, tgt_d1x, tgt_d1y)
 
-            if self._anim_p1 is None:
-                self._anim_p1, self._anim_d1x, self._anim_d1y = tgt_p1, tgt_d1x, tgt_d1y
+            if e.anim_p1 is None:
+                e.snap_source(tgt_p1, tgt_d1x, tgt_d1y)
 
             if not self._glide_timer.isActive():
                 self._glide_timer.start()
 
             self._sync_z()
             self._build_bezier(
-                self._anim_p1, self._anim_d1x, self._anim_d1y,
+                e.anim_p1, e.anim_d1x, e.anim_d1y,
                 self.floating_point, -1.0, 0.0,
             )
             return
@@ -229,69 +206,31 @@ class Connection(QGraphicsPathItem):
 
         self._sync_z()
         self._build_bezier(
-            self._anim_p1, self._anim_d1x, self._anim_d1y,
-            self._anim_p2, self._anim_d2x, self._anim_d2y,
+            e.anim_p1, e.anim_d1x, e.anim_d1y,
+            e.anim_p2, e.anim_d2x, e.anim_d2y,
         )
 
     def _glide_tick(self):
-        """Advance both animated endpoints toward their targets."""
+        """Advance the motion engine one frame and rebuild the bezier."""
         if self.start_node is None:
             self._glide_timer.stop()
             return
 
-        sp = self._PORT_GLIDE_SPEED   # slower — for endpoint positions
-        st = self._GLIDE_SPEED        # faster — for tangent directions (curve flex)
+        e = self._engine
+        settled = e.tick()
 
-        def _lerp(a, b, s):
-            return a + (b - a) * s
-
-        # Departure (source end)
-        ax1 = _lerp(self._anim_p1.x(), self._tgt_p1.x(), sp)
-        ay1 = _lerp(self._anim_p1.y(), self._tgt_p1.y(), sp)
-        dx1 = _lerp(self._anim_d1x,    self._tgt_d1x,    st)
-        dy1 = _lerp(self._anim_d1y,    self._tgt_d1y,    st)
-
-        # Arrival (target end)
-        if self._anim_p2 is not None and self._tgt_p2 is not None:
-            ax2 = _lerp(self._anim_p2.x(), self._tgt_p2.x(), sp)
-            ay2 = _lerp(self._anim_p2.y(), self._tgt_p2.y(), sp)
-            dx2 = _lerp(self._anim_d2x,    self._tgt_d2x,    st)
-            dy2 = _lerp(self._anim_d2y,    self._tgt_d2y,    st)
-        else:
-            ax2, ay2, dx2, dy2 = None, None, self._anim_d2x, self._anim_d2y
-
-        # Settle check — stop the timer when both ends are close enough
-        p1_settled = (self._tgt_p1.x() - ax1) ** 2 + (self._tgt_p1.y() - ay1) ** 2 < 0.04
-        d1_settled = (self._tgt_d1x - dx1) ** 2    + (self._tgt_d1y - dy1) ** 2    < 0.0001
-        if ax2 is not None and self._tgt_p2 is not None:
-            p2_settled = (self._tgt_p2.x() - ax2) ** 2 + (self._tgt_p2.y() - ay2) ** 2 < 0.04
-            d2_settled = (self._tgt_d2x - dx2) ** 2    + (self._tgt_d2y - dy2) ** 2    < 0.0001
-        else:
-            p2_settled = d2_settled = True
-
-        if p1_settled and d1_settled and p2_settled and d2_settled:
-            self._anim_p1, self._anim_d1x, self._anim_d1y = self._tgt_p1, self._tgt_d1x, self._tgt_d1y
-            if self._tgt_p2 is not None:
-                self._anim_p2, self._anim_d2x, self._anim_d2y = self._tgt_p2, self._tgt_d2x, self._tgt_d2y
+        if settled:
             self._glide_timer.stop()
-        else:
-            self._anim_p1  = QPointF(ax1, ay1)
-            self._anim_d1x = dx1
-            self._anim_d1y = dy1
-            if ax2 is not None:
-                self._anim_p2  = QPointF(ax2, ay2)
-                self._anim_d2x = dx2
-                self._anim_d2y = dy2
 
         self._sync_z()
-        if self._anim_p2 is not None:
+        if e.anim_p2 is not None:
             self._build_bezier(
-                self._anim_p1, self._anim_d1x, self._anim_d1y,
-                self._anim_p2, self._anim_d2x, self._anim_d2y,
+                e.anim_p1, e.anim_d1x, e.anim_d1y,
+                e.anim_p2, e.anim_d2x, e.anim_d2y,
             )
         elif self.floating_point:
             self._build_bezier(
-                self._anim_p1, self._anim_d1x, self._anim_d1y,
+                e.anim_p1, e.anim_d1x, e.anim_d1y,
                 self.floating_point, -1.0, 0.0,
             )
         self.update()
