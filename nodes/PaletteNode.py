@@ -416,8 +416,9 @@ class PaletteNode(BaseNode):
         scene.render(painter, QRectF(0, 0, w, h), scene_rect)
         painter.end()
 
+        from utils.helpers import ensure_dir
         out_dir = Path(_s.get("shared", "images_dir", default="."))
-        out_dir.mkdir(parents=True, exist_ok=True)
+        ensure_dir(out_dir)
         title = self.data.title.strip() or "Palette"
         path = out_dir / f"{title}.png"
         img.save(str(path))

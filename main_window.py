@@ -26,6 +26,7 @@ from widgets.PrettyButton import button
 from utils.logger import setup_logger
 from utils.PhrasePicker import motivationalMessages
 from utils.settings import appName, set_nested, get_nested, set_value, get
+from utils.helpers import ensure_dir
 from widgets.PrettyCombo import combo as pretty_combo
 from widgets.PrettyLabel import label as pretty_label
 
@@ -803,8 +804,10 @@ class IntricateApp(QMainWindow):
 
     def _spawn_tree_node(self):
         path = self._session_path()
+        # session lives in {project}/Documents/data/ — project root is three levels up
+        project_root = path.parent.parent.parent if path else None
         self._spawn(self.scene.add_tree_node, "mapping the territory",
-                    project_path=str(path.parent) if path else "")
+                    project_path=str(project_root) if project_root else "")
 
     # =========================================================================
     # The buttons and stuff at the bottom of the Ui
@@ -1035,7 +1038,7 @@ class IntricateApp(QMainWindow):
         # ── Migrate legacy root-level session.json ────────────────────────────
         old_session = project_root / "session.json"
         if old_session.exists() and not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
+            ensure_dir(path.parent)
             try:
                 old_session.rename(path)
                 logger.info(f"migrated session.json → {path.relative_to(project_root)}")
@@ -1066,7 +1069,7 @@ class IntricateApp(QMainWindow):
         """Save the current canvas to the active project's session.json."""
         path = self._session_path()
         if path:
-            path.parent.mkdir(parents=True, exist_ok=True)
+            ensure_dir(path.parent)
             self.scene.save_session(path)
 
     def _schedule_autosave(self) -> None:
@@ -1096,7 +1099,7 @@ class IntricateApp(QMainWindow):
         if hasattr(self, '_active_project'):
             prev_path = self._session_path(self._active_project)
             if prev_path:
-                prev_path.parent.mkdir(parents=True, exist_ok=True)
+                ensure_dir(prev_path.parent)
                 self.scene.save_session(prev_path)
 
         self._active_project = new_project

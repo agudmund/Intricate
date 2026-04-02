@@ -11,17 +11,21 @@ import os
 from pathlib import Path
 from typing import Iterator, List, Optional
 
-from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
+from PySide6.QtWidgets import (
+    QGraphicsProxyWidget, QTextEdit, QWidget, QVBoxLayout, QPushButton,
+    QLineEdit,
+)
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QPainter
+from PySide6.QtGui import QPainter, QIcon
 
 from nodes.BaseNode import BaseNode
 from data.TreeNodeData import TreeNodeData
 from graphics.Theme import Theme
 
 
-PADDING    = 6.0
-TITLE_GAP  = 8.0    # breathing room between title row and tree body
+PADDING      = 6.0
+TITLE_GAP    = 8.0    # breathing room between title row and tree body
+TOOLBAR_W    = 28.0   # width of the left-hand toolbar strip
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -203,6 +207,11 @@ class TreeNode(BaseNode):
 
         self._editor: QTextEdit | None = None
         self._editor_proxy: QGraphicsProxyWidget | None = None
+        self._toolbar_proxy: QGraphicsProxyWidget | None = None
+        self._name_proxy: QGraphicsProxyWidget | None = None
+        self._name_editor: QLineEdit | None = None
+        self._build_toolbar()
+        self._build_name_input()
         self._build_tree_view()
 
         if data.tree_text:
@@ -214,15 +223,160 @@ class TreeNode(BaseNode):
     # TREE VIEW
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _body_rect(self) -> QRectF:
+    def _toolbar_rect(self) -> QRectF:
         r   = self.rect()
         top = r.y() + self._BUTTON_ZONE_H + TITLE_GAP + PADDING
         return QRectF(
             r.x() + PADDING,
             top,
-            r.width()  - PADDING * 2,
+            TOOLBAR_W,
             r.height() - (top - r.y()) - PADDING,
         )
+
+    def _body_rect(self) -> QRectF:
+        r   = self.rect()
+        top = r.y() + self._BUTTON_ZONE_H + TITLE_GAP + PADDING
+        return QRectF(
+            r.x() + PADDING + TOOLBAR_W,
+            top,
+            r.width()  - PADDING * 2 - TOOLBAR_W,
+            r.height() - (top - r.y()) - PADDING,
+        )
+
+    def _name_input_rect(self) -> QRectF:
+        """Floating input field — spans the body area, one line tall."""
+        br = self._body_rect()
+        return QRectF(br.x(), br.y(), br.width(), 24.0)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # LEFT TOOLBAR
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_toolbar(self) -> None:
+        btn_size = int(TOOLBAR_W - 4)
+        self._tb_new_folder = QPushButton("📁")
+        self._tb_new_folder.setToolTip("New Folder")
+        self._tb_new_folder.setFixedSize(btn_size, btn_size)
+        self._tb_new_folder.setFlat(True)
+        self._tb_new_folder.setStyleSheet(f"""
+            QPushButton {{
+                border: none; padding: 0px;
+                background: transparent;
+                color: {Theme.textPrimary};
+                font-size: 12pt;
+            }}
+            QPushButton:hover {{
+                background: {Theme.primaryBorder};
+                border-radius: 4px;
+            }}
+        """)
+        self._tb_new_folder.clicked.connect(self._show_name_input)
+
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        tb_layout = QVBoxLayout(container)
+        tb_layout.setContentsMargins(2, 2, 2, 2)
+        tb_layout.setSpacing(4)
+        tb_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        tb_layout.addWidget(self._tb_new_folder)
+
+        self._toolbar_proxy = QGraphicsProxyWidget(self)
+        self._toolbar_proxy.setWidget(container)
+        self._toolbar_proxy.setGeometry(self._toolbar_rect())
+        self._toolbar_proxy.show()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # NEW FOLDER — NAME INPUT
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_name_input(self) -> None:
+        self._name_editor = QLineEdit()
+        self._name_editor.setAlignment(Qt.AlignLeft)
+        self._name_editor.setPlaceholderText("folder name…")
+        self._name_editor.setFrame(False)
+        self._name_editor.setStyleSheet(f"""
+            QLineEdit {{
+                background: {Theme.nodeBg};
+                color: {Theme.textPrimary};
+                font-family: {Theme.healthFontFamily};
+                font-size: 9pt;
+                border: 1px solid {Theme.primaryBorder};
+                border-radius: 4px;
+                padding: 2px 6px;
+                selection-background-color: {Theme.primaryBorder};
+            }}
+        """)
+        self._name_editor.returnPressed.connect(self._commit_new_folder)
+
+        self._name_proxy = QGraphicsProxyWidget(self)
+        self._name_proxy.setWidget(self._name_editor)
+        self._name_proxy.setGeometry(self._name_input_rect())
+        self._name_proxy.hide()
+        self._name_proxy.setZValue(10)  # float above the tree text
+
+    def _show_name_input(self) -> None:
+        self._name_proxy.setGeometry(self._name_input_rect())
+        self._name_editor.clear()
+
+        # Lift view focus policy so the embedded QLineEdit can receive keys
+        if self.scene() and self.scene().views():
+            self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
+
+        self._name_proxy.show()
+        self._name_proxy.setFocus()
+        self._name_editor.setFocus(Qt.MouseFocusReason)
+
+    def _commit_new_folder(self) -> None:
+        name = self._name_editor.text().strip()
+        self._name_proxy.hide()
+        if self.scene() and self.scene().views():
+            self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
+
+        if not name or not self.data.project_path:
+            return
+
+        from utils.helpers import ensure_dir
+        target = Path(self.data.project_path) / name
+        if ensure_dir(target):
+            self._refresh_in_place()
+
+    def _refresh_in_place(self) -> None:
+        """Re-walk the tree, destroy this node (with particles), spawn a fresh one."""
+        project = Path(self.data.project_path)
+        if not project.is_dir():
+            return
+
+        try:
+            text = self._make_walker().build_text()
+        except Exception:
+            return
+
+        scene = self.scene()
+        if scene is None:
+            return
+
+        pos = self.pos()
+        z   = self.zValue()
+        w   = self.rect().width()
+        h   = self.rect().height()
+
+        # Spawn the replacement first so the canvas is never empty
+        new_data = TreeNodeData(
+            project_path = self.data.project_path,
+            tree_text    = text,
+            width        = w,
+            height       = h,
+        )
+        new_node = TreeNode(new_data)
+        new_node.setPos(pos)
+        new_node.setZValue(z)
+        scene.addItem(new_node)
+
+        # Standard particle burst + deferred removal — same path as shake-delete
+        from graphics.Particles import sprinkle
+        sprinkle(scene, self.mapToScene(self.rect().center()), count=3000)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, lambda: scene.removeItem(self))
 
     def _build_tree_view(self) -> None:
         self._editor = QTextEdit()
@@ -331,7 +485,7 @@ class TreeNode(BaseNode):
         doc.setTextWidth(ideal_w)
         doc_h = doc.size().height()
 
-        chrome_x = PADDING * 2 + 12
+        chrome_x = PADDING * 2 + TOOLBAR_W + 12
         chrome_y = self._BUTTON_ZONE_H + TITLE_GAP + PADDING * 2 + 8
 
         new_w = max(200, ideal_w + chrome_x)
@@ -339,6 +493,22 @@ class TreeNode(BaseNode):
 
         r = self.rect()
         self.setRect(QRectF(r.x(), r.y(), new_w, new_h))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # INTERACTION
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def keyPressEvent(self, event) -> None:
+        if self._name_proxy and self._name_proxy.isVisible():
+            if event.key() == Qt.Key_Escape:
+                self._name_proxy.hide()
+                if self.scene() and self.scene().views():
+                    self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
+                event.accept()
+                return
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS
@@ -365,17 +535,26 @@ class TreeNode(BaseNode):
 
     def setRect(self, rect):
         super().setRect(rect)
+        if self._toolbar_proxy:
+            self._toolbar_proxy.setGeometry(self._toolbar_rect())
         if self._editor_proxy:
             self._editor_proxy.setGeometry(self._body_rect())
+        if self._name_proxy:
+            self._name_proxy.setGeometry(self._name_input_rect())
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        if self._name_proxy and self._name_proxy.isVisible():
+            self._name_proxy.hide()
+        if self._toolbar_proxy:
+            self._toolbar_proxy.hide()
         if self._editor_proxy:
             self._editor_proxy.hide()
         self._editor = None
+        self._name_editor = None
         super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import subprocess
 import hashlib
 from pathlib import Path
 from send2trash import send2trash
+from utils.helpers import ensure_dir
 
 # --- Configuration ---
 appName      = "Intricate"
@@ -48,9 +49,9 @@ class BuildManager:
     def rotateAndArchive(cls, root: Path):
         """Moves existing builds into buffers and tracks everything for the summary."""
         archiveDir = root / "archive"
-        archiveDir.mkdir(exist_ok=True)
+        ensure_dir(archiveDir)
         docsDir = root / docsFolder
-        docsDir.mkdir(exist_ok=True)
+        ensure_dir(docsDir)
 
         currentExeFile = root / cls.exeName
         oldHash = cls.getFileHash(currentExeFile)

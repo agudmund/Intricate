@@ -21,6 +21,7 @@ from PySide6.QtCore import QPointF
 from PySide6.QtWidgets import QGraphicsView
 
 from utils.logger import setup_logger
+from utils.helpers import ensure_dir
 import uuid as uuid_module
 
 logger = setup_logger()
@@ -54,7 +55,7 @@ def _rotate_session(filepath: str):
     """
     current    = Path(filepath)
     backup_dir = current.parent / "backup"
-    backup_dir.mkdir(exist_ok=True)
+    ensure_dir(backup_dir)
 
     previous = backup_dir / (current.stem + "_previous.json")
     archive  = backup_dir / (current.stem + "_archive.json")
@@ -115,7 +116,7 @@ class SessionManager:
         """Drive the data to the warehouse and save as JSON."""
         try:
             # Ensure the directory exists
-            Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+            ensure_dir(Path(filepath).parent)
 
             # 3-slot rollover before writing — matches build.py / logger.py rotation pattern
             _rotate_session(filepath)
