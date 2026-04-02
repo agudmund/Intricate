@@ -174,13 +174,18 @@ class _TreeWalker:
         if not visible:
             return
 
-        pointers = ["├── "] * (len(visible) - 1) + ["└── "]
-        for ptr, entry in zip(pointers, visible):
-            is_last = ptr == "└── "
-            icon = ("📁 " if entry.is_dir() else "📄 ") if self.use_emoji else ""
-            yield f"{prefix}{ptr}{icon}{entry.name}{'/' if entry.is_dir() else ''}"
+        for entry in visible:
+            if not self.use_emoji:
+                icon = ""
+            elif entry.is_file():
+                icon = "📄 "
+            elif depth > 0:
+                icon = "📁 "
+            else:
+                icon = ""
+            yield f"{prefix}{icon}{entry.name}{'/' if entry.is_dir() else ''}"
             if entry.is_dir():
-                next_prefix = prefix + ("    " if is_last else "│   ")
+                next_prefix = prefix + "    "
                 yield from self._walk(entry, next_prefix, depth + 1)
 
     def build_text(self) -> str:
@@ -225,6 +230,9 @@ class TreeNode(BaseNode):
         elif data.project_path:
             self.refresh()
 
+        if data.project_path:
+            self._ensure_init_files()
+
     # ─────────────────────────────────────────────────────────────────────────
     # TREE VIEW
     # ─────────────────────────────────────────────────────────────────────────
@@ -253,6 +261,17 @@ class TreeNode(BaseNode):
         """Floating input field — spans the body area, one line tall."""
         br = self._body_rect()
         return QRectF(br.x(), br.y(), br.width(), 24.0)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # INIT.PY COMPLIANCE
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _ensure_init_files(self) -> None:
+        """Create missing __init__.py files in Python package subfolders."""
+        from utils.helpers import ensure_init_tree
+        root = Path(self.data.project_path)
+        if root.is_dir():
+            ensure_init_tree(root)
 
     # ─────────────────────────────────────────────────────────────────────────
     # LEFT TOOLBAR

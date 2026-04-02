@@ -6,10 +6,23 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import os
 from pathlib import Path
 from utils.logger import setup_logger
 
 logger = setup_logger("helpers")
+
+
+# ── __init__.py template ─────────────────────────────────────────────────────
+_INIT_TEMPLATE = (
+    '#!/usr/bin/env python3\n'
+    '# -*- coding: utf-8 -*-\n'
+    '"""\n'
+    '-Intricate nodal playground - {path}/__init__.py package initializer\n'
+    '-{name} package initializer for enjoying\n'
+    '-Built using a single shared braincell by Yours Truly and various Intelligences\n'
+    '"""\n'
+)
 
 
 def ensure_dir(path: str | Path) -> bool:
@@ -28,3 +41,54 @@ def ensure_dir(path: str | Path) -> bool:
     except OSError as e:
         logger.warning(f"⚠ Failed to create directory: {path} — {e}")
         return False
+
+
+def ensure_init(path: str | Path, project_root: str | Path | None = None) -> bool:
+    """Create __init__.py with the standard header if missing.
+
+    Args:
+        path:         The directory that should contain __init__.py.
+        project_root: Optional root for deriving the relative path in the header.
+                      Falls back to using the directory name alone.
+
+    Returns True if __init__.py exists after the call, False on failure.
+    """
+    path = Path(path)
+    init_file = path / "__init__.py"
+    if init_file.exists():
+        logger.info(f"✓ __init__.py already in {path}")
+        return True
+    try:
+        rel  = path.relative_to(project_root) if project_root else Path(path.name)
+        name = rel.parts[-1].capitalize() if rel.parts else path.name.capitalize()
+        init_file.write_text(
+            _INIT_TEMPLATE.format(path=rel.as_posix(), name=name),
+            encoding="utf-8",
+        )
+        logger.info(f"🌱 Created __init__.py in {path}")
+        return True
+    except OSError as e:
+        logger.warning(f"⚠ Failed to create __init__.py in {path} — {e}")
+        return False
+
+
+def ensure_init_tree(root: str | Path) -> int:
+    """Walk a project tree and create missing __init__.py in Python package folders.
+
+    A subfolder is treated as a library package when it contains .py files
+    but no main.py.  Folders with main.py are standalone entry points and
+    are left alone.
+
+    Returns the number of __init__.py files created.
+    """
+    root = Path(root)
+    skip = {".git", "__pycache__"}
+    created = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
+        py_files = [f for f in filenames if f.endswith(".py")]
+        if not py_files or "main.py" in py_files or "__init__.py" in py_files:
+            continue
+        if ensure_init(dirpath, project_root=root):
+            created += 1
+    return created
