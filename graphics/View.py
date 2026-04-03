@@ -152,7 +152,11 @@ class IntricateView(QGraphicsView):
             self._on_zoom_changed()
 
     def _notify_viewport_changed(self) -> None:
-        """Tell the scene the visible area moved so it can cull offscreen videos."""
+        """Tell the scene the visible area moved so it can cull offscreen videos.
+        Skips while curtains are collapsed — videos stay paused until expand."""
+        win = self.window()
+        if win and getattr(win, 'is_collapsed', False):
+            return
         scene = self.scene()
         if scene and hasattr(scene, 'update_video_visibility'):
             viewport_rect = self.mapToScene(self.viewport().rect()).boundingRect()

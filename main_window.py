@@ -232,10 +232,9 @@ class IntricateApp(QMainWindow):
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
             self.central.hide()
             self.bottomToolbar.hide()
-            # Cull all videos — curtains hide the canvas
+            # Pause all videos — curtains hide the canvas
             if self.scene:
-                from PySide6.QtCore import QRectF
-                self.scene.update_video_visibility(QRectF())
+                self.scene.pause_all_videos()
         else:
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), self.original_height)
             self.central.show()

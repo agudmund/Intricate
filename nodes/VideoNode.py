@@ -196,7 +196,10 @@ class VideoNode(BaseNode):
         elif status == QMediaPlayer.MediaStatus.EndOfMedia:
             if self.data.looping:
                 self._player.setPosition(0)
-                self._player.play()
+                if self._viewport_visible:
+                    self._player.play()
+                else:
+                    self._was_playing_before_cull = True
 
     def _on_frame(self, frame: QVideoFrame) -> None:
         """Convert each video frame to a proxy-sized QPixmap for painting.
@@ -243,7 +246,7 @@ class VideoNode(BaseNode):
     def _toggle_playback(self) -> None:
         if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.pause()
-        else:
+        elif self._viewport_visible:
             self._player.play()
         self.update()
 
@@ -347,7 +350,7 @@ class VideoNode(BaseNode):
     def mouseReleaseEvent(self, event) -> None:
         pos = event.pos()
         if self._buttons_visible and self._progress_rect().contains(pos) and event.button() == Qt.LeftButton:
-            if self._was_playing:
+            if self._was_playing and self._viewport_visible:
                 self._player.play()
                 self._was_playing = False
             event.accept()

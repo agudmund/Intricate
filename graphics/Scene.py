@@ -421,6 +421,13 @@ class IntricateScene(QGraphicsScene):
                 node_rect = item.mapRectToScene(item.rect())
                 item._set_viewport_visible(padded.intersects(node_rect))
 
+    def pause_all_videos(self) -> None:
+        """Unconditionally pause every VideoNode — used when curtains collapse."""
+        from nodes.VideoNode import VideoNode
+        for item in self.items():
+            if isinstance(item, VideoNode):
+                item._set_viewport_visible(False)
+
     # ─────────────────────────────────────────────────────────────────────────
     # SESSION PERSISTENCE
     # ─────────────────────────────────────────────────────────────────────────
