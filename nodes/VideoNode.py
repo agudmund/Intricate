@@ -89,6 +89,7 @@ class VideoNode(BaseNode):
         self._player.setAudioOutput(self._audio)
         self._player.setVideoOutput(self._sink)
         self._audio.setVolume(data.volume / 100.0)
+        self._audio.setMuted(data.muted)
 
         self._sink.videoFrameChanged.connect(self._on_frame)
         self._player.durationChanged.connect(self._on_duration_changed)
@@ -133,11 +134,12 @@ class VideoNode(BaseNode):
     def _video_rect(self) -> QRectF:
         r = self.rect()
         top = r.y() + self._top_offset() + VIDEO_PADDING
+        bottom_reserve = (PROGRESS_HEIGHT + VIDEO_PADDING) if self._buttons_visible else 0.0
         return QRectF(
             r.x()     + VIDEO_PADDING,
             top,
             r.width() - VIDEO_PADDING * 2,
-            r.height() - (top - r.y()) - VIDEO_PADDING - PROGRESS_HEIGHT - VIDEO_PADDING,
+            r.height() - (top - r.y()) - VIDEO_PADDING - bottom_reserve,
         )
 
     def _spawn_caption_node(self, caption: str) -> None:
@@ -248,6 +250,10 @@ class VideoNode(BaseNode):
     def _toggle_loop(self) -> None:
         self.data.looping = not self.data.looping
 
+    def _toggle_mute(self) -> None:
+        self.data.muted = not self.data.muted
+        self._audio.setMuted(self.data.muted)
+
     def _stop(self) -> None:
         self._player.stop()
         self.update()
@@ -290,6 +296,12 @@ class VideoNode(BaseNode):
         self._loop_btn._in_confirm = self.data.looping
         self._buttons.append(self._loop_btn)
 
+        mute_off_pix = Theme.icon(Theme.iconMuteOff, fallback_color="#7a8a9a")
+        mute_on_pix  = Theme.icon(Theme.iconMuteOn,  fallback_color="#c47a7a")
+        self._mute_btn = NodeButton(self, mute_off_pix, self._toggle_mute, mute_on_pix, toggle=True)
+        self._mute_btn._in_confirm = self.data.muted
+        self._buttons.append(self._mute_btn)
+
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
@@ -313,7 +325,7 @@ class VideoNode(BaseNode):
 
     def mousePressEvent(self, event) -> None:
         pos = event.pos()
-        if event.button() == Qt.LeftButton and self._progress_rect().contains(pos):
+        if self._buttons_visible and event.button() == Qt.LeftButton and self._progress_rect().contains(pos):
             self._was_playing = (
                 self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
             )
@@ -326,7 +338,7 @@ class VideoNode(BaseNode):
 
     def mouseMoveEvent(self, event) -> None:
         pos = event.pos()
-        if self._progress_rect().contains(pos) and event.buttons() & Qt.LeftButton:
+        if self._buttons_visible and self._progress_rect().contains(pos) and event.buttons() & Qt.LeftButton:
             self._scrub_to(pos.x())
             event.accept()
             return
@@ -334,7 +346,7 @@ class VideoNode(BaseNode):
 
     def mouseReleaseEvent(self, event) -> None:
         pos = event.pos()
-        if self._progress_rect().contains(pos) and event.button() == Qt.LeftButton:
+        if self._buttons_visible and self._progress_rect().contains(pos) and event.button() == Qt.LeftButton:
             if self._was_playing:
                 self._player.play()
                 self._was_playing = False
@@ -405,18 +417,19 @@ class VideoNode(BaseNode):
             painter.setPen(QColor(Theme.healthColorLabel))
             painter.drawText(vr, Qt.AlignCenter, "double-click\nto load video")
 
-        # ── Progress bar ─────────────────────────────────────────────────────
-        bar_bg = QColor(Theme.nodeBg).lighter(130)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(bar_bg)
-        painter.drawRoundedRect(pr, 3, 3)
+        # ── Progress bar (only when button row is visible) ────────────────────
+        if self._buttons_visible:
+            bar_bg = QColor(Theme.nodeBg).lighter(130)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(bar_bg)
+            painter.drawRoundedRect(pr, 3, 3)
 
-        if self._duration_ms > 0:
-            ratio = self._position_ms / self._duration_ms
-            fill_w = pr.width() * ratio
-            fill_rect = QRectF(pr.left(), pr.top(), fill_w, pr.height())
-            painter.setBrush(QColor(Theme.primaryBorder))
-            painter.drawRoundedRect(fill_rect, 3, 3)
+            if self._duration_ms > 0:
+                ratio = self._position_ms / self._duration_ms
+                fill_w = pr.width() * ratio
+                fill_rect = QRectF(pr.left(), pr.top(), fill_w, pr.height())
+                painter.setBrush(QColor(Theme.primaryBorder))
+                painter.drawRoundedRect(fill_rect, 3, 3)
 
 
         # ── Play state indicator ─────────────────────────────────────────────
@@ -489,6 +502,7 @@ class VideoNode(BaseNode):
     def to_dict(self) -> dict:
         self.data.playback_pos = self._position_ms
         self.data.volume = int(self._audio.volume() * 100)
+        self.data.muted = self._audio.isMuted()
         self.sync_data()
         return self.data.to_dict()
 

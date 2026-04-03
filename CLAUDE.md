@@ -171,6 +171,17 @@ xxx = "xxx_node.ico"
 
 `Theme.iconXxx` resolves automatically via the metaclass — no code change needed.
 
+### Icon Rule — Every Button Gets an Icon
+
+Whenever you add a new button **anywhere** in the app — sidebar, toolbar, node-embedded control, dialog — you **must** also generate a matching `.ico` icon using the Pillow recipe above. No button ships without its own icon. The steps:
+
+1. Write a standalone Python script following the recipe (outer ring + symbol in the centre).
+2. Run it to produce both the `.png` and multi-resolution `.ico` in `./icons/`.
+3. Register the icon in `[theme.icons]` in `settings.toml`.
+4. Reference it via `Theme.iconXxx` in the button code — the metaclass resolves it automatically.
+
+This applies to node-type icons, toolbar actions, modal buttons, and any future UI surface that presents a clickable control. If it is a button, it gets an icon.
+
 ### Logging
 
 Logs go to the directory set in `[shared] log_dir` in `settings.toml`, falling back to `./logs/nodal.log`. Three-slot rotation (current → previous → archive → recycle bin). TRACE (5) is the lowest level — used for per-frame diagnostics in file only.

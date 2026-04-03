@@ -232,6 +232,10 @@ class IntricateApp(QMainWindow):
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
             self.central.hide()
             self.bottomToolbar.hide()
+            # Cull all videos — curtains hide the canvas
+            if self.scene:
+                from PySide6.QtCore import QRectF
+                self.scene.update_video_visibility(QRectF())
         else:
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), self.original_height)
             self.central.show()
@@ -273,6 +277,9 @@ class IntricateApp(QMainWindow):
         # Reset pan state — a stale non-None _last_pan_pos after a
         # visibility change would lock the view into phantom-pan mode.
         self.view._last_pan_pos = None
+        # Re-evaluate video visibility after curtains expand
+        if not self.is_collapsed:
+            self.view._notify_viewport_changed()
 
 
     # =================================================================================

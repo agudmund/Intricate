@@ -343,18 +343,25 @@ class Theme(metaclass=_ThemeMeta):
         resolved = cls._resolve_icon_path(filename)
         if resolved:
             path_str = str(resolved)
-            # .ico files contain multiple resolution layers — QPixmap picks the
-            # smallest. Load via QIcon.pixmap() which selects the best layer for
-            # the requested size, giving us a crisp pixmap at display resolution.
+            # Prefer the high-res .png sibling over the .ico container.
+            # .ico files cap at 256px via QIcon.pixmap(); the companion .png
+            # is 1024px and downscales cleanly at any zoom — matching the
+            # crisp rendering that PrettyButton and NodeButton rely on.
             if path_str.lower().endswith('.ico'):
-                from PySide6.QtGui import QIcon as _QIcon
-                sz = max(cls.iconSize, cls.iconButtonSize, 64)
-                candidate = _QIcon(path_str).pixmap(sz, sz)
+                import os as _os
+                png_sibling = path_str[:-4] + '.png'
+                if _os.path.exists(png_sibling):
+                    candidate = QPixmap(png_sibling)
+                    path_str = png_sibling
+                else:
+                    from PySide6.QtGui import QIcon as _QIcon
+                    sz = max(cls.iconSize, cls.iconButtonSize, 64)
+                    candidate = _QIcon(path_str).pixmap(sz, sz)
             else:
                 candidate = QPixmap(path_str)
             if not candidate.isNull():
                 pix = candidate
-                _log.debug(f"[icon] '{filename}' → loaded from {resolved}")
+                _log.debug(f"[icon] '{filename}' → loaded from {path_str}")
             else:
                 _log.warning(f"[icon] '{filename}' → file exists at {resolved} but QPixmap is null")
 

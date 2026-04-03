@@ -122,13 +122,6 @@ class ClaudeNode(BaseNode):
         if body_text:
             self._greeted = True   # session loaded with content — no greeting needed
             return
-        if not self._current_uuid:
-            # UUID not ready yet — retry once more after another 4 s
-            retries = getattr(self, '_greeting_retries', 0)
-            if retries < 2:
-                self._greeting_retries = retries + 1
-                QTimer.singleShot(2000, self._attempt_greeting)
-            return
         self._greeted = True
         self._send_greeting()
 
@@ -136,12 +129,18 @@ class ClaudeNode(BaseNode):
         """
         Fire a hidden greeting prompt — doesn't update the node title or
         body, just lets Claude say something warm into a response node.
+        Samples a phrase from PhrasePicker to seed each greeting's tone.
         """
+        import random
+        from utils.PhrasePicker import motivationalMessages
+        seed_phrase = random.choice(motivationalMessages)
         _GREETING_PROMPT = (
-            "The user has just opened or returned to their Intricate canvas — "
-            "a personal node-based visual workspace. Offer a brief, warm, civil "
+            "The user has just returned to Intricate — "
+            "and Claude has arrived. Construct a brief, warm, civil "
             "greeting. One or two sentences at most. Be natural and unhurried, "
-            "as if you're a thoughtful presence in the room rather than a chatbot."
+            "as if you're a thoughtful presence in the room rather than a chatbot. "
+            f"Let the spirit of \"{seed_phrase}\" color the mood of your greeting — "
+            "don't quote it directly, just let it influence the feeling and tone."
         )
         import tempfile
         _tf = tempfile.NamedTemporaryFile(
@@ -163,11 +162,17 @@ class ClaudeNode(BaseNode):
         self._stdout_accumulated = ""
         self._last_response_node = None
         self._suppress_body_append = True   # greeting text only goes to response node
-        jsonl_path = Path(self.data.folder_path) / f"{self._current_uuid}.jsonl"
-        try:
-            self._file_offset = jsonl_path.stat().st_size
-        except OSError:
-            pass
+        self._pre_send_jsonl_stems: set = set()
+        if self._current_uuid:
+            jsonl_path = Path(self.data.folder_path) / f"{self._current_uuid}.jsonl"
+            try:
+                self._file_offset = jsonl_path.stat().st_size
+            except OSError:
+                pass
+        else:
+            p = Path(self.data.folder_path)
+            self._pre_send_jsonl_stems = set(f.stem for f in p.glob("*.jsonl")) if p.exists() else set()
+            self._file_offset = 0
 
         # Stop any in-flight stream before starting a new one
         if hasattr(self, '_stream_timer') and self._stream_timer:

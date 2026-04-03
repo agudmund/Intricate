@@ -42,9 +42,10 @@ class NodeButton(QGraphicsObject):
         Checked in paint — no timer, no signal, zero overhead.
 
     Icon spec:
-        32×32px PNG with alpha channel.
-        Scaled to BUTTON_SIZE (16×16px logical) once at construction,
-        cached — zero per-frame scaling cost.
+        High-res PNG (1024×1024) with alpha channel.
+        Source pixmap kept at full resolution — the painter scales it
+        into the BUTTON_SIZE bounding rect with SmoothPixmapTransform,
+        so icons stay crisp at every zoom level just like the emoji button.
     """
 
     def __init__(
@@ -65,15 +66,11 @@ class NodeButton(QGraphicsObject):
         self._reset_timer.setInterval(CONFIRM_TIMEOUT)
         self._reset_timer.timeout.connect(self._reset)
 
-        # Scale once at construction — cached, never scaled again during paint
-        sz = int(BUTTON_SIZE)
-        self._pix_normal  = pixmap_normal.scaled(
-            sz, sz, Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
-        self._pix_confirm = (
-            pixmap_confirm.scaled(sz, sz, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            if pixmap_confirm else None
-        )
+        # Keep full-res source pixmaps — the painter scales them into the
+        # bounding rect at paint time so icons stay crisp at every zoom level,
+        # matching the emoji button which renders vector text.
+        self._pix_normal  = pixmap_normal
+        self._pix_confirm = pixmap_confirm
 
         self.setAcceptHoverEvents(True)
         self.setCursor(Qt.PointingHandCursor)
@@ -100,7 +97,8 @@ class NodeButton(QGraphicsObject):
             if self._in_confirm and self._pix_confirm
             else self._pix_normal
         )
-        painter.drawPixmap(QPointF(0.0, 0.0), pix)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        painter.drawPixmap(self.boundingRect().toRect(), pix)
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION

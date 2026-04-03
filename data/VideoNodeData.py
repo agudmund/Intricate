@@ -33,6 +33,7 @@ class VideoNodeData(NodeData):
     volume:      int   = field(default=50)      # 0–100, persisted
     playback_pos: int  = field(default=0)       # Milliseconds into the video at save time
     looping:      bool = field(default=False)   # Whether playback loops
+    muted:        bool = field(default=False)   # Whether audio is muted
 
     def to_dict(self) -> dict:
         data = super().to_dict()
@@ -41,6 +42,7 @@ class VideoNodeData(NodeData):
         data["volume"]        = self.volume
         data["playback_pos"]  = self.playback_pos
         data["looping"]       = self.looping
+        data["muted"]         = self.muted
         return data
 
     @classmethod
@@ -60,4 +62,5 @@ class VideoNodeData(NodeData):
             volume        = data.get("volume",        50),
             playback_pos  = data.get("playback_pos",  0),
             looping       = data.get("looping",       False),
+            muted         = data.get("muted",         False),
         )
