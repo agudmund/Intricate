@@ -508,12 +508,22 @@ class IntricateScene(QGraphicsScene):
         from nodes.BaseNode import BaseNode
         from graphics.Connection import Connection
 
+        from nodes.VideoNode import VideoNode
         for item in list(self.items()):
             if isinstance(item, BaseNode):
                 try:
                     item.behaviour.disconnect_all()
                 except Exception:
                     pass
+                # Stop media players so VideoNodes don't keep decoding in RAM
+                if isinstance(item, VideoNode):
+                    try:
+                        if item._volume_anim:
+                            item._volume_anim.stop()
+                            item._volume_anim = None
+                        item._player.stop()
+                    except Exception:
+                        pass
             elif isinstance(item, Connection):
                 try:
                     item._glide_timer.stop()
@@ -549,10 +559,13 @@ class IntricateScene(QGraphicsScene):
                 except Exception:
                     pass
 
-        # Clear each node's connection list then remove it from the scene
+        # Tear down each node fully — _prepare_for_removal stops media players,
+        # volume animations, and disconnects signals that would otherwise keep
+        # VideoNodes alive and decoding in the background until GC runs.
         for item in list(self.items()):
             if isinstance(item, BaseNode):
                 try:
+                    item._prepare_for_removal()
                     item.connections.clear()
                     self.removeItem(item)
                 except Exception:

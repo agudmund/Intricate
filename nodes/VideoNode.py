@@ -9,7 +9,7 @@
 from pathlib import Path
 
 from PySide6.QtWidgets import QFileDialog
-from PySide6.QtCore import Qt, QRectF, QPointF, QUrl
+from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath
 )
@@ -102,6 +102,8 @@ class VideoNode(BaseNode):
 
         self._viewport_visible: bool = True   # assume visible until told otherwise
         self._was_playing_before_cull: bool = False
+        self._volume_anim: QPropertyAnimation | None = None
+        self._target_volume: float = data.volume / 100.0  # user's intended volume
 
         # Button row starts hidden — double-click the top strip to reveal
         self._buttons_visible = False
@@ -462,23 +464,53 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _set_viewport_visible(self, visible: bool) -> None:
-        """Pause playback when offscreen, resume when back in view."""
+        """Fade audio and pause/resume playback on visibility change.
+
+        Fade-out (1 s) → pause when leaving view.
+        Resume → fade-in (1 s) when entering view.
+        Video pauses only after the fade completes so the audio tail
+        never cuts mid-tone.
+        """
         if visible == self._viewport_visible:
             return
         self._viewport_visible = visible
         if not self.data.source_path:
             return
+
+        # Kill any in-flight fade before starting a new one
+        if self._volume_anim:
+            self._volume_anim.stop()
+            self._volume_anim = None
+
         if visible:
             if self._was_playing_before_cull:
+                self._audio.setVolume(0.0)
                 self._player.play()
                 self._was_playing_before_cull = False
+                self._fade_volume(0.0, self._target_volume)
         else:
             playing = (
                 self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
             )
             if playing:
                 self._was_playing_before_cull = True
-                self._player.pause()
+                self._fade_volume(self._audio.volume(), 0.0, pause_after=True)
+
+    def _fade_volume(self, start: float, end: float, pause_after: bool = False) -> None:
+        """Animate QAudioOutput.volume over 1 second, optionally pausing when done."""
+        self._volume_anim = QPropertyAnimation(self._audio, b"volume")
+        self._volume_anim.setDuration(1000)
+        self._volume_anim.setStartValue(start)
+        self._volume_anim.setEndValue(end)
+        self._volume_anim.setEasingCurve(QEasingCurve.InOutQuad)
+        if pause_after:
+            self._volume_anim.finished.connect(self._pause_after_fade)
+        self._volume_anim.start()
+
+    def _pause_after_fade(self) -> None:
+        """Called when the fade-out finishes — now safe to pause the player."""
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._player.pause()
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
@@ -486,6 +518,9 @@ class VideoNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         self._destroyed = True
+        if self._volume_anim:
+            self._volume_anim.stop()
+            self._volume_anim = None
         self._player.stop()
         try:
             self._sink.videoFrameChanged.disconnect(self._on_frame)
@@ -504,7 +539,7 @@ class VideoNode(BaseNode):
 
     def to_dict(self) -> dict:
         self.data.playback_pos = self._position_ms
-        self.data.volume = int(self._audio.volume() * 100)
+        self.data.volume = int(self._target_volume * 100)
         self.data.muted = self._audio.isMuted()
         self.sync_data()
         return self.data.to_dict()
