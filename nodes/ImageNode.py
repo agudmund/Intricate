@@ -12,7 +12,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QFileDialog
 from PySide6.QtCore import Qt, QRectF, QPointF, QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import (
-    QPainter, QPixmap, QImage, QColor, QPen, QPainterPath
+    QPainter, QPixmap, QImage, QImageReader, QColor, QPen, QPainterPath
 )
 
 from nodes.BaseNode import BaseNode
@@ -123,9 +123,12 @@ class ImageNode(BaseNode):
         Public — called by file browser and by View.dropEvent.
         """
         path = Path(path)
-        pixmap = QPixmap(str(path))
-        if pixmap.isNull():
+        reader = QImageReader(str(path))
+        reader.setAutoTransform(True)  # apply EXIF orientation
+        img = reader.read()
+        if img.isNull():
             return
+        pixmap = QPixmap.fromImage(img)
 
         # Scale down large images at load time — keeps session base64 small and
         # paint calls fast.  2048px on the longest side is sharp at any node size.
@@ -206,9 +209,12 @@ class ImageNode(BaseNode):
 
     def _restore_from_path(self, path: Path) -> None:
         """Load pixmap from path for session restore — no b64 encode, render context not ready yet."""
-        pixmap = QPixmap(str(path))
-        if pixmap.isNull():
+        reader = QImageReader(str(path))
+        reader.setAutoTransform(True)  # apply EXIF orientation
+        img = reader.read()
+        if img.isNull():
             return
+        pixmap = QPixmap.fromImage(img)
         _MAX = 2048
         if pixmap.width() > _MAX or pixmap.height() > _MAX:
             pixmap = pixmap.scaled(_MAX, _MAX, Qt.KeepAspectRatio, Qt.SmoothTransformation)

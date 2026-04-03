@@ -73,6 +73,8 @@ class VideoNode(BaseNode):
             data = VideoNodeData()
         super().__init__(data)
 
+        self._destroyed = False   # set by _prepare_for_removal to guard signal callbacks
+
         # ── Current frame pixmap ──────────────────────────────────────────────
         self._frame_pixmap: QPixmap | None = None
         self._scaled_cache: QPixmap | None = None
@@ -177,6 +179,11 @@ class VideoNode(BaseNode):
             self._restore_pos = 0
 
     def _on_media_status(self, status) -> None:
+        try:
+            if self._destroyed:
+                return
+        except RuntimeError:
+            return
         if status == QMediaPlayer.MediaStatus.LoadedMedia:
             if hasattr(self, '_restore_pos') and self._restore_pos > 0:
                 self._player.setPosition(self._restore_pos)
@@ -196,8 +203,11 @@ class VideoNode(BaseNode):
         memory — never the full decoded frame.  If the previous frame hasn't
         been painted yet we drop this one entirely (frame-skip).
         """
-        if self._frame_pending:
-            return                       # paint hasn't caught up — drop frame
+        try:
+            if self._destroyed or self._frame_pending:
+                return
+        except RuntimeError:
+            return
         if not frame.isValid():
             return
         img = frame.toImage()
@@ -205,7 +215,10 @@ class VideoNode(BaseNode):
             return
 
         # Scale to display size right away — never keep the full-res decode
-        vr = self._video_rect()
+        try:
+            vr = self._video_rect()
+        except RuntimeError:
+            return
         tw, th = max(1, int(vr.width())), max(1, int(vr.height()))
         small = img.scaled(tw, th, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self._frame_pixmap = QPixmap.fromImage(small)
@@ -217,8 +230,13 @@ class VideoNode(BaseNode):
         self._duration_ms = duration
 
     def _on_position_changed(self, position: int) -> None:
-        self._position_ms = position
-        self.update()  # repaint progress bar
+        try:
+            if self._destroyed:
+                return
+            self._position_ms = position
+            self.update()
+        except RuntimeError:
+            return
 
     def _toggle_playback(self) -> None:
         if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
@@ -451,11 +469,15 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        self._destroyed = True
         self._player.stop()
-        self._sink.videoFrameChanged.disconnect(self._on_frame)
-        self._player.durationChanged.disconnect(self._on_duration_changed)
-        self._player.positionChanged.disconnect(self._on_position_changed)
-        self._player.mediaStatusChanged.disconnect(self._on_media_status)
+        try:
+            self._sink.videoFrameChanged.disconnect(self._on_frame)
+            self._player.durationChanged.disconnect(self._on_duration_changed)
+            self._player.positionChanged.disconnect(self._on_position_changed)
+            self._player.mediaStatusChanged.disconnect(self._on_media_status)
+        except RuntimeError:
+            pass  # already disconnected or C++ side gone
         self._frame_pixmap = None
         self._scaled_cache = None
         super()._prepare_for_removal()
