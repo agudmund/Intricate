@@ -37,7 +37,7 @@ def ensure_dir(path: str | Path) -> bool:
             path.mkdir(parents=True, exist_ok=True)
             logger.info(f"🌱 Created directory: {path}")
         else:
-            logger.info(f"✓ Directory already exists: {path}")
+            logger.log(5, f"✓ Directory already exists: {path}")
         return True
     except OSError as e:
         logger.warning(f"⚠ Failed to create directory: {path} — {e}")

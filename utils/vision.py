@@ -36,55 +36,9 @@ _MEDIA_TYPES = {
 }
 
 # ---------------------------------------------------------------------------
-# PNG vision-stamp helpers
+# PNG vision-stamp helpers — canonical source is utils/HappyTimes.py
 # ---------------------------------------------------------------------------
-
-_STAMP_KEY = "intricate_vision"   # tEXt chunk key written into processed PNGs
-
-
-def read_png_vision_stamp(path: Path) -> str | None:
-    """
-    Read the vision caption stamped into a PNG's tEXt metadata.
-
-    Returns the stored caption string if the file has been processed before,
-    None otherwise (or if the file is not a PNG / Pillow is unavailable).
-    Rename-safe: the stamp travels with the file bytes, not the filename.
-    """
-    if path.suffix.lower() != ".png":
-        return None
-    try:
-        from PIL import Image
-        with Image.open(path) as img:
-            return img.text.get(_STAMP_KEY)
-    except Exception:
-        return None
-
-
-def write_png_vision_stamp(path: Path, caption: str) -> None:
-    """
-    Stamp a processed PNG with a tEXt metadata chunk recording the caption.
-
-    Uses Pillow to rewrite the file in-place, preserving all existing tEXt
-    chunks and image data losslessly.  The chunk is invisible to Windows
-    Explorer and any standard image viewer — it's pure metadata.
-
-    Silently no-ops for non-PNG files, missing files, or if Pillow is absent.
-    """
-    if path.suffix.lower() != ".png":
-        return
-    try:
-        from PIL import Image, PngImagePlugin
-        with Image.open(path) as img:
-            info = PngImagePlugin.PngInfo()
-            # Carry over any existing tEXt chunks so nothing is lost
-            for k, v in (img.text or {}).items():
-                if k != _STAMP_KEY:          # replace, don't duplicate
-                    info.add_text(k, v)
-            info.add_text(_STAMP_KEY, caption)
-            img.save(path, "PNG", pnginfo=info)
-        _log.debug(f"[vision] stamped '{path.name}' → {caption!r}")
-    except Exception as exc:
-        _log.debug(f"[vision] stamp write skipped for '{path.name}': {exc}")
+from utils.HappyTimes import read_png_vision_stamp, write_png_vision_stamp  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

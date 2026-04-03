@@ -323,20 +323,16 @@ class IntricateView(QGraphicsView):
             if any(Path(p).suffix.lower() in supported for p in paths):
                 event.acceptProposedAction()
                 return
-        # Let Qt route internal drags (e.g. palette swatches) to proxy widgets.
-        if event.mimeData().hasFormat("application/x-intricate-palette-color"):
-            super().dragEnterEvent(event)
-            return
-        event.ignore()
+        # Let Qt route internal drags (e.g. palette swatches, text selection
+        # inside proxy widgets) through the normal QGraphicsView pipeline.
+        super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event) -> None:
         """Keep accepting during the drag so the cursor stays correct."""
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
             return
-        if event.mimeData().hasFormat("application/x-intricate-palette-color"):
-            super().dragMoveEvent(event)
-            return
+        super().dragMoveEvent(event)
 
     def dropEvent(self, event) -> None:
         """

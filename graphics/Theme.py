@@ -236,6 +236,8 @@ class Theme(metaclass=_ThemeMeta):
     aboutTextPaddingTop      = 0.0
     aboutFontVerticalOffset   = 0.0
     aboutEditorVerticalOffset = 0.0
+    aboutSelectionLineHeight  = 15.0  # fixed px height for selection highlight; TOML value is an offset from this
+    aboutSelectionFontColor   = "#ffffff"
     healthFontFamily     = "Segoe UI"
     healthFontSizeLabel  = 8
     healthFontSizeValue  = 9
@@ -472,8 +474,13 @@ class Theme(metaclass=_ThemeMeta):
             cls.aboutTextPaddingTop = float(about["text_padding_top"])
         if "font_vertical_offset" in about:
             cls.aboutFontVerticalOffset = float(about["font_vertical_offset"])
+        cls.aboutEditorVerticalOffset = cls.aboutFontVerticalOffset
         if "editor_vertical_offset" in about:
             cls.aboutEditorVerticalOffset = float(about["editor_vertical_offset"])
+        if "selection_line_height" in about:
+            cls.aboutSelectionLineHeight = 15.0 + float(about["selection_line_height"])
+        if "selection_font_color" in about:
+            cls.aboutSelectionFontColor = str(about["selection_font_color"])
 
         # ── Curtains animation ────────────────────────────────────────────────
         curtains = settings.get_section("theme").get("curtains", {})

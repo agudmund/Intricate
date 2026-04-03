@@ -130,7 +130,8 @@ class AboutNode(BaseNode):
 
     def mouseDoubleClickEvent(self, event) -> None:
         # Top strip above the text area — toggle button row
-        if event.pos().y() < self.rect().top() + _BUTTON_ZONE_H:
+        # Use actual top offset so the hit area never overlaps the text
+        if event.pos().y() < self.rect().top() + self._top_offset():
             self._buttons_visible = not self._buttons_visible
             for btn in self._buttons:
                 btn.setVisible(self._buttons_visible)
@@ -166,8 +167,26 @@ class AboutNode(BaseNode):
         top = self._top_offset()
         text_rect = QRectF(r.left() + pad, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - top)
         label = self.data.label or self.data.title
-        label = QFontMetrics(font).elidedText(label, Qt.ElideRight, int(text_rect.width()))
-        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignTop, label)
+
+        # Only elide when the text overflows the full node area
+        fm = QFontMetrics(font)
+        bounding = fm.boundingRect(text_rect.toRect(), Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
+        if bounding.height() > text_rect.height() or bounding.width() > text_rect.width():
+            # Trim lines until the text fits vertically, then elide the last visible line
+            lines = label.splitlines(keepends=True)
+            visible = ""
+            line_h = fm.lineSpacing()
+            max_lines = max(1, int(text_rect.height() / line_h)) if line_h > 0 else 1
+            for i, ln in enumerate(lines):
+                if i >= max_lines:
+                    break
+                visible += ln
+            visible = visible.rstrip()
+            if len(visible) < len(label.rstrip()):
+                visible = visible + "…"
+            label = visible
+
+        painter.drawText(text_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────

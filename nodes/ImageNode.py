@@ -7,7 +7,6 @@
 """
 
 import base64
-import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -220,21 +219,12 @@ class ImageNode(BaseNode):
             pass  # Vision is a convenience — never crash the canvas over it
 
     def _on_vision_result(self, text: str) -> None:
-        """Update caption with Vision result, repaint, and stamp the source PNG."""
+        """Update caption with Vision result and repaint."""
         caption = text.strip().strip(".")
         if caption:
             self.data.caption = caption
             if self._editor and not self._editor.proxy.isVisible():
                 self.update()
-            # Stamp the PNG so future loads skip the API call, even after rename
-            src = self.data.source_path
-            if src:
-                from utils.vision import write_png_vision_stamp
-                threading.Thread(
-                    target=write_png_vision_stamp,
-                    args=(Path(src), caption),
-                    daemon=True,
-                ).start()
 
     def _on_vision_failed(self, error: str) -> None:
         """Log Vision failure quietly — filename stem caption stays."""
@@ -295,45 +285,12 @@ class ImageNode(BaseNode):
         super()._build_buttons()
         eye_pix = Theme.icon(Theme.iconVisionEye, fallback_color="#9ab8d9")
         self._buttons.append(NodeButton(self, eye_pix, self._vision_rename))
-        trash_pix   = Theme.icon(Theme.iconDelete,  fallback_color="#c97b7b")
-        confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
-        self._buttons.append(NodeButton(self, trash_pix, self._delete_source_file, confirm_pix))
-
-    def _delete_source_file(self) -> None:
-        """
-        Send the source file to the recycle bin, then remove this node.
-
-        Uses send2trash so the file is recoverable — not a permanent delete.
-        If source_path is empty (image was pasted / has no file behind it),
-        the node is removed without touching the filesystem.
-        """
-        path = self.data.source_path
-        if path:
-            try:
-                from send2trash import send2trash
-                send2trash(path)
-            except Exception as e:
-                logger.warning(f"could not trash '{path}': {e}")
-        scene = self.scene()
-        if scene:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, lambda: scene.removeItem(self))
 
     def _vision_rename(self) -> None:
         """Button action: call the vision API to identify this image and update its caption."""
         src = self.data.source_path
         if src:
             self._run_vision(Path(src))
-        elif self.data.image_b64:
-            # No source file — write a temp PNG so the API has a path to read
-            import tempfile
-            tmp = Path(tempfile.mktemp(suffix=".png"))
-            try:
-                import base64
-                tmp.write_bytes(base64.b64decode(self.data.image_b64))
-                self._run_vision(tmp)
-            except Exception:
-                pass
 
     def _trigger_vision(self) -> None:
         """Send this node's image to a ClaudeNode's vision API."""

@@ -9,6 +9,9 @@
 from PySide6.QtWidgets import QGraphicsScene
 from PySide6.QtCore import QPointF
 
+from utils.logger import setup_logger
+logger = setup_logger()
+
 
 class IntricateScene(QGraphicsScene):
     """
@@ -446,7 +449,12 @@ class IntricateScene(QGraphicsScene):
 
         uuid_map = {}
         for d in payload.get("nodes", []):
-            node = self._restore_node(d)
+            try:
+                node = self._restore_node(d)
+            except Exception:
+                logger.exception("Failed to restore %s node (uuid=%s)",
+                                 d.get("node_type"), d.get("uuid"))
+                node = None
             if node:
                 uuid_map[d.get("uuid")] = node
 
@@ -460,7 +468,8 @@ class IntricateScene(QGraphicsScene):
                     self.addItem(conn)
                     conn.update_path()
                 except Exception:
-                    pass
+                    logger.exception("Failed to restore connection %s → %s",
+                                     c.get("start_uuid"), c.get("end_uuid"))
 
     def _release_all(self) -> None:
         """

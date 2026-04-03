@@ -58,8 +58,20 @@ def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     logger = setup_logger()
-    set_log_level(args.debug, args.trace)
+
+    # CLI flags override; otherwise fall back to [intricate] log_level in settings.toml
     if args.trace:
+        _debug, _trace = False, True
+    elif args.debug:
+        _debug, _trace = True, False
+    else:
+        import utils.settings as _s_boot
+        _toml_level = str(_s_boot.get("intricate", "log_level", "info")).lower().strip()
+        _trace = _toml_level == "trace"
+        _debug = _toml_level == "debug"
+
+    set_log_level(_debug, _trace)
+    if _trace:
         logger.log(TRACE, "Trace mode active — verbose diagnostics will appear in console")
     _greeting = f"{appName} is generally so happy that you are here. ✨"
     print(_greeting)

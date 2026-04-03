@@ -653,7 +653,11 @@ class IntricateApp(QMainWindow):
 
     def _spawn(self, add_fn, status_msg: str, **kwargs) -> None:
         """Place a node at the viewport centre and update the status bar."""
-        add_fn(pos=self._viewport_center(), **kwargs)
+        try:
+            add_fn(pos=self._viewport_center(), **kwargs)
+        except Exception:
+            logger.exception("Failed to spawn node via %s", add_fn.__name__)
+            return
         self._status(status_msg)
 
     def _spawn_warm_node(self):        self._spawn(self.scene.add_warm_node,         "a warm thought arrives")

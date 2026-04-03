@@ -7,7 +7,8 @@
 """
 
 from PySide6.QtCore import Qt, QRectF, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import (QColor, QFont, QLinearGradient, QPalette,
+                            QTextBlockFormat, QTextCursor)
 from PySide6.QtWidgets import QGraphicsProxyWidget
 
 from widgets.PrettyMenu import StyledTextEdit
@@ -97,7 +98,8 @@ class PrettyEdit(StyledTextEdit):
                 font-size: {size}pt;
                 border: none;
                 padding: 0px;
-                selection-background-color: {Theme.primaryBorder};
+                selection-background-color: palette(highlight);
+                selection-color: palette(highlighted-text);
             }}
         """
         if scrollbar:
@@ -107,6 +109,29 @@ class PrettyEdit(StyledTextEdit):
                 radius=scrollbar_width // 2,
             )
         self.setStyleSheet(qss)
+
+        # ── Palette-level selection colors ────────────────────────────────
+        #    QPalette.setBrush accepts a QLinearGradient for Highlight,
+        #    giving us the same sweep used by the context menu items.
+        from PySide6.QtGui import QBrush
+        grad = QLinearGradient(0, 0, 1, 0)
+        grad.setCoordinateMode(QLinearGradient.ObjectMode)
+        grad.setColorAt(0.0, QColor("#1e1e1e"))
+        grad.setColorAt(0.4, QColor("#5c3e4f"))
+        grad.setColorAt(0.7, QColor("#a56a85"))
+        grad.setColorAt(1.0, QColor("#d87a9e"))
+        pal = self.palette()
+        pal.setBrush(QPalette.Highlight,       QBrush(grad))
+        pal.setColor(QPalette.HighlightedText, QColor(Theme.aboutSelectionFontColor))
+        self.setPalette(pal)
+
+        # ── Kill internal margins so text aligns with painted drawText ────
+        self.document().setDocumentMargin(0)
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setViewportMargins(0, 0, 0, 0)
+
+        # ── Override line height to tame fonts with inflated metrics ──────
+        self._applyLineHeight()
 
         # ── Auto-commit on focus loss (on-demand editors) ─────────────────
         if commit_on_focus_loss and not always_visible:
@@ -154,6 +179,7 @@ class PrettyEdit(StyledTextEdit):
         if rect is not None:
             self.proxy.setGeometry(rect)
         self.setPlainText(text)
+        self._applyLineHeight()
         if select_all:
             self.selectAll()
         self._lift_view_focus()
@@ -186,6 +212,26 @@ class PrettyEdit(StyledTextEdit):
         if self.proxy and self.proxy.isVisible():
             self.proxy.hide()
             self._restore_view_focus()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # LINE HEIGHT OVERRIDE
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _applyLineHeight(self) -> None:
+        """Clamp line height to a fixed pixel value if configured in Theme."""
+        h = Theme.aboutSelectionLineHeight
+        if h <= 0:
+            return
+        fmt = QTextBlockFormat()
+        fmt.setLineHeight(h, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
+        cursor = self.textCursor()
+        cursor.select(QTextCursor.Document)
+        cursor.mergeBlockFormat(fmt)
+        self.setTextCursor(cursor)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SELECTION GRADIENT
+    # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
     # VIEW FOCUS MANAGEMENT
