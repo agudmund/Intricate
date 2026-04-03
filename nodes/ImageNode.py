@@ -9,9 +9,7 @@
 import base64
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QGraphicsProxyWidget, QFileDialog, QGraphicsItem
-)
+from PySide6.QtWidgets import QFileDialog
 from PySide6.QtCore import Qt, QRectF, QPointF, QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath
@@ -20,7 +18,6 @@ from PySide6.QtGui import (
 from nodes.BaseNode import BaseNode
 from data.ImageNodeData import ImageNodeData
 from graphics.Theme import Theme
-from widgets.PrettyEdit import PrettyEdit
 import utils.settings as settings
 from utils.logger import setup_logger
 
@@ -28,14 +25,13 @@ logger = setup_logger("image")
 
 
 # Layout constants
-CAPTION_HEIGHT  = 28.0      # Height of the caption band at the bottom
 IMAGE_PADDING   = 6.0       # Inset on all sides — prevents image clipping rounded corners
 CLIP_RADIUS_MIN = 2.0       # Minimum clip radius inside the padding
 
 
 class ImageNode(BaseNode):
     """
-    Renders an image thumbnail with an editable caption.
+    Renders an image thumbnail on the canvas.
 
     Layout (top to bottom inside the node body):
         ┌─────────────────────────┐
@@ -45,23 +41,11 @@ class ImageNode(BaseNode):
         │  │   image area      │  │
         │  │                   │  │
         │  └───────────────────┘  │
-        │  caption band           │
         └─────────────────────────┘
 
-    Interaction zones (routed in mouseDoubleClickEvent):
-        Caption band  → activate inline QLineEdit editor
-        Image area    → open file browser
-
-    OS drag and drop:
-        Handled by IntricateView.dropEvent — image files dragged from Explorer
-        land on the view, get mapped to scene coordinates, and the nearest
-        ImageNode (or a new one) receives the path via load_from_path().
-
-    Caption editing:
-        QLineEdit wrapped in QGraphicsProxyWidget. Hidden until double-click
-        on the caption zone, shown inline, hidden again on Return/Escape/focus-loss.
-        Backspace and Delete are fully isolated to the editor — they never
-        propagate to the scene's delete handler while editing is active.
+    Caption lives in a separate AboutNode that is automatically spawned
+    and wired to this ImageNode whenever the caption changes. Double-click
+    the image area to open a file browser.
 
     Serialization:
         image_b64 holds the full image as a base64 PNG.
@@ -77,10 +61,6 @@ class ImageNode(BaseNode):
         self._scaled_cache: QPixmap | None = None          # Cached scaled pixmap
         self._scaled_cache_size: tuple[int, int] | None = None  # (w, h) key
 
-        # ── Caption editor ────────────────────────────────────────────────────
-        self._editor: PrettyEdit | None = None
-        self._build_caption_editor()
-
         # ── Restore image if session data carries one ─────────────────────────
         if data.image_b64:
             self._load_from_b64(data.image_b64)
@@ -90,52 +70,33 @@ class ImageNode(BaseNode):
                 self._restore_from_path(p)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # CAPTION EDITOR
+    # CAPTION → ABOUT NODE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_caption_editor(self) -> None:
-        """
-        Construct the PrettyEdit proxy and hide it.
-        Built once at node creation, shown/hidden on demand.
-        """
-        self._editor = PrettyEdit(
-            self,
-            font_family=Theme.healthFontFamily,
-            font_size=9,
-            font_color=Theme.textPrimary,
-            commit_on_focus_loss=True,
-        )
-        self._editor.committed.connect(self._on_caption_committed)
-
-    def _caption_rect(self) -> QRectF:
-        """The caption band at the bottom of the node."""
-        r = self.rect()
-        return QRectF(r.x(), r.bottom() - CAPTION_HEIGHT, r.width(), CAPTION_HEIGHT)
-
     def _image_rect(self) -> QRectF:
-        """The padded image display area below the button shelf, above the caption band."""
+        """The padded image display area below the button shelf."""
         r = self.rect()
         top = r.y() + self._BUTTON_ZONE_H + IMAGE_PADDING
         return QRectF(
             r.x()     + IMAGE_PADDING,
             top,
             r.width() - IMAGE_PADDING * 2,
-            r.height() - (top - r.y()) - IMAGE_PADDING - CAPTION_HEIGHT,
+            r.height() - (top - r.y()) - IMAGE_PADDING,
         )
 
-    def _start_caption_edit(self) -> None:
-        """Show the inline editor positioned over the caption band."""
-        self._editor.start_edit(self.data.caption, self._caption_rect())
+    def _spawn_caption_node(self, caption: str) -> None:
+        """Spawn an AboutNode with *caption* and wire it to this ImageNode."""
+        scene = self.scene()
+        if not scene:
+            return
+        pos = self.scenePos()
+        about_pos = QPointF(pos.x(), pos.y() + self.rect().height() + 20)
+        about = scene.add_about_node(pos=about_pos, label=caption)
 
-    def _on_caption_committed(self, text: str) -> None:
-        """Save the edited caption text."""
-        self.data.caption = text
-        self.update()
-
-    def _cancel_caption_edit(self) -> None:
-        """Discard edits, restore view focus policy, hide editor."""
-        self._editor.cancel()
-        self.update()
+        from graphics.Connection import Connection
+        conn = Connection(self, about)
+        scene.addItem(conn)
+        conn.update_path()
 
     # ─────────────────────────────────────────────────────────────────────────
     # IMAGE LOADING
@@ -170,9 +131,10 @@ class ImageNode(BaseNode):
         # Record the resolved absolute path so sync_project_images can skip it next load
         self.data.source_path = str(path.resolve())
 
-        # Set filename stem as initial caption — Vision will update it if available
+        # Set filename stem as initial caption and spawn an AboutNode label
         if not self.data.caption:
             self.data.caption = path.stem
+            self._spawn_caption_node(path.stem)
 
         logger.info(f"image loaded: {path.name} ({pixmap.width()}x{pixmap.height()}px)")
         self._encode_to_b64()
@@ -219,12 +181,12 @@ class ImageNode(BaseNode):
             pass  # Vision is a convenience — never crash the canvas over it
 
     def _on_vision_result(self, text: str) -> None:
-        """Update caption with Vision result and repaint."""
+        """Update caption with Vision result, spawn a new AboutNode label."""
         caption = text.strip().strip(".")
         if caption:
             self.data.caption = caption
-            if self._editor and not self._editor.proxy.isVisible():
-                self.update()
+            self._spawn_caption_node(caption)
+            self.update()
 
     def _on_vision_failed(self, error: str) -> None:
         """Log Vision failure quietly — filename stem caption stays."""
@@ -285,12 +247,28 @@ class ImageNode(BaseNode):
         super()._build_buttons()
         eye_pix = Theme.icon(Theme.iconVisionEye, fallback_color="#9ab8d9")
         self._buttons.append(NodeButton(self, eye_pix, self._vision_rename))
+        stamp_pix   = Theme.icon(Theme.iconStamp, fallback_color="#d4a96a")
+        confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
+        self._buttons.append(NodeButton(self, stamp_pix, self._stamp_source_file, confirm_pix))
 
     def _vision_rename(self) -> None:
         """Button action: call the vision API to identify this image and update its caption."""
         src = self.data.source_path
         if src:
             self._run_vision(Path(src))
+
+    def _stamp_source_file(self) -> None:
+        """Write the current caption into the source PNG's tEXt metadata."""
+        src = self.data.source_path
+        if not src:
+            logger.debug("stamp skipped — no source path")
+            return
+        caption = self.data.caption
+        if not caption:
+            logger.debug("stamp skipped — no caption to write")
+            return
+        from utils.HappyTimes import write_png_vision_stamp
+        write_png_vision_stamp(Path(src), caption)
 
     def _trigger_vision(self) -> None:
         """Send this node's image to a ClaudeNode's vision API."""
@@ -321,39 +299,12 @@ class ImageNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        """
-        Route double-click to the correct zone.
-
-        Caption band → start inline edit
-        Image area   → open file browser
-        """
-        pos = event.pos()
-        if self._caption_rect().contains(pos):
-            self._start_caption_edit()
-            event.accept()
-            return
-        if self._image_rect().contains(pos):
+        """Double-click the image area to open a file browser."""
+        if self._image_rect().contains(event.pos()):
             self._open_file_browser()
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
-
-    def keyPressEvent(self, event) -> None:
-        """
-        Route keyboard events when the caption editor is active.
-        Escape cancels. Everything else goes to the editor via the proxy.
-        Backspace/Delete are fully contained here — they never reach the
-        scene's delete handler while editing is active.
-        """
-        if self._editor and self._editor.proxy.isVisible():
-            if event.key() == Qt.Key_Escape:
-                self._cancel_caption_edit()
-                event.accept()
-                return
-            # Let the proxy handle all other keys including Backspace/Delete
-            event.accept()
-            return
-        super().keyPressEvent(event)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT
@@ -361,13 +312,12 @@ class ImageNode(BaseNode):
 
     def paint_content(self, painter: QPainter) -> None:
         """
-        Paint the image thumbnail and caption band inside the node shell.
+        Paint the image thumbnail inside the node shell.
         Called by BaseNode.paint after the shell (background + border) is drawn.
         """
         painter.save()
 
         ir = self._image_rect()
-        cr = self._caption_rect()
 
         if self._pixmap and not self._pixmap.isNull():
             # ── Clip to rounded rect so image respects the node corners ───────
@@ -377,8 +327,6 @@ class ImageNode(BaseNode):
             painter.setClipPath(clip_path)
 
             # ── Scale pixmap to fit, preserving aspect ratio ──────────────────
-            # Cache the scaled result — SmoothTransformation on a 2048px source
-            # is expensive; skip it on every pan-frame repaint.
             ir_size = (int(ir.width()), int(ir.height()))
             if self._scaled_cache is None or self._scaled_cache_size != ir_size:
                 self._scaled_cache = self._pixmap.scaled(
@@ -389,7 +337,6 @@ class ImageNode(BaseNode):
                 )
                 self._scaled_cache_size = ir_size
             scaled = self._scaled_cache
-            # Centre the scaled pixmap within the image rect
             draw_x = ir.x() + (ir.width()  - scaled.width())  / 2.0
             draw_y = ir.y() + (ir.height() - scaled.height()) / 2.0
             painter.drawPixmap(QPointF(draw_x, draw_y), scaled)
@@ -412,12 +359,6 @@ class ImageNode(BaseNode):
             painter.setPen(QColor(Theme.healthColorLabel))
             painter.drawText(ir, Qt.AlignCenter, "double-click\nto load image")
 
-        # ── Caption band ──────────────────────────────────────────────────────
-        if not self._editor or not self._editor.proxy.isVisible():
-            caption_text = self.data.caption or self.data.title
-            painter.setPen(QColor(Theme.textPrimary))
-            painter.drawText(cr, Qt.AlignCenter, caption_text)
-
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -425,12 +366,7 @@ class ImageNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
-        """
-        Clean up ImageNode-specific resources before scene departure.
-        Caption editor hidden, view focus restored, pixmap released.
-        """
-        if self._editor:
-            self._editor.teardown()
+        """Clean up ImageNode-specific resources before scene departure."""
         self._pixmap = None
         super()._prepare_for_removal()
 

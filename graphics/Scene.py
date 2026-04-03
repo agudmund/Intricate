@@ -156,12 +156,11 @@ class IntricateScene(QGraphicsScene):
         return random.choice(hexes) if hexes else None
 
     def add_about_node(self, pos: QPointF | None = None, label: str | None = None):
-        """Add an AboutNode at pos, tinted with a random color from the global palette."""
+        """Add an AboutNode at pos, defaulting to forest-green tint."""
         from nodes.AboutNode import AboutNode
         from data.AboutNodeData import AboutNodeData
-        from utils.ColorPicker import random as pick_color
         data = AboutNodeData(label=label) if label is not None else AboutNodeData()
-        data.node_tint = pick_color()
+        data.node_tint = "#2a3a2f"
         node = AboutNode(data)
         if pos is not None:
             node.setPos(pos)
