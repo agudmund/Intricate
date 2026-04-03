@@ -154,8 +154,8 @@ class Theme(metaclass=_ThemeMeta):
     nodeShadowOffsetX       = 0
     nodeShadowOffsetY       = 4
     nodeShadowMargin        = 40
-    nodeMinWidth            = 120.0
-    nodeMinHeight           = 50.0
+    nodeMinWidth            = 1.0
+    nodeMinHeight           = 1.0
     nodeResizeGrip          = 16
     nodePulseScale          = 1.018
     nodePulseMinMs          = 800
@@ -233,11 +233,13 @@ class Theme(metaclass=_ThemeMeta):
     portsIconOn              = "ports_on.png"
     aboutMinHeight           = 42.0
     aboutTextPaddingLeft     = 6.0
+    aboutTextPaddingRight    = 6.0
     aboutTextPaddingTop      = 0.0
     aboutFontVerticalOffset   = 0.0
     aboutEditorVerticalOffset = 0.0
-    aboutSelectionLineHeight  = 15.0  # fixed px height for selection highlight; TOML value is an offset from this
+    aboutSelectionLineHeight  = 0.0   # px offset applied to selection highlight height; negative shrinks
     aboutSelectionFontColor   = "#ffffff"
+    aboutLineSpacing          = 0.0   # extra px between lines; 0 = default font spacing
     healthFontFamily     = "Segoe UI"
     healthFontSizeLabel  = 8
     healthFontSizeValue  = 9
@@ -395,6 +397,34 @@ class Theme(metaclass=_ThemeMeta):
     # RELOAD — called by settings watcher when settings.toml changes
     # =========================================================================
 
+    # =========================================================================
+    # SAFE CONVERSION — never lets a bad TOML value propagate an exception
+    # =========================================================================
+
+    @staticmethod
+    def _safe(converter, value, fallback):
+        """
+        Try to convert a TOML value; return fallback on any failure.
+
+        Used by reload() so that a single bad value like fog_alpha = "oops"
+        doesn't crash the entire theme reload. The bad nib stays at its
+        previous position — the desk keeps running.
+        """
+        try:
+            return converter(value)
+        except (ValueError, TypeError, OverflowError):
+            try:
+                _log.warning(
+                    f"[theme] bad value {value!r} — keeping fallback {fallback!r}"
+                )
+            except Exception:
+                pass
+            return fallback
+
+    # =========================================================================
+    # RELOAD — called by settings watcher when settings.toml changes
+    # =========================================================================
+
     @classmethod
     def reload(cls) -> None:
         """
@@ -403,6 +433,14 @@ class Theme(metaclass=_ThemeMeta):
         Called automatically when the file watcher detects a change.
         Also called once at startup from main.py after settings are loaded.
 
+        HARDENED: Every section is wrapped in its own try/except so a bad
+        value in [node.about] never prevents [theme.colors] from loading.
+        Type conversions go through _safe() so a single garbage value
+        keeps its previous/fallback value instead of crashing the reload.
+
+        This is the DMX patch bay — individual nibs can show bad values,
+        but the patching itself never goes down.
+
         Order of operations:
             1. Read colors from [theme.colors]  — update class attributes
             2. Read icons from [theme.icons]    — update filename attributes dynamically
@@ -410,112 +448,134 @@ class Theme(metaclass=_ThemeMeta):
             4. Dependent attributes (combobox colors etc.) recalculated
                from the new base values
         """
+        _s = cls._safe   # local alias for readability
+
         # ── Base node ─────────────────────────────────────────────────────────
-        node = settings.get_section("node")
-        if "font_vertical_offset" in node:
-            cls.nodeFontVerticalOffset = float(node["font_vertical_offset"])
-        if "text_padding_left" in node:
-            cls.nodeTextPaddingLeft = float(node["text_padding_left"])
-        if "text_padding_top" in node:
-            cls.nodeTextPaddingTop = float(node["text_padding_top"])
-        if "border_selected_color" in node:
-            cls.nodeBorderSelected = node["border_selected_color"]
+        try:
+            node = settings.get_section("node")
+            if "font_vertical_offset" in node:
+                cls.nodeFontVerticalOffset = _s(float, node["font_vertical_offset"], cls.nodeFontVerticalOffset)
+            if "text_padding_left" in node:
+                cls.nodeTextPaddingLeft = _s(float, node["text_padding_left"], cls.nodeTextPaddingLeft)
+            if "text_padding_top" in node:
+                cls.nodeTextPaddingTop = _s(float, node["text_padding_top"], cls.nodeTextPaddingTop)
+            if "border_selected_color" in node:
+                cls.nodeBorderSelected = str(node["border_selected_color"])
+        except Exception:
+            _log.warning("[theme] failed to reload [node] section — keeping previous values", exc_info=True)
 
         # ── Claude node ───────────────────────────────────────────────────────
-        claude = settings.get_section("node").get("claude", {})
-        cls.claudeBgColor      = claude.get("bg_color",       cls.windowBg)
-        cls.claudeBgColorFront = claude.get("bg_color_front", cls.claudeBgColorFront)
-        cls.claudeBgColorBack  = claude.get("bg_color_back",  cls.claudeBgColorBack)
-        cls.claudeBgColorInput = claude.get("bg_color_input", cls.claudeBgColorInput)
-        if "bg_alpha" in claude:
-            cls.claudeBgAlpha = int(claude["bg_alpha"])
-        if "body_font_family" in claude:
-            cls.claudeBodyFontFamily = claude["body_font_family"]
-        if "body_font_size" in claude:
-            cls.claudeBodyFontSize = int(claude["body_font_size"])
-        if "default_width" in claude:
-            cls.claudeDefaultWidth = float(claude["default_width"])
-        if "default_height" in claude:
-            cls.claudeDefaultHeight = float(claude["default_height"])
-        if "border_width" in claude:
-            cls.claudeBorderWidth = float(claude["border_width"])
+        try:
+            claude = settings.get_section("node").get("claude", {})
+            cls.claudeBgColor      = claude.get("bg_color",       cls.windowBg)
+            cls.claudeBgColorFront = claude.get("bg_color_front", cls.claudeBgColorFront)
+            cls.claudeBgColorBack  = claude.get("bg_color_back",  cls.claudeBgColorBack)
+            cls.claudeBgColorInput = claude.get("bg_color_input", cls.claudeBgColorInput)
+            if "bg_alpha" in claude:
+                cls.claudeBgAlpha = _s(int, claude["bg_alpha"], cls.claudeBgAlpha)
+            if "body_font_family" in claude:
+                cls.claudeBodyFontFamily = str(claude["body_font_family"])
+            if "body_font_size" in claude:
+                cls.claudeBodyFontSize = _s(int, claude["body_font_size"], cls.claudeBodyFontSize)
+            if "default_width" in claude:
+                cls.claudeDefaultWidth = _s(float, claude["default_width"], cls.claudeDefaultWidth)
+            if "default_height" in claude:
+                cls.claudeDefaultHeight = _s(float, claude["default_height"], cls.claudeDefaultHeight)
+            if "border_width" in claude:
+                cls.claudeBorderWidth = _s(float, claude["border_width"], cls.claudeBorderWidth)
+        except Exception:
+            _log.warning("[theme] failed to reload [node.claude] section — keeping previous values", exc_info=True)
 
         # ── About node ────────────────────────────────────────────────────────
         # Inherit base node offsets first — [node.about] overrides only what it explicitly sets.
-        cls.aboutFontVerticalOffset = cls.nodeFontVerticalOffset
-        cls.aboutTextPaddingLeft    = cls.nodeTextPaddingLeft
-        cls.aboutTextPaddingTop     = cls.nodeTextPaddingTop
-        about = settings.get_section("node").get("about", {})
-        if "font_size" in about:
-            cls.aboutFontSize = int(about["font_size"])
-        if "font_color" in about:
-            cls.aboutFontColor = about["font_color"]
-        if "bg_color" in about:
-            cls.aboutBgColor = about["bg_color"]
-        if "bg_color_front" in about:
-            cls.aboutBgColorFront = about["bg_color_front"]
-        if "bg_alpha" in about:
-            cls.aboutBgAlpha = int(about["bg_alpha"])
-        if "border_color" in about:
-            cls.aboutBorderColor = about["border_color"]
-        if "border_hover_color" in about:
-            cls.aboutBorderHoverColor = about["border_hover_color"]
-        if "border_selected_color" in about:
-            cls.aboutBorderSelectedColor = about["border_selected_color"]
-        if "depth_icon_off" in about:
-            cls.aboutDepthIconOff = about["depth_icon_off"]
-        if "depth_icon_on" in about:
-            cls.aboutDepthIconOn = about["depth_icon_on"]
-        if "min_height" in about:
-            cls.aboutMinHeight = float(about["min_height"])
-        if "text_padding_left" in about:
-            cls.aboutTextPaddingLeft = float(about["text_padding_left"])
-        if "text_padding_top" in about:
-            cls.aboutTextPaddingTop = float(about["text_padding_top"])
-        if "font_vertical_offset" in about:
-            cls.aboutFontVerticalOffset = float(about["font_vertical_offset"])
-        cls.aboutEditorVerticalOffset = cls.aboutFontVerticalOffset
-        if "editor_vertical_offset" in about:
-            cls.aboutEditorVerticalOffset = float(about["editor_vertical_offset"])
-        if "selection_line_height" in about:
-            cls.aboutSelectionLineHeight = 15.0 + float(about["selection_line_height"])
-        if "selection_font_color" in about:
-            cls.aboutSelectionFontColor = str(about["selection_font_color"])
+        try:
+            cls.aboutFontVerticalOffset = cls.nodeFontVerticalOffset
+            cls.aboutTextPaddingLeft    = cls.nodeTextPaddingLeft
+            cls.aboutTextPaddingRight   = cls.aboutTextPaddingLeft
+            cls.aboutTextPaddingTop     = cls.nodeTextPaddingTop
+            about = settings.get_section("node").get("about", {})
+            if "font_size" in about:
+                cls.aboutFontSize = _s(int, about["font_size"], cls.aboutFontSize)
+            if "font_color" in about:
+                cls.aboutFontColor = str(about["font_color"])
+            if "bg_color" in about:
+                cls.aboutBgColor = str(about["bg_color"])
+            if "bg_color_front" in about:
+                cls.aboutBgColorFront = str(about["bg_color_front"])
+            if "bg_alpha" in about:
+                cls.aboutBgAlpha = _s(int, about["bg_alpha"], cls.aboutBgAlpha)
+            if "border_color" in about:
+                cls.aboutBorderColor = str(about["border_color"])
+            if "border_hover_color" in about:
+                cls.aboutBorderHoverColor = str(about["border_hover_color"])
+            if "border_selected_color" in about:
+                cls.aboutBorderSelectedColor = str(about["border_selected_color"])
+            if "depth_icon_off" in about:
+                cls.aboutDepthIconOff = str(about["depth_icon_off"])
+            if "depth_icon_on" in about:
+                cls.aboutDepthIconOn = str(about["depth_icon_on"])
+            if "min_height" in about:
+                cls.aboutMinHeight = _s(float, about["min_height"], cls.aboutMinHeight)
+            if "text_padding_left" in about:
+                cls.aboutTextPaddingLeft = _s(float, about["text_padding_left"], cls.aboutTextPaddingLeft)
+            if "text_padding_right" in about:
+                cls.aboutTextPaddingRight = _s(float, about["text_padding_right"], cls.aboutTextPaddingRight)
+            if "text_padding_top" in about:
+                cls.aboutTextPaddingTop = _s(float, about["text_padding_top"], cls.aboutTextPaddingTop)
+            if "font_vertical_offset" in about:
+                cls.aboutFontVerticalOffset = _s(float, about["font_vertical_offset"], cls.aboutFontVerticalOffset)
+            cls.aboutEditorVerticalOffset = cls.aboutFontVerticalOffset
+            if "editor_vertical_offset" in about:
+                cls.aboutEditorVerticalOffset = _s(float, about["editor_vertical_offset"], cls.aboutEditorVerticalOffset)
+            if "line_spacing" in about:
+                cls.aboutLineSpacing = _s(float, about["line_spacing"], cls.aboutLineSpacing)
+            if "selection_line_height" in about:
+                cls.aboutSelectionLineHeight = _s(float, about["selection_line_height"], cls.aboutSelectionLineHeight)
+            if "selection_font_color" in about:
+                cls.aboutSelectionFontColor = str(about["selection_font_color"])
+        except Exception:
+            _log.warning("[theme] failed to reload [node.about] section — keeping previous values", exc_info=True)
 
         # ── Curtains animation ────────────────────────────────────────────────
-        curtains = settings.get_section("theme").get("curtains", {})
-        if "pace_ms" in curtains:
-            cls.windowRollTiming = int(curtains["pace_ms"])
-        if "easing" in curtains:
-            cls.windowRollEasing = curtains["easing"]
+        try:
+            curtains = settings.get_section("theme").get("curtains", {})
+            if "pace_ms" in curtains:
+                cls.windowRollTiming = _s(int, curtains["pace_ms"], cls.windowRollTiming)
+            if "easing" in curtains:
+                cls.windowRollEasing = str(curtains["easing"])
+        except Exception:
+            _log.warning("[theme] failed to reload [theme.curtains] section — keeping previous values", exc_info=True)
 
         # ── Colors ────────────────────────────────────────────────────────────
-        colors = settings.get_section("theme").get("colors", {})
+        try:
+            colors = settings.get_section("theme").get("colors", {})
 
-        if "window_bg" in colors:
-            cls.windowBg           = colors["window_bg"]
-            cls.toolbarBg          = cls.windowBg
-            cls.buttonPrimaryColor = cls.windowBg
-            cls.buttonBg           = cls.windowBg
-            cls.buttonBgHover      = cls.windowBg
-            cls.comboboxBg         = cls.windowBg
+            if "window_bg" in colors:
+                cls.windowBg           = str(colors["window_bg"])
+                cls.toolbarBg          = cls.windowBg
+                cls.buttonPrimaryColor = cls.windowBg
+                cls.buttonBg           = cls.windowBg
+                cls.buttonBgHover      = cls.windowBg
+                cls.comboboxBg         = cls.windowBg
 
-        if "primary_border" in colors:
-            cls.primaryBorder     = colors["primary_border"]
-            cls.toolbarBorder     = cls.primaryBorder
-            cls.buttonBorder      = cls.primaryBorder
-            cls.buttonBorderHover = cls.primaryBorder
-            cls.nodeBorder        = cls.primaryBorder
-            cls.comboboxBorder    = cls.primaryBorder
-            cls.bezierHandleColor = cls.primaryBorder
+            if "primary_border" in colors:
+                cls.primaryBorder     = str(colors["primary_border"])
+                cls.toolbarBorder     = cls.primaryBorder
+                cls.buttonBorder      = cls.primaryBorder
+                cls.buttonBorderHover = cls.primaryBorder
+                cls.nodeBorder        = cls.primaryBorder
+                cls.comboboxBorder    = cls.primaryBorder
+                cls.bezierHandleColor = cls.primaryBorder
 
-        if "text_primary" in colors:
-            cls.textPrimary        = colors["text_primary"]
-            cls.comboboxText       = cls.textPrimary
+            if "text_primary" in colors:
+                cls.textPrimary        = str(colors["text_primary"])
+                cls.comboboxText       = cls.textPrimary
 
-        if "backdrop" in colors:
-            cls.backDrop       = colors["backdrop"]
-            cls.comboboxBgOpen = cls.backDrop
+            if "backdrop" in colors:
+                cls.backDrop       = str(colors["backdrop"])
+                cls.comboboxBgOpen = cls.backDrop
+        except Exception:
+            _log.warning("[theme] failed to reload [theme.colors] section — keeping previous values", exc_info=True)
 
         # ── Icons ─────────────────────────────────────────────────────────────
         # Fully dynamic — no closed icon_map. Every key present in [theme.icons]
@@ -532,48 +592,33 @@ class Theme(metaclass=_ThemeMeta):
         # in a previous load but is now absent, the attribute is removed so the
         # metaclass __getattr__ returns _MISSING_ICON and Theme.icon() draws a
         # circle — consistent with a key that was never set at all.
-        icons = settings.get_section("theme").get("icons", {})
+        try:
+            icons = settings.get_section("theme").get("icons", {})
 
-        # Track previously dynamic attrs so we can clean up keys removed from TOML
-        # existing_dynamic = {
-            # k for k in vars(cls)
-            # if k.startswith("icon") and k not in (
-            #     "iconButtonSize", "iconPadding", "iconSize",
-            #     "_icon_cache", "invalidate_icon", "invalidate_all_icons"
-            # )
-        # }
-        existing_dynamic = {k for k in vars(cls)}
+            existing_dynamic = {k for k in vars(cls)}
 
-        seen_attrs = set()
-        for toml_key, filename in icons.items():
-            attr_name = "icon" + toml_key[0].upper() + toml_key[1:]
-            seen_attrs.add(attr_name)
-            old_filename = getattr(cls, attr_name, None)
+            seen_attrs = set()
+            for toml_key, filename in icons.items():
+                attr_name = "icon" + toml_key[0].upper() + toml_key[1:]
+                seen_attrs.add(attr_name)
+                old_filename = getattr(cls, attr_name, None)
 
-            if filename:
-                # Key present and non-empty — update if changed
-                if old_filename != filename:
-                    cls.invalidate_icon(old_filename or "")
-                    setattr(cls, attr_name, filename)
-            else:
-                # Empty value — invalidate cache and remove attribute so next
-                # paint gets the circle fallback, same as if the key never existed
-                if old_filename:
-                    cls.invalidate_icon(old_filename)
-                try:
-                    delattr(cls, attr_name)
-                except AttributeError:
-                    pass
-
-        # Remove dynamic icon attrs for keys that disappeared from the TOML entirely
-        # for attr_name in existing_dynamic - seen_attrs:
-        #     old_filename = getattr(cls, attr_name, None)
-            # if old_filename:
-            #     cls.invalidate_icon(old_filename)
-            # try:
-            #     delattr(cls, attr_name)
-            # except AttributeError:
-            #     pass
+                if filename:
+                    # Key present and non-empty — update if changed
+                    if old_filename != filename:
+                        cls.invalidate_icon(old_filename or "")
+                        setattr(cls, attr_name, filename)
+                else:
+                    # Empty value — invalidate cache and remove attribute so next
+                    # paint gets the circle fallback, same as if the key never existed
+                    if old_filename:
+                        cls.invalidate_icon(old_filename)
+                    try:
+                        delattr(cls, attr_name)
+                    except AttributeError:
+                        pass
+        except Exception:
+            _log.warning("[theme] failed to reload [theme.icons] section — keeping previous values", exc_info=True)
 
     # =========================================================================
     # UTILITIES

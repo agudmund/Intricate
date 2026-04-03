@@ -92,6 +92,7 @@ _DEFAULTS: dict = {
             "editor_vertical_offset": 0,
             "font_size": 10,
             "font_color": "#e8f0ff",
+            "font_vertical_offset": -8,
             "bg_color": "#2a2a2a",
             "bg_color_front": "#322a3a",
             "bg_alpha": 180,
@@ -101,6 +102,11 @@ _DEFAULTS: dict = {
             "depth_icon_off": "depth_off.png",
             "depth_icon_on": "depth_on.png",
             "min_height": 42,
+            "line_spacing": 0,
+            "text_padding_left": 15,
+            "text_padding_top": 4,
+            "selection_line_height": 0,
+            "selection_font_color": "#ffffff",
         },
     },
     "theme": {
@@ -134,25 +140,91 @@ class _SettingsWatcher(QObject):
     QFileSystemWatcher fires on any write to the watched path regardless
     of which process caused it. That's the entire point — the handshake
     between Intricate and The Settlers requires no direct connection.
+
+    This handler is armored: nothing that happens inside — bad TOML,
+    permission errors, mid-write partial files — can kill the watcher.
+    A dead watcher means the entire live-reload pipeline goes silent
+    with no visible symptom. That must never happen.
     """
     changed = Signal()
 
     def __init__(self):
         super().__init__()
         self._watcher = QFileSystemWatcher()
-        if _SETTINGS_PATH.exists():
-            self._watcher.addPath(str(_SETTINGS_PATH))
+        self._ensure_watched()
         self._watcher.fileChanged.connect(self._on_file_changed)
+
+    def _ensure_watched(self) -> None:
+        """
+        (Re-)add the settings path to the watcher.
+
+        Wrapped in its own try/except because even Path.exists() can throw
+        on permission errors or broken symlinks, and addPath silently fails
+        on non-existent files. Neither case should take us down.
+        """
+        try:
+            path_str = str(_SETTINGS_PATH)
+            # addPath is idempotent — returns False if already watched or missing,
+            # never throws. But we guard the exists() check that precedes it.
+            if _SETTINGS_PATH.exists():
+                self._watcher.addPath(path_str)
+            else:
+                # File doesn't exist yet (mid delete+recreate cycle).
+                # Watch the parent directory so we catch the recreate.
+                parent = str(_SETTINGS_PATH.parent)
+                if _SETTINGS_PATH.parent.exists():
+                    self._watcher.addPath(parent)
+        except Exception:
+            # Filesystem is acting up — log and survive.
+            # The next fileChanged or directoryChanged event will retry.
+            try:
+                from utils.logger import setup_logger
+                setup_logger("settings").warning(
+                    "[watcher] could not re-add settings path — will retry on next event",
+                    exc_info=True
+                )
+            except Exception:
+                pass  # Even logging failed — stay alive regardless
 
     def _on_file_changed(self, path: str) -> None:
         """
-        Re-add the path after change — some editors write by delete+recreate
-        which removes the path from the watcher. Re-adding is idempotent.
+        Handle a file-change notification.
+
+        Armored with a blanket try/except so nothing — tomllib parse errors,
+        type conversion failures, permission issues, mid-write partial files,
+        Theme.reload() bugs — can kill this handler. A dead handler means
+        the watcher stays connected but stops processing events. The entire
+        live-reload pipeline dies silently. That is the one thing we prevent.
+
+        Order of operations is deliberate:
+            1. Re-add path FIRST — if the reload crashes, at least the watcher
+               is still alive for the next save.
+            2. Reload the store.
+            3. Emit changed() so Theme picks up new values.
         """
-        if _SETTINGS_PATH.exists():
-            self._watcher.addPath(str(_SETTINGS_PATH))
-        _reload()
-        self.changed.emit()
+        # Step 1: Re-add path unconditionally. This is the most critical step.
+        # Some editors (Notepad++, vim) write by delete+recreate which removes
+        # the path from QFileSystemWatcher. If we don't re-add, all future
+        # changes are missed forever.
+        self._ensure_watched()
+
+        # Step 2+3: Reload and notify. Wrapped so a bad file never kills us.
+        try:
+            _reload()
+            self.changed.emit()
+        except Exception:
+            # Bad TOML, mid-write partial file, disk error — whatever it is,
+            # the old _store is still intact (reload is atomic, see below).
+            # Log the problem so the user can fix their TOML and save again.
+            try:
+                from utils.logger import setup_logger
+                setup_logger("settings").warning(
+                    "[watcher] settings.toml reload failed — keeping previous values. "
+                    "Save the file again once it's valid.",
+                    exc_info=True
+                )
+            except Exception:
+                pass  # Even logging failed — the watcher lives on
 
 
 # Module-level watcher instance — created once, lives for the app lifetime.
@@ -184,12 +256,27 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def _reload() -> None:
-    """Read settings.toml from disk and merge with defaults."""
+    """
+    Read settings.toml from disk and merge with defaults.
+
+    Atomic by design: the new store is built in a local variable first.
+    Only after the entire parse+merge succeeds does it replace _store.
+    If anything fails — bad TOML, partial file, permission error — the
+    old _store remains untouched. The caller (watcher) catches the
+    exception and logs it; the next file-save will trigger a fresh attempt.
+
+    This is the DMX patch bay — it may never leave the system in a
+    half-updated state.
+    """
     global _store
     if _SETTINGS_PATH.exists():
         with open(_SETTINGS_PATH, "rb") as f:
             from_disk = tomllib.load(f)
-        _store = _deep_merge(_DEFAULTS, from_disk)
+        # Build the merged store in a local — only assign to _store on success.
+        # This ensures a tomllib error or a _deep_merge edge case never
+        # corrupts the live store.
+        merged = _deep_merge(_DEFAULTS, from_disk)
+        _store = merged
     else:
         _store = dict(_DEFAULTS)
         _save()     # Write defaults to disk on first run

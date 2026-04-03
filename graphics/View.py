@@ -151,11 +151,19 @@ class IntricateView(QGraphicsView):
         if self._on_zoom_changed:
             self._on_zoom_changed()
 
+    def _notify_viewport_changed(self) -> None:
+        """Tell the scene the visible area moved so it can cull offscreen videos."""
+        scene = self.scene()
+        if scene and hasattr(scene, 'update_video_visibility'):
+            viewport_rect = self.mapToScene(self.viewport().rect()).boundingRect()
+            scene.update_video_visibility(viewport_rect)
+
     def wheelEvent(self, event) -> None:
         """Zoom anchored to the cursor position."""
         factor = 1.25 if event.angleDelta().y() > 0 else 0.8
         anchor = self.mapToScene(event.position().toPoint())
         self._apply_zoom(factor, anchor=anchor)
+        self._notify_viewport_changed()
         event.accept()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -278,6 +286,7 @@ class IntricateView(QGraphicsView):
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = None
             self.setRenderHint(QPainter.Antialiasing, True)
+            self._notify_viewport_changed()
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -285,6 +294,10 @@ class IntricateView(QGraphicsView):
             # Defer to next event loop tick — scene state is fully settled by then
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, self._expand_scene_rect)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._notify_viewport_changed()
 
     # ── Scene auto-expansion ──────────────────────────────────────────────────
 

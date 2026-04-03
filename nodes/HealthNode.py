@@ -60,6 +60,13 @@ class HealthNode(BaseNode):
         self._last_gc_time:  float = 0.0
         self._poll_count:    int   = 0
 
+        # ── Video buffer tracking ─────────────────────────────────────────────
+        self._video_buf_bytes:      int = 0   # current total across all VideoNodes
+        self._video_buf_prev:       int = 0   # previous poll snapshot
+        self._video_buf_delta:      int = 0   # change since last poll
+        self._video_buf_peak:       int = 0   # high-water mark
+        self._video_node_count:     int = 0
+
         # ── Click monitor readings ─────────────────────────────────────────────
         self._last_clicked_type: str = "—"
         self._last_clicked_item: str = "—"
@@ -109,10 +116,46 @@ class HealthNode(BaseNode):
         except Exception:
             self._last_gc_time = time.monotonic() - t0
 
+        # ── Video buffer census ───────────────────────────────────────────
+        self._poll_video_buffers()
+
         self.update()
 
         if self.scene() and hasattr(self.scene(), 'set_dirty'):
             self.scene().set_dirty(False)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # VIDEO BUFFER CENSUS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _pixmap_bytes(pix) -> int:
+        """Estimate byte footprint of a QPixmap (width × height × depth/8)."""
+        if pix is None or pix.isNull():
+            return 0
+        return pix.width() * pix.height() * pix.depth() // 8
+
+    def _poll_video_buffers(self) -> None:
+        """Sum the pixmap memory held by every VideoNode in the scene."""
+        scene = self.scene()
+        if not scene:
+            return
+
+        from nodes.VideoNode import VideoNode
+
+        total = 0
+        count = 0
+        for item in scene.items():
+            if isinstance(item, VideoNode):
+                count += 1
+                total += self._pixmap_bytes(getattr(item, '_frame_pixmap', None))
+                total += self._pixmap_bytes(getattr(item, '_scaled_cache', None))
+
+        self._video_buf_prev  = self._video_buf_bytes
+        self._video_buf_bytes = total
+        self._video_buf_delta = total - self._video_buf_prev
+        self._video_buf_peak  = max(self._video_buf_peak, total)
+        self._video_node_count = count
 
     # ─────────────────────────────────────────────────────────────────────────
     # CLICK MONITOR
@@ -212,6 +255,18 @@ class HealthNode(BaseNode):
         )
         delta_color = c_warn if delta > 0 else c_calm
 
+        # ── Video buffer formatting ───────────────────────────────────────────
+        def _fmt_bytes(b: int) -> str:
+            if abs(b) < 1024:
+                return f"{b} B"
+            elif abs(b) < 1024 * 1024:
+                return f"{b / 1024:.1f} KB"
+            else:
+                return f"{b / (1024 * 1024):.1f} MB"
+
+        vid_delta_str = f"+{_fmt_bytes(self._video_buf_delta)}" if self._video_buf_delta > 0 else _fmt_bytes(self._video_buf_delta)
+        vid_delta_color = c_warn if self._video_buf_delta > 0 else c_calm
+
         rows: list[tuple[str, str, QColor]] = [
             ("Living nodes",  str(self._living_nodes),              node_color),
             ("Scene nodes",   str(self._scene_nodes),               node_color),
@@ -221,6 +276,16 @@ class HealthNode(BaseNode):
             ("GC time",       f"{self._last_gc_time * 1000:.1f}ms",  c_text),
             ("Poll #",        str(self._poll_count),                 c_label),
         ]
+
+        # ── Video buffer section (only when videos exist) ─────────────────
+        if self._video_node_count > 0:
+            rows.extend([
+                ("",             "",                                     c_label),   # spacer
+                ("🎬 Videos",    str(self._video_node_count),            c_text),
+                ("Vid buffers",  _fmt_bytes(self._video_buf_bytes),      c_text),
+                ("Vid Δ/poll",   vid_delta_str,                          vid_delta_color),
+                ("Vid peak",     _fmt_bytes(self._video_buf_peak),       c_label),
+            ])
 
         for label, value, value_color in rows:
             painter.setFont(f_label)

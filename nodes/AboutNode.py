@@ -8,7 +8,8 @@
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
 from PySide6.QtCore import Qt, QRectF, QSizeF
-from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
+from PySide6.QtGui import (QPainter, QFont, QColor, QFontMetrics, QPen,
+                           QTextDocument, QTextCursor, QTextBlockFormat)
 
 _BUTTON_ZONE_H = 40.0   # px reserved for button strip (4 pad + 32 button + 4 gap)
 _Z_FRONT       = 10.0
@@ -38,7 +39,7 @@ class AboutNode(BaseNode):
         if data is None:
             data = AboutNodeData()
         if data.height == 0.0:
-            data.height = Theme.aboutMinHeight / 2 + 5
+            data.height = Theme.aboutMinHeight / 2 + 10
         if data.width == 0.0:
             font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
             text_w = QFontMetrics(font).horizontalAdvance(data.label or data.title)
@@ -97,7 +98,7 @@ class AboutNode(BaseNode):
 
     def _top_offset(self) -> float:
         """Vertical space reserved above the text — full button zone or minimal pad."""
-        return _BUTTON_ZONE_H if self._buttons_visible else 6.0
+        return _BUTTON_ZONE_H if self._buttons_visible else 15.0
 
     def _build_editor(self) -> None:
         self._editor = PrettyEdit(
@@ -111,9 +112,10 @@ class AboutNode(BaseNode):
 
     def _edit_rect(self) -> QRectF:
         r = self.rect()
-        pad = Theme.aboutTextPaddingLeft
+        padL = Theme.aboutTextPaddingLeft
+        padR = Theme.aboutTextPaddingRight
         top = self._top_offset()
-        return QRectF(r.left() + pad, r.top() + top + Theme.aboutEditorVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - top)
+        return QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
 
     def _start_edit(self) -> None:
         self._editor.start_edit(self.data.label or self.data.title, self._edit_rect())
@@ -163,30 +165,46 @@ class AboutNode(BaseNode):
         painter.setFont(font)
         painter.setPen(QColor(Theme.aboutFontColor))
         r = self.rect()
-        pad = Theme.aboutTextPaddingLeft
+        padL = Theme.aboutTextPaddingLeft
+        padR = Theme.aboutTextPaddingRight
         top = self._top_offset()
-        text_rect = QRectF(r.left() + pad, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - pad, r.height() - top)
+        text_rect = QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
         label = self.data.label or self.data.title
 
-        # Only elide when the text overflows the full node area
-        fm = QFontMetrics(font)
-        bounding = fm.boundingRect(text_rect.toRect(), Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
-        if bounding.height() > text_rect.height() or bounding.width() > text_rect.width():
-            # Trim lines until the text fits vertically, then elide the last visible line
-            lines = label.splitlines(keepends=True)
-            visible = ""
-            line_h = fm.lineSpacing()
-            max_lines = max(1, int(text_rect.height() / line_h)) if line_h > 0 else 1
-            for i, ln in enumerate(lines):
-                if i >= max_lines:
-                    break
-                visible += ln
-            visible = visible.rstrip()
-            if len(visible) < len(label.rstrip()):
-                visible = visible + "…"
-            label = visible
-
-        painter.drawText(text_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
+        spacing = Theme.aboutLineSpacing
+        if spacing:
+            # Use QTextDocument to render with custom line spacing
+            doc = QTextDocument()
+            doc.setDefaultFont(font)
+            doc.setTextWidth(text_rect.width())
+            doc.setDocumentMargin(0)
+            doc.setPlainText(label)
+            fmt = QTextBlockFormat()
+            line_h = QFontMetrics(font).lineSpacing() + spacing
+            fmt.setLineHeight(line_h, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
+            cursor = QTextCursor(doc)
+            cursor.select(QTextCursor.Document)
+            cursor.mergeBlockFormat(fmt)
+            painter.translate(text_rect.topLeft())
+            doc.drawContents(painter, QRectF(0, 0, text_rect.width(), text_rect.height()))
+        else:
+            # Fast path — default font spacing
+            fm = QFontMetrics(font)
+            bounding = fm.boundingRect(text_rect.toRect(), Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
+            if bounding.height() > text_rect.height() or bounding.width() > text_rect.width():
+                lines = label.splitlines(keepends=True)
+                visible = ""
+                line_h = fm.lineSpacing()
+                max_lines = max(1, int(text_rect.height() / line_h)) if line_h > 0 else 1
+                for i, ln in enumerate(lines):
+                    if i >= max_lines:
+                        break
+                    visible += ln
+                visible = visible.rstrip()
+                if len(visible) < len(label.rstrip()):
+                    visible = visible + "…"
+                label = visible
+            painter.drawText(text_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────

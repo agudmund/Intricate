@@ -6,9 +6,10 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtCore import Qt, QRectF, Signal
-from PySide6.QtGui import (QColor, QFont, QLinearGradient, QPalette,
-                            QTextBlockFormat, QTextCursor)
+from PySide6.QtCore import Qt, QRectF, QPointF, Signal
+from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
+                            QPainterPath, QPalette, QTextBlockFormat,
+                            QTextCharFormat, QTextCursor, QTextLayout)
 from PySide6.QtWidgets import QGraphicsProxyWidget
 
 from widgets.PrettyMenu import StyledTextEdit
@@ -90,6 +91,11 @@ class PrettyEdit(StyledTextEdit):
             self.setPlaceholderText(placeholder)
 
         # ── Stylesheet ────────────────────────────────────────────────────
+        # When line_spacing is negative the text gets pulled upward and
+        # can sit flush against the top border.  Compensate with a gentle
+        # top padding derived from the magnitude of that spacing.
+        spacing = Theme.aboutLineSpacing
+        pad_top = max(0, int(abs(spacing))) if spacing < 0 else 0
         qss = f"""
             QTextEdit {{
                 background: transparent;
@@ -97,9 +103,9 @@ class PrettyEdit(StyledTextEdit):
                 font-family: {family};
                 font-size: {size}pt;
                 border: none;
-                padding: 0px;
-                selection-background-color: palette(highlight);
-                selection-color: palette(highlighted-text);
+                padding: {pad_top}px 0px 0px 0px;
+                selection-background-color: transparent;
+                selection-color: {color};
             }}
         """
         if scrollbar:
@@ -110,19 +116,18 @@ class PrettyEdit(StyledTextEdit):
             )
         self.setStyleSheet(qss)
 
-        # ── Palette-level selection colors ────────────────────────────────
-        #    QPalette.setBrush accepts a QLinearGradient for Highlight,
-        #    giving us the same sweep used by the context menu items.
-        from PySide6.QtGui import QBrush
-        grad = QLinearGradient(0, 0, 1, 0)
-        grad.setCoordinateMode(QLinearGradient.ObjectMode)
-        grad.setColorAt(0.0, QColor("#1e1e1e"))
-        grad.setColorAt(0.4, QColor("#5c3e4f"))
-        grad.setColorAt(0.7, QColor("#a56a85"))
-        grad.setColorAt(1.0, QColor("#d87a9e"))
+        # ── Selection colors ──────────────────────────────────────────────
+        #    We paint our own tight selection highlight in paintEvent so that
+        #    the highlight only covers text metrics, not line spacing.  The
+        #    built-in Qt selection is made invisible here; the real gradient
+        #    and text color are stored for use by our custom painter.
+        self._sel_brush      = QBrush(QColor(Theme.aboutSelectionFontColor))
+        self._sel_text_color = QColor(color)
+
         pal = self.palette()
-        pal.setBrush(QPalette.Highlight,       QBrush(grad))
-        pal.setColor(QPalette.HighlightedText, QColor(Theme.aboutSelectionFontColor))
+        # Invisible built-in highlight — our paintEvent draws the real one
+        pal.setBrush(QPalette.Highlight,       QBrush(QColor(0, 0, 0, 0)))
+        pal.setColor(QPalette.HighlightedText, QColor(color))
         self.setPalette(pal)
 
         # ── Kill internal margins so text aligns with painted drawText ────
@@ -132,6 +137,7 @@ class PrettyEdit(StyledTextEdit):
 
         # ── Override line height to tame fonts with inflated metrics ──────
         self._applyLineHeight()
+        self.document().blockCountChanged.connect(lambda _: self._applyLineHeight())
 
         # ── Auto-commit on focus loss (on-demand editors) ─────────────────
         if commit_on_focus_loss and not always_visible:
@@ -218,20 +224,128 @@ class PrettyEdit(StyledTextEdit):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _applyLineHeight(self) -> None:
-        """Clamp line height to a fixed pixel value if configured in Theme."""
-        h = Theme.aboutSelectionLineHeight
-        if h <= 0:
+        """Apply line height from Theme using line_spacing."""
+        spacing = Theme.aboutLineSpacing
+        if not spacing:
             return
+        # LineDistanceHeight adds (or subtracts) pixels between lines,
+        # which works for both positive and negative values unlike
+        # FixedHeight which Qt clamps at the font's natural metrics.
         fmt = QTextBlockFormat()
-        fmt.setLineHeight(h, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
-        cursor = self.textCursor()
-        cursor.select(QTextCursor.Document)
+        fmt.setLineHeight(spacing, QTextBlockFormat.LineHeightTypes.LineDistanceHeight.value)
+        # Apply to every existing block AND the empty first block so newly
+        # typed / pasted text inherits the same fixed line height.
+        cursor = QTextCursor(self.document())
+        cursor.movePosition(QTextCursor.Start)
+        cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
         cursor.mergeBlockFormat(fmt)
-        self.setTextCursor(cursor)
+        # Also format the very first block (covers the empty-document case
+        # where Start→End selects nothing).
+        cursor.movePosition(QTextCursor.Start)
+        cursor.mergeBlockFormat(fmt)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # SELECTION GRADIENT
+    # TIGHT SELECTION HIGHLIGHT
     # ─────────────────────────────────────────────────────────────────────────
+
+    def paintEvent(self, event):
+        """Paint with tight selection highlights that cover only the text
+        metrics height, ignoring any extra line spacing."""
+        super().paintEvent(event)
+
+        tc = self.textCursor()
+        if not tc.hasSelection():
+            return
+
+        sel_start = tc.selectionStart()
+        sel_end   = tc.selectionEnd()
+
+        p = QPainter(self.viewport())
+        p.setRenderHint(QPainter.Antialiasing)
+
+        doc = self.document()
+        fm  = self.fontMetrics()
+        text_h = fm.ascent() + fm.descent() + Theme.aboutSelectionLineHeight
+
+        sb_v = self.verticalScrollBar()
+        sb_h = self.horizontalScrollBar()
+        sy = sb_v.value() if sb_v else 0
+        sx = sb_h.value() if sb_h else 0
+
+        # ── Content offset: Qt may render the document shifted from (0,0)
+        #    (e.g. CSS padding, internal margins).  Compare where Qt places a
+        #    cursor vs where blockBoundingRect says it should be so our
+        #    highlight lines up with the real glyphs.
+        first = doc.firstBlock()
+        if first.isValid():
+            ref_cursor = QTextCursor(first)
+            cr = self.cursorRect(ref_cursor)
+            dr = doc.documentLayout().blockBoundingRect(first)
+            oy = cr.y() - (dr.y() - sy)
+            ox = cr.x() - (dr.x() - sx)
+        else:
+            oy = ox = 0
+
+        block = doc.findBlock(sel_start)
+        while block.isValid() and block.position() < sel_end:
+            bl = block.layout()
+            if not bl or bl.lineCount() == 0:
+                block = block.next()
+                continue
+
+            br = doc.documentLayout().blockBoundingRect(block)
+            bx = br.x() - sx + ox
+            by = br.y() - sy + oy
+
+            # ── Collect tight rects and paint highlight background ────────
+            rects = []
+            for i in range(bl.lineCount()):
+                line = bl.lineAt(i)
+                ls = block.position() + line.textStart()
+                le = ls + line.textLength()
+                if le <= sel_start or ls >= sel_end:
+                    continue
+
+                local_s = max(sel_start, ls) - block.position()
+                local_e = min(sel_end,   le) - block.position()
+                x1 = line.cursorToX(local_s)[0]
+                x2 = line.cursorToX(local_e)[0]
+                if x2 < x1:
+                    x1, x2 = x2, x1
+
+                line_y = by + line.y()
+                adj    = Theme.aboutSelectionLineHeight
+                top_y  = line_y + (-adj if adj < 0 else 0)
+
+                r = QRectF(bx + x1, top_y, x2 - x1, text_h)
+                rects.append(r)
+                p.fillRect(r, self._sel_brush)
+
+            # ── Redraw selected glyphs in highlight text color ────────────
+            if rects:
+                clip = QPainterPath()
+                for r in rects:
+                    clip.addRect(r)
+
+                local_start = max(sel_start, block.position()) - block.position()
+                local_end   = min(sel_end, block.position() + block.length() - 1) - block.position()
+
+                if local_end > local_start:
+                    fmt = QTextCharFormat()
+                    fmt.setForeground(self._sel_text_color)
+                    fr = QTextLayout.FormatRange()
+                    fr.start  = local_start
+                    fr.length = local_end - local_start
+                    fr.format = fmt
+
+                    p.save()
+                    p.setClipPath(clip)
+                    bl.draw(p, QPointF(bx, by), [fr])
+                    p.restore()
+
+            block = block.next()
+
+        p.end()
 
     # ─────────────────────────────────────────────────────────────────────────
     # VIEW FOCUS MANAGEMENT

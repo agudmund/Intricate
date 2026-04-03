@@ -8,19 +8,16 @@
 
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QGraphicsProxyWidget, QFileDialog, QGraphicsItem
-)
-from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QSizeF
+from PySide6.QtWidgets import QFileDialog
+from PySide6.QtCore import Qt, QRectF, QPointF, QUrl
 from PySide6.QtGui import (
-    QPainter, QPixmap, QImage, QColor, QPen, QPainterPath, QFont
+    QPainter, QPixmap, QImage, QColor, QPen, QPainterPath
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink, QVideoFrame
 
 from nodes.BaseNode import BaseNode
 from data.VideoNodeData import VideoNodeData
 from graphics.Theme import Theme
-from widgets.PrettyEdit import PrettyEdit
 import utils.settings as settings
 from utils.logger import setup_logger
 
@@ -28,12 +25,12 @@ logger = setup_logger("video")
 
 
 # Layout constants
-CAPTION_HEIGHT   = 28.0     # Height of the caption band at the bottom
 PROGRESS_HEIGHT  = 14.0     # Height of the scrub/progress bar
 VIDEO_PADDING    = 6.0      # Inset on all sides
 CLIP_RADIUS_MIN  = 2.0      # Minimum clip radius inside the padding
 
 _VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv", ".flv", ".m4v"}
+_BUTTON_ZONE_H    = 40.0   # px reserved for button strip (4 pad + 32 button + 4 gap)
 
 
 def _fmt_time(ms: int) -> str:
@@ -80,6 +77,7 @@ class VideoNode(BaseNode):
         self._frame_pixmap: QPixmap | None = None
         self._scaled_cache: QPixmap | None = None
         self._scaled_cache_size: tuple[int, int] | None = None
+        self._frame_pending: bool = False          # throttle: skip if paint hasn't caught up
 
         # ── Media player ──────────────────────────────────────────────────────
         self._player = QMediaPlayer()
@@ -99,9 +97,13 @@ class VideoNode(BaseNode):
         self._position_ms: int = 0
         self._was_playing: bool = False   # track state across scrub
 
-        # ── Caption editor ────────────────────────────────────────────────────
-        self._editor: PrettyEdit | None = None
-        self._build_caption_editor()
+        self._viewport_visible: bool = True   # assume visible until told otherwise
+        self._was_playing_before_cull: bool = False
+
+        # Button row starts hidden — double-click the top strip to reveal
+        self._buttons_visible = False
+        for btn in self._buttons:
+            btn.hide()
 
         # ── Restore from session ──────────────────────────────────────────────
         if data.source_path:
@@ -110,52 +112,45 @@ class VideoNode(BaseNode):
                 self._set_source(p, restore_pos=data.playback_pos)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # CAPTION EDITOR  (same pattern as ImageNode)
+    # CAPTION → ABOUT NODE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_caption_editor(self) -> None:
-        self._editor = PrettyEdit(
-            self,
-            font_family=Theme.healthFontFamily,
-            font_size=9,
-            font_color=Theme.textPrimary,
-            commit_on_focus_loss=True,
-        )
-        self._editor.committed.connect(self._on_caption_committed)
-
-    def _caption_rect(self) -> QRectF:
-        r = self.rect()
-        return QRectF(r.x(), r.bottom() - CAPTION_HEIGHT, r.width(), CAPTION_HEIGHT)
+    def _top_offset(self) -> float:
+        """Vertical space reserved above the video — full button zone or minimal pad."""
+        return _BUTTON_ZONE_H if self._buttons_visible else 15.0
 
     def _progress_rect(self) -> QRectF:
         r = self.rect()
         return QRectF(
             r.x() + VIDEO_PADDING,
-            r.bottom() - CAPTION_HEIGHT - PROGRESS_HEIGHT,
+            r.bottom() - PROGRESS_HEIGHT - VIDEO_PADDING,
             r.width() - VIDEO_PADDING * 2,
             PROGRESS_HEIGHT,
         )
 
     def _video_rect(self) -> QRectF:
         r = self.rect()
-        top = r.y() + self._BUTTON_ZONE_H + VIDEO_PADDING
+        top = r.y() + self._top_offset() + VIDEO_PADDING
         return QRectF(
             r.x()     + VIDEO_PADDING,
             top,
             r.width() - VIDEO_PADDING * 2,
-            r.height() - (top - r.y()) - VIDEO_PADDING - CAPTION_HEIGHT - PROGRESS_HEIGHT,
+            r.height() - (top - r.y()) - VIDEO_PADDING - PROGRESS_HEIGHT - VIDEO_PADDING,
         )
 
-    def _start_caption_edit(self) -> None:
-        self._editor.start_edit(self.data.caption, self._caption_rect())
+    def _spawn_caption_node(self, caption: str) -> None:
+        """Spawn an AboutNode with *caption* and wire it to this VideoNode."""
+        scene = self.scene()
+        if not scene:
+            return
+        pos = self.scenePos()
+        about_pos = QPointF(pos.x(), pos.y() + self.rect().height() + 20)
+        about = scene.add_about_node(pos=about_pos, label=caption)
 
-    def _on_caption_committed(self, text: str) -> None:
-        self.data.caption = text
-        self.update()
-
-    def _cancel_caption_edit(self) -> None:
-        self._editor.cancel()
-        self.update()
+        from graphics.Connection import Connection
+        conn = Connection(self, about)
+        scene.addItem(conn)
+        conn.update_path()
 
     # ─────────────────────────────────────────────────────────────────────────
     # MEDIA PLAYER
@@ -169,6 +164,7 @@ class VideoNode(BaseNode):
         self._set_source(path)
         if not self.data.caption:
             self.data.caption = path.stem
+            self._spawn_caption_node(path.stem)
         logger.info(f"video loaded: {path.name}")
 
     def _set_source(self, path: Path, restore_pos: int = 0) -> None:
@@ -194,14 +190,27 @@ class VideoNode(BaseNode):
                 self._player.play()
 
     def _on_frame(self, frame: QVideoFrame) -> None:
-        """Convert each video frame to a QPixmap for painting."""
+        """Convert each video frame to a proxy-sized QPixmap for painting.
+
+        We scale down immediately so only a thumbnail-sized pixmap lives in
+        memory — never the full decoded frame.  If the previous frame hasn't
+        been painted yet we drop this one entirely (frame-skip).
+        """
+        if self._frame_pending:
+            return                       # paint hasn't caught up — drop frame
         if not frame.isValid():
             return
         img = frame.toImage()
         if img.isNull():
             return
-        self._frame_pixmap = QPixmap.fromImage(img)
-        self._scaled_cache = None  # invalidate
+
+        # Scale to display size right away — never keep the full-res decode
+        vr = self._video_rect()
+        tw, th = max(1, int(vr.width())), max(1, int(vr.height()))
+        small = img.scaled(tw, th, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._frame_pixmap = QPixmap.fromImage(small)
+        self._scaled_cache = None       # invalidate
+        self._frame_pending = True
         self.update()
 
     def _on_duration_changed(self, duration: int) -> None:
@@ -262,36 +271,20 @@ class VideoNode(BaseNode):
         self._loop_btn = NodeButton(self, loop_off_pix, self._toggle_loop, loop_on_pix, toggle=True)
         self._loop_btn._in_confirm = self.data.looping
         self._buttons.append(self._loop_btn)
-        trash_pix   = Theme.icon(Theme.iconDelete,  fallback_color="#c97b7b")
-        confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
-        self._buttons.append(NodeButton(self, trash_pix, self._delete_source_file, confirm_pix))
-
-    def _delete_source_file(self) -> None:
-        """Send the source file to the recycle bin, then remove this node."""
-        self._player.stop()
-        path = self.data.source_path
-        if path:
-            try:
-                from send2trash import send2trash
-                send2trash(path)
-            except Exception as e:
-                logger.warning(f"could not trash '{path}': {e}")
-        scene = self.scene()
-        if scene:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, lambda: scene.removeItem(self))
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        pos = event.pos()
-        if self._caption_rect().contains(pos):
-            self._start_caption_edit()
+        # Top strip above the video area — toggle button row
+        if event.pos().y() < self.rect().top() + self._top_offset():
+            self._buttons_visible = not self._buttons_visible
+            for btn in self._buttons:
+                btn.setVisible(self._buttons_visible)
             event.accept()
             return
-        if self._video_rect().contains(pos):
+        if self._video_rect().contains(event.pos()):
             if self.data.source_path:
                 self._toggle_playback()
             else:
@@ -332,13 +325,6 @@ class VideoNode(BaseNode):
         super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event) -> None:
-        if self._editor.proxy and self._editor.proxy.isVisible():
-            if event.key() == Qt.Key_Escape:
-                self._cancel_caption_edit()
-                event.accept()
-                return
-            event.accept()
-            return
         # Space toggles playback when node is selected
         if event.key() == Qt.Key_Space and self.data.source_path:
             self._toggle_playback()
@@ -355,7 +341,8 @@ class VideoNode(BaseNode):
 
         vr = self._video_rect()
         pr = self._progress_rect()
-        cr = self._caption_rect()
+
+        self._frame_pending = False          # allow next frame to be accepted
 
         if self._frame_pixmap and not self._frame_pixmap.isNull():
             # ── Clip to rounded rect ─────────────────────────────────────────
@@ -365,6 +352,8 @@ class VideoNode(BaseNode):
             painter.setClipPath(clip_path)
 
             # ── Scale + centre ───────────────────────────────────────────────
+            # _frame_pixmap is already proxy-sized from _on_frame; only
+            # re-scale if the node was resized since the last decode.
             vr_size = (int(vr.width()), int(vr.height()))
             if self._scaled_cache is None or self._scaled_cache_size != vr_size:
                 self._scaled_cache = self._frame_pixmap.scaled(
@@ -411,13 +400,6 @@ class VideoNode(BaseNode):
             painter.setBrush(QColor(Theme.primaryBorder))
             painter.drawRoundedRect(fill_rect, 3, 3)
 
-            # Time label
-            time_text = f"{_fmt_time(self._position_ms)} / {_fmt_time(self._duration_ms)}"
-            painter.setPen(QColor(Theme.textPrimary))
-            font = painter.font()
-            font.setPointSize(7)
-            painter.setFont(font)
-            painter.drawText(pr, Qt.AlignCenter, time_text)
 
         # ── Play state indicator ─────────────────────────────────────────────
         if self.data.source_path and self._frame_pixmap:
@@ -439,16 +421,30 @@ class VideoNode(BaseNode):
                 path.closeSubpath()
                 painter.drawPath(path)
 
-        # ── Caption band ─────────────────────────────────────────────────────
-        if not self._editor.proxy or not self._editor.proxy.isVisible():
-            caption_text = self.data.caption or self.data.title
-            painter.setPen(QColor(Theme.textPrimary))
-            font = painter.font()
-            font.setPointSize(9)
-            painter.setFont(font)
-            painter.drawText(cr, Qt.AlignCenter, caption_text)
-
         painter.restore()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # VIEWPORT CULLING
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _set_viewport_visible(self, visible: bool) -> None:
+        """Pause playback when offscreen, resume when back in view."""
+        if visible == self._viewport_visible:
+            return
+        self._viewport_visible = visible
+        if not self.data.source_path:
+            return
+        if visible:
+            if self._was_playing_before_cull:
+                self._player.play()
+                self._was_playing_before_cull = False
+        else:
+            playing = (
+                self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+            )
+            if playing:
+                self._was_playing_before_cull = True
+                self._player.pause()
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
@@ -460,9 +456,8 @@ class VideoNode(BaseNode):
         self._player.durationChanged.disconnect(self._on_duration_changed)
         self._player.positionChanged.disconnect(self._on_position_changed)
         self._player.mediaStatusChanged.disconnect(self._on_media_status)
-        if self._editor:
-            self._editor.teardown()
         self._frame_pixmap = None
+        self._scaled_cache = None
         super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────

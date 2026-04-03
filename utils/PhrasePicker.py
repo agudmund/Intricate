@@ -31,7 +31,7 @@ motivationalMessages = [
     "Bright Tomorrow",
     "Inner Peace",
     "Clay",
-    "Ominous",
+    "Omnious",
     "Intricate",
     "Bloom",
     "Unfold",

@@ -404,6 +404,24 @@ class IntricateScene(QGraphicsScene):
             self.add_image_node(pos=QPointF(x, y), path=str(path))
 
     # ─────────────────────────────────────────────────────────────────────────
+    # VIDEO VIEWPORT CULLING
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def update_video_visibility(self, viewport_rect) -> None:
+        """Pause/resume VideoNodes based on whether they intersect the viewport."""
+        from nodes.VideoNode import VideoNode
+        from PySide6.QtCore import QRectF
+
+        # Add a margin so videos spin up slightly before scrolling into view
+        margin = 200.0
+        padded = viewport_rect.adjusted(-margin, -margin, margin, margin)
+
+        for item in self.items():
+            if isinstance(item, VideoNode):
+                node_rect = item.mapRectToScene(item.rect())
+                item._set_viewport_visible(padded.intersects(node_rect))
+
+    # ─────────────────────────────────────────────────────────────────────────
     # SESSION PERSISTENCE
     # ─────────────────────────────────────────────────────────────────────────
 

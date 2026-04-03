@@ -29,6 +29,9 @@ IMAGE_PADDING   = 6.0       # Inset on all sides — prevents image clipping rou
 CLIP_RADIUS_MIN = 2.0       # Minimum clip radius inside the padding
 
 
+_BUTTON_ZONE_H = 40.0   # px reserved for button strip (4 pad + 32 button + 4 gap)
+
+
 class ImageNode(BaseNode):
     """
     Renders an image thumbnail on the canvas.
@@ -61,6 +64,11 @@ class ImageNode(BaseNode):
         self._scaled_cache: QPixmap | None = None          # Cached scaled pixmap
         self._scaled_cache_size: tuple[int, int] | None = None  # (w, h) key
 
+        # Button row starts hidden — double-click the top strip to reveal
+        self._buttons_visible = False
+        for btn in self._buttons:
+            btn.hide()
+
         # ── Restore image if session data carries one ─────────────────────────
         if data.image_b64:
             self._load_from_b64(data.image_b64)
@@ -73,10 +81,14 @@ class ImageNode(BaseNode):
     # CAPTION → ABOUT NODE
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _top_offset(self) -> float:
+        """Vertical space reserved above the image — full button zone or minimal pad."""
+        return _BUTTON_ZONE_H if self._buttons_visible else 15.0
+
     def _image_rect(self) -> QRectF:
         """The padded image display area below the button shelf."""
         r = self.rect()
-        top = r.y() + self._BUTTON_ZONE_H + IMAGE_PADDING
+        top = r.y() + self._top_offset() + IMAGE_PADDING
         return QRectF(
             r.x()     + IMAGE_PADDING,
             top,
@@ -299,7 +311,14 @@ class ImageNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        """Double-click the image area to open a file browser."""
+        """Double-click the top strip to toggle buttons, image area to browse."""
+        # Top strip above the image area — toggle button row
+        if event.pos().y() < self.rect().top() + self._top_offset():
+            self._buttons_visible = not self._buttons_visible
+            for btn in self._buttons:
+                btn.setVisible(self._buttons_visible)
+            event.accept()
+            return
         if self._image_rect().contains(event.pos()):
             self._open_file_browser()
             event.accept()
