@@ -24,7 +24,16 @@ _DOT_R      = 5.0    # status dot radius
 _POLL_MS    = 10000   # refresh every 10 seconds
 
 
-_SESSION_PATTERNS = {"session.json", "session_previous.json", "session_archive.json"}
+_SESSION_FILENAMES = {"session.json", "session_previous.json", "session_archive.json"}
+_SESSION_DIRS      = {"backup", "Documents", "data"}
+
+
+def _is_session_path(raw: str) -> bool:
+    """Check if a porcelain path is session-related (files or directories)."""
+    p = raw.strip().strip('"').rstrip("/")
+    name = Path(p).name
+    return name in _SESSION_FILENAMES or name in _SESSION_DIRS
+
 
 # Status: "clean" = no changes, "session" = only session files, "dirty" = real changes
 def _scan_repos() -> list[tuple[str, str]]:
@@ -49,9 +58,8 @@ def _scan_repos() -> list[tuple[str, str]]:
             if not lines:
                 repos.append((folder.name, "clean"))
             else:
-                # Check if all changed files are session-related
                 all_session = all(
-                    Path(line[3:].strip().strip('"')).name in _SESSION_PATTERNS
+                    _is_session_path(line[3:])
                     for line in lines if len(line) > 3
                 )
                 repos.append((folder.name, "session" if all_session else "dirty"))
