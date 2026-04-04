@@ -25,12 +25,18 @@ class InfoNode(BaseNode):
     """
 
     _BODY_LINES = [
-        "Intricate is a multi nodal space",
-        "Where ideas and thoughts roam free",
-        "And are given space to grow",
+        "A Gentle nodal space",
+        "Where thoughts interlink ideas",
+        "Transitioning Thoughts to Things",
         "",
-        "  Built by Yours Truly and Various Intelligences",
-        "        For enjoying",
+        "A Creative Space",
+        "Where the next breath of air found us",
+        "Roaming free finding room to grow",
+        "And become all that it could be",
+        "",
+        "Built by Yours Truly and Various Intelligences",
+        "",
+        "    For enjoying",
     ]
 
     def __init__(self, data: InfoNodeData | None = None):

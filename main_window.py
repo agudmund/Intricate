@@ -30,6 +30,7 @@ from utils.helpers import ensure_dir, clean_pycache
 from utils.session import session_path, enter_project
 from widgets.PrettyCombo import combo as pretty_combo
 from widgets.PrettyLabel import label as pretty_label
+from widgets.PrettySlider import slider as pretty_slider
 
 logger = setup_logger()
 
@@ -858,31 +859,15 @@ class IntricateApp(QMainWindow):
         layout.addStretch()
 
         # ── Zoom slider — horizontal, maps 0.1–5.0 to integer range ──────
-        self._zoom_label = pretty_label("100%")
-        self._zoom_label.setFixedWidth(42)
-        layout.addWidget(self._zoom_label, alignment=Qt.AlignVCenter)
-
-        self._zoom_slider = QSlider(Qt.Horizontal)
-        self._zoom_slider.setFixedWidth(120)
-        self._zoom_slider.setMinimum(10)    # 0.1× zoom × 100
-        self._zoom_slider.setMaximum(500)   # 5.0× zoom × 100
-        self._zoom_slider.setValue(100)
-        self._zoom_slider.setSingleStep(5)
-        self._zoom_slider.setPageStep(25)
-        self._zoom_slider.setStyleSheet(f"""
-            QSlider::groove:horizontal {{
-                height: 3px;
-                background: {Theme.primaryBorder};
-                border-radius: 1px;
-            }}
-            QSlider::handle:horizontal {{
-                width: 10px;
-                margin: -4px 0;
-                background: {Theme.textPrimary};
-                border-radius: 5px;
-            }}
-        """)
-        self._zoom_slider.valueChanged.connect(self._on_zoom_slider)
+        self._zoom_slider = pretty_slider(
+            Qt.Horizontal,
+            range=(10, 500),
+            value=100,
+            fixedWidth=250,
+            singleStep=5,
+            pageStep=25,
+            valueChanged=self._on_zoom_slider,
+        )
         layout.addWidget(self._zoom_slider, alignment=Qt.AlignVCenter)
 
         # Exid button — lower-right anchor, styled via PrettyButton
@@ -902,7 +887,6 @@ class IntricateApp(QMainWindow):
         factor = target / current
         centre = self.view.mapToScene(self.view.viewport().rect().center())
         self.view._apply_zoom(factor, anchor=centre)
-        self._zoom_label.setText(f"{value}%")
 
     def show_info(self, message: str, on_click=None) -> None:
         """Typewriter reveal with simultaneous fade-in, hold 3 s, then fade out."""
@@ -961,7 +945,6 @@ class IntricateApp(QMainWindow):
         self._zoom_slider.blockSignals(True)
         self._zoom_slider.setValue(max(10, min(500, value)))
         self._zoom_slider.blockSignals(False)
-        self._zoom_label.setText(f"{value}%")
 
     def _open_settings_dialog(self):
         # Because it's a QWidget now, we need to ensure it doesn't get garbage collected

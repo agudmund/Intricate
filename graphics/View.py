@@ -45,6 +45,10 @@ class IntricateView(QGraphicsView):
         self._last_pan_pos: QPointF | None = None
         self._on_zoom_changed = None   # optional callback, set by main_window
 
+        # Alt+Right-click drag zoom (Photoshop-style)
+        self._alt_zooming      = False
+        self._alt_zoom_start_y = 0.0
+
         self._configure()
 
     def _configure(self) -> None:
@@ -222,6 +226,13 @@ class IntricateView(QGraphicsView):
                 return
 
         self.setFocus()
+        # Alt+Right-click → Photoshop-style drag zoom
+        if event.button() == Qt.RightButton and event.modifiers() & Qt.AltModifier:
+            self._alt_zooming = True
+            self._alt_zoom_start_y = event.position().y()
+            self.setCursor(Qt.SizeVerCursor)
+            event.accept()
+            return
         if event.button() == Qt.MiddleButton:
             # Safety net: clear any stale scene mouse grabber. A shake-deleted node
             # that didn't fully release its grab can leave the scene routing events
@@ -271,7 +282,15 @@ class IntricateView(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        """Pan on middle mouse drag; update floating wire on move."""
+        """Pan on middle mouse drag; Alt+Right drag zoom; update floating wire on move."""
+        if self._alt_zooming and event.buttons() & Qt.RightButton:
+            delta_y = event.position().y() - self._alt_zoom_start_y
+            factor = 1.005 ** (-delta_y)   # up = zoom in, gentle sensitivity
+            anchor = self.mapToScene(event.position().toPoint())
+            self._apply_zoom(factor, anchor=anchor)
+            self._alt_zoom_start_y = event.position().y()
+            event.accept()
+            return
         if self._last_pan_pos is not None and event.buttons() & Qt.MiddleButton:
             delta          = event.position() - self._last_pan_pos
             self._last_pan_pos = event.position()
@@ -286,7 +305,12 @@ class IntricateView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
-        """End pan; expand the scene rect if a node was dragged outside it."""
+        """End pan/zoom; expand the scene rect if a node was dragged outside it."""
+        if event.button() == Qt.RightButton and self._alt_zooming:
+            self._alt_zooming = False
+            self.setCursor(Qt.ArrowCursor)
+            event.accept()
+            return
         if event.button() == Qt.MiddleButton:
             self._last_pan_pos = None
             self.setRenderHint(QPainter.Antialiasing, True)
