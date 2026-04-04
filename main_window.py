@@ -1089,6 +1089,11 @@ class IntricateApp(QMainWindow):
         """Save the outgoing session, swap to a fresh scene, load incoming."""
         new_project = self.project_selector.currentText()
 
+        # ── Create New Session ───────────────────────────────────────────
+        if new_project == self._NEW_SESSION_SENTINEL:
+            self._create_new_session()
+            return
+
         # Save whatever was on canvas for the previous project
         if hasattr(self, '_active_project'):
             prev_path = self._session_path(self._active_project)
@@ -1104,6 +1109,78 @@ class IntricateApp(QMainWindow):
         self._load_session_into_scene(self._session_path(new_project))
         self._status(f"welcome back to {new_project}")
 
+    def _create_new_session(self) -> None:
+        """Prompt for a name, create the folder, and switch to the new session."""
+        from PySide6.QtWidgets import QInputDialog
+
+        prev = getattr(self, '_active_project', '')
+        name, ok = QInputDialog.getText(
+            self, "New Session", "Name your next masterpiece:"
+        )
+        name = name.strip() if ok else ""
+
+        if not name:
+            # Cancelled or empty — restore previous selection
+            self.project_selector.blockSignals(True)
+            self.project_selector.setCurrentText(prev)
+            self.project_selector.blockSignals(False)
+            return
+
+        # Check if folder already exists
+        project_dir = Path.home() / "Desktop" / name
+        if project_dir.exists():
+            self._status(f"{name} already exists — switching to it")
+        else:
+            ensure_dir(project_dir / "Documents" / "data")
+            self._git_init_project(project_dir, name)
+
+        # Save outgoing session before switching
+        if prev:
+            prev_path = self._session_path(prev)
+            if prev_path:
+                ensure_dir(prev_path.parent)
+                self.scene.save_session(prev_path, self._get_viewport())
+
+        # Repopulate combo with the new folder included
+        self.project_selector.blockSignals(True)
+        self.project_selector.clear()
+        self.populate_sessions()
+        self.project_selector.setCurrentText(name)
+        self.project_selector.blockSignals(False)
+
+        self._active_project = name
+        set_value("ui", "selected_project", name)
+
+        self._swap_scene()
+        self._load_session_into_scene(self._session_path(name))
+        self._status(f"welcome to {name}")
+
+    def _git_init_project(self, project_dir: Path, name: str) -> None:
+        """git init + .gitignore + README + initial commit for a new project folder."""
+        import subprocess as _sp
+        try:
+            _run = lambda cmd: _sp.run(
+                cmd, cwd=str(project_dir), capture_output=True, text=True, timeout=15
+            )
+            _run(["git", "init"])
+            gitignore = project_dir / ".gitignore"
+            gitignore.write_text(
+                "__pycache__/\n*.pyc\n.env\n*.log\nlogs/\n",
+                encoding="utf-8",
+            )
+            readme = project_dir / "README.md"
+            readme.write_text(
+                f"# {name}\n\nIt is what it is\n",
+                encoding="utf-8",
+            )
+            _run(["git", "add", "."])
+            _run(["git", "commit", "-m", f"init {name}"])
+            logger.info(f"[session] git init complete for {name}")
+        except Exception:
+            logger.warning(f"[session] git init failed for {name}", exc_info=True)
+
+    _NEW_SESSION_SENTINEL = "+ New Session"
+
     def populate_sessions(self) -> None:
         desktop = Path.home() / "Desktop"
         desktop_folders = sorted(
@@ -1111,6 +1188,7 @@ class IntricateApp(QMainWindow):
             if p.is_dir() and not p.name.startswith(".")
         ) if desktop.exists() else []
         self.project_selector.addItems(desktop_folders)
+        self.project_selector.addItem(self._NEW_SESSION_SENTINEL)
         saved = get("ui", "selected_project", "")
         if saved in desktop_folders:
             self.project_selector.setCurrentText(saved)

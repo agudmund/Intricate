@@ -145,7 +145,10 @@ class PerfNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _refresh(self) -> None:
-        self.update()
+        try:
+            self.update()
+        except RuntimeError:
+            self._poll_timer.stop()
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS

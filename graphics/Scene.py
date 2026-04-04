@@ -525,12 +525,19 @@ class IntricateScene(QGraphicsScene):
         from graphics.Connection import Connection
 
         from nodes.VideoNode import VideoNode
+        from nodes.PerfNode import PerfNode
         for item in list(self.items()):
             if isinstance(item, BaseNode):
                 try:
                     item.behaviour.disconnect_all()
                 except Exception:
                     pass
+                # Stop poll timers on PerfNodes
+                if isinstance(item, PerfNode):
+                    try:
+                        item._poll_timer.stop()
+                    except Exception:
+                        pass
                 # Stop media players so VideoNodes don't keep decoding in RAM.
                 # Defer player.stop() via singleShot so codec teardown doesn't
                 # block the UI thread when many videos are open at once.
