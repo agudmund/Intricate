@@ -669,16 +669,12 @@ class ClaudeNode(BaseNode):
         """
         Send image_b64 to the Claude vision API and spawn a response node.
 
-        Runs the HTTP call on a daemon thread — never blocks the canvas.
-        Result arrives on the main thread via QTimer.singleShot.
+        Delegates to VisionWorker — never blocks the canvas.
         """
         import os
-        import json
-        import urllib.request
-        import urllib.error
+        from utils.vision import VisionWorker
 
-        api_key = os.environ.get("SingleSharedBraincell_ApiKey", "").strip()
-        if not api_key:
+        if not os.environ.get("SingleSharedBraincell_ApiKey", "").strip():
             self._spawn_response_node(
                 "API key not set — check SingleSharedBraincell_ApiKey."
             )
@@ -695,57 +691,30 @@ class ClaudeNode(BaseNode):
         self.data.title = f"Vision: {caption or 'image'}…"
         self.update()
 
-        def _call():
-            try:
-                payload = json.dumps({
-                    "model":      "claude-sonnet-4-6",
-                    "max_tokens": 1024,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {
-                                "type":   "image",
-                                "source": {
-                                    "type":       "base64",
-                                    "media_type": "image/png",
-                                    "data":       image_b64,
-                                },
-                            },
-                            {"type": "text", "text": prompt},
-                        ],
-                    }],
-                }).encode("utf-8")
+        def _on_finished(text: str):
+            self.data.title = _saved_title
+            self._append_body(text)
+            self.update()
+            self._spawn_response_node(text)
 
-                req = urllib.request.Request(
-                    "https://api.anthropic.com/v1/messages",
-                    data=payload,
-                    headers={
-                        "x-api-key":         api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type":      "application/json",
-                    },
-                    method="POST",
-                )
-                try:
-                    with urllib.request.urlopen(req, timeout=60) as resp:
-                        body = json.loads(resp.read().decode("utf-8"))
-                    text = body["content"][0]["text"].strip()
-                except urllib.error.HTTPError as e:
-                    detail = e.read().decode("utf-8", errors="replace")
-                    text = f"Vision API error {e.code}:\n{detail[:300]}"
-                except Exception as e:
-                    text = f"Vision request failed:\n{e}"
-            except Exception as e:
-                text = f"Vision setup failed:\n{e}"
+        def _on_failed(err: str):
+            self.data.title = _saved_title
+            self._append_body(err)
+            self.update()
+            self._spawn_response_node(err)
 
-            def _done():
-                self.data.title = _saved_title
-                self._append_body(text)
-                self.update()
-                self._spawn_response_node(text)
-            QTimer.singleShot(0, _done)
-
-        threading.Thread(target=_call, daemon=True).start()
+        worker = VisionWorker(
+            image_b64=image_b64,
+            prompt=prompt,
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            timeout=60,
+            parent=self,
+        )
+        worker.finished.connect(_on_finished)
+        worker.failed.connect(_on_failed)
+        worker.start()
+        self._vision_worker = worker   # prevent GC
 
     def _on_reply_done(self) -> None:
         self.data.depth_front = True

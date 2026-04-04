@@ -95,17 +95,23 @@ class VisionWorker(QThread):
 
     def __init__(
         self,
-        image_path: Path,
-        prompt:     str = "",
-        model:      str = "claude-haiku-4-5-20251001",
-        max_tokens: int = 2048,
-        parent          = None,
+        image_path: Path | None = None,
+        prompt:     str  = "",
+        model:      str  = "claude-haiku-4-5-20251001",
+        max_tokens: int  = 2048,
+        timeout:    int  = 30,
+        image_b64:  str  = "",
+        media_type: str  = "image/png",
+        parent           = None,
     ):
         super().__init__(parent)
         self.image_path = image_path
         self.prompt     = prompt or self._DEFAULT_PROMPT
         self.model      = model
         self.max_tokens = max_tokens
+        self.timeout    = timeout
+        self._image_b64  = image_b64
+        self._media_type = media_type
 
     def run(self):
         api_key = os.environ.get("SingleSharedBraincell_ApiKey", "").strip()
@@ -116,14 +122,21 @@ class VisionWorker(QThread):
             )
             return
 
-        try:
-            raw = self.image_path.read_bytes()
-        except OSError as e:
-            self.failed.emit(f"Could not read image file:\n{e}")
+        # Resolve image data — either pre-encoded or read from file
+        if self._image_b64:
+            b64        = self._image_b64
+            media_type = self._media_type
+        elif self.image_path:
+            try:
+                raw = self.image_path.read_bytes()
+            except OSError as e:
+                self.failed.emit(f"Could not read image file:\n{e}")
+                return
+            b64        = base64.standard_b64encode(raw).decode("ascii")
+            media_type = _MEDIA_TYPES.get(self.image_path.suffix.lower(), "image/png")
+        else:
+            self.failed.emit("No image provided — supply image_path or image_b64.")
             return
-
-        b64        = base64.standard_b64encode(raw).decode("ascii")
-        media_type = _MEDIA_TYPES.get(self.image_path.suffix.lower(), "image/png")
 
         payload = json.dumps({
             "model":      self.model,
@@ -161,7 +174,7 @@ class VisionWorker(QThread):
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")
@@ -177,10 +190,8 @@ class VisionWorker(QThread):
             self.failed.emit(f"Unexpected API response shape:\n{e}")
             return
 
-        _log.info(
-            f"[vision] extraction complete — {len(text)} chars "
-            f"from {self.image_path.name}"
-        )
+        source = self.image_path.name if self.image_path else "base64"
+        _log.info(f"[vision] extraction complete — {len(text)} chars from {source}")
         self.finished.emit(text)
 
 

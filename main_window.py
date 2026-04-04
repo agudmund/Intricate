@@ -447,12 +447,12 @@ class IntricateApp(QMainWindow):
 
     def _restore_preview_width(self) -> None:
         """Restore saved splitter sizes (sidebar and preview panel widths persisted in settings)."""
-        saved_preview = get("ui", "preview_width", 0)
+        saved_preview = get("ui", "preview_width", None)
         saved_sidebar = get("ui", "sidebar_width", 0)
         sizes = self.splitter.sizes()
         if len(sizes) == 3:
             new_sidebar  = saved_sidebar if saved_sidebar > 0 else sizes[0]
-            new_preview  = saved_preview if saved_preview > 0 else sizes[2]
+            new_preview  = saved_preview if saved_preview is not None else sizes[2]
             slack        = sizes[0] + sizes[1] + sizes[2] - new_sidebar - new_preview
             self.splitter.setSizes([new_sidebar, max(0, slack), new_preview])
         self.splitter.splitterMoved.connect(self._on_splitter_moved)
