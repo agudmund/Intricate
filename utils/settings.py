@@ -400,6 +400,34 @@ def get_color(name: str) -> str:
     return get_nested("theme", "colors", name, "")
 
 
+# ── Masked values (lightweight obfuscation for sensitive config) ─────────────
+
+def _mask(text: str) -> str:
+    """Base64-encode a string for storage obfuscation."""
+    import base64
+    return base64.b64encode(text.encode("utf-8")).decode("ascii")
+
+
+def _unmask(masked: str) -> str:
+    """Decode a base64-masked string. Returns empty string on failure."""
+    import base64
+    try:
+        return base64.b64decode(masked.encode("ascii")).decode("utf-8")
+    except Exception:
+        return ""
+
+
+def get_masked(section: str, key: str, default: str = "") -> str:
+    """Retrieve and unmask a base64-obfuscated value."""
+    raw = get(section, key, "")
+    return _unmask(raw) if raw else default
+
+
+def set_masked(section: str, key: str, value: str) -> None:
+    """Mask a value with base64 and persist it."""
+    set_value(section, key, _mask(value))
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # INITIALISE
 # ─────────────────────────────────────────────────────────────────────────────

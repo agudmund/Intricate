@@ -159,4 +159,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logging.critical(f"Starting Intricate catastrophically failed", exc_info=True)
+        print(f"Intricate has entered the void: {e}", file=sys.stderr)
+        sys.exit(1)

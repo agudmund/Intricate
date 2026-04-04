@@ -34,7 +34,8 @@ class InfoNode(BaseNode):
         "Roaming free finding room to grow",
         "And become all that it could be",
         "",
-        "Built by Yours Truly and Various Intelligences",
+        "Built using a single shared braincell",
+        "By Yours Truly and various Intelligences",
         "",
         "    For enjoying",
     ]
@@ -115,6 +116,23 @@ class InfoNode(BaseNode):
                 line,
             )
             y += 16
+
+        # Footnote
+        y += 12
+        footnote_font = QFont("Lato", max(1, Theme.aboutFontSize - 3))
+        painter.setFont(footnote_font)
+        painter.setOpacity(0.5)
+        painter.drawText(
+            QRectF(r.left() + pad, y, r.width() - pad * 2, 16),
+            Qt.AlignLeft | Qt.AlignTop,
+            "Nodes harmed: 0",
+        )
+        y += 14
+        painter.drawText(
+            QRectF(r.left() + pad, y, r.width() - pad * 2, 16),
+            Qt.AlignLeft | Qt.AlignTop,
+            "but many were aggressively fluffed",
+        )
 
         painter.restore()
 
