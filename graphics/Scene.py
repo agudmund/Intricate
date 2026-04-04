@@ -327,6 +327,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_git_node(self, pos: QPointF | None = None):
+        """Add a GitNode showing repo status across all Desktop projects."""
+        from nodes.GitNode import GitNode
+        from data.GitNodeData import GitNodeData
+        node = GitNode(GitNodeData())
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_palette_node(self, pos: QPointF | None = None, colors: list | None = None):
         """Add a PaletteNode at pos, optionally pre-filled with colors."""
         from nodes.PaletteNode import PaletteNode
@@ -526,14 +537,15 @@ class IntricateScene(QGraphicsScene):
 
         from nodes.VideoNode import VideoNode
         from nodes.PerfNode import PerfNode
+        from nodes.GitNode import GitNode
         for item in list(self.items()):
             if isinstance(item, BaseNode):
                 try:
                     item.behaviour.disconnect_all()
                 except Exception:
                     pass
-                # Stop poll timers on PerfNodes
-                if isinstance(item, PerfNode):
+                # Stop poll timers on PerfNodes and GitNodes
+                if isinstance(item, (PerfNode, GitNode)):
                     try:
                         item._poll_timer.stop()
                     except Exception:
@@ -684,6 +696,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.InfoNode import InfoNode
             from data.InfoNodeData import InfoNodeData
             node = InfoNode(InfoNodeData.from_dict(d))
+
+        elif node_type == "git":
+            from nodes.GitNode import GitNode
+            from data.GitNodeData import GitNodeData
+            node = GitNode(GitNodeData.from_dict(d))
 
         elif node_type == "palette":
             from nodes.PaletteNode import PaletteNode
