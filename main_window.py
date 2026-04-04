@@ -1011,20 +1011,49 @@ class IntricateApp(QMainWindow):
         self.scene.changed.connect(self._schedule_autosave)
         self.scene.selectionChanged.connect(self._on_selection_changed)
 
+    def _get_viewport(self) -> dict:
+        """Capture current camera position and zoom for session persistence."""
+        try:
+            center = self.view.mapToScene(self.view.viewport().rect().center())
+            return {
+                "camera_x": center.x(),
+                "camera_y": center.y(),
+                "camera_zoom": self.view.current_zoom,
+            }
+        except (RuntimeError, AttributeError):
+            return {}
+
+    def _apply_viewport(self, vp: dict) -> None:
+        """Restore camera position and zoom from a session viewport dict."""
+        cx   = vp.get("camera_x")
+        cy   = vp.get("camera_y")
+        zoom = vp.get("camera_zoom")
+        if cx is None or cy is None:
+            return
+        self.view._expand_scene_rect()
+        if zoom is not None and zoom > 0:
+            self.view.resetTransform()
+            self.view.scale(zoom, zoom)
+            self.view.current_zoom = zoom
+        self.view.centerOn(QPointF(cx, cy))
+        self._sync_zoom_slider()
+
     def _load_session_into_scene(self, path: Path | None) -> None:
         """Change cwd to the project folder and load its session."""
         if not path:
             return
         enter_project(path)
         if path.exists():
-            self.scene.load_session(path)
+            vp = self.scene.load_session(path)
+            if vp:
+                QTimer.singleShot(0, lambda: self._apply_viewport(vp))
 
     def _autosave(self) -> None:
         """Save the current canvas to the active project's session.json."""
         path = self._session_path()
         if path:
             ensure_dir(path.parent)
-            self.scene.save_session(path)
+            self.scene.save_session(path, self._get_viewport())
 
     def _schedule_autosave(self) -> None:
         """Debounce scene changes — save 2 s after the last modification."""
@@ -1054,7 +1083,7 @@ class IntricateApp(QMainWindow):
             prev_path = self._session_path(self._active_project)
             if prev_path:
                 ensure_dir(prev_path.parent)
-                self.scene.save_session(prev_path)
+                self.scene.save_session(prev_path, self._get_viewport())
 
         self._active_project = new_project
         set_value("ui", "selected_project", new_project)

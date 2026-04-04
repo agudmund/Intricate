@@ -432,7 +432,7 @@ class IntricateScene(QGraphicsScene):
     # SESSION PERSISTENCE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def save_session(self, path) -> None:
+    def save_session(self, path, viewport: dict | None = None) -> None:
         """Serialize all nodes and connections via SessionManager (rotation + checksum)."""
         from nodes.BaseNode import BaseNode
         from graphics.Connection import Connection
@@ -460,16 +460,19 @@ class IntricateScene(QGraphicsScene):
             "version":     SessionManager.VERSION,
             "nodes":       nodes,
             "connections": connections,
-            "viewport":    {},
+            "viewport":    viewport or {},
         })
 
-    def load_session(self, path) -> None:
-        """Clear the scene and restore from a session.json via SessionManager."""
+    def load_session(self, path) -> dict:
+        """Clear the scene and restore from a session.json via SessionManager.
+
+        Returns the viewport dict from the session (may be empty for legacy files).
+        """
         from utils.session import SessionManager
 
         payload = SessionManager.get_session_data(str(path))
         if payload is None:
-            return
+            return {}
 
         uuid_map = {}
         for d in payload.get("nodes", []):
@@ -494,6 +497,8 @@ class IntricateScene(QGraphicsScene):
                 except Exception:
                     logger.exception("Failed to restore connection %s → %s",
                                      c.get("start_uuid"), c.get("end_uuid"))
+
+        return payload.get("viewport", {})
 
     def _release_all(self) -> None:
         """
