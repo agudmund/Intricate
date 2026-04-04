@@ -6,10 +6,9 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtCore import Qt, QRectF, QPointF, Signal
-from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
-                            QPainterPath, QPalette, QTextBlockFormat,
-                            QTextCharFormat, QTextCursor, QTextLayout)
+from PySide6.QtCore import Qt, QRectF, Signal
+from PySide6.QtGui import (QBrush, QColor, QFont, QPainter, QPalette,
+                            QTextBlockFormat, QTextCursor)
 from PySide6.QtWidgets import QGraphicsProxyWidget
 
 from widgets.PrettyMenu import StyledTextEdit
@@ -250,13 +249,20 @@ class PrettyEdit(StyledTextEdit):
 
     def paintEvent(self, event):
         """Paint with tight selection highlights that cover only the text
-        metrics height, ignoring any extra line spacing."""
+        metrics height, ignoring any extra line spacing.
+
+        Highlight fills are painted *before* super() so Qt's own text
+        rendering draws the glyphs on top — avoids the fragile bl.draw()
+        redraw that drifted on lines 2+ with LineDistanceHeight spacing.
+        """
+        tc = self.textCursor()
+        if tc.hasSelection():
+            self._paint_selection_bg(tc)
+
         super().paintEvent(event)
 
-        tc = self.textCursor()
-        if not tc.hasSelection():
-            return
-
+    def _paint_selection_bg(self, tc) -> None:
+        """Fill tight highlight rects behind selected text."""
         sel_start = tc.selectionStart()
         sel_end   = tc.selectionEnd()
 
@@ -297,8 +303,6 @@ class PrettyEdit(StyledTextEdit):
             bx = br.x() - sx + ox
             by = br.y() - sy + oy
 
-            # ── Collect tight rects and paint highlight background ────────
-            rects = []
             for i in range(bl.lineCount()):
                 line = bl.lineAt(i)
                 ls = block.position() + line.textStart()
@@ -317,31 +321,7 @@ class PrettyEdit(StyledTextEdit):
                 adj    = Theme.aboutSelectionLineHeight
                 top_y  = line_y + (-adj if adj < 0 else 0)
 
-                r = QRectF(bx + x1, top_y, x2 - x1, text_h)
-                rects.append(r)
-                p.fillRect(r, self._sel_brush)
-
-            # ── Redraw selected glyphs in highlight text color ────────────
-            if rects:
-                clip = QPainterPath()
-                for r in rects:
-                    clip.addRect(r)
-
-                local_start = max(sel_start, block.position()) - block.position()
-                local_end   = min(sel_end, block.position() + block.length() - 1) - block.position()
-
-                if local_end > local_start:
-                    fmt = QTextCharFormat()
-                    fmt.setForeground(self._sel_text_color)
-                    fr = QTextLayout.FormatRange()
-                    fr.start  = local_start
-                    fr.length = local_end - local_start
-                    fr.format = fmt
-
-                    p.save()
-                    p.setClipPath(clip)
-                    bl.draw(p, QPointF(bx, by), [fr])
-                    p.restore()
+                p.fillRect(QRectF(bx + x1, top_y, x2 - x1, text_h), self._sel_brush)
 
             block = block.next()
 

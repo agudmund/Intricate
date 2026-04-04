@@ -92,7 +92,7 @@ class AboutNode(BaseNode):
 
     def _top_offset(self) -> float:
         """Vertical space reserved above the text — full button zone or minimal pad."""
-        return _BUTTON_ZONE_H if self._buttons_visible else 15.0
+        return _BUTTON_ZONE_H if self._buttons_visible else 8.0
 
     def _build_editor(self) -> None:
         self._editor = PrettyEdit(
@@ -167,19 +167,23 @@ class AboutNode(BaseNode):
 
         spacing = Theme.aboutLineSpacing
         if spacing:
-            # Use QTextDocument to render with custom line spacing
+            # Use QTextDocument to render with custom line spacing.
+            # Must match PrettyEdit exactly: LineDistanceHeight mode and
+            # the same pad_top that the editor stylesheet applies when
+            # spacing is negative — otherwise painted text and editor
+            # text land on different pixels.
+            pad_top = max(0, int(abs(spacing))) if spacing < 0 else 0
             doc = QTextDocument()
             doc.setDefaultFont(font)
             doc.setTextWidth(text_rect.width())
             doc.setDocumentMargin(0)
             doc.setPlainText(label)
             fmt = QTextBlockFormat()
-            line_h = QFontMetrics(font).lineSpacing() + spacing
-            fmt.setLineHeight(line_h, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
+            fmt.setLineHeight(spacing, QTextBlockFormat.LineHeightTypes.LineDistanceHeight.value)
             cursor = QTextCursor(doc)
             cursor.select(QTextCursor.Document)
             cursor.mergeBlockFormat(fmt)
-            painter.translate(text_rect.topLeft())
+            painter.translate(text_rect.left(), text_rect.top() + pad_top)
             doc.drawContents(painter, QRectF(0, 0, text_rect.width(), text_rect.height()))
         else:
             # Fast path — default font spacing
