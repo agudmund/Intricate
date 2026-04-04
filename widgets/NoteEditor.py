@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - NoteEditor.py cozy note editing dialog
+-Intricate nodal playground - NoteEditor.py note editing dialog
 -Sophisticated note editor with title field, word count, spell checking, and emoji insertion for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
@@ -14,7 +14,12 @@ from PySide6.QtWidgets import (
 from widgets.PrettyMenu import StyledTextEdit as QTextEdit, StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QFont
-from utils.spellchecker import DebouncedSpellHighlighter, show_spell_suggestions, SPELL_CHECKER_TYPE
+try:
+    from utils.spellchecker import DebouncedSpellHighlighter, show_spell_suggestions, SPELL_CHECKER_TYPE
+except ImportError:
+    DebouncedSpellHighlighter = None
+    show_spell_suggestions = None
+    SPELL_CHECKER_TYPE = None
 from utils.logger import setup_logger
 
 logger = setup_logger()
@@ -60,8 +65,8 @@ class PrettyNoteEditor(QDialog):
         self.title_edit.setFont(QFont("Chandler42", 14, QFont.Bold))
         self.title_edit.setMinimumHeight(48)
 
-        from widgets import CozyButton
-        emoji_btn = CozyButton("🌸")
+        from widgets.PrettyButton import button as _btn
+        emoji_btn = _btn("🌸")
         emoji_btn.setMinimumHeight(48)
         emoji_btn.setFixedWidth(48)
         emoji_btn.clicked.connect(self._insert_random_emoji)
@@ -109,7 +114,7 @@ class PrettyNoteEditor(QDialog):
         button_layout.addSpacing(15)
         button_layout.addWidget(self.word_count)
 
-        self.save_btn = CozyButton("Save Note 🌿")
+        self.save_btn = _btn("Save Note 🌿")
         self.save_btn.setObjectName("cozySaveBtn")
         self.save_btn.setDefault(True)
         self.save_btn.setMinimumHeight(48)

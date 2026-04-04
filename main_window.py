@@ -1179,16 +1179,14 @@ class IntricateApp(QMainWindow):
         super().showEvent(event)
         if not self._shown_once:
             self._shown_once = True
+            if getattr(self, '_pending_fullscreen', False):
+                self._pending_fullscreen = False
+                self.showFullScreen()
             self._animate_fade_in()
             QTimer.singleShot(250, lambda: self.show_info(
                 f"{appName} is generally so happy that you are here. ✨"
             ))
             QTimer.singleShot(600, self._check_vaporize_restart)
-            if getattr(self, '_pending_fullscreen', False):
-                self._pending_fullscreen = False
-                QTimer.singleShot(0, self.showFullScreen)
-        else:
-            self.setWindowOpacity(1.0)
 
     def _animate_opacity(self, start: float, end: float, duration: int,
                           easing, on_finish=None) -> QPropertyAnimation:
@@ -1205,7 +1203,7 @@ class IntricateApp(QMainWindow):
 
     def _animate_fade_in(self) -> None:
         """Fade the window opacity from 0 → 1 on show."""
-        self.fadeIn = self._animate_opacity(0.0, 1.0, 200, QEasingCurve.OutCubic)
+        self.fadeIn = self._animate_opacity(0.0, 1.0, 1500, QEasingCurve.OutCubic)
 
     def _check_vaporize_restart(self):
         """Spawn a response node if the previous session ended via 'then vaporize'."""
@@ -1341,5 +1339,5 @@ class IntricateApp(QMainWindow):
             self._spawn_restart()
             self.close()
         self.fadeOut = self._animate_opacity(
-            self.windowOpacity(), 0.0, 120, QEasingCurve.InCubic, on_finish=_on_faded
+            self.windowOpacity(), 0.0, 1000, QEasingCurve.InCubic, on_finish=_on_faded
         )
