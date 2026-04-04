@@ -7,7 +7,6 @@
 """
 
 import json
-import os
 import random
 
 import subprocess
@@ -28,6 +27,7 @@ from utils.logger import setup_logger
 from utils.PhrasePicker import motivationalMessages
 from utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir
+from utils.session import session_path, enter_project
 from widgets.PrettyCombo import combo as pretty_combo
 from widgets.PrettyLabel import label as pretty_label
 
@@ -986,9 +986,7 @@ class IntricateApp(QMainWindow):
     def _session_path(self, project: str | None = None) -> Path | None:
         """Return the session.json path for a project folder name."""
         name = project if project is not None else self.project_selector.currentText()
-        if not name:
-            return None
-        return Path.home() / "Desktop" / name / "Documents" / "data" / "session.json"
+        return session_path(name) if name else None
 
     def _swap_scene(self) -> None:
         """Replace the current scene with a fresh one on the view.
@@ -1014,47 +1012,12 @@ class IntricateApp(QMainWindow):
         self.scene.selectionChanged.connect(self._on_selection_changed)
 
     def _load_session_into_scene(self, path: Path | None) -> None:
-        """Change cwd to the project folder, load its session, and sync images.
-
-        Migration: if session.json still sits in the project root (old layout)
-        and Documents/data/ doesn't have one yet, move it there automatically.
-        The backup/ folder beside it migrates too.
-        """
+        """Change cwd to the project folder and load its session."""
         if not path:
             return
-
-        # project_root is ~/Desktop/{project}/ — two levels above Documents/data/
-        project_root = path.parent.parent.parent
-
-        # ── Migrate legacy root-level session.json ────────────────────────────
-        old_session = project_root / "session.json"
-        if old_session.exists() and not path.exists():
-            ensure_dir(path.parent)
-            try:
-                old_session.rename(path)
-                logger.info(f"migrated session.json → {path.relative_to(project_root)}")
-            except OSError as e:
-                logger.warning(f"session migration failed: {e}")
-
-            # Move the old backup/ folder too if it exists
-            old_backup = project_root / "backup"
-            new_backup = path.parent / "backup"
-            if old_backup.exists() and old_backup.is_dir() and not new_backup.exists():
-                try:
-                    old_backup.rename(new_backup)
-                    logger.info("migrated backup/ → Documents/data/backup/")
-                except OSError as e:
-                    logger.warning(f"backup migration failed: {e}")
-
-        # cwd stays at project root — image paths, README, etc. are relative to it
-        if project_root.exists():
-            try:
-                os.chdir(str(project_root))
-            except OSError:
-                pass
+        enter_project(path)
         if path.exists():
             self.scene.load_session(path)
-        self.scene.sync_project_images(project_root)
 
     def _autosave(self) -> None:
         """Save the current canvas to the active project's session.json."""
