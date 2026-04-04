@@ -1,42 +1,87 @@
 # Intricate
 
-**Intricate** is a frameless, always-on-top node-based visual canvas built with PySide6. You place nodes on an infinite zoomable canvas, connect them via ports, and arrange your thoughts spatially rather than linearly. It is part of a "Single Shared Braincell" family of apps that share live configuration via a common `settings.toml` file and a set of environment variables.
+**Version 0.0.5 — The Breath of Thought Era**
 
-Current node types: **WarmNode** (free-form text with emoji accent), **HealthNode** (live system monitor — GC census and OS-level click tracking), **BezierNode** (interactive bezier curve with draggable control handles), **ImageNode** (drag-and-drop or browse images with editable caption), and **AboutNode** (sticky note for labelling groups of nodes).
+A gentle nodal space where thoughts interlink ideas, transitioning thoughts to things.
 
-The canvas supports cursor-anchored zoom, middle-mouse pan, and drag-and-drop of image files directly from Explorer. Nodes have ambient hover pulse animations driven by a separate `NodeBehaviour` personality system. The entire theme — colors, icons, layout — hot-reloads the moment `settings.toml` is saved by any app in the family.
+Built with PySide6. Frameless, always-on-top, infinite zoomable canvas. Part of the "Single Shared Braincell" family of apps that share live configuration via a common `settings.toml` file.
+
+## Node Types
+
+| Node | Purpose |
+|------|---------|
+| **WarmNode** | Free-form text with emoji accent |
+| **AboutNode** | Sticky note / region highlighter with animated button shelf |
+| **ImageNode** | Drag-and-drop images with editable caption and AI vision extraction |
+| **VideoNode** | Video playback with spatial audio mixing — volume fades by proximity |
+| **ClaudeNode** | Claude API chat node with DAG-networked conversation flow |
+| **ClaudeResponseNode** | AI response display with chain linking |
+| **TextNode** | Lightweight text block |
+| **LogNode** | Scrollable log viewer |
+| **TreeNode** | Project folder structure visualizer |
+| **InfoNode** | Read-only version and era display |
+| **SequenceNode** | Image sequence viewer |
+| **BezierNode** | Interactive bezier curve with draggable control handles |
+| **HealthNode** | Live system monitor — GC census and OS-level click tracking |
+| **PaletteNode** | Color palette display |
+| **ValueNode** | Numeric value display |
+| **PerfNode** | Performance metrics |
+
+## Canvas
+
+- Cursor-anchored scroll wheel zoom
+- Alt+Right-click drag zoom (Photoshop-style, Wacom-friendly)
+- Middle-mouse pan
+- Drag-and-drop images and videos from Explorer
+- Per-session camera position and zoom persistence
+- Ambient hover pulse animations via NodeBehaviour personality system
+- Spatial audio mixing — node distance on canvas acts as a live mixer
 
 ## Architecture
 
 ```
-📄 main.py
-└── 📄 main_window.py (IntricateApp — QMainWindow)
+📄 main.py                — version, era, entry point
+└── 📄 main_window.py     — IntricateApp (frameless QMainWindow)
       ├── 📁 graphics/
-      │     ├── 📄 Scene.py          — IntricateScene, canvas and node factory
-      │     ├── 📄 View.py           — IntricateView, pan / zoom / drag-drop
-      │     └── 📄 Theme.py          — all visual values, icons, live reload
+      │     ├── 📄 Scene.py        — canvas, node factory, session save/load
+      │     ├── 📄 View.py         — pan, zoom, drag-drop, wire snip
+      │     ├── 📄 Theme.py        — metaclass theme, live reload from settings.toml
+      │     └── 📄 Connection.py   — bezier wires between nodes
       ├── 📁 nodes/
-      │     ├── 📄 BaseNode.py       — base class every node builds on
-      │     ├── 📄 NodeBehaviour.py  — hover pulse and personality system
-      │     ├── 📄 NodeButton.py     — node-embedded controls
-      │     ├── 📄 Port.py           — connection ports
-      │     ├── 📄 WarmNode.py       — text + emoji content node
-      │     ├── 📄 HealthNode.py     — live system monitor node
-      │     ├── 📄 BezierNode.py     — bezier curve node
-      │     ├── 📄 ImageNode.py      — image display node
-      │     └── 📄 AboutNode.py      — sticky note node
+      │     ├── 📄 BaseNode.py     — base class, buttons, resize, depth toggle
+      │     ├── 📄 NodeBehaviour.py — hover pulse, bg animation
+      │     ├── 📄 NodeButton.py   — icon + emoji button controls
+      │     ├── 📄 Port.py         — connection ports
+      │     └── 📄 *Node.py        — one per node type
       ├── 📁 data/
-      │     ├── 📄 NodeData.py       — base dataclass, no Qt
-      │     └── 📄 XxxNodeData.py    — one per node type, state + serialization
+      │     ├── 📄 NodeData.py     — base dataclass (no Qt)
+      │     └── 📄 *NodeData.py    — one per node type, to_dict/from_dict
       ├── 📁 widgets/
-      │     ├── 📄 NoteEditor.py     — text editor dialog
-      │     └── 📄 PrettyButton.py   — themed button
+      │     ├── 📄 PrettyButton.py — themed button with hover animation
+      │     ├── 📄 PrettyCombo.py  — themed combo box
+      │     ├── 📄 PrettySlider.py — themed slider with PNG handle support
+      │     ├── 📄 PrettyEdit.py   — inline text editor with selection highlight
+      │     ├── 📄 PrettyMenu.py   — styled context menus and text inputs
+      │     ├── 📄 PrettyLabel.py  — themed label
+      │     └── 📄 NoteEditor.py   — full note editing dialog
       └── 📁 utils/
-            ├── 📄 settings.py       — TOML loader + file watcher
-            ├── 📄 logger.py         — 3-slot rotating log
-            ├── 📄 vision.py         — image processing
-            └── 📄 OSClickMonitor.py — global Windows mouse hook
+            ├── 📄 settings.py     — TOML loader + file watcher
+            ├── 📄 session.py      — save/load, rotation, checksum, migration
+            ├── 📄 audio.py        — UI chime feedback + global mute
+            ├── 📄 vision.py       — Claude Vision API worker
+            ├── 📄 logger.py       — 3-slot rotating log with TRACE level
+            ├── 📄 ColorPicker.py  — curated node tint palette
+            ├── 📄 IconPicker.py   — emoji icon bank
+            └── 📄 helpers.py      — ensure_dir, clean_pycache, utilities
+```
+
+## Running
+
+```bash
+python main.py           # Normal launch
+python main.py --debug   # DEBUG-level console output
+python main.py --trace   # TRACE-level (hyper-verbose)
 ```
 
 ---
-*It is what it is*
+*Built by Yours Truly and Various Intelligences — For enjoying*
