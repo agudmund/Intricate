@@ -166,7 +166,7 @@ class EmojiButton(QGraphicsObject):
             return
         from PySide6.QtGui import QFont
         painter.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7)))
-        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.setPen(QColor(Theme.nodeFontColor))
         painter.drawText(self.boundingRect(), Qt.AlignCenter, self._get_emoji())
 
     def mousePressEvent(self, event) -> None:

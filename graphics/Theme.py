@@ -145,7 +145,8 @@ class Theme(metaclass=_ThemeMeta):
 
     nodeBg                  = "#2a2a2a"
     nodeBorder              = primaryBorder
-    nodeBorderSelected      = "#8a7560"
+    nodeBorderHover         = "#8a7560"
+    nodeBorderSelected      = "#a38f7b"
     nodeBorderWidth         = 1.0
     nodeBorderSelectedScale = 1.0
     nodeRoundRadius         = 12.0
@@ -219,14 +220,11 @@ class Theme(metaclass=_ThemeMeta):
 
     aboutFontFamily          = "Chandler42"
     aboutFontSize            = 10
-    aboutFontColor           = "#e8f0ff"
+    nodeFontColor            = "#d2d1cf"
     aboutBgColor             = "#6f7f6f"
     aboutBgColorFront        = "#7a8f7a"
     aboutBgAlpha             = 255
     claudeResponseBgAlpha    = 120   # independent of aboutBgAlpha — chain tints need to be readable
-    aboutBorderColor         = "#6b5a47"
-    aboutBorderHoverColor    = "#8a7560"
-    aboutBorderSelectedColor = "#8a7560"
     aboutDepthIconOff        = "depth_off.png"
     aboutDepthIconOn         = "depth_on.png"
     portsIconOff             = "ports_off.png"
@@ -466,8 +464,14 @@ class Theme(metaclass=_ThemeMeta):
                 cls.nodeTextPaddingLeft = _s(float, node["text_padding_left"], cls.nodeTextPaddingLeft)
             if "text_padding_top" in node:
                 cls.nodeTextPaddingTop = _s(float, node["text_padding_top"], cls.nodeTextPaddingTop)
+            if "border_color" in node:
+                cls.nodeBorder = str(node["border_color"])
+            if "border_hover_color" in node:
+                cls.nodeBorderHover = str(node["border_hover_color"])
             if "border_selected_color" in node:
                 cls.nodeBorderSelected = str(node["border_selected_color"])
+            if "font_color" in node:
+                cls.nodeFontColor = str(node["font_color"])
         except Exception:
             _log.warning("[theme] failed to reload [node] section — keeping previous values", exc_info=True)
 
@@ -503,20 +507,12 @@ class Theme(metaclass=_ThemeMeta):
             about = settings.get_section("node").get("about", {})
             if "font_size" in about:
                 cls.aboutFontSize = _s(int, about["font_size"], cls.aboutFontSize)
-            if "font_color" in about:
-                cls.aboutFontColor = str(about["font_color"])
             if "bg_color" in about:
                 cls.aboutBgColor = str(about["bg_color"])
             if "bg_color_front" in about:
                 cls.aboutBgColorFront = str(about["bg_color_front"])
             if "bg_alpha" in about:
                 cls.aboutBgAlpha = _s(int, about["bg_alpha"], cls.aboutBgAlpha)
-            if "border_color" in about:
-                cls.aboutBorderColor = str(about["border_color"])
-            if "border_hover_color" in about:
-                cls.aboutBorderHoverColor = str(about["border_hover_color"])
-            if "border_selected_color" in about:
-                cls.aboutBorderSelectedColor = str(about["border_selected_color"])
             if "depth_icon_off" in about:
                 cls.aboutDepthIconOff = str(about["depth_icon_off"])
             if "depth_icon_on" in about:

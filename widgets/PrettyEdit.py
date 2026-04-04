@@ -64,7 +64,7 @@ class PrettyEdit(StyledTextEdit):
         *,
         font_family:     str  = None,         # defaults to Theme.aboutFontFamily
         font_size:       int  = None,         # defaults to Theme.aboutFontSize
-        font_color:      str  = None,         # defaults to Theme.aboutFontColor
+        font_color:      str  = None,         # defaults to Theme.nodeFontColor
         always_visible:  bool = False,
         read_only:       bool = False,
         scrollbar:       bool = False,        # show a slim scrollbar
@@ -80,7 +80,7 @@ class PrettyEdit(StyledTextEdit):
         # ── Resolve defaults ──────────────────────────────────────────────
         family = font_family or Theme.aboutFontFamily
         size   = font_size   or Theme.aboutFontSize
-        color  = font_color  or Theme.aboutFontColor
+        color  = font_color  or Theme.nodeFontColor
 
         # ── Widget config ─────────────────────────────────────────────────
         self.setFrameShape(StyledTextEdit.NoFrame)

@@ -131,7 +131,7 @@ class BaseNode(QGraphicsRectItem):
         _bss = Theme.nodeBorderSelectedScale
         self.round_radius  = Theme.nodeRoundRadius
         self.normal_pen    = QPen(_bc, _bw)
-        self.hover_pen     = QPen(_bc.lighter(130), _bw)
+        self.hover_pen     = QPen(QColor(Theme.nodeBorderHover), _bw)
         self.selected_pen  = QPen(_bcs, _bw * _bss)
         self.current_pen   = self.normal_pen
 
@@ -851,7 +851,7 @@ class BaseNode(QGraphicsRectItem):
         """
         painter.save()
         painter.setFont(QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize)))
-        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.setPen(QColor(Theme.nodeFontColor))
         painter.drawText(self._title_rect(), Qt.AlignLeft | Qt.AlignTop, self.data.title)
         painter.restore()
 

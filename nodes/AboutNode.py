@@ -8,7 +8,7 @@
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
 from PySide6.QtCore import Qt, QRectF, QSizeF
-from PySide6.QtGui import (QPainter, QFont, QColor, QFontMetrics, QPen,
+from PySide6.QtGui import (QPainter, QFont, QColor, QFontMetrics,
                            QTextDocument, QTextCursor, QTextBlockFormat)
 
 _BUTTON_ZONE_H = 40.0   # px reserved for button strip (4 pad + 32 button + 4 gap)
@@ -48,12 +48,6 @@ class AboutNode(BaseNode):
         super().__init__(data)
 
         self.setBrush(self._bg_color())
-        _w = Theme.nodeBorderWidth
-        self.normal_pen   = QPen(QColor(Theme.aboutBorderColor),         _w)
-        self.hover_pen    = QPen(QColor(Theme.aboutBorderHoverColor),    _w)
-        self.selected_pen = QPen(QColor(Theme.aboutBorderSelectedColor), _w)
-        self.current_pen  = self.normal_pen
-        self.setPen(self.current_pen)
         self._min_height = Theme.aboutMinHeight / 2 + 5
         self._apply_depth()
 
@@ -105,7 +99,7 @@ class AboutNode(BaseNode):
             self,
             font_family=Theme.aboutFontFamily,
             font_size=Theme.aboutFontSize,
-            font_color=Theme.aboutFontColor,
+            font_color=Theme.nodeFontColor,
             commit_on_focus_loss=True,
         )
         self._editor.committed.connect(self._on_committed)
@@ -163,7 +157,7 @@ class AboutNode(BaseNode):
         painter.save()
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         painter.setFont(font)
-        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.setPen(QColor(Theme.nodeFontColor))
         r = self.rect()
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight

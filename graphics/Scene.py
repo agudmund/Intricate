@@ -436,7 +436,7 @@ class IntricateScene(QGraphicsScene):
         """Serialize all nodes and connections via SessionManager (rotation + checksum)."""
         from nodes.BaseNode import BaseNode
         from graphics.Connection import Connection
-        from utils.session_manager import SessionManager
+        from utils.session import SessionManager
 
         nodes = []
         connections = []
@@ -465,7 +465,7 @@ class IntricateScene(QGraphicsScene):
 
     def load_session(self, path) -> None:
         """Clear the scene and restore from a session.json via SessionManager."""
-        from utils.session_manager import SessionManager
+        from utils.session import SessionManager
 
         payload = SessionManager.get_session_data(str(path))
         if payload is None:

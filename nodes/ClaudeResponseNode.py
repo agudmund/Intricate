@@ -10,7 +10,7 @@ import random
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
 from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics, QPen
+from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics
 
 from utils.IconPicker import emojiIcons
 
@@ -49,12 +49,6 @@ class ClaudeResponseNode(BaseNode):
         super().__init__(data)
 
         self.setBrush(self._bg_color())
-        _w = Theme.nodeBorderWidth
-        self.normal_pen   = QPen(QColor(Theme.aboutBorderColor),         _w)
-        self.hover_pen    = QPen(QColor(Theme.aboutBorderHoverColor),    _w)
-        self.selected_pen = QPen(QColor(Theme.aboutBorderSelectedColor), _w)
-        self.current_pen  = self.normal_pen
-        self.setPen(self.current_pen)
         self._min_height  = Theme.aboutMinHeight
         self._apply_depth()
 
@@ -104,7 +98,7 @@ class ClaudeResponseNode(BaseNode):
             self,
             font_family=Theme.aboutFontFamily,
             font_size=Theme.aboutFontSize,
-            font_color=Theme.aboutFontColor,
+            font_color=Theme.nodeFontColor,
             commit_on_focus_loss=True,
         )
         self._editor.committed.connect(self._on_committed)
@@ -159,7 +153,7 @@ class ClaudeResponseNode(BaseNode):
         pad = Theme.aboutTextPaddingLeft
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         painter.setFont(font)
-        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.setPen(QColor(Theme.nodeFontColor))
         content_top = r.top() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V
         text_rect = QRectF(r.left() + pad,
                            content_top,

@@ -11,7 +11,7 @@ import random
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QPainter, QFont, QColor, QPen
+from PySide6.QtGui import QPainter, QFont, QColor
 
 from nodes.BaseNode import BaseNode
 from data.TextNodeData import TextNodeData
@@ -38,12 +38,6 @@ class TextNode(BaseNode):
         super().__init__(data)
 
         self.setBrush(self._bg_color())
-        _w = Theme.nodeBorderWidth
-        self.normal_pen   = QPen(QColor(Theme.aboutBorderColor),         _w)
-        self.hover_pen    = QPen(QColor(Theme.aboutBorderHoverColor),    _w)
-        self.selected_pen = QPen(QColor(Theme.aboutBorderSelectedColor), _w)
-        self.current_pen  = self.normal_pen
-        self.setPen(self.current_pen)
         self._min_height  = Theme.aboutMinHeight
         self._apply_depth()
 
@@ -70,7 +64,7 @@ class TextNode(BaseNode):
             self,
             font_family=Theme.claudeBodyFontFamily,
             font_size=Theme.claudeBodyFontSize,
-            font_color=Theme.aboutFontColor,
+            font_color=Theme.nodeFontColor,
             always_visible=True,
         )
         self._editor.setPlainText(self.data.label)

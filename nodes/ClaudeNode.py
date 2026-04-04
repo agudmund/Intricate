@@ -421,7 +421,7 @@ class ClaudeNode(BaseNode):
         self._body.setStyleSheet(f"""
             QTextEdit {{
                 background: transparent;
-                color: {Theme.aboutFontColor};
+                color: {Theme.nodeFontColor};
                 font-family: {Theme.claudeBodyFontFamily};
                 font-size: {Theme.claudeBodyFontSize}pt;
                 border-top: 1px solid rgba(0,0,0,80);
@@ -1049,7 +1049,7 @@ class ClaudeNode(BaseNode):
         pad  = Theme.nodeTextPaddingLeft
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         painter.setFont(font)
-        painter.setPen(QColor(Theme.aboutFontColor))
+        painter.setPen(QColor(Theme.nodeFontColor))
         title_rect = QRectF(
             r.left() + pad,
             r.top() + self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop,
@@ -1122,7 +1122,7 @@ class ClaudeNode(BaseNode):
         self._input.setStyleSheet(f"""
             QTextEdit {{
                 background: {Theme.claudeBgColorInput};
-                color: {Theme.aboutFontColor};
+                color: {Theme.nodeFontColor};
                 font-family: {Theme.claudeBodyFontFamily};
                 font-size: {Theme.claudeBodyFontSize}pt;
                 border: 1px solid rgba(255, 255, 255, 25);
