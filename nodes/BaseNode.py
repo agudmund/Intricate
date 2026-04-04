@@ -345,11 +345,20 @@ class BaseNode(QGraphicsRectItem):
             ports_btn._in_confirm = self.data.ports_visible
             self._buttons.append(ports_btn)
         if self._has_depth_toggle:
-            depth_off_pix = Theme.icon(Theme.aboutDepthIconOff, fallback_color="#7b9bc9")
-            depth_on_pix  = Theme.icon(Theme.aboutDepthIconOn,  fallback_color="#9bc97b")
-            btn = NodeButton(self, depth_off_pix, self._depth_action, depth_on_pix, toggle=True)
-            btn._in_confirm = getattr(self.data, 'depth_front', False)
-            self._buttons.append(btn)
+            _DEPTH_BACK  = "\U0001fae4"   # 🫤
+            _DEPTH_FRONT = "\U0001f62f"   # 😯
+            def _depth_set(_):
+                self._depth_action()
+                front = getattr(self.data, 'depth_front', False)
+                self._depth_btn.setToolTip("Toggle Depth, Click to send to the background." if front else "Toggle Depth, Click to bring on top of other nodes.")
+            self._depth_btn = EmojiButton(
+                self,
+                get_emoji=lambda: _DEPTH_FRONT if getattr(self.data, 'depth_front', False) else _DEPTH_BACK,
+                set_emoji=_depth_set,
+            )
+            front = getattr(self.data, 'depth_front', False)
+            self._depth_btn.setToolTip("Toggle Depth, Click to send to the background." if front else "Toggle Depth, Click to bring on top of other nodes.")
+            self._buttons.append(self._depth_btn)
 
         tint_pix = Theme.icon(Theme.iconTint, fallback_color="#c0a888")
         self._buttons.append(NodeButton(self, tint_pix, self._toggle_node_tint))

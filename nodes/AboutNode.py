@@ -7,7 +7,7 @@
 """
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
-from PySide6.QtCore import Qt, QRectF, QSizeF
+from PySide6.QtCore import Qt, QRectF, QSizeF, QEasingCurve, QVariantAnimation
 from PySide6.QtGui import (QPainter, QFont, QColor, QFontMetrics,
                            QTextDocument, QTextCursor, QTextBlockFormat)
 
@@ -56,6 +56,12 @@ class AboutNode(BaseNode):
 
         # Button row starts hidden — double-click the top strip to reveal
         self._buttons_visible = False
+        self._anim_top_offset = 8.0
+        self._shelf_anim = QVariantAnimation()
+        self._shelf_anim.setDuration(250)
+        self._shelf_anim.setEasingCurve(QEasingCurve.InOutSine)
+        self._shelf_anim.valueChanged.connect(self._on_shelf_tick)
+        self._shelf_anim.finished.connect(self._on_shelf_done)
         for btn in self._buttons:
             btn.hide()
 
@@ -63,6 +69,22 @@ class AboutNode(BaseNode):
     # BUTTONS
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _build_buttons(self) -> None:
+        from nodes.NodeButton import EmojiButton
+        self._shuffle_emoji = ""
+        self._shuffle_btn = EmojiButton(
+            self,
+            get_emoji=lambda: self._shuffle_emoji,
+            set_emoji=lambda e: setattr(self, '_shuffle_emoji', e),
+        )
+        self._buttons.append(self._shuffle_btn)
+        super()._build_buttons()
+
+    def _reshuffle_emoji(self) -> None:
+        import random
+        from utils.IconPicker import emojiIcons
+        self._shuffle_emoji = random.choice(emojiIcons)
+        self._shuffle_btn.update()
 
     def _bg_color(self) -> QColor:
         acc = getattr(self.data, 'node_tint', '')
@@ -91,8 +113,8 @@ class AboutNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _top_offset(self) -> float:
-        """Vertical space reserved above the text — full button zone or minimal pad."""
-        return _BUTTON_ZONE_H if self._buttons_visible else 8.0
+        """Vertical space reserved above the text — animated between 8px and button zone."""
+        return self._anim_top_offset
 
     def _build_editor(self) -> None:
         self._editor = PrettyEdit(
@@ -129,12 +151,33 @@ class AboutNode(BaseNode):
         # Use actual top offset so the hit area never overlaps the text
         if event.pos().y() < self.rect().top() + self._top_offset():
             self._buttons_visible = not self._buttons_visible
-            for btn in self._buttons:
-                btn.setVisible(self._buttons_visible)
+            self._shelf_anim.stop()
+            if self._buttons_visible:
+                # Opening — animate offset up, show buttons at the end
+                self._shelf_anim.setStartValue(self._anim_top_offset)
+                self._shelf_anim.setEndValue(_BUTTON_ZONE_H)
+                self._reshuffle_emoji()
+            else:
+                # Closing — hide buttons immediately, animate offset down
+                for btn in self._buttons:
+                    btn.hide()
+                self._shelf_anim.setStartValue(self._anim_top_offset)
+                self._shelf_anim.setEndValue(8.0)
+            self._shelf_anim.start()
             event.accept()
             return
         self._start_edit()
         event.accept()
+
+    def _on_shelf_tick(self, value: float) -> None:
+        self._anim_top_offset = value
+        self.update()
+
+    def _on_shelf_done(self) -> None:
+        if self._buttons_visible:
+            self._position_buttons()
+            for btn in self._buttons:
+                btn.show()
 
     def keyPressEvent(self, event) -> None:
         if self._editor and self._editor.proxy.isVisible():
@@ -210,6 +253,7 @@ class AboutNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        self._shelf_anim.stop()
         if self._editor:
             self._editor.teardown()
         self._editor = None
