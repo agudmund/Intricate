@@ -749,9 +749,11 @@ class IntricateApp(QMainWindow):
         act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "Snip a Wire")
         act_restore = menu.addAction(QIcon(Theme.icon(Theme.iconRestore, fallback_color="#8aaa88")), "Restore Last Deleted")
         act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "Folder Structure")
+        act_info    = menu.addAction(QIcon(Theme.icon(Theme.iconInfo,    fallback_color="#9a9aaa")), "Info Node")
         act_snip.triggered.connect(self._start_wire_snip)
         act_restore.triggered.connect(self._restore_deleted)
         act_tree.triggered.connect(self._spawn_tree_node)
+        act_info.triggered.connect(self._spawn_info_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_claude_menu(self, btn: QPushButton) -> None:
@@ -799,6 +801,9 @@ class IntricateApp(QMainWindow):
         project_root = path.parent.parent.parent if path else None
         self._spawn(self.scene.add_tree_node, "mapping the territory",
                     project_path=str(project_root) if project_root else "")
+
+    def _spawn_info_node(self):
+        self._spawn(self.scene.add_info_node, "version 0.0.5")
 
     # =========================================================================
     # The buttons and stuff at the bottom of the Ui

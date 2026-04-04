@@ -13,6 +13,9 @@ import argparse
 import ctypes
 import logging
 
+__version__ = "0.0.5"
+__era__     = "The Breath of Thought Era"
+
 # Reconfigure stdout/stderr to UTF-8 so emoji in log lines don't crash on
 # Windows consoles that default to cp1252 (e.g. plain cmd.exe or PowerShell).
 if hasattr(sys.stdout, "reconfigure"):

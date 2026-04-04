@@ -316,6 +316,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_info_node(self, pos: QPointF | None = None):
+        """Add an InfoNode displaying version and era."""
+        from nodes.InfoNode import InfoNode
+        from data.InfoNodeData import InfoNodeData
+        node = InfoNode(InfoNodeData())
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_palette_node(self, pos: QPointF | None = None, colors: list | None = None):
         """Add a PaletteNode at pos, optionally pre-filled with colors."""
         from nodes.PaletteNode import PaletteNode
@@ -661,6 +672,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.TreeNode import TreeNode
             from data.TreeNodeData import TreeNodeData
             node = TreeNode(TreeNodeData.from_dict(d))
+
+        elif node_type == "info":
+            from nodes.InfoNode import InfoNode
+            from data.InfoNodeData import InfoNodeData
+            node = InfoNode(InfoNodeData.from_dict(d))
 
         elif node_type == "palette":
             from nodes.PaletteNode import PaletteNode
