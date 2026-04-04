@@ -260,6 +260,10 @@ class VideoNode(BaseNode):
         self.data.muted = not self.data.muted
         self._audio.setMuted(self.data.muted)
 
+    def _toggle_border(self) -> None:
+        self.data.show_border = not self.data.show_border
+        self.update()
+
     def _stop(self) -> None:
         self._player.stop()
         self.update()
@@ -307,6 +311,12 @@ class VideoNode(BaseNode):
         self._mute_btn = NodeButton(self, mute_off_pix, self._toggle_mute, mute_on_pix, toggle=True)
         self._mute_btn._in_confirm = self.data.muted
         self._buttons.append(self._mute_btn)
+
+        border_off_pix = Theme.icon(Theme.iconBorderOff, fallback_color="#7a8a9a")
+        border_on_pix  = Theme.icon(Theme.iconBorderOn,  fallback_color="#e1d5c6")
+        self._border_btn = NodeButton(self, border_off_pix, self._toggle_border, border_on_pix, toggle=True)
+        self._border_btn._in_confirm = self.data.show_border
+        self._buttons.append(self._border_btn)
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION
@@ -404,17 +414,25 @@ class VideoNode(BaseNode):
             painter.drawPixmap(QPointF(draw_x, draw_y), scaled)
             painter.setClipping(False)
 
-            # ── Bevel border ─────────────────────────────────────────────────
+            # ── Border ────────────────────────────────────────────────────────
             bevel_r = max(CLIP_RADIUS_MIN, self.round_radius - VIDEO_PADDING)
             painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QColor(0, 0, 0, 80), 1))
-            painter.drawRoundedRect(vr, bevel_r, bevel_r)
-            painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
-            painter.drawRoundedRect(
-                vr.adjusted(1, 1, -1, -1),
-                max(CLIP_RADIUS_MIN, bevel_r - 1),
-                max(CLIP_RADIUS_MIN, bevel_r - 1),
-            )
+            if self.data.show_border:
+                # Ivory white border — sits inside the video rect
+                painter.setPen(QPen(QColor(225, 213, 198, 255), 3))
+                painter.drawRoundedRect(
+                    vr.adjusted(1, 1, -1, -1), bevel_r, bevel_r,
+                )
+            else:
+                # Default subtle bevel
+                painter.setPen(QPen(QColor(0, 0, 0, 80), 1))
+                painter.drawRoundedRect(vr, bevel_r, bevel_r)
+                painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
+                painter.drawRoundedRect(
+                    vr.adjusted(1, 1, -1, -1),
+                    max(CLIP_RADIUS_MIN, bevel_r - 1),
+                    max(CLIP_RADIUS_MIN, bevel_r - 1),
+                )
         else:
             # ── Placeholder ──────────────────────────────────────────────────
             painter.setPen(QPen(QColor(Theme.primaryBorder), 1, Qt.DashLine))

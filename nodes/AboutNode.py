@@ -140,6 +140,11 @@ class AboutNode(BaseNode):
     def _on_committed(self, text: str) -> None:
         self.data.label = text
         self.data.title = text
+        # Invalidate the DeviceCoordinateCache — without this, Qt reuses
+        # the stale cached pixmap that still contains the old text.
+        from PySide6.QtWidgets import QGraphicsItem
+        self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
         self.update()
 
     # ─────────────────────────────────────────────────────────────────────────

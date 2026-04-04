@@ -159,3 +159,50 @@ def snapshot_node(node, filename: str | None = None, scale: int = 2) -> Path | N
     img.save(str(path))
     logger.info(f"📸 Snapshot saved: {path}")
     return path
+
+
+def snapshot_viewport(view, filename: str | None = None, scale: int = 2) -> Path | None:
+    """Render the current viewport to a transparent PNG — nodes included, background removed.
+
+    Captures exactly what the view shows at the current pan/zoom, but with a
+    fully transparent background instead of Theme.backDrop. This gives a clean
+    alpha channel suitable for compositing or chroma-free workflows.
+
+    Args:
+        view:     The IntricateView instance.
+        filename: Output filename (without directory). Defaults to 'viewport_snap.png'.
+        scale:    Render multiplier for crisp output (default 2×).
+
+    Returns the Path of the saved PNG, or None on failure.
+    """
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QImage, QPainter
+    import utils.settings as _s
+
+    scene = view.scene()
+    if not scene:
+        return None
+
+    # Map the visible viewport rect to scene coordinates
+    vp_rect = view.viewport().rect()
+    scene_rect = view.mapToScene(vp_rect).boundingRect()
+
+    w = int(vp_rect.width()  * scale)
+    h = int(vp_rect.height() * scale)
+    img = QImage(w, h, QImage.Format_ARGB32_Premultiplied)
+    img.fill(0)   # fully transparent
+
+    painter = QPainter(img)
+    painter.setRenderHint(QPainter.Antialiasing)
+    scene.render(painter, QRectF(0, 0, w, h), scene_rect)
+    painter.end()
+
+    out_dir = Path(_s.get("shared", "images_dir", default="."))
+    ensure_dir(out_dir)
+    title = filename or "viewport_snap.png"
+    if not title.lower().endswith(".png"):
+        title += ".png"
+    path = out_dir / title
+    img.save(str(path))
+    logger.info(f"📸 Viewport snapshot saved: {path}")
+    return path

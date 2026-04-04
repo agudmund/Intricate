@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSlider, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
@@ -591,30 +591,16 @@ class IntricateApp(QMainWindow):
         # ── Fog slider ────────────────────────────────────────────────────────
         # Vertical, top = opaque (255), bottom = transparent (0).
         # Placeholder — will drive fog layer alpha when that arrives.
-        self.fog_slider = QSlider(Qt.Vertical)
-        self.fog_slider.setRange(0, 255)
-        self.fog_slider.setValue(180)
-        self.fog_slider.setInvertedAppearance(True)
-        self.fog_slider.setFixedWidth(Theme.sidebarWidth() - Theme.sidebarPadding * 2)
-        self.fog_slider.setMinimumHeight(80)
-        self.fog_slider.setStyleSheet(f"""
-            QSlider::groove:vertical {{
-                background: {Theme.primaryBorder};
-                width: 4px;
-                border-radius: 2px;
-            }}
-            QSlider::handle:vertical {{
-                background: {Theme.textPrimary};
-                width: 12px; height: 12px;
-                margin: 0 -4px;
-                border-radius: 6px;
-            }}
-            QSlider::sub-page:vertical {{
-                background: {Theme.backDrop};
-                border-radius: 2px;
-            }}
-        """)
-        self.fog_slider.valueChanged.connect(self._on_fog_slider_changed)
+        self.fog_slider = pretty_slider(
+            Qt.Vertical,
+            use_scroll_icon=True,
+            range=(0, 255),
+            value=180,
+            invertedAppearance=True,
+            fixedWidth=Theme.sidebarWidth() - Theme.sidebarPadding * 2,
+            minimumHeight=80,
+            valueChanged=self._on_fog_slider_changed,
+        )
         layout.addWidget(self.fog_slider, alignment=Qt.AlignHCenter)
 
         layout.addSpacing(4)
@@ -647,7 +633,9 @@ class IntricateApp(QMainWindow):
 
     def _on_fog_slider_changed(self, value: int) -> None:
         """Slider → progress bar mirror. Will drive fog alpha when fog arrives."""
-        self.fog_progress.setValue(value)
+        bar = getattr(self, 'fog_progress', None)
+        if bar is not None:
+            bar.setValue(value)
 
     # ─────────────────────────────────────────────────────────────────────────
     # NODE SPAWN ACTIONS
@@ -875,6 +863,7 @@ class IntricateApp(QMainWindow):
         # ── Zoom slider — horizontal, maps 0.1–5.0 to integer range ──────
         self._zoom_slider = pretty_slider(
             Qt.Horizontal,
+            use_scroll_icon=True,
             range=(10, 500),
             value=100,
             fixedWidth=250,
@@ -883,6 +872,13 @@ class IntricateApp(QMainWindow):
             valueChanged=self._on_zoom_slider,
         )
         layout.addWidget(self._zoom_slider, alignment=Qt.AlignVCenter)
+
+        # ── Screensnap — capture viewport with alpha ────────────────────
+        self._snap_btn = button("", clicked=self._snapshot_viewport)
+        self._snap_btn.setFixedSize(QSize(32, 32))
+        self._snap_btn.setText("\U0001f4f7")   # 📷
+        self._snap_btn.setToolTip("Snapshot viewport (alpha)")
+        layout.addWidget(self._snap_btn, alignment=Qt.AlignVCenter)
 
         # ── Master mute toggle ──────────────────────────────────────────
         from utils.audio import audio
@@ -923,6 +919,14 @@ class IntricateApp(QMainWindow):
         for item in self.scene.items():
             if isinstance(item, (VideoNode, AudioNode)):
                 item._audio.setMuted(muted or item.data.muted)
+
+    def _snapshot_viewport(self) -> None:
+        """Capture the current viewport with transparent background."""
+        from utils.helpers import snapshot_viewport
+        path = snapshot_viewport(self.view)
+        if path:
+            import os
+            self.show_info(f"Snap saved → {path.name}", on_click=lambda: os.startfile(path))
 
     def show_info(self, message: str, on_click=None) -> None:
         """Typewriter reveal with simultaneous fade-in, hold 3 s, then fade out."""

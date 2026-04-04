@@ -337,6 +337,7 @@ class BaseNode(QGraphicsRectItem):
                 get_emoji=lambda: self.data.emoji,
                 set_emoji=lambda e: setattr(self.data, 'emoji', e),
             )
+            self._emoji_btn.setToolTip("More Glory")
             self._buttons.append(self._emoji_btn)
         if self._show_ports_btn:
             ports_off_pix = Theme.icon(Theme.portsIconOff, fallback_color="#7a8a9a")

@@ -110,11 +110,15 @@ class PrettyEdit(StyledTextEdit):
             }}
         """
         if scrollbar:
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             qss += _SCROLLBAR_QSS.format(
                 width=scrollbar_width,
                 handle=Theme.primaryBorder,
                 radius=scrollbar_width // 2,
             )
+        else:
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setStyleSheet(qss)
 
         # ── Selection colors ──────────────────────────────────────────────

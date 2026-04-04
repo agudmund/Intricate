@@ -58,7 +58,13 @@
       "Bash(xargs ls:*)",
       "Bash(ls:*)",
       "Bash(PYTHONIOENCODING=utf-8 python build.py)",
-      "Bash(/c/python/python:*)"
+      "Bash(/c/python/python:*)",
+      "Bash(gh auth:*)",
+      "Bash(\"/c/Users/thisg/AppData/Local/GitHubDesktop/bin/github\" --help)",
+      "Bash(winget list:*)",
+      "Bash(find /c/Users/thisg/.claude -type f \\\\\\( -name \"*.json\" -o -name \"*.jsonl\" -o -name \"*.db\" \\\\\\) -exec ls -lh {} \\\\;)",
+      "Bash(find /c/Users/thisg/AppData/Local/claude-cli-nodejs -type f -exec ls -lh {} \\\\;)",
+      "Bash(du:*)"
     ]
   }
 }

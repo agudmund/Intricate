@@ -371,6 +371,7 @@ class ClaudeNode(BaseNode):
         show_pix = Theme.icon(Theme.claudeBodyShowIcon, fallback_color="#7ab8c9")
         hide_pix = Theme.icon(Theme.claudeBodyHideIcon, fallback_color="#4a7a8a")
         btn = NodeButton(self, show_pix, self._toggle_body, hide_pix, toggle=True)
+        btn.setToolTip("Toggle Reply Body")
         self._buttons.append(btn)
 
     def _collapsed_height(self) -> float:
