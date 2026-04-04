@@ -39,7 +39,7 @@ class AboutNode(BaseNode):
         if data is None:
             data = AboutNodeData()
         if data.height == 0.0:
-            data.height = Theme.aboutMinHeight / 2 + 10
+            data.height = Theme.aboutMinHeight + 2
         if data.width == 0.0:
             font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
             text_w = QFontMetrics(font).horizontalAdvance(data.label or data.title)

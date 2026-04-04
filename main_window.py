@@ -26,7 +26,7 @@ from widgets.PrettyMenu import menu as pretty_menu
 from utils.logger import setup_logger
 from utils.PhrasePicker import motivationalMessages
 from utils.settings import appName, set_nested, get_nested, set_value, get
-from utils.helpers import ensure_dir
+from utils.helpers import ensure_dir, clean_pycache
 from utils.session import session_path, enter_project
 from widgets.PrettyCombo import combo as pretty_combo
 from widgets.PrettyLabel import label as pretty_label
@@ -126,12 +126,14 @@ class IntricateApp(QMainWindow):
         centre.setSpacing(4)
         combo = self.setup_project_selector()
         centre.addWidget(combo)
+        # Size the curtains button to match the combo height so they sit flush
+        combo_h = combo.maximumHeight() or combo.sizeHint().height()
         self._curtains_btn = self.setup_iconic_button(
             clicked=self.toggle_curtains,
         )
-        # Match the curtains button height to the combo so they sit flush
-        combo_h = combo.maximumHeight() or combo.sizeHint().height()
-        self._curtains_btn.setFixedSize(self._curtains_btn.width(), combo_h)
+        self._curtains_btn.setFixedSize(combo_h, combo_h)
+        self._curtains_btn.setIconSize(QSize(combo_h - Theme.iconPadding,
+                                             combo_h - Theme.iconPadding))
         centre.addWidget(self._curtains_btn)
         layout.addLayout(centre)
 
@@ -245,7 +247,6 @@ class IntricateApp(QMainWindow):
 
     def _animate_curtains(self, start_rect: QRect, end_rect: QRect) -> None:
         """Drive the geometry animation for curtain collapse / expand."""
-        from PySide6.QtWidgets import QGraphicsView
         self.view.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.curtain_anim = QPropertyAnimation(self, b"geometry")
         self.curtain_anim.setDuration(Theme.windowRollTiming)
@@ -266,7 +267,6 @@ class IntricateApp(QMainWindow):
         """
         # NoAnchor is the view's native state (set in _configure). Restoring
         # AnchorViewCenter here was the root cause of pan being dead after curtains.
-        from PySide6.QtWidgets import QGraphicsView
         self.view.setTransformationAnchor(QGraphicsView.NoAnchor)
         scene = self.scene
         if scene:
@@ -1234,7 +1234,6 @@ class IntricateApp(QMainWindow):
 
     def _cleanup_pycache(self) -> None:
         """Remove all __pycache__ folders and .pyc files under the project root."""
-        from utils.helpers import clean_pycache
         clean_pycache()
 
     def _persist_claude_node_size(self) -> None:
