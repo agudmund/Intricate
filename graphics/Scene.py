@@ -7,7 +7,7 @@
 """
 
 from PySide6.QtWidgets import QGraphicsScene
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPointF, QTimer
 
 from utils.logger import setup_logger
 logger = setup_logger()
@@ -515,7 +515,9 @@ class IntricateScene(QGraphicsScene):
                     item.behaviour.disconnect_all()
                 except Exception:
                     pass
-                # Stop media players so VideoNodes don't keep decoding in RAM
+                # Stop media players so VideoNodes don't keep decoding in RAM.
+                # Defer player.stop() via singleShot so codec teardown doesn't
+                # block the UI thread when many videos are open at once.
                 if isinstance(item, VideoNode):
                     try:
                         item._destroyed = True
@@ -526,7 +528,8 @@ class IntricateScene(QGraphicsScene):
                                 pass
                             item._volume_anim.stop()
                             item._volume_anim = None
-                        item._player.stop()
+                        item._audio.setVolume(0.0)
+                        QTimer.singleShot(0, item._player.stop)
                     except Exception:
                         pass
             elif isinstance(item, Connection):

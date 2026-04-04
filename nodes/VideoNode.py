@@ -9,7 +9,7 @@
 from pathlib import Path
 
 from PySide6.QtWidgets import QFileDialog
-from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QPropertyAnimation, QEasingCurve, QTimer
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath
 )
@@ -527,7 +527,7 @@ class VideoNode(BaseNode):
                 pass
             self._volume_anim.stop()
             self._volume_anim = None
-        self._player.stop()
+        self._audio.setVolume(0.0)
         try:
             self._sink.videoFrameChanged.disconnect(self._on_frame)
             self._player.durationChanged.disconnect(self._on_duration_changed)
@@ -535,6 +535,7 @@ class VideoNode(BaseNode):
             self._player.mediaStatusChanged.disconnect(self._on_media_status)
         except RuntimeError:
             pass  # already disconnected or C++ side gone
+        QTimer.singleShot(0, self._player.stop)
         self._frame_pixmap = None
         self._scaled_cache = None
         super()._prepare_for_removal()
