@@ -89,7 +89,8 @@ class VideoNode(BaseNode):
         self._player.setAudioOutput(self._audio)
         self._player.setVideoOutput(self._sink)
         self._audio.setVolume(data.volume / 100.0)
-        self._audio.setMuted(data.muted)
+        from utils.audio import audio as _audio_mgr
+        self._audio.setMuted(data.muted or _audio_mgr.is_muted())
 
         self._sink.videoFrameChanged.connect(self._on_frame)
         self._player.durationChanged.connect(self._on_duration_changed)
@@ -487,7 +488,9 @@ class VideoNode(BaseNode):
                 self._audio.setVolume(0.0)
                 self._player.play()
                 self._was_playing_before_cull = False
-                self._fade_volume(0.0, self._target_volume)
+                from utils.audio import audio as _audio_mgr
+                if not _audio_mgr.is_muted():
+                    self._fade_volume(0.0, self._target_volume)
         else:
             playing = (
                 self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState

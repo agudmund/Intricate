@@ -665,6 +665,8 @@ class IntricateApp(QMainWindow):
         except Exception:
             logger.exception("Failed to spawn node via %s", add_fn.__name__)
             return
+        from utils.audio import audio
+        audio.play_chime()
         self._status(status_msg)
 
     def _spawn_warm_node(self):        self._spawn(self.scene.add_warm_node,         "a warm thought arrives")
@@ -870,6 +872,14 @@ class IntricateApp(QMainWindow):
         )
         layout.addWidget(self._zoom_slider, alignment=Qt.AlignVCenter)
 
+        # ── Master mute toggle ──────────────────────────────────────────
+        from utils.audio import audio
+        self._mute_btn = button("", clicked=self._toggle_global_mute)
+        self._mute_btn.setFixedSize(QSize(32, 32))
+        self._mute_btn.setText("\U0001f508" if audio.is_muted() else "\U0001f50a")  # 🔈 / 🔊
+        self._mute_btn.setToolTip("Unmute all" if audio.is_muted() else "Mute all")
+        layout.addWidget(self._mute_btn, alignment=Qt.AlignVCenter)
+
         # Exid button — lower-right anchor, styled via PrettyButton
         self._exid_btn = button("Exid", clicked=self.close)
         layout.addWidget(self._exid_btn, alignment=Qt.AlignVCenter)
@@ -887,6 +897,19 @@ class IntricateApp(QMainWindow):
         factor = target / current
         centre = self.view.mapToScene(self.view.viewport().rect().center())
         self.view._apply_zoom(factor, anchor=centre)
+
+    def _toggle_global_mute(self) -> None:
+        """Toggle master mute — silences chimes and all video audio."""
+        from utils.audio import audio
+        muted = not audio.is_muted()
+        audio.set_muted(muted)
+        self._mute_btn.setText("\U0001f508" if muted else "\U0001f50a")
+        self._mute_btn.setToolTip("Unmute all" if muted else "Mute all")
+        # Mute/unmute all VideoNode audio outputs
+        from nodes.VideoNode import VideoNode
+        for item in self.scene.items():
+            if isinstance(item, VideoNode):
+                item._audio.setMuted(muted or item.data.muted)
 
     def show_info(self, message: str, on_click=None) -> None:
         """Typewriter reveal with simultaneous fade-in, hold 3 s, then fade out."""
