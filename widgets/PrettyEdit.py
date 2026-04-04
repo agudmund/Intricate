@@ -70,11 +70,13 @@ class PrettyEdit(StyledTextEdit):
         scrollbar_width: int  = 4,
         placeholder:     str  = None,
         commit_on_focus_loss: bool = False,    # auto-commit when editor loses focus
+        enter_commits:       bool = False,    # Enter commits, Shift+Enter for newline
     ):
         super().__init__()
 
         self._parent_node    = parent_node
         self._always_visible = always_visible
+        self._enter_commits  = enter_commits
 
         # ── Resolve defaults ──────────────────────────────────────────────
         family = font_family or Theme.aboutFontFamily
@@ -166,6 +168,19 @@ class PrettyEdit(StyledTextEdit):
             self.proxy.show()
         else:
             self.proxy.hide()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # KEY HANDLING
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def keyPressEvent(self, event) -> None:
+        if self._enter_commits and event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            if event.modifiers() & Qt.ShiftModifier:
+                super().keyPressEvent(event)
+            else:
+                self.commit()
+        else:
+            super().keyPressEvent(event)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PUBLIC API

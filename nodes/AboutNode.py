@@ -123,6 +123,7 @@ class AboutNode(BaseNode):
             font_size=Theme.aboutFontSize,
             font_color=Theme.nodeFontColor,
             commit_on_focus_loss=True,
+            enter_commits=True,
         )
         self._editor.committed.connect(self._on_committed)
 
