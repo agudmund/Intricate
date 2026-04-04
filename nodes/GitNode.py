@@ -19,7 +19,7 @@ from utils.logger import setup_logger
 
 _log = setup_logger("git")
 
-_HEADER_H   = 44.0   # space for title above the list
+_HEADER_H   = 24.0   # space for title — snug below button zone
 _ROW_H      = 20.0   # height per repo row
 _PAD        = 15.0
 _DOT_R      = 5.0    # status dot radius
@@ -105,11 +105,11 @@ class GitNode(BaseNode):
         r = self.rect()
 
         # Title
-        title_font = QFont("Chandler42", max(1, Theme.aboutFontSize + 2))
+        title_font = QFont("Chandler42", max(1, Theme.aboutFontSize + 6))
         painter.setFont(title_font)
         painter.setPen(QColor(Theme.nodeFontColor))
         painter.drawText(
-            QRectF(r.left() + _PAD, r.top() + _HEADER_H - 20, r.width() - _PAD * 2, 24),
+            QRectF(r.left() + _PAD, r.top() + _HEADER_H, r.width() - _PAD * 2, 40),
             Qt.AlignLeft | Qt.AlignTop,
             "Git Status",
         )
@@ -117,7 +117,7 @@ class GitNode(BaseNode):
         # Repo list
         body_font = QFont("Lato", max(1, Theme.aboutFontSize - 1))
         painter.setFont(body_font)
-        y = r.top() + _HEADER_H + 8
+        y = r.top() + _HEADER_H + 52
 
         if not self._repos:
             painter.setPen(QColor(Theme.nodeFontColor))
