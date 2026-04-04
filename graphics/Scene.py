@@ -518,7 +518,12 @@ class IntricateScene(QGraphicsScene):
                 # Stop media players so VideoNodes don't keep decoding in RAM
                 if isinstance(item, VideoNode):
                     try:
+                        item._destroyed = True
                         if item._volume_anim:
+                            try:
+                                item._volume_anim.finished.disconnect(item._pause_after_fade)
+                            except RuntimeError:
+                                pass
                             item._volume_anim.stop()
                             item._volume_anim = None
                         item._player.stop()

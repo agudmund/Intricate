@@ -509,6 +509,8 @@ class VideoNode(BaseNode):
 
     def _pause_after_fade(self) -> None:
         """Called when the fade-out finishes — now safe to pause the player."""
+        if self._destroyed:
+            return
         if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.pause()
 
@@ -519,6 +521,10 @@ class VideoNode(BaseNode):
     def _prepare_for_removal(self) -> None:
         self._destroyed = True
         if self._volume_anim:
+            try:
+                self._volume_anim.finished.disconnect(self._pause_after_fade)
+            except RuntimeError:
+                pass
             self._volume_anim.stop()
             self._volume_anim = None
         self._player.stop()
