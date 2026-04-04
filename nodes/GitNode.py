@@ -19,9 +19,7 @@ from utils.logger import setup_logger
 
 _log = setup_logger("git")
 
-_HEADER_H   = 24.0   # space for title — snug below button zone
 _ROW_H      = 20.0   # height per repo row
-_PAD        = 15.0
 _DOT_R      = 5.0    # status dot radius
 _POLL_MS    = 10000   # refresh every 10 seconds
 
@@ -105,25 +103,27 @@ class GitNode(BaseNode):
         r = self.rect()
 
         # Title
-        title_font = QFont("Chandler42", max(1, Theme.aboutFontSize + 6))
+        pad = self._CONTENT_PAD
+        top = self._CONTENT_TOP
+        title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
         painter.setFont(title_font)
         painter.setPen(QColor(Theme.nodeFontColor))
         painter.drawText(
-            QRectF(r.left() + _PAD, r.top() + _HEADER_H, r.width() - _PAD * 2, 40),
+            QRectF(r.left() + pad, r.top() + top, r.width() - pad * 2, self._TITLE_HEIGHT),
             Qt.AlignLeft | Qt.AlignTop,
             "Git Status",
         )
 
         # Repo list
-        body_font = QFont("Lato", max(1, Theme.aboutFontSize - 1))
+        body_font = QFont(self._BODY_FONT, max(1, Theme.aboutFontSize + self._BODY_FONT_BUMP))
         painter.setFont(body_font)
-        y = r.top() + _HEADER_H + 52
+        y = r.top() + top + self._BODY_OFFSET
 
         if not self._repos:
             painter.setPen(QColor(Theme.nodeFontColor))
             painter.setOpacity(0.5)
             painter.drawText(
-                QRectF(r.left() + _PAD, y, r.width() - _PAD * 2, _ROW_H),
+                QRectF(r.left() + pad, y, r.width() - pad * 2, _ROW_H),
                 Qt.AlignLeft | Qt.AlignVCenter,
                 "No git repos found on Desktop",
             )
@@ -135,7 +135,7 @@ class GitNode(BaseNode):
                 dot_color = QColor("#c47a7a") if dirty else QColor("#7ac47a")
                 painter.setBrush(dot_color)
                 painter.setPen(Qt.NoPen)
-                dot_x = r.left() + _PAD + _DOT_R
+                dot_x = r.left() + pad + _DOT_R
                 dot_y = y + _ROW_H / 2
                 painter.drawEllipse(QRectF(dot_x - _DOT_R, dot_y - _DOT_R, _DOT_R * 2, _DOT_R * 2))
 
@@ -143,7 +143,7 @@ class GitNode(BaseNode):
                 painter.setPen(QColor(Theme.nodeFontColor))
                 painter.setOpacity(0.85)
                 painter.drawText(
-                    QRectF(r.left() + _PAD + _DOT_R * 2 + 8, y, r.width() - _PAD * 2 - _DOT_R * 2 - 8, _ROW_H),
+                    QRectF(r.left() + pad + _DOT_R * 2 + 8, y, r.width() - pad * 2 - _DOT_R * 2 - 8, _ROW_H),
                     Qt.AlignLeft | Qt.AlignVCenter,
                     name,
                 )

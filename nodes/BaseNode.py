@@ -848,7 +848,15 @@ class BaseNode(QGraphicsRectItem):
 
         painter.restore()
 
-    _BUTTON_ZONE_H = 40.0   # px reserved for the button strip (4 pad + 32 button + 4 gap)
+    _BUTTON_ZONE_H   = 40.0   # px reserved for the button strip (4 pad + 32 button + 4 gap)
+    _CONTENT_TOP     = 24.0   # px from top of node to title baseline (snug below buttons)
+    _CONTENT_PAD     = 15.0   # horizontal padding for title/body text
+    _TITLE_HEIGHT    = 40.0   # rect height allocated for title text
+    _BODY_OFFSET     = 52.0   # px below _CONTENT_TOP where body text starts
+    _TITLE_FONT      = "Chandler42"
+    _TITLE_FONT_BUMP = 6      # added to Theme.aboutFontSize for title
+    _BODY_FONT       = "Lato"
+    _BODY_FONT_BUMP  = -1     # added to Theme.aboutFontSize for body
 
     def _title_rect(self) -> QRectF:
         """Text area below the button strip."""

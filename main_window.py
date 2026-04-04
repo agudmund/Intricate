@@ -789,11 +789,15 @@ class IntricateApp(QMainWindow):
         val_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconValue)), "Value Node"
         )
+        aud_action = menu.addAction(
+            QIcon(Theme.icon(Theme.iconAudio, fallback_color="#9a8a7a")), "Audio Node"
+        )
 
         img_action.triggered.connect(self._spawn_image_node)
         vid_action.triggered.connect(self._spawn_video_node)
         seq_action.triggered.connect(self._spawn_sequence_node)
         val_action.triggered.connect(self._spawn_value_node)
+        aud_action.triggered.connect(self._spawn_audio_node)
 
         # Show below the button, left-aligned
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
@@ -812,6 +816,9 @@ class IntricateApp(QMainWindow):
 
     def _spawn_git_node(self):
         self._spawn(self.scene.add_git_node, "the boring but necessary one")
+
+    def _spawn_audio_node(self):
+        self._spawn(self.scene.add_audio_node, "Yummi >> Tummy >> voila!")
 
     # =========================================================================
     # The buttons and stuff at the bottom of the Ui
@@ -910,10 +917,11 @@ class IntricateApp(QMainWindow):
         audio.set_muted(muted)
         self._mute_btn.setText("\U0001f508" if muted else "\U0001f50a")
         self._mute_btn.setToolTip("Unmute all" if muted else "Mute all")
-        # Mute/unmute all VideoNode audio outputs
+        # Mute/unmute all VideoNode and AudioNode audio outputs
         from nodes.VideoNode import VideoNode
+        from nodes.AudioNode import AudioNode
         for item in self.scene.items():
-            if isinstance(item, VideoNode):
+            if isinstance(item, (VideoNode, AudioNode)):
                 item._audio.setMuted(muted or item.data.muted)
 
     def show_info(self, message: str, on_click=None) -> None:

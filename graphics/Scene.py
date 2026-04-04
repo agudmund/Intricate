@@ -327,6 +327,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_audio_node(self, pos: QPointF | None = None):
+        """Add an AudioNode for audio playback."""
+        from nodes.AudioNode import AudioNode
+        from data.AudioNodeData import AudioNodeData
+        node = AudioNode(AudioNodeData())
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_git_node(self, pos: QPointF | None = None):
         """Add a GitNode showing repo status across all Desktop projects."""
         from nodes.GitNode import GitNode
@@ -536,6 +547,7 @@ class IntricateScene(QGraphicsScene):
         from graphics.Connection import Connection
 
         from nodes.VideoNode import VideoNode
+        from nodes.AudioNode import AudioNode
         from nodes.PerfNode import PerfNode
         from nodes.GitNode import GitNode
         for item in list(self.items()):
@@ -553,6 +565,13 @@ class IntricateScene(QGraphicsScene):
                 # Stop media players so VideoNodes don't keep decoding in RAM.
                 # Defer player.stop() via singleShot so codec teardown doesn't
                 # block the UI thread when many videos are open at once.
+                # Stop audio players on AudioNodes
+                if isinstance(item, AudioNode):
+                    try:
+                        item._audio.setVolume(0.0)
+                        QTimer.singleShot(0, item._player.stop)
+                    except Exception:
+                        pass
                 if isinstance(item, VideoNode):
                     try:
                         item._destroyed = True
@@ -701,6 +720,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.GitNode import GitNode
             from data.GitNodeData import GitNodeData
             node = GitNode(GitNodeData.from_dict(d))
+
+        elif node_type == "audio":
+            from nodes.AudioNode import AudioNode
+            from data.AudioNodeData import AudioNodeData
+            node = AudioNode(AudioNodeData.from_dict(d))
 
         elif node_type == "palette":
             from nodes.PaletteNode import PaletteNode

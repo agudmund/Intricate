@@ -9,7 +9,7 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, QTimer
 from PySide6.QtMultimedia import QSoundEffect
 
 import utils.settings as settings
@@ -63,13 +63,32 @@ class AudioFeedback:
 
         return self._chime
 
+    _FADE_STEPS    = 10
+    _FADE_MS       = 300   # total fade-in duration
+    _TARGET_VOLUME = 0.6
+
     def play_chime(self) -> None:
-        """Play the node-creation chime unless globally muted."""
+        """Play the node-creation chime with a gentle fade-in, unless globally muted."""
         if self._muted:
             return
         chime = self._get_chime()
         if chime:
+            chime.setVolume(0.0)
             chime.play()
+            self._fade_step = 0
+            interval = self._FADE_MS // self._FADE_STEPS
+            self._fade_timer = QTimer()
+            self._fade_timer.setInterval(interval)
+            self._fade_timer.timeout.connect(self._tick_fade)
+            self._fade_timer.start()
+
+    def _tick_fade(self) -> None:
+        self._fade_step += 1
+        progress = self._fade_step / self._FADE_STEPS
+        if self._chime:
+            self._chime.setVolume(self._TARGET_VOLUME * progress)
+        if self._fade_step >= self._FADE_STEPS:
+            self._fade_timer.stop()
 
     def is_muted(self) -> bool:
         return self._muted
