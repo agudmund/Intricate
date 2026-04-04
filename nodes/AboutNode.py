@@ -137,9 +137,8 @@ class AboutNode(BaseNode):
         self._editor.start_edit(self.data.label or self.data.title, self._edit_rect())
 
     def _on_committed(self, text: str) -> None:
-        if text:
-            self.data.label = text
-            self.data.title = text
+        self.data.label = text
+        self.data.title = text
         self.update()
 
     # ─────────────────────────────────────────────────────────────────────────

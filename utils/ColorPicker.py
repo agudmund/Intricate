@@ -10,19 +10,10 @@ import random as _random
 
 # Curated from the Paradisic Fields project palette — warm reds, earthy neutrals, muted greens.
 _COLORS = [
-    "#9a4a4a",  # muted rose
-    "#c97a7a",  # dusty salmon
+    "#2a2f3a",  # dusk slate
     "#b05f5f",  # old brick
-    "#8a7560",  # warm khaki
-    "#6b5a47",  # dark tan
-    "#d4b99f",  # linen
-    "#d4c9b8",  # pale sand
-    "#8a7a67",  # stone
-    "#9b8a72",  # driftwood
-    "#2a3a2f",  # forest
-    "#8a9a8a",  # sage
-    "#6f7f6f",  # fern
-    "#5a6a5a",  # deep moss
+    "#4a3a5a",  # plum shadow
+    "#1e1e1e",  # charcoal
 ]
 
 

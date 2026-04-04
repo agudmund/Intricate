@@ -360,8 +360,13 @@ class BaseNode(QGraphicsRectItem):
             self._depth_btn.setToolTip("Toggle Depth, Click to send to the background." if front else "Toggle Depth, Click to bring on top of other nodes.")
             self._buttons.append(self._depth_btn)
 
-        tint_pix = Theme.icon(Theme.iconTint, fallback_color="#c0a888")
-        self._buttons.append(NodeButton(self, tint_pix, self._toggle_node_tint))
+        self._tint_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\U0001f60e",   # 😎
+            set_emoji=lambda _: self._toggle_node_tint(),
+        )
+        self._tint_btn.setToolTip("Select a new color")
+        self._buttons.append(self._tint_btn)
 
     def _toggle_node_tint(self) -> None:
         """Cycle through ColorPicker palette colors as a temporary node highlight.
@@ -417,16 +422,27 @@ class BaseNode(QGraphicsRectItem):
         """
         Left strip: depth toggle (and any subclass buttons); ports toggle if _show_ports_btn.
         Delete button: pinned to the top-right corner.
+        Buttons compress their spacing to stay inside the node when narrow.
         """
         pad     = 4.0
-        spacing = 4.0
         r       = self.rect()
         y       = r.top() + pad
+        n       = len(self._buttons)
+
+        if n == 0:
+            return
+
+        # Ideal stride is BUTTON_SIZE + 4px gap. If the node is too narrow,
+        # compress stride so the last button's right edge stays inside.
+        ideal_stride = BUTTON_SIZE + 4.0
+        available    = r.width() - pad * 2
+        max_stride   = (available - BUTTON_SIZE) / max(n - 1, 1)
+        stride       = min(ideal_stride, max(0.0, max_stride))
 
         x = r.left() + pad
         for btn in self._buttons:
             btn.setPos(QPointF(x, y))
-            x += BUTTON_SIZE + spacing
+            x += stride
 
         if self._delete_btn:
             self._delete_btn.setPos(QPointF(r.right() - pad - BUTTON_SIZE, y))
