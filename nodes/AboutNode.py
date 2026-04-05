@@ -7,11 +7,10 @@
 """
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
-from PySide6.QtCore import Qt, QRectF, QSizeF, QEasingCurve, QVariantAnimation
+from PySide6.QtCore import Qt, QRectF, QSizeF
 from PySide6.QtGui import (QPainter, QFont, QColor, QFontMetrics,
                            QTextDocument, QTextCursor, QTextBlockFormat)
 
-_BUTTON_ZONE_H = 40.0   # px reserved for button strip (4 pad + 32 button + 4 gap)
 _Z_FRONT       = 10.0
 _Z_BACK        = -10.0
 
@@ -47,23 +46,18 @@ class AboutNode(BaseNode):
 
         super().__init__(data)
 
+        # Start with shelf collapsed — AboutNode shows buttons only on demand
+        self._buttons_visible = False
+        self._anim_top_offset = 8.0
+        for btn in self._buttons:
+            btn.hide()
+
         self.setBrush(self._bg_color())
         self._min_height = Theme.aboutMinHeight / 2 + 5
         self._apply_depth()
 
         self._editor: PrettyEdit | None = None
         self._build_editor()
-
-        # Button row starts hidden — double-click the top strip to reveal
-        self._buttons_visible = False
-        self._anim_top_offset = 8.0
-        self._shelf_anim = QVariantAnimation()
-        self._shelf_anim.setDuration(250)
-        self._shelf_anim.setEasingCurve(QEasingCurve.InOutSine)
-        self._shelf_anim.valueChanged.connect(self._on_shelf_tick)
-        self._shelf_anim.finished.connect(self._on_shelf_done)
-        for btn in self._buttons:
-            btn.hide()
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS
@@ -112,10 +106,6 @@ class AboutNode(BaseNode):
     # EDITOR
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _top_offset(self) -> float:
-        """Vertical space reserved above the text — animated between 8px and button zone."""
-        return self._anim_top_offset
-
     def _build_editor(self) -> None:
         self._editor = PrettyEdit(
             self,
@@ -131,10 +121,15 @@ class AboutNode(BaseNode):
         r = self.rect()
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
-        top = self._top_offset()
+        top = self._anim_top_offset
         return QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
 
     def _start_edit(self) -> None:
+        # Flush the device-coordinate cache so the old painted title doesn't
+        # bleed through behind the editor overlay.
+        from PySide6.QtWidgets import QGraphicsItem
+        self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
         self._editor.start_edit(self.data.label or self.data.title, self._edit_rect())
 
     def _on_committed(self, text: str) -> None:
@@ -152,37 +147,13 @@ class AboutNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        # Top strip above the text area — toggle button row
-        # Use actual top offset so the hit area never overlaps the text
-        if event.pos().y() < self.rect().top() + self._top_offset():
-            self._buttons_visible = not self._buttons_visible
-            self._shelf_anim.stop()
-            if self._buttons_visible:
-                # Opening — animate offset up, show buttons at the end
-                self._shelf_anim.setStartValue(self._anim_top_offset)
-                self._shelf_anim.setEndValue(_BUTTON_ZONE_H)
-                self._reshuffle_emoji()
-            else:
-                # Closing — hide buttons immediately, animate offset down
-                for btn in self._buttons:
-                    btn.hide()
-                self._shelf_anim.setStartValue(self._anim_top_offset)
-                self._shelf_anim.setEndValue(8.0)
-            self._shelf_anim.start()
-            event.accept()
+        # Top strip — delegate shelf toggle to BaseNode
+        if event.pos().y() < self.rect().top() + self._anim_top_offset:
+            self._reshuffle_emoji()
+            super().mouseDoubleClickEvent(event)
             return
         self._start_edit()
         event.accept()
-
-    def _on_shelf_tick(self, value: float) -> None:
-        self._anim_top_offset = value
-        self.update()
-
-    def _on_shelf_done(self) -> None:
-        if self._buttons_visible:
-            self._position_buttons()
-            for btn in self._buttons:
-                btn.show()
 
     def keyPressEvent(self, event) -> None:
         if self._editor and self._editor.proxy.isVisible():
@@ -209,7 +180,7 @@ class AboutNode(BaseNode):
         r = self.rect()
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
-        top = self._top_offset()
+        top = self._anim_top_offset
         text_rect = QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
         label = self.data.label or self.data.title
 

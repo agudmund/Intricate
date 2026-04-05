@@ -147,6 +147,9 @@ class NodeButton(QGraphicsObject):
         self._reset_timer.stop()
 
 
+EMOJI_OVERFLOW = 4.0  # extra height so emoji glyphs don't clip at the bottom
+
+
 class EmojiButton(QGraphicsObject):
     """A small button that renders the node's current emoji and shuffles on click."""
 
@@ -158,7 +161,7 @@ class EmojiButton(QGraphicsObject):
         self.setCursor(Qt.PointingHandCursor)
 
     def boundingRect(self) -> QRectF:
-        return QRectF(0.0, 0.0, BUTTON_SIZE, BUTTON_SIZE)
+        return QRectF(0.0, 0.0, BUTTON_SIZE, BUTTON_SIZE + EMOJI_OVERFLOW)
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
         lod = option.levelOfDetailFromTransform(painter.worldTransform())

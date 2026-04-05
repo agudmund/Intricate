@@ -82,9 +82,6 @@ class ClaudeResponseNode(BaseNode):
             btn.setPos(QPointF(x, y))
             x += BUTTON_SIZE + spacing
 
-        if self._delete_btn:
-            self._delete_btn.setPos(QPointF(r.right() - pad - BUTTON_SIZE, y))
-
     def _apply_depth(self) -> None:
         super()._apply_depth()
         self.setBrush(self._bg_color())

@@ -11,10 +11,12 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QRectF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
+from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel
 
 from nodes.BaseNode import BaseNode
 from data.GitNodeData import GitNodeData
 from graphics.Theme import Theme
+from widgets.PrettyButton import PrettyButton
 from utils.logger import setup_logger
 
 _log = setup_logger("git")
@@ -68,9 +70,85 @@ def _scan_repos() -> list[tuple[str, str]]:
     return repos
 
 
+class _CommitDialog(QDialog):
+    """Frameless commit-message dialog matching the app's visual language."""
+
+    def __init__(self, repo_count: int, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedWidth(380)
+
+        # ── Outer container with background + border ─────────────────────
+        container = QWidget(self)
+        container.setStyleSheet(f"""
+            QWidget#commitContainer {{
+                background: {Theme.windowBg};
+                border: 1px solid {Theme.primaryBorder};
+                border-radius: 9px;
+            }}
+        """)
+        container.setObjectName("commitContainer")
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(container)
+
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # ── Label ────────────────────────────────────────────────────────
+        label = QLabel(f"Commit message for {repo_count} session repo(s):")
+        label.setStyleSheet(f"""
+            color: {Theme.textPrimary};
+            font-family: '{Theme.healthFontFamily}';
+            font-size: {Theme.healthFontSizeLabel}pt;
+        """)
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        # ── Text input ───────────────────────────────────────────────────
+        from widgets.PrettyMenu import StyledLineEdit
+        self._input = StyledLineEdit()
+        self._input.setPlaceholderText("session sync\u2026")
+        self._input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {Theme.backDrop};
+                color: {Theme.textPrimary};
+                border: 1px solid {Theme.primaryBorder};
+                border-radius: 5px;
+                padding: 6px 10px;
+                font-family: '{Theme.healthFontFamily}';
+                font-size: {Theme.healthFontSizeLabel}pt;
+            }}
+        """)
+        self._input.returnPressed.connect(self.accept)
+        layout.addWidget(self._input)
+
+        # ── Buttons ──────────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+
+        cancel_btn = PrettyButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        ok_btn = PrettyButton("Push")
+        ok_btn.clicked.connect(self.accept)
+        btn_row.addWidget(ok_btn)
+
+        layout.addLayout(btn_row)
+
+        self._input.setFocus()
+
+    def message(self) -> str:
+        return self._input.text()
+
+
 class GitNode(BaseNode):
     _has_depth_toggle = True
-    _show_emoji_btn   = False
     """
     Dashboard node showing all Desktop git repos with red/green status dots.
 
@@ -112,7 +190,7 @@ class GitNode(BaseNode):
             rows += 1   # separator
         # Minimum: header area even if nothing dirty
         rows = max(rows, 1)
-        h = self._CONTENT_TOP + self._BODY_OFFSET + rows * _ROW_H + 16
+        h = self._BUTTON_ZONE_H + self._BODY_OFFSET + rows * _ROW_H + 16
         r = self.rect()
         if abs(r.height() - self.data.height) < 1.0:
             # Only auto-resize if the user hasn't manually resized
@@ -134,25 +212,21 @@ class GitNode(BaseNode):
 
     def _bulk_push_sessions(self) -> None:
         """Prompt for a commit message, then git add+commit+push all green-dot repos on a worker thread."""
-        from PySide6.QtWidgets import QInputDialog
-
         session_repos = [name for name, status in self._repos if status == "session"]
         if not session_repos:
             return
 
         win = self._lower_window()
-        msg, ok = QInputDialog.getText(
-            None, "Bulk Session Push",
-            f"Commit message for {len(session_repos)} session repo(s):"
-        )
+        dlg = _CommitDialog(len(session_repos))
+        result = dlg.exec()
         self._raise_window(win)
-        if not ok or not msg.strip():
+        if result != QDialog.DialogCode.Accepted or not dlg.message().strip():
             return
 
         import threading
         threading.Thread(
             target=self._push_worker,
-            args=(session_repos, msg.strip()),
+            args=(session_repos, dlg.message().strip()),
             daemon=True,
         ).start()
 
@@ -196,7 +270,7 @@ class GitNode(BaseNode):
 
         # Title
         pad = self._CONTENT_PAD
-        top = self._CONTENT_TOP
+        top = self._content_top()
         title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
         painter.setFont(title_font)
         painter.setPen(QColor(Theme.nodeFontColor))
@@ -209,7 +283,7 @@ class GitNode(BaseNode):
         # Repo list
         body_font = QFont(self._BODY_FONT, max(1, Theme.aboutFontSize + self._BODY_FONT_BUMP))
         painter.setFont(body_font)
-        y = r.top() + top + self._BODY_OFFSET
+        y = r.top() + self._body_top()
 
         if not self._repos:
             painter.setPen(QColor(Theme.nodeFontColor))

@@ -613,7 +613,7 @@ class IntricateApp(QMainWindow):
         self.fog_progress.setRange(0, 255)
         self.fog_progress.setValue(180)
         self.fog_progress.setTextVisible(False)
-        self.fog_progress.setFixedWidth(Theme.sidebarWidth() - Theme.sidebarPadding * 2)
+        self.fog_progress.setFixedWidth((Theme.sidebarWidth() - Theme.sidebarPadding * 2) // 4)
         self.fog_progress.setMinimumHeight(60)
         self.fog_progress.setStyleSheet(f"""
             QProgressBar {{
@@ -622,7 +622,9 @@ class IntricateApp(QMainWindow):
                 border-radius: 3px;
             }}
             QProgressBar::chunk {{
-                background: {Theme.primaryBorder};
+                background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+                    stop:0 #1e1e1e, stop:0.4 #5c3e4f,
+                    stop:0.7 #a56a85, stop:1 #d87a9e);
                 border-radius: 2px;
             }}
         """)

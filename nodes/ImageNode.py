@@ -66,6 +66,7 @@ class ImageNode(BaseNode):
 
         # Button row starts hidden — double-click the top strip to reveal
         self._buttons_visible = False
+        self._anim_top_offset = 8.0
         for btn in self._buttons:
             btn.hide()
 

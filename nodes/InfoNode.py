@@ -16,7 +16,6 @@ from graphics.Theme import Theme
 
 class InfoNode(BaseNode):
     _has_depth_toggle = True
-    _show_emoji_btn   = False
     """
     Read-only node that displays app version and era.
 
@@ -77,7 +76,7 @@ class InfoNode(BaseNode):
         painter.save()
         r = self.rect()
         pad = self._CONTENT_PAD
-        top = self._CONTENT_TOP
+        top = self._content_top()
 
         # Title
         title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
@@ -94,7 +93,7 @@ class InfoNode(BaseNode):
         painter.setFont(body_font)
         painter.setPen(QColor(Theme.nodeFontColor))
         painter.setOpacity(0.85)
-        y = r.top() + top + self._BODY_OFFSET
+        y = r.top() + self._body_top()
         painter.drawText(
             QRectF(r.left() + pad, y, r.width() - pad * 2, 20),
             Qt.AlignLeft | Qt.AlignTop,

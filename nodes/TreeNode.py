@@ -41,7 +41,8 @@ class _TreeWalker:
     no subprocess, no temp file, filters applied at walk time on Path objects.
     """
 
-    _ALWAYS_IGNORE = {".git", "__pycache__"}
+    _ALWAYS_IGNORE     = {".git", "__pycache__"}
+    _ALWAYS_IGNORE_EXT = {".pkf"}
 
     def __init__(
         self,
@@ -57,7 +58,7 @@ class _TreeWalker:
         self.root          = root.resolve()
         self.max_depth     = max_depth
         self.exclude_dirs  = set(exclude_dirs) | self._ALWAYS_IGNORE
-        self.exclude_exts  = {e.lower() for e in exclude_exts}
+        self.exclude_exts  = {e.lower() for e in exclude_exts} | self._ALWAYS_IGNORE_EXT
         self.exclude_files = set(exclude_files)
         self.show_hidden   = show_hidden
         self.use_emoji     = use_emoji
@@ -232,7 +233,7 @@ class TreeNode(BaseNode):
 
     def _toolbar_rect(self) -> QRectF:
         r   = self.rect()
-        top = r.y() + self._BUTTON_ZONE_H + TITLE_GAP + PADDING
+        top = r.y() + self._anim_top_offset + TITLE_GAP + PADDING
         return QRectF(
             r.x() + PADDING,
             top,
@@ -242,7 +243,9 @@ class TreeNode(BaseNode):
 
     def _body_rect(self) -> QRectF:
         r   = self.rect()
-        top = r.y() + self._BUTTON_ZONE_H + TITLE_GAP + PADDING
+        btn_h = int(TOOLBAR_W - 4) + 2  # toolbar button height + top margin
+        line_h = 14                     # approx height of one 8pt mono line
+        top = r.y() + self._anim_top_offset + TITLE_GAP + PADDING + btn_h - line_h
         return QRectF(
             r.x() + PADDING + TOOLBAR_W,
             top,

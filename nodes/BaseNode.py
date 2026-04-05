@@ -9,7 +9,7 @@
 import time as _time
 import uuid as _uuid
 from PySide6.QtWidgets import QGraphicsRectItem
-from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer
+from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
 from PySide6.QtWidgets import QGraphicsItem
 
@@ -167,13 +167,26 @@ class BaseNode(QGraphicsRectItem):
         self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
 
 
+        # ── Collapsible button shelf state ───────────────────────────────────
+        # Initialised before buttons so layout methods can reference _anim_top_offset.
+        # Starts expanded — subclasses can set _buttons_visible = False after super().__init__
+        # to start collapsed (e.g. AboutNode).
+        self._buttons_visible = True
+        self._anim_top_offset = self._BUTTON_ZONE_H
+
         # ── Button strip ──────────────────────────────────────────────────────
         # Built last — geometry must be final before positioning.
         # Subclasses append their own buttons by overriding _build_buttons().
         self._buttons: list[NodeButton] = []
-        self._delete_btn: NodeButton | None = None
         self._build_buttons()
         self._position_buttons()
+
+        # ── Shelf animation ──────────────────────────────────────────────────
+        self._shelf_anim = QVariantAnimation()
+        self._shelf_anim.setDuration(250)
+        self._shelf_anim.setEasingCurve(QEasingCurve.InOutSine)
+        self._shelf_anim.valueChanged.connect(self._on_shelf_tick)
+        self._shelf_anim.finished.connect(self._on_shelf_done)
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
@@ -330,7 +343,6 @@ class BaseNode(QGraphicsRectItem):
         If files are missing, Theme.icon() returns a coloured circle fallback
         so the layout holds without requiring assets to be present first.
         """
-        self._delete_btn   = None   # shake-to-delete replaces the icon button
         if self._show_emoji_btn:
             self._emoji_btn = EmojiButton(
                 self,
@@ -445,17 +457,12 @@ class BaseNode(QGraphicsRectItem):
             btn.setPos(QPointF(x, y))
             x += stride
 
-        if self._delete_btn:
-            self._delete_btn.setPos(QPointF(r.right() - pad - BUTTON_SIZE, y))
 
     def _detach_buttons(self) -> None:
         """Stop button timers before scene removal."""
         for btn in self._buttons:
             btn.detach()
         self._buttons.clear()
-        if self._delete_btn:
-            self._delete_btn.detach()
-            self._delete_btn = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # PORTS
@@ -777,8 +784,36 @@ class BaseNode(QGraphicsRectItem):
             break   # one splice per drop
 
     def mouseDoubleClickEvent(self, event):
-        """Override in subclasses for type-specific double-click behaviour."""
+        """Toggle button shelf on top-strip double-click; subclasses call super() for this."""
+        if event.pos().y() < self.rect().top() + self._anim_top_offset:
+            self._toggle_shelf()
+            event.accept()
+            return
         super().mouseDoubleClickEvent(event)
+
+    def _toggle_shelf(self) -> None:
+        """Animate the button row in or out."""
+        self._buttons_visible = not self._buttons_visible
+        self._shelf_anim.stop()
+        if self._buttons_visible:
+            self._shelf_anim.setStartValue(self._anim_top_offset)
+            self._shelf_anim.setEndValue(self._BUTTON_ZONE_H)
+        else:
+            for btn in self._buttons:
+                btn.hide()
+            self._shelf_anim.setStartValue(self._anim_top_offset)
+            self._shelf_anim.setEndValue(8.0)
+        self._shelf_anim.start()
+
+    def _on_shelf_tick(self, value: float) -> None:
+        self._anim_top_offset = value
+        self.update()
+
+    def _on_shelf_done(self) -> None:
+        if self._buttons_visible:
+            self._position_buttons()
+            for btn in self._buttons:
+                btn.show()
 
     # ─────────────────────────────────────────────────────────────────────────
     # FILE DIALOG HELPER
@@ -850,25 +885,37 @@ class BaseNode(QGraphicsRectItem):
         painter.restore()
 
     _BUTTON_ZONE_H   = 40.0   # px reserved for the button strip (4 pad + 32 button + 4 gap)
-    _CONTENT_TOP     = 24.0   # px from top of node to title baseline (snug below buttons)
     _CONTENT_PAD     = 15.0   # horizontal padding for title/body text
     _TITLE_HEIGHT    = 40.0   # rect height allocated for title text
-    _BODY_OFFSET     = 52.0   # px below _CONTENT_TOP where body text starts
+    _BODY_OFFSET     = 36.0   # px below title top where body text starts
     _TITLE_FONT      = "Chandler42"
     _TITLE_FONT_BUMP = 6      # added to Theme.aboutFontSize for title
     _BODY_FONT       = "Lato"
     _BODY_FONT_BUMP  = -1     # added to Theme.aboutFontSize for body
 
+    def _content_top(self) -> float:
+        """Y offset from node top to title text — the canonical spacing all nodes use.
+
+        Tracks the animated shelf offset so the title slides with the button row.
+        Subclasses that override paint_content should use this instead of computing
+        their own title position.
+        """
+        return self._anim_top_offset + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop
+
+    def _body_top(self) -> float:
+        """Y offset from node top to body text — title top + body offset."""
+        return self._content_top() + self._BODY_OFFSET
+
     def _title_rect(self) -> QRectF:
         """Text area below the button strip."""
         r   = self.rect()
         pad = Theme.nodeTextPaddingLeft
-        ty  = r.top() + self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop
+        top = self._content_top()
         return QRectF(
             r.left() + pad,
-            ty,
+            r.top() + top,
             r.width() - pad * 2,
-            r.height() - self._BUTTON_ZONE_H,
+            r.height() - self._anim_top_offset,
         )
 
     def paint_content(self, painter: QPainter):

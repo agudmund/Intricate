@@ -26,7 +26,6 @@ _AUDIO_EXTENSIONS = "Audio (*.wav *.mp3 *.flac *.ogg *.m4a *.aac *.wma)"
 
 class AudioNode(BaseNode):
     _has_depth_toggle = True
-    _show_emoji_btn   = False
     """
     Compact audio player node.
 
@@ -171,32 +170,34 @@ class AudioNode(BaseNode):
     def _build_buttons(self) -> None:
         from nodes.NodeButton import NodeButton, EmojiButton
 
+        super()._build_buttons()
+
+        # Mute toggle — emoji faces
+        self._mute_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\U0001fae2" if self.data.muted else "\U0001f60a",  # 🫢 / 😊
+            set_emoji=lambda _: self._toggle_mute(),
+        )
+        self._mute_btn.setToolTip("Mute" if not self.data.muted else "Unmute")
+        self._buttons.append(self._mute_btn)
+
         # Play/pause
         self._play_btn = EmojiButton(
             self,
-            get_emoji=lambda: "\u23f8" if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState else "\u25b6",  # ⏸ / ▶
+            get_emoji=lambda: "\u2016" if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState else "\u25b6",  # ‖ / ▶
             set_emoji=lambda _: self._toggle_playback(),
         )
         self._play_btn.setToolTip("Play / Pause")
         self._buttons.append(self._play_btn)
 
-        super()._build_buttons()
-
-        # Loop toggle
+        # Loop toggle — plain arrows, no emoji background
         self._loop_btn = EmojiButton(
             self,
-            get_emoji=lambda: "\U0001f501" if self.data.looping else "\U0001f500",  # 🔁 / 🔀
+            get_emoji=lambda: "\u21bb" if self.data.looping else "\u21a9",  # ↻ / ↩
             set_emoji=lambda _: self._toggle_loop(),
         )
         self._loop_btn.setToolTip("Loop: on" if self.data.looping else "Loop: off")
         self._buttons.append(self._loop_btn)
-
-        # Mute toggle
-        mute_off_pix = Theme.icon(Theme.iconMuteOff, fallback_color="#7a8a9a")
-        mute_on_pix  = Theme.icon(Theme.iconMuteOn,  fallback_color="#c47a7a")
-        self._mute_btn = NodeButton(self, mute_off_pix, self._toggle_mute, mute_on_pix, toggle=True)
-        self._mute_btn._in_confirm = self.data.muted
-        self._buttons.append(self._mute_btn)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PROGRESS BAR + SCRUB
@@ -227,8 +228,12 @@ class AudioNode(BaseNode):
         if self._progress_rect().contains(event.pos()):
             event.accept()
             return
-        self._open_file_browser()
-        event.accept()
+        # Only open file browser if no audio is loaded yet
+        if not self.data.source_path:
+            self._open_file_browser()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton and self._progress_rect().contains(event.pos()):
@@ -267,7 +272,7 @@ class AudioNode(BaseNode):
         painter.save()
         r   = self.rect()
         pad = self._CONTENT_PAD
-        top = self._CONTENT_TOP
+        top = self._content_top()
 
         # Title
         title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
@@ -284,7 +289,7 @@ class AudioNode(BaseNode):
         body_font = QFont(self._BODY_FONT, max(1, Theme.aboutFontSize + self._BODY_FONT_BUMP))
         painter.setFont(body_font)
         painter.setOpacity(0.7)
-        y = r.top() + top + self._BODY_OFFSET
+        y = r.top() + self._body_top()
 
         if not self.data.source_path:
             status = "Double-click to browse for audio"
