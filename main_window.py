@@ -178,6 +178,20 @@ class IntricateApp(QMainWindow):
         self._curtains_btn.setIconSize(QSize(combo_h - Theme.iconPadding,
                                              combo_h - Theme.iconPadding))
         centre.addWidget(self._curtains_btn)
+
+        # Snap button — toggles the rolled-up strip between screen top
+        # (park over titlebar) and below-tabs (clear Chrome tab row).
+        self._snap_positions = [0, 45]   # y offsets from screen top
+        self._snap_index = 0
+        self._dock_btn = self.setup_iconic_button(
+            clicked=self._toggle_dock_position, icon=Theme.iconDock
+        )
+        self._dock_btn.setFixedSize(combo_h, combo_h)
+        self._dock_btn.setIconSize(QSize(combo_h - Theme.iconPadding,
+                                         combo_h - Theme.iconPadding))
+        self._dock_btn.setToolTip("Snap position")
+        centre.addWidget(self._dock_btn)
+
         layout.addLayout(centre)
 
         layout.addStretch()
@@ -325,14 +339,17 @@ class IntricateApp(QMainWindow):
         return super().eventFilter(obj, event)
 
     def toggle_fullscreen(self):
-        if self._is_fullscreen:
-            self.showNormal()
+        screen = self.screen().geometry()
+        if self.geometry() == screen:
+            # Already filling the screen — restore
             if hasattr(self, '_pre_fullscreen_geometry'):
                 self.setGeometry(self._pre_fullscreen_geometry)
+            self._is_fullscreen = False
         else:
+            # Not filling the screen — maximize regardless of flag state
             self._pre_fullscreen_geometry = self.geometry()
-            self.showFullScreen()
-        self._is_fullscreen = not self._is_fullscreen
+            self.setGeometry(screen)
+            self._is_fullscreen = True
 
     # =========================================================================
     # Curtains, The Window Rollup Thing
@@ -397,6 +414,14 @@ class IntricateApp(QMainWindow):
         if not self.is_collapsed:
             self.view._notify_viewport_changed()
 
+
+    def _toggle_dock_position(self) -> None:
+        """Snap the rolled-up strip between preset Y positions."""
+        if not self.is_collapsed:
+            return
+        self._snap_index = (self._snap_index + 1) % len(self._snap_positions)
+        target_y = self.screen().availableGeometry().top() + self._snap_positions[self._snap_index]
+        self.move(self.pos().x(), target_y)
 
     # =================================================================================
     # The central area — sidebar | canvas | reserved for a special vip arriving later
