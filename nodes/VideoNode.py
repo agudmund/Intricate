@@ -301,7 +301,7 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_buttons(self) -> None:
-        from nodes.NodeButton import NodeButton, EmojiButton
+        from nodes.NodeButton import EmojiButton
         super()._build_buttons()
 
         # Mute toggle — emoji faces, matches AudioNode
@@ -331,11 +331,13 @@ class VideoNode(BaseNode):
         self._loop_btn.setToolTip("Loop: on" if self.data.looping else "Loop: off")
         self._buttons.append(self._loop_btn)
 
-        # Border toggle
-        border_off_pix = Theme.icon(Theme.iconBorderOff, fallback_color="#7a8a9a")
-        border_on_pix  = Theme.icon(Theme.iconBorderOn,  fallback_color="#e1d5c6")
-        self._border_btn = NodeButton(self, border_off_pix, self._toggle_border, border_on_pix, toggle=True)
-        self._border_btn._in_confirm = self.data.show_border
+        # Border toggle — simple circle, state is visible on the node itself
+        self._border_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\u25cb",  # ○
+            set_emoji=lambda _: self._toggle_border(),
+        )
+        self._border_btn.setToolTip("Toggle ivory border")
         self._buttons.append(self._border_btn)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -343,11 +345,9 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        # Top strip above the video area — toggle button row
+        # Top strip above the video area — animated shelf toggle
         if event.pos().y() < self.rect().top() + self._top_offset():
-            self._buttons_visible = not self._buttons_visible
-            for btn in self._buttons:
-                btn.setVisible(self._buttons_visible)
+            self._toggle_shelf()
             event.accept()
             return
         if self._video_rect().contains(event.pos()):
