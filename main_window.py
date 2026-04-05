@@ -1008,12 +1008,14 @@ class IntricateApp(QMainWindow):
         widest = max(fm.horizontalAdvance("Sound"), fm.horizontalAdvance("Quiet"))
         self._mute_btn.setFixedWidth(widest + 32)  # padding + Reey overshoot
         self._mute_btn.setMinimumHeight(fm.height() + 6 + 18)  # top + bottom padding
-        self._mute_btn.setStyleSheet(
+        from utils.hover_glow import HoverGlow
+
+        _mute_base = (
             f"QPushButton {{ background-color: {Theme.buttonBg};"
             f" border: none; border-radius: 6px;"
-            f" color: {Theme.textPrimary};"
             f" padding: 6px 2px 18px 14px; }}"
         )
+        HoverGlow.install(self._mute_btn, _mute_base)
         right_layout.addWidget(self._mute_btn)
 
         self._snap_btn = button("eXport", clicked=self._snapshot_viewport)
@@ -1022,12 +1024,12 @@ class IntricateApp(QMainWindow):
         snap_font = self._snap_btn.font()
         snap_font.setPointSize(16)
         self._snap_btn.setFont(snap_font)
-        self._snap_btn.setStyleSheet(
+        _snap_base = (
             f"QPushButton {{ background-color: {Theme.buttonBg};"
             f" border: none; border-radius: 6px;"
-            f" color: {Theme.textPrimary};"
             f" padding: 6px 2px 18px 4px; }}"
         )
+        HoverGlow.install(self._snap_btn, _snap_base)
         right_layout.addWidget(self._snap_btn)
 
         self._exid_btn = button("eXid", clicked=self.close)
@@ -1035,12 +1037,12 @@ class IntricateApp(QMainWindow):
         font = self._exid_btn.font()
         font.setPointSize(16)
         self._exid_btn.setFont(font)
-        self._exid_btn.setStyleSheet(
+        _exid_base = (
             f"QPushButton {{ background-color: {Theme.buttonBg};"
             f" border: none; border-radius: 6px;"
-            f" color: {Theme.textPrimary};"
             f" padding: 6px 4px 18px 2px; }}"
         )
+        HoverGlow.install(self._exid_btn, _exid_base)
         right_layout.addWidget(self._exid_btn)
 
         # ── Progress bar — hidden at rest, floats between the two groups ──────
