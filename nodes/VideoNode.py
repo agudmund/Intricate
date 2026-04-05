@@ -66,7 +66,8 @@ class VideoNode(BaseNode):
         receives the path via load_from_path().
     """
 
-    _show_ports_btn = True
+    _show_ports_btn = False   # ports toggle hidden — re-enable for debug
+    _has_depth_toggle = True
 
     def __init__(self, data: VideoNodeData | None = None):
         if data is None:
@@ -300,20 +301,37 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_buttons(self) -> None:
-        from nodes.NodeButton import NodeButton
+        from nodes.NodeButton import NodeButton, EmojiButton
         super()._build_buttons()
-        loop_off_pix = Theme.icon(Theme.iconLoopOff, fallback_color="#7a8a9a")
-        loop_on_pix  = Theme.icon(Theme.iconLoopOn,  fallback_color="#8cbea0")
-        self._loop_btn = NodeButton(self, loop_off_pix, self._toggle_loop, loop_on_pix, toggle=True)
-        self._loop_btn._in_confirm = self.data.looping
-        self._buttons.append(self._loop_btn)
 
-        mute_off_pix = Theme.icon(Theme.iconMuteOff, fallback_color="#7a8a9a")
-        mute_on_pix  = Theme.icon(Theme.iconMuteOn,  fallback_color="#c47a7a")
-        self._mute_btn = NodeButton(self, mute_off_pix, self._toggle_mute, mute_on_pix, toggle=True)
-        self._mute_btn._in_confirm = self.data.muted
+        # Mute toggle — emoji faces, matches AudioNode
+        self._mute_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\U0001fae2" if self.data.muted else "\U0001f60a",  # 🫢 / 😊
+            set_emoji=lambda _: self._toggle_mute(),
+        )
+        self._mute_btn.setToolTip("Mute" if not self.data.muted else "Unmute")
         self._buttons.append(self._mute_btn)
 
+        # Play/pause
+        self._play_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\u2016" if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState else "\u25b6",  # ‖ / ▶
+            set_emoji=lambda _: self._toggle_playback(),
+        )
+        self._play_btn.setToolTip("Play / Pause")
+        self._buttons.append(self._play_btn)
+
+        # Loop toggle — plain arrows
+        self._loop_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\u21bb" if self.data.looping else "\u21a9",  # ↻ / ↩
+            set_emoji=lambda _: self._toggle_loop(),
+        )
+        self._loop_btn.setToolTip("Loop: on" if self.data.looping else "Loop: off")
+        self._buttons.append(self._loop_btn)
+
+        # Border toggle
         border_off_pix = Theme.icon(Theme.iconBorderOff, fallback_color="#7a8a9a")
         border_on_pix  = Theme.icon(Theme.iconBorderOn,  fallback_color="#e1d5c6")
         self._border_btn = NodeButton(self, border_off_pix, self._toggle_border, border_on_pix, toggle=True)
