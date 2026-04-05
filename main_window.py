@@ -109,6 +109,8 @@ class IntricateApp(QMainWindow):
         self._make_opaque(self.bottomToolbar)
         if hasattr(self, 'sidebar'):
             self._make_opaque(self.sidebar)
+        if hasattr(self, 'rightPanel'):
+            self._make_opaque(self.rightPanel)
 
         # 6. Restore persisted geometry
         self._restore_geometry()
@@ -545,10 +547,10 @@ class IntricateApp(QMainWindow):
         # ── Splitter ──────────────────────────────────────────────────────────
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setHandleWidth(4)
-        self.splitter.setStyleSheet("""
-            QSplitter::handle {
-                background-color: transparent;
-            }
+        self.splitter.setStyleSheet(f"""
+            QSplitter::handle {{
+                background-color: {Theme.windowBg};
+            }}
         """)
         self.splitter.addWidget(self.sidebar)
         self.splitter.addWidget(self.view)
