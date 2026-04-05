@@ -1048,6 +1048,7 @@ class IntricateApp(QMainWindow):
         self._spawn(self.scene.add_text_node, "the README has arrived", label=text)
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
     def _spawn_value_node(self):       self._spawn(self.scene.add_value_node,        "dialing in the value")
+    def _spawn_sticker_node(self):     self._spawn(self.scene.add_sticker_node,      "sticker time")
     def _spawn_palette_node(self):     self._spawn(self.scene.add_palette_node,      "mixing colors")
 
     def _restore_deleted(self) -> None:
@@ -1141,6 +1142,9 @@ class IntricateApp(QMainWindow):
         val_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconValue)), "Value Node"
         )
+        stk_action = menu.addAction(
+            QIcon(Theme.icon(Theme.iconSticker, fallback_color="#c9b8a7")), "Sticker"
+        )
         aud_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconAudio, fallback_color="#9a8a7a")), "Audio Node"
         )
@@ -1149,6 +1153,7 @@ class IntricateApp(QMainWindow):
         vid_action.triggered.connect(self._spawn_video_node)
         seq_action.triggered.connect(self._spawn_sequence_node)
         val_action.triggered.connect(self._spawn_value_node)
+        stk_action.triggered.connect(self._spawn_sticker_node)
         aud_action.triggered.connect(self._spawn_audio_node)
 
         # Show below the button, left-aligned

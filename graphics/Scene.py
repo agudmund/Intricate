@@ -421,6 +421,20 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_sticker_node(self, pos: QPointF | None = None, path: str | None = None):
+        """Add a chromeless alpha-PNG sticker pinned on the canvas."""
+        from nodes.StickerNode import StickerNode
+        from data.StickerNodeData import StickerNodeData
+        data = StickerNodeData()
+        if path:
+            data.source_path = path
+        node = StickerNode(data)
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     # ─────────────────────────────────────────────────────────────────────────
     # PROJECT IMAGE SYNC
     # ─────────────────────────────────────────────────────────────────────────
@@ -777,6 +791,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.PaletteNode import PaletteNode
             from data.PaletteNodeData import PaletteNodeData
             node = PaletteNode(PaletteNodeData.from_dict(d))
+
+        elif node_type == "sticker":
+            from nodes.StickerNode import StickerNode
+            from data.StickerNodeData import StickerNodeData
+            node = StickerNode(StickerNodeData.from_dict(d))
 
         elif node_type == "value":
             from nodes.ValueNode import ValueNode
