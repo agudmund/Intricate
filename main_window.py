@@ -423,7 +423,7 @@ class IntricateApp(QMainWindow):
     }
 
     def _toggle_dock_position(self) -> None:
-        """Snap the rolled-up strip to a Y position based on the app behind it."""
+        """Glide the rolled-up strip to a Y position based on the app behind it."""
         if not self.is_collapsed:
             return
         from utils.window_behind import get_window_behind
@@ -431,7 +431,16 @@ class IntricateApp(QMainWindow):
         exe = (info.get("exe", "") if info else "").lower()
         offset = self._DOCK_OFFSETS.get(exe, 0)
         target_y = self.screen().availableGeometry().top() + offset
-        self.move(self.pos().x(), target_y)
+
+        start_rect = self.geometry()
+        end_rect = QRect(start_rect.x(), target_y, start_rect.width(), start_rect.height())
+        self._dock_anim = QPropertyAnimation(self, b"geometry")
+        self._dock_anim.setDuration(250)
+        self._dock_anim.setEasingCurve(QEasingCurve.InOutSine)
+        self._dock_anim.setStartValue(start_rect)
+        self._dock_anim.setEndValue(end_rect)
+        self._dock_anim.start()
+
         if info:
             self.show_info(f"{info['exe']} — {info['title']}")
 
