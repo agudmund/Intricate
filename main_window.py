@@ -35,6 +35,47 @@ from widgets.PrettySlider import slider as pretty_slider
 logger = setup_logger()
 
 
+class _ButtonBar(QWidget):
+    """
+    Pins a left group of widgets to the left edge and a right group to the right
+    edge using resizeEvent geometry calls — bypasses all layout-manager expansion
+    completely. A progress bar floats in the gap between them.
+    """
+    def __init__(self, left: QWidget, right: QWidget, progress: QWidget, parent=None):
+        super().__init__(parent)
+        self._left     = left
+        self._right    = right
+        self._progress = progress
+        left.setParent(self)
+        right.setParent(self)
+        progress.setParent(self)
+        self.setFixedHeight(max(left.minimumSizeHint().height(),
+                                right.minimumSizeHint().height()))
+
+    def _reposition(self):
+        w  = self.width()
+        h  = self.height()
+        lw = self._left.minimumSizeHint().width()
+        rw = self._right.minimumSizeHint().width()
+        lh = self._left.minimumSizeHint().height()
+        rh = self._right.minimumSizeHint().height()
+        self._left.setGeometry(0,       (h - lh) // 2, lw, lh)
+        self._right.setGeometry(w - rw, (h - rh) // 2, rw, rh)
+        gap = 10
+        px  = lw + gap
+        pw  = max(0, w - lw - rw - gap * 2)
+        self._progress.setGeometry(px, (h - 8) // 2, pw, 8)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition()
+
+    def event(self, e):
+        if e.type() == e.Type.LayoutRequest:
+            self._reposition()
+        return super().event(e)
+
+
 class IntricateApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -45,6 +86,7 @@ class IntricateApp(QMainWindow):
 
         # 2. The Beautiful and Prestigious Top Toolbar things with all it's specifics
         self._dragging_window = False
+        self._resizing_window = False
         self._drag_pos = None
         self.is_collapsed = False
         self._is_fullscreen = False
@@ -890,15 +932,15 @@ class IntricateApp(QMainWindow):
 
     def _setupBottomToolbar(self):
         self.bottomToolbar = QWidget()
-        self.bottomToolbar.setFixedHeight(Theme.handleHeightBottom)
+        self.bottomToolbar.setStyleSheet(f"background: {Theme.windowBg};")
 
         outer = QVBoxLayout(self.bottomToolbar)
-        outer.setContentsMargins(*Theme.layoutMargins)
-        outer.setSpacing(2)
+        outer.setContentsMargins(10, 6, 10, 6)
+        outer.setSpacing(4)
 
         # ── Info bar row ──────────────────────────────────────────────────────
         _info_bar_row = QWidget()
-        _info_bar_row.setFixedHeight(26)
+        _info_bar_row.setFixedHeight(18)
         _info_bar_row.setStyleSheet("background: transparent;")
         _info_bar_layout = QHBoxLayout(_info_bar_row)
         _info_bar_layout.setContentsMargins(0, 0, 0, 0)
@@ -909,7 +951,7 @@ class IntricateApp(QMainWindow):
             f"background: transparent; border: none; padding: 0px 4px;"
             f" color: {Theme.textPrimary}; font-family: Chandler42; font-size: 16px;"
         )
-        self.info_label.setFixedHeight(26)
+        self.info_label.setFixedHeight(18)
 
         self._info_opacity = QGraphicsOpacityEffect()
         self._info_opacity.setOpacity(0.0)
@@ -926,17 +968,20 @@ class IntricateApp(QMainWindow):
         _info_bar_layout.addWidget(self.info_label, stretch=1)
         outer.addWidget(_info_bar_row)
 
-        # ── Buttons row ───────────────────────────────────────────────────────
-        buttons_row = QWidget()
-        buttons_row.setStyleSheet("background: transparent;")
-        layout = QHBoxLayout(buttons_row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
-        layout.setAlignment(Qt.AlignVCenter)
+        # ── Left group — (empty for now) ──────────────────────────────────────
+        left_group = QWidget()
+        left_group.setStyleSheet("background: transparent;")
+        left_layout = QHBoxLayout(left_group)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
 
-        layout.addStretch()
+        # ── Right group — zoom / Sound / eXport / eXid ──────────────────────
+        right_group = QWidget()
+        right_group.setStyleSheet("background: transparent;")
+        right_layout = QHBoxLayout(right_group)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
 
-        # ── Zoom slider — horizontal, maps 0.1–5.0 to integer range ──────
         self._zoom_slider = pretty_slider(
             Qt.Horizontal,
             use_scroll_icon=True,
@@ -947,28 +992,71 @@ class IntricateApp(QMainWindow):
             pageStep=25,
             valueChanged=self._on_zoom_slider,
         )
-        layout.addWidget(self._zoom_slider, alignment=Qt.AlignVCenter)
+        right_layout.addWidget(self._zoom_slider)
 
-        # ── Screensnap — capture viewport with alpha ────────────────────
-        self._snap_btn = button("", clicked=self._snapshot_viewport)
-        self._snap_btn.setFixedSize(QSize(32, 32))
-        self._snap_btn.setText("\U0001f4f7")   # 📷
-        self._snap_btn.setToolTip("Snapshot viewport (alpha)")
-        layout.addWidget(self._snap_btn, alignment=Qt.AlignVCenter)
-
-        # ── Master mute toggle ──────────────────────────────────────────
         from utils.audio import audio
-        self._mute_btn = button("", clicked=self._toggle_global_mute)
-        self._mute_btn.setFixedSize(QSize(32, 32))
-        self._mute_btn.setText("\U0001f508" if audio.is_muted() else "\U0001f50a")  # 🔈 / 🔊
+        self._mute_btn = button("Quiet" if audio.is_muted() else "Sound", clicked=self._toggle_global_mute)
+        self._mute_btn.setMinimumSize(0, 0)
         self._mute_btn.setToolTip("Unmute all" if audio.is_muted() else "Mute all")
-        layout.addWidget(self._mute_btn, alignment=Qt.AlignVCenter)
+        mute_font = self._mute_btn.font()
+        mute_font.setPointSize(16)
+        self._mute_btn.setFont(mute_font)
+        # Fix width so toggling Sound/Quiet doesn't shift the slider.
+        # Reey glyphs extend well beyond QFontMetrics advance, so add generous room.
+        from PySide6.QtGui import QFontMetrics
+        fm = QFontMetrics(mute_font)
+        widest = max(fm.horizontalAdvance("Sound"), fm.horizontalAdvance("Quiet"))
+        self._mute_btn.setFixedWidth(widest + 32)  # padding + Reey overshoot
+        self._mute_btn.setMinimumHeight(fm.height() + 6 + 18)  # top + bottom padding
+        self._mute_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.buttonBg};"
+            f" border: none; border-radius: 6px;"
+            f" color: {Theme.textPrimary};"
+            f" padding: 6px 2px 18px 14px; }}"
+        )
+        right_layout.addWidget(self._mute_btn)
 
-        # Exid button — lower-right anchor, styled via PrettyButton
-        self._exid_btn = button("Exid", clicked=self.close)
-        layout.addWidget(self._exid_btn, alignment=Qt.AlignVCenter)
+        self._snap_btn = button("eXport", clicked=self._snapshot_viewport)
+        self._snap_btn.setMinimumSize(0, 0)
+        self._snap_btn.setToolTip("Snapshot viewport (alpha)")
+        snap_font = self._snap_btn.font()
+        snap_font.setPointSize(16)
+        self._snap_btn.setFont(snap_font)
+        self._snap_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.buttonBg};"
+            f" border: none; border-radius: 6px;"
+            f" color: {Theme.textPrimary};"
+            f" padding: 6px 2px 18px 4px; }}"
+        )
+        right_layout.addWidget(self._snap_btn)
 
-        outer.addWidget(buttons_row, stretch=1)
+        self._exid_btn = button("eXid", clicked=self.close)
+        self._exid_btn.setMinimumSize(0, 0)
+        font = self._exid_btn.font()
+        font.setPointSize(16)
+        self._exid_btn.setFont(font)
+        self._exid_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.buttonBg};"
+            f" border: none; border-radius: 6px;"
+            f" color: {Theme.textPrimary};"
+            f" padding: 6px 4px 18px 2px; }}"
+        )
+        right_layout.addWidget(self._exid_btn)
+
+        # ── Progress bar — hidden at rest, floats between the two groups ──────
+        self._bottom_progress = QProgressBar()
+        self._bottom_progress.setRange(0, 100)
+        self._bottom_progress.setValue(0)
+        self._bottom_progress.setFixedHeight(8)
+        self._bottom_progress.setTextVisible(False)
+        self._bottom_progress.hide()
+        self._bottom_progress.setStyleSheet(
+            f"QProgressBar {{ background: {Theme.nodeBg}; border: none; border-radius: 4px; }}"
+            f"QProgressBar::chunk {{ background: {Theme.primaryBorder}; border-radius: 4px; }}"
+        )
+
+        buttons_row = _ButtonBar(left_group, right_group, self._bottom_progress)
+        outer.addWidget(buttons_row)
 
         self.grid.addWidget(self.bottomToolbar, 2, 0)
 
@@ -987,7 +1075,7 @@ class IntricateApp(QMainWindow):
         from utils.audio import audio
         muted = not audio.is_muted()
         audio.set_muted(muted)
-        self._mute_btn.setText("\U0001f508" if muted else "\U0001f50a")
+        self._mute_btn.setText("Quiet" if muted else "Sound")
         self._mute_btn.setToolTip("Unmute all" if muted else "Mute all")
         # Mute/unmute all VideoNode and AudioNode audio outputs
         from nodes.VideoNode import VideoNode
@@ -999,7 +1087,7 @@ class IntricateApp(QMainWindow):
     def _snapshot_viewport(self) -> None:
         """Capture the current viewport with transparent background."""
         from utils.helpers import snapshot_viewport
-        path = snapshot_viewport(self.view)
+        path = snapshot_viewport(self.view, session_name=self.project_selector.currentText())
         if path:
             import os
             self.show_info(f"Snap saved → {path.name}", on_click=lambda: os.startfile(path))
@@ -1295,15 +1383,29 @@ class IntricateApp(QMainWindow):
         super().resizeEvent(event)
         self._reposition_exit_btn()
 
+    _RESIZE_GRIP = 16   # px from bottom-right corner
+
+    def _in_resize_grip(self, pos) -> bool:
+        """True if pos is inside the passive bottom-right resize zone."""
+        return (pos.x() >= self.width() - self._RESIZE_GRIP
+                and pos.y() >= self.height() - self._RESIZE_GRIP)
+
     def mousePressEvent(self, event):
         """The Curtains Sensor: Every single press counts. (coming soon!)"""
-        if event.button() == Qt.LeftButton and event.position().y() < Theme.handleHeightTop:
-            
-            # Positional Replacement is probably the most overcomplicated way to phrase what this feature does
-            self._dragging_window = True
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-            return
+        if event.button() == Qt.LeftButton:
+            pos = event.position().toPoint()
+            # Bottom-right corner resize grip
+            if self._in_resize_grip(pos):
+                self._resizing_window = True
+                self._drag_pos = event.globalPosition().toPoint()
+                event.accept()
+                return
+            if pos.y() < Theme.handleHeightTop:
+                # Positional Replacement is probably the most overcomplicated way to phrase what this feature does
+                self._dragging_window = True
+                self._drag_pos = event.globalPosition().toPoint()
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -1312,6 +1414,15 @@ class IntricateApp(QMainWindow):
         When curtains are rolled up the strip acts as a vertical slider —
         horizontal position is locked so it only glides up and down.
         """
+        if self._resizing_window:
+            new_pos = event.globalPosition().toPoint()
+            delta = new_pos - self._drag_pos
+            new_w = max(self.minimumWidth(),  self.width()  + delta.x())
+            new_h = max(self.minimumHeight(), self.height() + delta.y())
+            self.resize(new_w, new_h)
+            self._drag_pos = new_pos
+            event.accept()
+            return
         if self._dragging_window:
             new_pos = event.globalPosition().toPoint()
             delta = new_pos - self._drag_pos
@@ -1337,6 +1448,7 @@ class IntricateApp(QMainWindow):
     def mouseReleaseEvent(self, event):
         """Release the window to let it enjoy it's new location."""
         self._dragging_window = False
+        self._resizing_window = False
         super().mouseReleaseEvent(event)
 
     # =========================================================================

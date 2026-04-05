@@ -161,20 +161,52 @@ def snapshot_node(node, filename: str | None = None, scale: int = 2) -> Path | N
     return path
 
 
-def snapshot_viewport(view, filename: str | None = None, scale: int = 2) -> Path | None:
+def _lowest_about_label(view) -> str:
+    """Return the label of the AboutNode with the highest y (furthest down) visible in the viewport."""
+    from nodes.AboutNode import AboutNode
+
+    scene = view.scene()
+    if not scene:
+        return ""
+    vp_rect = view.mapToScene(view.viewport().rect()).boundingRect()
+    best_y = -float("inf")
+    best_label = ""
+    for item in scene.items():
+        if isinstance(item, AboutNode) and vp_rect.intersects(item.sceneBoundingRect()):
+            y = item.scenePos().y()
+            if y > best_y:
+                best_y = y
+                best_label = getattr(item.data, "label", "")
+    return best_label.strip()
+
+
+def _sanitize(text: str, max_len: int = 40) -> str:
+    """Strip a string down to filesystem-safe characters."""
+    import re
+    text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', text)
+    text = text.strip(". ")
+    return text[:max_len] if text else ""
+
+
+def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | None:
     """Render the current viewport to a transparent PNG — nodes included, background removed.
 
     Captures exactly what the view shows at the current pan/zoom, but with a
     fully transparent background instead of Theme.backDrop. This gives a clean
     alpha channel suitable for compositing or chroma-free workflows.
 
+    Filename convention:
+        {timestamp}_{session}_{lowest-about-label}.png
+    Any empty segment is omitted.
+
     Args:
-        view:     The IntricateView instance.
-        filename: Output filename (without directory). Defaults to 'viewport_snap.png'.
-        scale:    Render multiplier for crisp output (default 2×).
+        view:         The IntricateView instance.
+        session_name: Current project / session name (may be empty).
+        scale:        Render multiplier for crisp output (default 2×).
 
     Returns the Path of the saved PNG, or None on failure.
     """
+    from datetime import datetime
     from PySide6.QtCore import QRectF
     from PySide6.QtGui import QImage, QPainter
     import utils.settings as _s
@@ -197,11 +229,19 @@ def snapshot_viewport(view, filename: str | None = None, scale: int = 2) -> Path
     scene.render(painter, QRectF(0, 0, w, h), scene_rect)
     painter.end()
 
+    # ── Build filename: timestamp_session_aboutlabel.png ─────────────────
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    parts = [stamp]
+    s = _sanitize(session_name)
+    if s:
+        parts.append(s)
+    about = _sanitize(_lowest_about_label(view))
+    if about:
+        parts.append(about)
+    title = "_".join(parts) + ".png"
+
     out_dir = Path(_s.get("shared", "images_dir", default="."))
     ensure_dir(out_dir)
-    title = filename or "viewport_snap.png"
-    if not title.lower().endswith(".png"):
-        title += ".png"
     path = out_dir / title
     img.save(str(path))
     logger.info(f"📸 Viewport snapshot saved: {path}")
