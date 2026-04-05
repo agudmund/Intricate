@@ -6,11 +6,58 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import ctypes
+import ctypes.wintypes as wt
+
 from PySide6.QtWidgets import QGraphicsScene
 from PySide6.QtCore import QPointF, QTimer
+from PySide6.QtGui import QColor
 
 from utils.logger import setup_logger
 logger = setup_logger()
+
+
+def enable_blur(hwnd, tint: QColor = None):
+    """Enable Windows Mica blur behind the window via DWM composition.
+
+    AccentState 5 = Mica — the OS provides a frosted glass backdrop
+    behind any transparent region of the window.  GradientColor tints
+    the blur in ABGR format.
+    """
+    class AccentPolicy(ctypes.Structure):
+        _fields_ = [
+            ("AccentState",   ctypes.c_int),
+            ("AccentFlags",   ctypes.c_int),
+            ("GradientColor", ctypes.c_int),
+            ("AnimationId",   ctypes.c_int),
+        ]
+
+    class WindowCompositionAttributeData(ctypes.Structure):
+        _fields_ = [
+            ("Attribute",  ctypes.c_int),
+            ("Data",       ctypes.c_void_p),
+            ("SizeOfData", ctypes.c_size_t),
+        ]
+
+    accent = AccentPolicy()
+    accent.AccentState = 5   # Mica
+    accent.AccentFlags = 0
+
+    if tint:
+        accent.GradientColor = (
+            (tint.alpha() << 24) | (tint.blue() << 16)
+            | (tint.green() << 8) | tint.red()
+        )
+    else:
+        accent.GradientColor = 0x00000000
+
+    data = WindowCompositionAttributeData()
+    data.Attribute  = 19   # WCA_ACCENT_POLICY
+    data.SizeOfData = ctypes.sizeof(accent)
+    data.Data       = ctypes.cast(ctypes.pointer(accent), ctypes.c_void_p)
+
+    ctypes.windll.user32.SetWindowCompositionAttribute(hwnd, ctypes.pointer(data))
+    logger.info("DWM Mica blur enabled")
 
 
 class IntricateScene(QGraphicsScene):

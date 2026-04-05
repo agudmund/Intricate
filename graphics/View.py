@@ -42,6 +42,7 @@ class IntricateView(QGraphicsView):
         super().__init__(scene, parent)
 
         self.current_zoom  = 1.0
+        self._fog_alpha    = 180       # driven by sidebar fog slider (0=clear, 255=opaque)
         self._last_pan_pos: QPointF | None = None
         self._on_zoom_changed = None   # optional callback, set by main_window
 
@@ -58,6 +59,10 @@ class IntricateView(QGraphicsView):
         self.setContentsMargins(0, 0, 0, 0)
         self.viewport().setContentsMargins(0, 0, 0, 0)
 
+        # ── Transparency — let the DWM blur show through ─────────────────────
+        self.viewport().setAttribute(Qt.WA_TranslucentBackground)
+        self.setStyleSheet("background: transparent;")
+
         # ── Scrollbars ────────────────────────────────────────────────────────
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -72,7 +77,9 @@ class IntricateView(QGraphicsView):
         # MinimalViewportUpdate: only repaints dirty regions.  During pan, Qt
         # uses a bitblt scroll (very cheap) plus repaints only the newly-exposed
         # strip — no full-viewport repaint on every mouse-move tick.
-        self.setViewportUpdateMode(QGraphicsView.MinimalViewportUpdate)
+        # FullViewportUpdate required for WA_TranslucentBackground — partial
+        # repaints leave stale alpha fragments in the composited background.
+        self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
         self.setRenderHint(QPainter.Antialiasing)
 
         # ── Focus ─────────────────────────────────────────────────────────────
@@ -88,10 +95,12 @@ class IntricateView(QGraphicsView):
     # ─────────────────────────────────────────────────────────────────────────
 
     def drawBackground(self, painter: QPainter, rect) -> None:
-        """Solid canvas background — one honest rectangle, no magic yet."""
+        """Frost-tinted canvas background — alpha-blended over the DWM blur."""
         painter.save()
         painter.resetTransform()
-        painter.fillRect(self.viewport().rect(), QColor(Theme.backDrop))
+        c = QColor(Theme.backDrop)
+        c.setAlpha(self._fog_alpha)
+        painter.fillRect(self.viewport().rect(), c)
         painter.restore()
 
     def drawForeground(self, painter: QPainter, rect) -> None:

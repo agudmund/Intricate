@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect, QSystemTrayIcon, QMenu
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon, QPixmap, QColor
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
@@ -94,7 +94,7 @@ class IntricateApp(QMainWindow):
 
         # 3.  Window OS Defaults
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        # self.setAttribute(Qt.WA_TranslucentBackground) # this is for the selective blur later
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(500, 500)
         
         # 4. Grid and widget setup
@@ -103,7 +103,14 @@ class IntricateApp(QMainWindow):
         self._setupTheAreaFormerlyKnownAsNodal()
         self._setupBottomToolbar()
 
-        # 5. Restore persisted geometry
+        # 5. Repaint non-canvas widgets solid so WA_TranslucentBackground
+        #    only punches through the canvas, not the toolbars/sidebar.
+        self._make_opaque(self.top_toolbar)
+        self._make_opaque(self.bottomToolbar)
+        if hasattr(self, 'sidebar'):
+            self._make_opaque(self.sidebar)
+
+        # 6. Restore persisted geometry
         self._restore_geometry()
 
         # 6. Load session for the initially selected project, then start autosave
@@ -131,6 +138,15 @@ class IntricateApp(QMainWindow):
 
         # Row 1 (canvas) takes all the vertical slack
         self.grid.setRowStretch(1, 1)
+
+    @staticmethod
+    def _make_opaque(widget):
+        """Force a widget to paint its background solid, defeating WA_TranslucentBackground."""
+        from PySide6.QtGui import QPalette
+        widget.setAutoFillBackground(True)
+        pal = widget.palette()
+        pal.setColor(QPalette.Window, QColor(Theme.windowBg))
+        widget.setPalette(pal)
 
     # =========================================================================
     # The top toolbar with all the fancy features
@@ -849,7 +865,9 @@ class IntricateApp(QMainWindow):
         return sidebar
 
     def _on_fog_slider_changed(self, value: int) -> None:
-        """Slider → progress bar mirror. Will drive fog alpha when fog arrives."""
+        """Drive canvas fog transparency and mirror to the progress bar."""
+        self.view._fog_alpha = value
+        self.view.viewport().update()
         bar = getattr(self, 'fog_progress', None)
         if bar is not None:
             bar.setValue(value)
@@ -1566,6 +1584,9 @@ class IntricateApp(QMainWindow):
             if getattr(self, '_pending_fullscreen', False):
                 self._pending_fullscreen = False
                 self.showFullScreen()
+            # Enable DWM Mica blur behind the transparent canvas
+            from graphics.Scene import enable_blur
+            enable_blur(int(self.winId()), tint=QColor(Theme.backDrop))
             self._animate_fade_in()
             QTimer.singleShot(250, lambda: self.show_info(
                 f"{appName} is generally so happy that you are here. ✨"
