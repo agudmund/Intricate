@@ -25,9 +25,10 @@ if hasattr(sys.stderr, "reconfigure"):
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from utils.logger import setup_logger, set_log_level, TRACE
+import utils.settings as settings
 from utils.settings import appName, orgName
 
-_INSTANCE_PORT = 47321
+_INSTANCE_PORT = int(settings.get("intricate", "instance_port", default=47321))
 _instance_lock: socket.socket | None = None
 
 
