@@ -415,12 +415,19 @@ class IntricateApp(QMainWindow):
             self.view._notify_viewport_changed()
 
 
-    # App-specific Y offsets for the rolled-up strip (px from screen top).
-    # Keyed by lowercase exe name — fallback to 0 if unknown.
-    _DOCK_OFFSETS = {
-        "claude.exe": 0,
-        "chrome.exe": 50,
-    }
+    def _get_dock_offsets(self) -> dict:
+        """Read app-specific dock offsets from settings.toml [intricate.dock_offsets].
+
+        Each key is a lowercase exe name, value is the Y offset in px from screen top.
+        Only apps listed here are eligible for dock snapping — unlisted apps are ignored.
+
+        Example settings.toml entry:
+            [intricate.dock_offsets]
+            "claude.exe" = 0
+            "chrome.exe" = 50
+        """
+        import utils.settings as _s
+        return _s.get("intricate", "dock_offsets", default={})
 
     def _toggle_dock_position(self) -> None:
         """Glide the rolled-up strip to a Y position based on the app behind it."""
@@ -429,7 +436,15 @@ class IntricateApp(QMainWindow):
         from utils.window_behind import get_window_behind
         info = get_window_behind(int(self.winId()))
         exe = (info.get("exe", "") if info else "").lower()
-        offset = self._DOCK_OFFSETS.get(exe, 0)
+        offsets = self._get_dock_offsets()
+
+        if exe not in offsets:
+            # App not in the privileged list — just show what's behind, don't move
+            if info:
+                self.show_info(f"{info['exe']} (not docked)")
+            return
+
+        offset = offsets[exe]
         target_y = self.screen().availableGeometry().top() + offset
 
         start_rect = self.geometry()
