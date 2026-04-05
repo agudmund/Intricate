@@ -838,17 +838,17 @@ class IntricateApp(QMainWindow):
 
         layout.addSpacing(4)
 
-        # ── Progress bar ──────────────────────────────────────────────────────
-        # Vertical, fills bottom-to-top mirroring the slider.
-        # Connected to fog_slider for functional testing.
-        self.fog_progress = QProgressBar()
-        self.fog_progress.setOrientation(Qt.Vertical)
-        self.fog_progress.setRange(0, 255)
-        self.fog_progress.setValue(180)
-        self.fog_progress.setTextVisible(False)
-        self.fog_progress.setFixedWidth((Theme.sidebarWidth() - Theme.sidebarPadding * 2) // 4)
-        self.fog_progress.setMinimumHeight(60)
-        self.fog_progress.setStyleSheet(f"""
+        # ── Joy bucket — tamagotchi energy bar ────────────────────────────────
+        # Depletes from 100 → 0 over 15 minutes. Click the feed button to
+        # top it up by 10% each press. Purely nurturing, zero utility.
+        self.joy_bar = QProgressBar()
+        self.joy_bar.setOrientation(Qt.Vertical)
+        self.joy_bar.setRange(0, 100)
+        self.joy_bar.setValue(100)
+        self.joy_bar.setTextVisible(False)
+        self.joy_bar.setFixedWidth((Theme.sidebarWidth() - Theme.sidebarPadding * 2) // 4)
+        self.joy_bar.setMinimumHeight(60)
+        self.joy_bar.setStyleSheet(f"""
             QProgressBar {{
                 background: {Theme.backDrop};
                 border: 1px solid {Theme.primaryBorder};
@@ -861,18 +861,40 @@ class IntricateApp(QMainWindow):
                 border-radius: 2px;
             }}
         """)
-        layout.addWidget(self.fog_progress, alignment=Qt.AlignHCenter)
+        layout.addWidget(self.joy_bar, alignment=Qt.AlignHCenter)
+
+        # Feed button — 10% per click, capped at 100
+        self._feed_btn = button("", clicked=self._feed_joy)
+        self._feed_btn.setMinimumSize(0, 0)
+        self._feed_btn.setFixedSize(QSize(24, 24))
+        self._feed_btn.setText("\U0001f331")  # 🌱
+        self._feed_btn.setToolTip("Feed me")
+        layout.addWidget(self._feed_btn, alignment=Qt.AlignHCenter)
+
         layout.addSpacing(Theme.sidebarPadding)
+
+        # Depletion timer — drains 1% every 9 seconds (100% over 15 minutes)
+        self._joy_timer = QTimer(self)
+        self._joy_timer.setInterval(9000)
+        self._joy_timer.timeout.connect(self._deplete_joy)
+        self._joy_timer.start()
 
         return sidebar
 
     def _on_fog_slider_changed(self, value: int) -> None:
-        """Drive canvas fog transparency and mirror to the progress bar."""
+        """Drive canvas fog transparency."""
         self.view._fog_alpha = value
         self.view.viewport().update()
-        bar = getattr(self, 'fog_progress', None)
-        if bar is not None:
-            bar.setValue(value)
+
+    def _feed_joy(self) -> None:
+        """Top up the joy bucket by 10%, capped at 100."""
+        v = min(100, self.joy_bar.value() + 10)
+        self.joy_bar.setValue(v)
+
+    def _deplete_joy(self) -> None:
+        """Drain 1% from the joy bucket. Bottoms out at 0."""
+        v = max(0, self.joy_bar.value() - 1)
+        self.joy_bar.setValue(v)
 
     # ─────────────────────────────────────────────────────────────────────────
     # NODE SPAWN ACTIONS
