@@ -166,6 +166,7 @@ def buildApp():
         f"--icon={appIcon}",
         f"--add-data={iconsFolder}{os.pathsep}{iconsFolder}",
         f"--add-data=Images{os.pathsep}Images",
+        f"--add-data=audio{os.pathsep}audio",
     ]
 
     # 3. PyInstaller Execution
