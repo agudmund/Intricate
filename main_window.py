@@ -179,18 +179,15 @@ class IntricateApp(QMainWindow):
                                              combo_h - Theme.iconPadding))
         centre.addWidget(self._curtains_btn)
 
-        # Snap button — toggles the rolled-up strip between screen top
-        # (park over titlebar) and below-tabs (clear Chrome tab row).
-        self._snap_positions = [0, 45]   # y offsets from screen top
-        self._snap_index = 0
-        self._dock_btn = self.setup_iconic_button(
-            clicked=self._toggle_dock_position, icon=Theme.iconDock
-        )
-        self._dock_btn.setFixedSize(combo_h, combo_h)
-        self._dock_btn.setIconSize(QSize(combo_h - Theme.iconPadding,
-                                         combo_h - Theme.iconPadding))
-        self._dock_btn.setToolTip("Snap position")
-        centre.addWidget(self._dock_btn)
+        # ── DEBUG: uncomment to restore the manual dock snap button ────────
+        # self._dock_btn = self.setup_iconic_button(
+        #     clicked=self._toggle_dock_position, icon=Theme.iconDock
+        # )
+        # self._dock_btn.setFixedSize(combo_h, combo_h)
+        # self._dock_btn.setIconSize(QSize(combo_h - Theme.iconPadding,
+        #                                  combo_h - Theme.iconPadding))
+        # self._dock_btn.setToolTip("Snap position")
+        # centre.addWidget(self._dock_btn)
 
         # Dock watcher — polls the window behind while curtains are rolled up
         self._dock_watcher = QTimer(self)
@@ -381,7 +378,11 @@ class IntricateApp(QMainWindow):
             self._dock_watcher.start()
         else:
             self._dock_watcher.stop()
-            end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), self.original_height)
+            # Clamp so the bottom edge never drops below the screen
+            avail = self.screen().availableGeometry()
+            y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
+            y = max(avail.top(), y)
+            end_rect = QRect(start_rect.x(), y, start_rect.width(), self.original_height)
             self.central.show()
             self.bottomToolbar.show()
 
