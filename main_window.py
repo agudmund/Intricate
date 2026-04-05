@@ -892,9 +892,67 @@ class IntricateApp(QMainWindow):
         self.joy_bar.setValue(v)
 
     def _deplete_joy(self) -> None:
-        """Drain 1% from the joy bucket. Bottoms out at 0."""
+        """Drain 1% from the joy bucket. Meow with escalating urgency."""
         v = max(0, self.joy_bar.value() - 1)
         self.joy_bar.setValue(v)
+        self._maybe_meow(v)
+
+    def _maybe_meow(self, hunger_pct: int) -> None:
+        """Play a meow from audio/meows/ based on hunger level.
+
+        Files are sorted alphabetically — early files are gentle, later
+        files are demanding.  As the bar drops, meows get more frequent
+        and pick from further down the escalation ladder.
+
+        Frequency:  >70% silent, 50-70% rare, 30-50% occasional, <30% frequent.
+        """
+        import random
+        from utils.audio import audio
+        if audio.is_muted() or hunger_pct > 70:
+            return
+
+        # Frequency gates — higher hunger = more likely to meow per tick
+        if hunger_pct > 50 and random.random() > 0.15:
+            return
+        if hunger_pct > 30 and random.random() > 0.30:
+            return
+        if hunger_pct > 10 and random.random() > 0.50:
+            return
+
+        self._play_meow(hunger_pct)
+
+    def _play_meow(self, hunger_pct: int) -> None:
+        """Pick and play a meow WAV matching the current hunger tier."""
+        from pathlib import Path
+        from PySide6.QtCore import QUrl
+        from PySide6.QtMultimedia import QSoundEffect
+        import random
+
+        meow_dir = Path(__file__).resolve().parent / "audio" / "meows"
+        if not meow_dir.exists():
+            return
+        wavs = sorted(meow_dir.glob("*.wav"))
+        if not wavs:
+            return
+
+        # Map hunger to escalation tier — lower hunger picks later (angrier) files
+        n = len(wavs)
+        if hunger_pct > 50:
+            pool = wavs[:max(1, n // 3)]           # gentle third
+        elif hunger_pct > 25:
+            pool = wavs[n // 3:max(n // 3 + 1, 2 * n // 3)]  # middle third
+        else:
+            pool = wavs[2 * n // 3:]                # demanding third
+        if not pool:
+            pool = wavs
+
+        chosen = random.choice(pool)
+
+        if not hasattr(self, '_meow_sfx'):
+            self._meow_sfx = QSoundEffect(self)
+        self._meow_sfx.setSource(QUrl.fromLocalFile(str(chosen)))
+        self._meow_sfx.setVolume(0.5)
+        self._meow_sfx.play()
 
     # ─────────────────────────────────────────────────────────────────────────
     # NODE SPAWN ACTIONS
