@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Generate maximize/fullscreen icon: a square outline with slightly rounded corners.
+Warm cream on transparent, outer ring matching iconic.png.
+"""
+from PIL import Image, ImageDraw
+
+S  = 2048
+cx = cy = S // 2
+C  = (225, 213, 198, 255)
+
+img  = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+draw = ImageDraw.Draw(img)
+
+# Outer ring
+draw.ellipse([cx-800, cy-800, cx+800, cy+800], outline=C, width=52)
+
+# Maximise square — rounded rectangle in the centre
+draw.rounded_rectangle(
+    [cx - 280, cy - 280, cx + 280, cy + 280],
+    radius=40, outline=C, width=28
+)
+
+# Downsample
+out = img.resize((1024, 1024), Image.LANCZOS)
+out.save('icons/maximize_node.png')
+
+sizes  = [16, 24, 32, 48, 64, 128, 256]
+frames = [out.resize((s, s), Image.LANCZOS) for s in sizes]
+frames[0].save(
+    'icons/maximize_node.ico',
+    format='ICO',
+    sizes=[(s, s) for s in sizes],
+    append_images=frames[1:]
+)
+print("Created icons/maximize_node.png and icons/maximize_node.ico")

@@ -1,22 +1,27 @@
 ✨ Cozy Snapshot — clean tree respecting .gitignore 🌱
-Generated: 2026-04-01 21:29:24
+Generated: 2026-04-05 06:23:30
 Location:  C:\Users\thisg\Desktop\Intricate
 ├── 📁 .claude/
 │   └── 📄 settings.local.json
 ├── 📁 .github/
 │   └── 📄 copilot-instructions.md
-├── 📁 backup/
-│   ├── 📄 session_archive.json
-│   └── 📄 session_previous.json
+├── 📁 archive/
+│   └── 📄 Intricate_previous.exe
+├── 📁 audio/
+│   └── 📄 new_node_chime.wav
 ├── 📁 data/
 │   ├── 📄 __init__.py
 │   ├── 📄 AboutNodeData.py
+│   ├── 📄 AudioNodeData.py
 │   ├── 📄 BezierNodeData.py
 │   ├── 📄 ClaudeInfoNodeData.py
 │   ├── 📄 ClaudeNodeData.py
 │   ├── 📄 ClaudeResponseNodeData.py
+│   ├── 📄 GitNodeData.py
 │   ├── 📄 HealthNodeData.py
 │   ├── 📄 ImageNodeData.py
+│   ├── 📄 InfoNodeData.py
+│   ├── 📄 LogNodeData.py
 │   ├── 📄 NodeData.py
 │   ├── 📄 PaletteNodeData.py
 │   ├── 📄 PerfNodeData.py
@@ -24,8 +29,15 @@ Location:  C:\Users\thisg\Desktop\Intricate
 │   ├── 📄 TextNodeData.py
 │   ├── 📄 TreeNodeData.py
 │   ├── 📄 ValueNodeData.py
+│   ├── 📄 VideoNodeData.py
 │   └── 📄 WarmNodeData.py
 ├── 📁 Documents/
+│   ├── 📁 data/
+│   │   ├── 📁 backup/
+│   │   │   ├── 📄 session_archive.json
+│   │   │   └── 📄 session_previous.json
+│   │   └── 📄 session.json
+│   ├── 📄 Build Version Previous.md
 │   ├── 📄 Build Version.md
 │   ├── 📄 Docstring Compliance Report.md
 │   └── 📄 Python Header Compliance Guide.md
@@ -38,14 +50,45 @@ Location:  C:\Users\thisg\Desktop\Intricate
 │   └── 📄 View.py
 ├── 📁 icons/
 │   ├── 📄 about_icon.png
+│   ├── 📄 about_node.ico
+│   ├── 📄 about_node.png
+│   ├── 📄 audio_node.ico
+│   ├── 📄 audio_node.png
 │   ├── 📄 bezier_icon.png
+│   ├── 📄 bezier_node.ico
+│   ├── 📄 bezier_node.png
+│   ├── 📄 border_off_node.ico
+│   ├── 📄 border_off_node.png
+│   ├── 📄 border_on_node.ico
+│   ├── 📄 border_on_node.png
 │   ├── 📄 claude_body_hide.png
 │   ├── 📄 claude_body_show.png
+│   ├── 📄 claude_census.ico
+│   ├── 📄 claude_census.png
 │   ├── 📄 claude_icon.png
+│   ├── 📄 claude_node.ico
+│   ├── 📄 claude_node.png
+│   ├── 📄 claude_response.ico
+│   ├── 📄 claude_response.png
 │   ├── 📄 close.png
 │   ├── 📄 depth_off.png
 │   ├── 📄 depth_on.png
+│   ├── 📄 gen_border_icons.py
+│   ├── 📄 gen_category_icons.py
+│   ├── 📄 gen_claude_icons.py
+│   ├── 📄 gen_loop_icons.py
+│   ├── 📄 gen_mute_icons.py
+│   ├── 📄 gen_remaining_icons.py
+│   ├── 📄 gen_screensnap_icon.py
+│   ├── 📄 gen_text_icons.py
+│   ├── 📄 gen_video_icon.py
+│   ├── 📄 git_node.ico
+│   ├── 📄 git_node.png
+│   ├── 📄 health_group.ico
+│   ├── 📄 health_group.png
 │   ├── 📄 health_icon.png
+│   ├── 📄 health_node.ico
+│   ├── 📄 health_node.png
 │   ├── 📄 heart.png
 │   ├── 📄 I Also Wrote This Poem Just For You.png
 │   ├── 📄 I took a photo of it to show you.png
@@ -55,25 +98,66 @@ Location:  C:\Users\thisg\Desktop\Intricate
 │   ├── 📄 image_node.png
 │   ├── 📄 images_group.ico
 │   ├── 📄 images_group.png
+│   ├── 📄 info_node.ico
+│   ├── 📄 info_node.png
+│   ├── 📄 intricate.ico
+│   ├── 📄 log_node.ico
+│   ├── 📄 log_node.png
+│   ├── 📄 loop_off.ico
+│   ├── 📄 loop_off.png
+│   ├── 📄 loop_on.ico
+│   ├── 📄 loop_on.png
+│   ├── 📄 mute_off.ico
+│   ├── 📄 mute_off.png
+│   ├── 📄 mute_on.ico
+│   ├── 📄 mute_on.png
 │   ├── 📄 Our Love as Intricate as the patterns we impose.png
 │   ├── 📄 palette_node.ico
 │   ├── 📄 palette_node.png
+│   ├── 📄 perf_node.ico
+│   ├── 📄 perf_node.png
 │   ├── 📄 ports_off.png
 │   ├── 📄 ports_on.png
+│   ├── 📄 rebuild_ico.py
+│   ├── 📄 recolor_all.py
+│   ├── 📄 reset_node.ico
+│   ├── 📄 reset_node.png
+│   ├── 📄 restore_node.ico
+│   ├── 📄 restore_node.png
+│   ├── 📄 screensnap_node.ico
+│   ├── 📄 screensnap_node.png
 │   ├── 📄 sequence_node.ico
 │   ├── 📄 sequence_node.png
+│   ├── 📄 snip_cursor.png
+│   ├── 📄 snip_node.ico
+│   ├── 📄 snip_node.png
+│   ├── 📄 solidify_all.py
 │   ├── 📄 split_node.ico
 │   ├── 📄 split_node.png
+│   ├── 📄 stamp_node.ico
+│   ├── 📄 stamp_node.png
 │   ├── 📄 tester.png
 │   ├── 📄 text_node.ico
 │   ├── 📄 text_node.png
+│   ├── 📄 tint_node.ico
+│   ├── 📄 tint_node.png
+│   ├── 📄 tools_group.ico
+│   ├── 📄 tools_group.png
 │   ├── 📄 tree_node.ico
 │   ├── 📄 tree_node.png
+│   ├── 📄 tree_refresh.ico
+│   ├── 📄 tree_refresh.png
 │   ├── 📄 value_node.ico
 │   ├── 📄 value_node.png
+│   ├── 📄 video_node.ico
+│   ├── 📄 video_node.png
 │   ├── 📄 vision_eye.ico
 │   ├── 📄 vision_eye.png
-│   └── 📄 warm_icon.PNG
+│   ├── 📄 visual_group.ico
+│   ├── 📄 visual_group.png
+│   ├── 📄 warm_icon.PNG
+│   ├── 📄 warm_node.ico
+│   └── 📄 warm_node.png
 ├── 📁 Images/
 │   └── 📁 Value/
 │       ├── 📄 bar00.png
@@ -90,13 +174,17 @@ Location:  C:\Users\thisg\Desktop\Intricate
 ├── 📁 nodes/
 │   ├── 📄 __init__.py
 │   ├── 📄 AboutNode.py
+│   ├── 📄 AudioNode.py
 │   ├── 📄 BaseNode.py
 │   ├── 📄 BezierNode.py
 │   ├── 📄 ClaudeInfoNode.py
 │   ├── 📄 ClaudeNode.py
 │   ├── 📄 ClaudeResponseNode.py
+│   ├── 📄 GitNode.py
 │   ├── 📄 HealthNode.py
 │   ├── 📄 ImageNode.py
+│   ├── 📄 InfoNode.py
+│   ├── 📄 LogNode.py
 │   ├── 📄 NodeBehaviour.py
 │   ├── 📄 NodeButton.py
 │   ├── 📄 PaletteNode.py
@@ -106,14 +194,21 @@ Location:  C:\Users\thisg\Desktop\Intricate
 │   ├── 📄 TextNode.py
 │   ├── 📄 TreeNode.py
 │   ├── 📄 ValueNode.py
+│   ├── 📄 VideoNode.py
 │   └── 📄 WarmNode.py
 ├── 📁 utils/
 │   ├── 📄 __init__.py
+│   ├── 📄 audio.py
 │   ├── 📄 ColorPicker.py
+│   ├── 📄 HappyHelper.py
+│   ├── 📄 HappyTimes.py
+│   ├── 📄 helpers.py
+│   ├── 📄 IconPicker.py
 │   ├── 📄 logger.py
-│   ├── 📄 motivationalMessages.py
+│   ├── 📄 MotionCurves.py
 │   ├── 📄 OSClickMonitor.py
-│   ├── 📄 session_manager.py
+│   ├── 📄 PhrasePicker.py
+│   ├── 📄 session.py
 │   ├── 📄 settings.py
 │   └── 📄 vision.py
 ├── 📁 widgets/
@@ -121,7 +216,9 @@ Location:  C:\Users\thisg\Desktop\Intricate
 │   ├── 📄 NoteEditor.py
 │   ├── 📄 PrettyButton.py
 │   ├── 📄 PrettyCombo.py
+│   ├── 📄 PrettyEdit.py
 │   ├── 📄 PrettyLabel.py
+│   ├── 📄 PrettyMenu.py
 │   └── 📄 PrettySlider.py
 ├── 📄 .gitattributes
 ├── 📄 .gitignore
@@ -139,7 +236,6 @@ Location:  C:\Users\thisg\Desktop\Intricate
 ├── 📄 NotepadPlusPlusDuplexPlusTurbo.exe
 ├── 📄 README.md
 ├── 📄 requirements.txt
-├── 📄 session.json
 └── 📄 The Thurr - Palette.png
 
 ────────────────────────────────────────────────────────────

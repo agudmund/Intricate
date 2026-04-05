@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect, QSystemTrayIcon, QMenu
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
@@ -140,27 +140,101 @@ class IntricateApp(QMainWindow):
 
         layout.addStretch()
 
-        # ── Exit button: absolute child of top_toolbar, pinned to top-right ──────
-        # Icon-only square button — size matches the other toolbar icon buttons.
+        # ── Tray / Maximize / Exit buttons: absolute children, pinned right ──
+        # Match the combo/curtains height so all toolbar controls sit flush.
+        btn_h = combo_h
+        btn_icon = QSize(btn_h - Theme.iconPadding, btn_h - Theme.iconPadding)
+
+        self._tray_btn = self.setup_iconic_button(
+            clicked=self._minimize_to_tray, icon=Theme.iconTray
+        )
+        self._tray_btn.setFixedSize(btn_h, btn_h)
+        self._tray_btn.setIconSize(btn_icon)
+        self._tray_btn.setParent(self.top_toolbar)
+        self._tray_btn.setToolTip("Minimize to tray")
+
+        self._max_btn = self.setup_iconic_button(
+            clicked=self.toggle_fullscreen, icon=Theme.iconMaximize
+        )
+        self._max_btn.setFixedSize(btn_h, btn_h)
+        self._max_btn.setIconSize(btn_icon)
+        self._max_btn.setParent(self.top_toolbar)
+        self._max_btn.setToolTip("Maximize")
+
         self._exit_btn = self.setup_iconic_button(
             clicked=self.close, icon=Theme.iconClose
         )
+        self._exit_btn.setFixedSize(btn_h, btn_h)
+        self._exit_btn.setIconSize(btn_icon)
         self._exit_btn.setParent(self.top_toolbar)
         # Deferred first position — toolbar width isn't known at construction time
         QTimer.singleShot(0, self._reposition_exit_btn)
+
+        self._setup_system_tray()
 
         self.grid.addWidget(self.top_toolbar, 0, 0)
         self.top_toolbar.installEventFilter(self)
 
     def _reposition_exit_btn(self) -> None:
-        """Keep the exit button pinned to the top-right corner of the toolbar."""
+        """Keep the tray / maximize / exit buttons pinned to the top-right corner."""
         if not hasattr(self, '_exit_btn') or not hasattr(self, 'top_toolbar'):
             return
-        btn = self._exit_btn
         tb  = self.top_toolbar
-        btn.move(tb.width() - btn.width() - 4,
-                 (tb.height() - btn.height()) // 2)
-        btn.raise_()
+        gap = 2
+        y   = (tb.height() - self._exit_btn.height()) // 2
+
+        # Exit button flush right
+        ex = tb.width() - self._exit_btn.width() - 4
+        self._exit_btn.move(ex, y)
+        self._exit_btn.raise_()
+
+        # Maximize button left of exit
+        if hasattr(self, '_max_btn'):
+            mx = ex - self._max_btn.width() - gap
+            self._max_btn.move(mx, y)
+            self._max_btn.raise_()
+        else:
+            mx = ex
+
+        # Tray button left of maximize
+        if hasattr(self, '_tray_btn'):
+            tx = mx - self._tray_btn.width() - gap
+            self._tray_btn.move(tx, y)
+            self._tray_btn.raise_()
+
+    def _setup_system_tray(self) -> None:
+        """Create the system tray icon with a restore / exit context menu."""
+        self._tray_icon = QSystemTrayIcon(self)
+        icon = Theme.icon(Theme.iconCurtains)
+        if icon and not icon.isNull():
+            self._tray_icon.setIcon(icon)
+        else:
+            self._tray_icon.setIcon(self.windowIcon())
+
+        tray_menu = QMenu()
+        tray_menu.addAction("Show", self._restore_from_tray)
+        tray_menu.addSeparator()
+        tray_menu.addAction("Exit", self.close)
+        self._tray_icon.setContextMenu(tray_menu)
+        self._tray_icon.activated.connect(self._on_tray_activated)
+
+    def _minimize_to_tray(self) -> None:
+        """Hide the window and show the system tray icon."""
+        self._tray_icon.show()
+        self.hide()
+
+    def _restore_from_tray(self) -> None:
+        """Bring the window back from the system tray."""
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self._tray_icon.hide()
+
+    def _on_tray_activated(self, reason) -> None:
+        """Double-click or trigger on the tray icon restores the window."""
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger,
+                      QSystemTrayIcon.ActivationReason.DoubleClick):
+            self._restore_from_tray()
 
     def setup_project_selector(self):
         """The Project Selector Combo Box"""
