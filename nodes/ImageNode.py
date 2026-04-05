@@ -261,6 +261,10 @@ class ImageNode(BaseNode):
     # BUTTONS
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _toggle_border(self) -> None:
+        self.data.show_border = not self.data.show_border
+        self.update()
+
     def _build_buttons(self) -> None:
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
@@ -269,6 +273,11 @@ class ImageNode(BaseNode):
         stamp_pix   = Theme.icon(Theme.iconStamp, fallback_color="#d4a96a")
         confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
         self._buttons.append(NodeButton(self, stamp_pix, self._stamp_source_file, confirm_pix))
+        border_off_pix = Theme.icon(Theme.iconBorderOff, fallback_color="#7a8a9a")
+        border_on_pix  = Theme.icon(Theme.iconBorderOn,  fallback_color="#e1d5c6")
+        self._border_btn = NodeButton(self, border_off_pix, self._toggle_border, border_on_pix, toggle=True)
+        self._border_btn._in_confirm = self.data.show_border
+        self._buttons.append(self._border_btn)
 
     def _vision_rename(self) -> None:
         """Button action: call the vision API to identify this image and update its caption."""
@@ -369,13 +378,25 @@ class ImageNode(BaseNode):
 
             painter.setClipping(False)
 
-            # ── Bevel border over the image ───────────────────────────────────
+            # ── Border ────────────────────────────────────────────────────────
             bevel_r = max(CLIP_RADIUS_MIN, self.round_radius - IMAGE_PADDING)
             painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QColor(0, 0, 0, 80), 1))
-            painter.drawRoundedRect(ir, bevel_r, bevel_r)
-            painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
-            painter.drawRoundedRect(ir.adjusted(1, 1, -1, -1), max(CLIP_RADIUS_MIN, bevel_r - 1), max(CLIP_RADIUS_MIN, bevel_r - 1))
+            if self.data.show_border:
+                # Ivory white border — sits inside the image rect
+                painter.setPen(QPen(QColor(225, 213, 198, 255), 3))
+                painter.drawRoundedRect(
+                    ir.adjusted(1, 1, -1, -1), bevel_r, bevel_r,
+                )
+            else:
+                # Default subtle bevel
+                painter.setPen(QPen(QColor(0, 0, 0, 80), 1))
+                painter.drawRoundedRect(ir, bevel_r, bevel_r)
+                painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
+                painter.drawRoundedRect(
+                    ir.adjusted(1, 1, -1, -1),
+                    max(CLIP_RADIUS_MIN, bevel_r - 1),
+                    max(CLIP_RADIUS_MIN, bevel_r - 1),
+                )
 
         else:
             # ── Placeholder when no image is loaded ───────────────────────────

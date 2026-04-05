@@ -32,6 +32,7 @@ class ImageNodeData(NodeData):
     image_b64:   str  = field(default="")    # Base64-encoded PNG — empty until loaded
     caption:     str  = field(default="")    # Editable label shown on the node
     source_path: str  = field(default="")    # Absolute path to the source file on disk (empty for pasted/dropped images)
+    show_border: bool = field(default=False) # Ivory border overlay on the image
 
     def to_dict(self) -> dict:
         data = super().to_dict()
@@ -40,6 +41,7 @@ class ImageNodeData(NodeData):
         data["image_b64"]   = "" if self.source_path else self.image_b64
         data["caption"]     = self.caption
         data["source_path"] = self.source_path
+        data["show_border"] = self.show_border
         return data
 
     @classmethod
@@ -57,4 +59,5 @@ class ImageNodeData(NodeData):
             image_b64     = data.get("image_b64",   ""),
             caption       = data.get("caption",     ""),
             source_path   = data.get("source_path", ""),
+            show_border   = data.get("show_border", False),
         )

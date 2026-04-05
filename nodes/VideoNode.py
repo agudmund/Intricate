@@ -11,7 +11,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QFileDialog
 from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QPropertyAnimation, QEasingCurve, QTimer
 from PySide6.QtGui import (
-    QPainter, QPixmap, QImage, QColor, QPen, QPainterPath
+    QPainter, QPixmap, QImage, QColor, QPen, QPainterPath, QLinearGradient
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink, QVideoFrame
 
@@ -100,6 +100,7 @@ class VideoNode(BaseNode):
         self._duration_ms: int = 0
         self._position_ms: int = 0
         self._was_playing: bool = False   # track state across scrub
+        self._scrubbing: bool = False     # progress bar drag in progress
 
         self._viewport_visible: bool = True   # assume visible until told otherwise
         self._was_playing_before_cull: bool = False
@@ -343,6 +344,7 @@ class VideoNode(BaseNode):
     def mousePressEvent(self, event) -> None:
         pos = event.pos()
         if self._buttons_visible and event.button() == Qt.LeftButton and self._progress_rect().contains(pos):
+            self._scrubbing = True
             self._was_playing = (
                 self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
             )
@@ -354,16 +356,15 @@ class VideoNode(BaseNode):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        pos = event.pos()
-        if self._buttons_visible and self._progress_rect().contains(pos) and event.buttons() & Qt.LeftButton:
-            self._scrub_to(pos.x())
+        if self._scrubbing and event.buttons() & Qt.LeftButton:
+            self._scrub_to(event.pos().x())
             event.accept()
             return
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
-        pos = event.pos()
-        if self._buttons_visible and self._progress_rect().contains(pos) and event.button() == Qt.LeftButton:
+        if self._scrubbing and event.button() == Qt.LeftButton:
+            self._scrubbing = False
             if self._was_playing and self._viewport_visible:
                 self._player.play()
                 self._was_playing = False
@@ -453,7 +454,12 @@ class VideoNode(BaseNode):
                 ratio = self._position_ms / self._duration_ms
                 fill_w = pr.width() * ratio
                 fill_rect = QRectF(pr.left(), pr.top(), fill_w, pr.height())
-                painter.setBrush(QColor(Theme.primaryBorder))
+                grad = QLinearGradient(fill_rect.left(), 0, fill_rect.right(), 0)
+                grad.setColorAt(0.0, QColor("#1e1e1e"))
+                grad.setColorAt(0.4, QColor("#5c3e4f"))
+                grad.setColorAt(0.7, QColor("#a56a85"))
+                grad.setColorAt(1.0, QColor("#d87a9e"))
+                painter.setBrush(grad)
                 painter.drawRoundedRect(fill_rect, 3, 3)
 
 
