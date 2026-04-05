@@ -46,8 +46,8 @@ def _acquire_instance_lock() -> bool:
 
 
 def main():
-    if not _acquire_instance_lock():
-        sys.exit(0)
+    # if not _acquire_instance_lock():
+    #     sys.exit(0)
 
     # Name the process for the Windows taskbar and Task Manager Apps view
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appName)

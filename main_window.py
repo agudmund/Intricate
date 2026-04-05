@@ -192,6 +192,12 @@ class IntricateApp(QMainWindow):
         self._dock_btn.setToolTip("Snap position")
         centre.addWidget(self._dock_btn)
 
+        # Dock watcher — polls the window behind while curtains are rolled up
+        self._dock_watcher = QTimer(self)
+        self._dock_watcher.setInterval(500)
+        self._dock_watcher.timeout.connect(self._check_window_behind)
+        self._last_docked_exe = ""
+
         layout.addLayout(centre)
 
         layout.addStretch()
@@ -371,7 +377,10 @@ class IntricateApp(QMainWindow):
             # Pause all videos — curtains hide the canvas
             if self.scene:
                 self.scene.pause_all_videos()
+            self._last_docked_exe = ""
+            self._dock_watcher.start()
         else:
+            self._dock_watcher.stop()
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), self.original_height)
             self.central.show()
             self.bottomToolbar.show()
@@ -435,7 +444,8 @@ class IntricateApp(QMainWindow):
             return
         from utils.window_behind import get_window_behind
         info = get_window_behind(int(self.winId()))
-        exe = (info.get("exe", "") if info else "").lower()
+        exe_raw = (info.get("exe", "") if info else "").lower()
+        exe = exe_raw.removesuffix(".exe")
         offsets = self._get_dock_offsets()
 
         if exe not in offsets:
@@ -458,6 +468,33 @@ class IntricateApp(QMainWindow):
 
         if info:
             self.show_info(f"{info['exe']} — {info['title']}")
+
+    def _check_window_behind(self) -> None:
+        """Periodic check — auto-dock when the app behind changes."""
+        if not self.is_collapsed:
+            return
+        from utils.window_behind import get_window_behind
+        info = get_window_behind(int(self.winId()))
+        exe_raw = (info.get("exe", "") if info else "").lower()
+        exe = exe_raw.removesuffix(".exe")
+        if exe == self._last_docked_exe:
+            return  # same app, nothing to do
+        self._last_docked_exe = exe
+        offsets = self._get_dock_offsets()
+        if exe not in offsets:
+            return
+        offset = offsets[exe]
+        target_y = self.screen().availableGeometry().top() + offset
+        if self.pos().y() == target_y:
+            return  # already in position
+        start_rect = self.geometry()
+        end_rect = QRect(start_rect.x(), target_y, start_rect.width(), start_rect.height())
+        self._dock_anim = QPropertyAnimation(self, b"geometry")
+        self._dock_anim.setDuration(250)
+        self._dock_anim.setEasingCurve(QEasingCurve.InOutSine)
+        self._dock_anim.setStartValue(start_rect)
+        self._dock_anim.setEndValue(end_rect)
+        self._dock_anim.start()
 
     # =================================================================================
     # The central area — sidebar | canvas | reserved for a special vip arriving later
