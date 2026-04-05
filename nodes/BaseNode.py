@@ -169,10 +169,11 @@ class BaseNode(QGraphicsRectItem):
 
         # ── Collapsible button shelf state ───────────────────────────────────
         # Initialised before buttons so layout methods can reference _anim_top_offset.
-        # Starts expanded — subclasses can set _buttons_visible = False after super().__init__
-        # to start collapsed (e.g. AboutNode).
-        self._buttons_visible = True
-        self._anim_top_offset = self._BUTTON_ZONE_H
+        # Restored from data.shelf_visible so the toggle survives session save/load.
+        # Subclasses can still override _buttons_visible after super().__init__
+        # to force a collapsed default (e.g. AboutNode).
+        self._buttons_visible = getattr(self.data, 'shelf_visible', True)
+        self._anim_top_offset = self._BUTTON_ZONE_H if self._buttons_visible else 8.0
 
         # ── Button strip ──────────────────────────────────────────────────────
         # Built last — geometry must be final before positioning.
@@ -180,6 +181,9 @@ class BaseNode(QGraphicsRectItem):
         self._buttons: list[NodeButton] = []
         self._build_buttons()
         self._position_buttons()
+        if not self._buttons_visible:
+            for btn in self._buttons:
+                btn.hide()
 
         # ── Shelf animation ──────────────────────────────────────────────────
         self._shelf_anim = QVariantAnimation()
@@ -953,6 +957,7 @@ class BaseNode(QGraphicsRectItem):
         self.data.height        = self.rect().height()
         self.data.z_value       = self.zValue()
         self.data.ports_visible = self.ports_visible
+        self.data.shelf_visible = self._buttons_visible
 
     def to_dict(self) -> dict:
         """Sync visual state into data, then serialize."""

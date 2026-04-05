@@ -57,6 +57,7 @@ class AudioNodeData(NodeData):
             width         = float(data.get("width",  300.0)),
             height        = float(data.get("height", 120.0)),
             ports_visible = data.get("ports_visible", False),
+            shelf_visible = data.get("shelf_visible", True),
             source_path   = data.get("source_path",  ""),
             caption       = data.get("caption",      ""),
             volume        = int(data.get("volume",   50)),

@@ -53,6 +53,10 @@ class NodeData:
     # Persisted so wiring mode survives session save/load.
     ports_visible: bool = False
 
+    # ── Shelf state ───────────────────────────────────────────────────────────
+    # Persisted so the button-row toggle survives session save/load.
+    shelf_visible: bool = True
+
     # ── Accent emoji ──────────────────────────────────────────────────────────
     emoji: str = field(default="")
 
@@ -79,6 +83,7 @@ class NodeData:
             "height":        self.height,
             "z_value":       self.z_value,
             "ports_visible": self.ports_visible,
+            "shelf_visible": self.shelf_visible,
             "emoji":         self.emoji,
         }
 
@@ -101,5 +106,6 @@ class NodeData:
             height        = float(data.get("height",  200.0)),
             z_value       = float(data.get("z_value",   0.0)),
             ports_visible = data.get("ports_visible", False),
+            shelf_visible = data.get("shelf_visible", True),
             emoji         = data.get("emoji",         "🌿"),
         )
