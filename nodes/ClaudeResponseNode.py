@@ -14,7 +14,6 @@ from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics
 
 from utils.IconPicker import emojiIcons
 
-_EMOJI_ROW_H   = 38.0  # space reserved for the top-left emoji accent
 _BUTTON_ZONE_H = 40.0
 _MAX_WIDTH      = 420.0
 _MIN_WIDTH      = 160.0
@@ -44,7 +43,7 @@ class ClaudeResponseNode(BaseNode):
             if data.width == 0.0:
                 data.width  = wrap_width
             if data.height == 0.0:
-                data.height = bound.height() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V * 2 + Theme.aboutMinHeight
+                data.height = bound.height() + _BUTTON_ZONE_H + _PAD_V * 2 + Theme.aboutMinHeight
 
         super().__init__(data)
 
@@ -68,20 +67,6 @@ class ClaudeResponseNode(BaseNode):
         c.setAlpha(Theme.claudeResponseBgAlpha)
         return c
 
-    def _position_buttons(self) -> None:
-        """Push the button strip below the emoji row."""
-        from nodes.NodeButton import BUTTON_SIZE
-        from PySide6.QtCore import QPointF
-        pad     = 4.0
-        spacing = 4.0
-        r       = self.rect()
-        y       = r.top() + _EMOJI_ROW_H + pad + 2
-
-        x = r.left() + pad
-        for btn in self._buttons:
-            btn.setPos(QPointF(x, y))
-            x += BUTTON_SIZE + spacing
-
     def _apply_depth(self) -> None:
         super()._apply_depth()
         self.setBrush(self._bg_color())
@@ -103,7 +88,7 @@ class ClaudeResponseNode(BaseNode):
     def _edit_rect(self) -> QRectF:
         r   = self.rect()
         pad = Theme.aboutTextPaddingLeft
-        content_top = r.top() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V
+        content_top = r.top() + _BUTTON_ZONE_H + _PAD_V
         return QRectF(r.left() + pad,
                       content_top,
                       r.width() - pad * 2,
@@ -151,7 +136,7 @@ class ClaudeResponseNode(BaseNode):
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         painter.setFont(font)
         painter.setPen(QColor(Theme.nodeFontColor))
-        content_top = r.top() + _EMOJI_ROW_H + _BUTTON_ZONE_H + _PAD_V
+        content_top = r.top() + _BUTTON_ZONE_H + _PAD_V
         text_rect = QRectF(r.left() + pad,
                            content_top,
                            r.width() - pad * 2,
