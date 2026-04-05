@@ -415,13 +415,25 @@ class IntricateApp(QMainWindow):
             self.view._notify_viewport_changed()
 
 
+    # App-specific Y offsets for the rolled-up strip (px from screen top).
+    # Keyed by lowercase exe name — fallback to 0 if unknown.
+    _DOCK_OFFSETS = {
+        "claude.exe": 0,
+        "chrome.exe": 50,
+    }
+
     def _toggle_dock_position(self) -> None:
-        """Snap the rolled-up strip between preset Y positions."""
+        """Snap the rolled-up strip to a Y position based on the app behind it."""
         if not self.is_collapsed:
             return
-        self._snap_index = (self._snap_index + 1) % len(self._snap_positions)
-        target_y = self.screen().availableGeometry().top() + self._snap_positions[self._snap_index]
+        from utils.window_behind import get_window_behind
+        info = get_window_behind(int(self.winId()))
+        exe = (info.get("exe", "") if info else "").lower()
+        offset = self._DOCK_OFFSETS.get(exe, 0)
+        target_y = self.screen().availableGeometry().top() + offset
         self.move(self.pos().x(), target_y)
+        if info:
+            self.show_info(f"{info['exe']} — {info['title']}")
 
     # =================================================================================
     # The central area — sidebar | canvas | reserved for a special vip arriving later
