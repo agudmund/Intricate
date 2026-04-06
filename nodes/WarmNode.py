@@ -6,22 +6,33 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import json
+import os
 import subprocess
+import sys
+import time
+from pathlib import Path
+
 from PySide6.QtWidgets import QGraphicsProxyWidget
 from pretty_widgets.PrettyMenu import StyledTextEdit as QTextEdit
-from PySide6.QtCore import Qt, QRectF, QPointF
+from PySide6.QtCore import Qt, QRectF, QPointF, QFileSystemWatcher, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
 from nodes.BaseNode import BaseNode
 from data.WarmNodeData import WarmNodeData
 from graphics.Theme import Theme
+from utils.logger import setup_logger
 
+_log = setup_logger("warmnode")
 
 # Layout constants
 EMOJI_SIZE      = 28.0      # Emoji accent area at top-left
 TITLE_HEIGHT    = 22.0      # Title band below emoji row
 PADDING         = 10.0      # General internal padding
 BODY_TOP        = PADDING + EMOJI_SIZE + 4.0    # Body text starts here
+
+# Bridge file lives alongside session data
+_BRIDGE_DIR = Path(__file__).resolve().parent.parent / "Documents" / "data"
 
 
 class WarmNode(BaseNode):
@@ -39,6 +50,11 @@ class WarmNode(BaseNode):
     Serialization:
         body_text and emoji are stored in WarmNodeData.
         Both survive session save/load cleanly.
+
+    Bridge:
+        Double-clicking the title opens Notepad++ Duplex+ Turbo with a
+        bidirectional JSON bridge file.  Edits in either app propagate
+        to the other via QFileSystemWatcher with debounce timers.
     """
 
     _has_depth_toggle = True
@@ -52,6 +68,21 @@ class WarmNode(BaseNode):
         self._editor: QTextEdit | None = None
         self._editor_proxy: QGraphicsProxyWidget | None = None
         self._build_body_editor()
+
+        # ── Bridge state (runtime only — not persisted) ───────────────────────
+        self._bridge_path: str | None = None
+        self._bridge_watcher: QFileSystemWatcher | None = None
+        self._bridge_writing = False
+
+        self._bridge_debounce = QTimer()
+        self._bridge_debounce.setSingleShot(True)
+        self._bridge_debounce.setInterval(300)
+        self._bridge_debounce.timeout.connect(self._process_bridge_change)
+
+        self._bridge_write_debounce = QTimer()
+        self._bridge_write_debounce.setSingleShot(True)
+        self._bridge_write_debounce.setInterval(500)
+        self._bridge_write_debounce.timeout.connect(self._write_bridge)
 
     # ─────────────────────────────────────────────────────────────────────────
     # LAYOUT ZONES
@@ -88,6 +119,9 @@ class WarmNode(BaseNode):
         self._editor.setPlainText(self.data.body_text)
         self._editor.textChanged.connect(self._on_text_changed)
 
+        # Extend the standard right-click menu with "Open in Notepad"
+        self._editor.contextMenuEvent = self._editor_context_menu
+
         self._editor_proxy = QGraphicsProxyWidget(self)
         self._editor_proxy.setWidget(self._editor)
         self._editor_proxy.setGeometry(self._body_rect())
@@ -97,41 +131,190 @@ class WarmNode(BaseNode):
         """Sync text to data on every keystroke — no explicit commit needed."""
         if self._editor:
             self.data.body_text = self._editor.toPlainText()
+            # Propagate inline edits to bridge if active
+            if self._bridge_path and os.path.exists(self._bridge_path):
+                self._bridge_write_debounce.start()
+
+    def _editor_context_menu(self, event) -> None:
+        """Standard context menu with 'Open in Notepad' prepended."""
+        from pretty_widgets.PrettyMenu import menu_stylesheet
+        ctx = self._editor.createStandardContextMenu()
+        ctx.setStyleSheet(menu_stylesheet())
+        # Prepend our action before the standard Cut/Copy/Paste
+        first = ctx.actions()[0] if ctx.actions() else None
+        notepad_action = ctx.addAction("Open in Notepad")
+        if first:
+            ctx.removeAction(notepad_action)
+            ctx.insertAction(first, notepad_action)
+            ctx.insertSeparator(first)
+        notepad_action.triggered.connect(self._launch_editor)
+        ctx.exec(event.globalPos())
+        ctx.deleteLater()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # INTERACTION
+    # BRIDGE — WRITE
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _write_bridge(self) -> None:
+        """Atomic write of current state to the bridge JSON file."""
+        if not self._bridge_path:
+            return
+        payload = {
+            "version":   1,
+            "node_uuid": self.data.uuid,
+            "title":     self.data.title,
+            "body_text": self.data.body_text,
+            "writer":    "intricate",
+            "timestamp": time.time(),
+        }
+        tmp = self._bridge_path + ".tmp"
+        try:
+            self._bridge_writing = True
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False)
+            os.replace(tmp, self._bridge_path)
+        except OSError as e:
+            _log.warning(f"[WarmNode] bridge write failed: {e}")
+        finally:
+            # Clear the guard after the watcher event has had time to fire
+            QTimer.singleShot(150, self._clear_bridge_writing)
+
+    def _clear_bridge_writing(self) -> None:
+        self._bridge_writing = False
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # BRIDGE — WATCH
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _start_bridge_watcher(self) -> None:
+        """Create a QFileSystemWatcher on the bridge file."""
+        self._stop_bridge_watcher()
+        if not self._bridge_path:
+            return
+        self._bridge_watcher = QFileSystemWatcher([self._bridge_path])
+        self._bridge_watcher.fileChanged.connect(self._on_bridge_file_changed)
+
+    def _stop_bridge_watcher(self) -> None:
+        """Disconnect and discard the current bridge watcher."""
+        if self._bridge_watcher:
+            try:
+                self._bridge_watcher.fileChanged.disconnect()
+            except RuntimeError:
+                pass
+            self._bridge_watcher.deleteLater()
+            self._bridge_watcher = None
+
+    def _on_bridge_file_changed(self, path: str) -> None:
+        """Watcher callback — defensive re-add, then debounce."""
+        if self._bridge_writing:
+            return
+        # Some editors delete+recreate — re-add if missing from watch list
+        if self._bridge_watcher and path not in self._bridge_watcher.files():
+            if os.path.exists(path):
+                self._bridge_watcher.addPath(path)
+        self._bridge_debounce.start()
+
+    def _process_bridge_change(self) -> None:
+        """Read the bridge file and apply changes from Eddie."""
+        if not self._bridge_path or not os.path.exists(self._bridge_path):
+            return
+        try:
+            with open(self._bridge_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return  # mid-write partial file — skip silently
+
+        if data.get("writer") == "intricate":
+            return  # echo of our own write
+
+        # Apply body_text changes
+        new_body = data.get("body_text", "")
+        if new_body != self.data.body_text:
+            self.data.body_text = new_body
+            if self._editor:
+                self._editor.blockSignals(True)
+                self._editor.setPlainText(new_body)
+                self._editor.blockSignals(False)
+
+        # Apply title changes
+        new_title = data.get("title", "")
+        if new_title != self.data.title:
+            self.data.title = new_title
+            self.update()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # BRIDGE — LAUNCH
     # ─────────────────────────────────────────────────────────────────────────
 
     def _launch_editor(self) -> None:
         """
-        Launch the external warm node editor as a peer process.
+        Launch Notepad++ Duplex+ Turbo with a bidirectional bridge file.
 
-        Path is read from settings.toml [apps] warm_editor at call time —
-        never cached, so changing the path in The Settlers takes effect
-        immediately without restarting Intricate.
-
-        Falls back to notepad.exe if no path is configured.
-        Fires and forgets — Intricate doesn't own the child process.
+        The bridge JSON is written first, then the editor is launched with
+        --bridge <path>.  A QFileSystemWatcher monitors the file for changes
+        from the editor side.
         """
-        import utils.settings as _settings
-        editor_path = _settings.get("apps", "warm_editor", "").strip()
-        if not editor_path:
-            editor_path = "NotepadPlusPlusDuplexPlusTurbo.exe"
-        try:
-            from utils.logger import setup_logger
-            _log = setup_logger("warmnode")
-        except Exception:
-            _log = None
+        # Clean up any stale bridge session
+        self._teardown_bridge()
+
+        # Create bridge file
+        os.makedirs(str(_BRIDGE_DIR), exist_ok=True)
+        self._bridge_path = str(_BRIDGE_DIR / f".warm_bridge_{self.data.uuid}.json")
+        self._write_bridge()
+
+        # Resolve editor command
+        cmd = self._resolve_editor_cmd()
+        if not cmd:
+            _log.warning("[WarmNode] No editor found — cannot launch")
+            return
 
         try:
-            subprocess.Popen(editor_path, shell=True)
-            if _log:
-                _log.debug(f"[WarmNode] Launched editor: '{editor_path}'")
-            # Roll up the canvas so the editor gets focus
+            subprocess.Popen(cmd)
+            _log.debug(f"[WarmNode] Launched editor: {cmd}")
+            self._start_bridge_watcher()
             self._roll_up_curtains()
         except Exception as e:
-            if _log:
-                _log.warning(f"[WarmNode] Failed to launch '{editor_path}': {e}")
+            _log.warning(f"[WarmNode] Failed to launch editor: {e}")
+
+    def _resolve_editor_cmd(self) -> list[str] | None:
+        """Build the subprocess command list for the editor."""
+        import utils.settings as _settings
+        editor_path = _settings.get("apps", "warm_editor", "").strip()
+
+        # If configured path is a directory with main.py, run from source
+        if editor_path:
+            p = Path(editor_path)
+            if p.is_dir() and (p / "main.py").exists():
+                return [sys.executable, str(p / "main.py"),
+                        "--bridge", self._bridge_path]
+            if p.is_file() and p.exists():
+                return [str(p), "--bridge", self._bridge_path]
+            # Configured path doesn't exist — fall through to sibling
+
+        # Fall back to the known sibling project
+        sibling = Path(r"C:\Users\thisg\Desktop\Notepad++ Duplex+ Turbo\main.py")
+        if sibling.exists():
+            return [sys.executable, str(sibling),
+                    "--bridge", self._bridge_path]
+
+        return None
+
+    def _teardown_bridge(self) -> None:
+        """Stop watching and clean up the bridge file."""
+        self._bridge_debounce.stop()
+        self._bridge_write_debounce.stop()
+        self._stop_bridge_watcher()
+        if self._bridge_path:
+            try:
+                if os.path.exists(self._bridge_path):
+                    os.remove(self._bridge_path)
+            except OSError:
+                pass
+            self._bridge_path = None
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # INTERACTION
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _roll_up_curtains(self) -> None:
         """Collapse the main window to its HUD strip so the editor gets focus."""
@@ -147,27 +330,23 @@ class WarmNode(BaseNode):
 
     def mouseDoubleClickEvent(self, event) -> None:
         """
-        Route double-click by zone:
+        Double-click zones:
 
-            Title zone  → launch external editor (Notepad++ Duplex+ or fallback)
             Body zone   → focus the inline QTextEdit editor
+            Elsewhere   → shelf toggle (BaseNode default)
         """
-        pos = event.pos()
-
-        if self._title_rect().contains(pos):
-            self._launch_editor()
-            event.accept()
-            return
-
-        if self._body_rect().contains(pos):
+        if self._body_rect().contains(event.pos()):
             if self.scene() and self.scene().views():
                 self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
             self._editor_proxy.setFocus()
             self._editor.setFocus(Qt.MouseFocusReason)
             event.accept()
             return
-
         super().mouseDoubleClickEvent(event)
+
+    def contextMenuEvent(self, event) -> None:
+        """Fallback right-click — areas not covered by the body editor."""
+        super().contextMenuEvent(event)
 
     def focusOutEvent(self, event) -> None:
         """Restore view focus policy when the node loses focus."""
@@ -197,6 +376,7 @@ class WarmNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        self._teardown_bridge()
         if self._editor_proxy:
             self._editor_proxy.hide()
         if self.scene() and self.scene().views():
