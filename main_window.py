@@ -879,6 +879,9 @@ class IntricateApp(QMainWindow):
         v = min(100, self.joy_bar.value() + 10)
         self.joy_bar.setValue(v)
         self._stop_hunger_glow()
+        # Reset the depletion timer so feeding buys a full cycle of peace
+        if hasattr(self, '_joy_timer') and self._joy_timer.isActive():
+            self._joy_timer.start()
 
     def _deplete_joy(self) -> None:
         """Drain 1% from the joy bucket. Meow with escalating urgency."""
@@ -886,7 +889,7 @@ class IntricateApp(QMainWindow):
         self.joy_bar.setValue(v)
         self._maybe_meow(v)
         # Start or stop the hunger glow based on level + curtain state
-        if v <= 15 and self.is_collapsed:
+        if v < 15 and self.is_collapsed:
             self._start_hunger_glow()
         else:
             self._stop_hunger_glow()
@@ -983,7 +986,7 @@ class IntricateApp(QMainWindow):
 
     def _stop_hunger_glow(self) -> None:
         """Stop the hunger glow and restore the toolbar to its natural color."""
-        if hasattr(self, '_glow_timer') and self._glow_timer.isActive():
+        if hasattr(self, '_glow_timer'):
             self._glow_timer.stop()
         self.top_toolbar.setStyleSheet(f"background-color: {Theme.windowBg};")
         self._hunger_glow_anim = None
