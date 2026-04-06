@@ -830,7 +830,7 @@ class IntricateApp(QMainWindow):
             use_scroll_icon=True,
             range=(0, 255),
             value=180,
-            invertedAppearance=True,
+            invertedAppearance=False,
             fixedWidth=Theme.sidebarWidth() - Theme.sidebarPadding * 2,
             minimumHeight=80,
             valueChanged=self._on_fog_slider_changed,
