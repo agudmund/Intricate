@@ -8,7 +8,7 @@
 
 import subprocess
 from PySide6.QtWidgets import QGraphicsProxyWidget
-from widgets.PrettyMenu import StyledTextEdit as QTextEdit
+from pretty_widgets.PrettyMenu import StyledTextEdit as QTextEdit
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
 

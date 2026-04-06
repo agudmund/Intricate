@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QGraphicsDropShadowEffect
 )
-from widgets.PrettyMenu import StyledTextEdit as QTextEdit, StyledLineEdit as QLineEdit
+from pretty_widgets.PrettyMenu import StyledTextEdit as QTextEdit, StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QFont
 try:
@@ -65,7 +65,7 @@ class PrettyNoteEditor(QDialog):
         self.title_edit.setFont(QFont("Chandler42", 14, QFont.Bold))
         self.title_edit.setMinimumHeight(48)
 
-        from widgets.PrettyButton import button as _btn
+        from pretty_widgets.PrettyButton import button as _btn
         emoji_btn = _btn("🌸")
         emoji_btn.setMinimumHeight(48)
         emoji_btn.setFixedWidth(48)

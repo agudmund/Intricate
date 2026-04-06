@@ -18,7 +18,7 @@ _ANSI_RE = re.compile(r'\x1b\[[^A-Za-z]*[A-Za-z]')
 from PySide6.QtCore import QRectF, QFileSystemWatcher, QTimer, Signal, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsProxyWidget, QFrame, QVBoxLayout
-from widgets.PrettyMenu import StyledTextEdit as QTextEdit
+from pretty_widgets.PrettyMenu import StyledTextEdit as QTextEdit
 
 from nodes.BaseNode import BaseNode
 from data.ClaudeNodeData import ClaudeNodeData

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QGraphicsProxyWidget, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QFrame, QPushButton, QScrollArea, QLabel,
 )
-from widgets.PrettyMenu import StyledLineEdit as QLineEdit
+from pretty_widgets.PrettyMenu import StyledLineEdit as QLineEdit
 from PySide6.QtCore import Qt, QRectF, QMimeData, QPoint, QByteArray, QEvent
 from PySide6.QtGui import QPainter, QColor, QDrag, QPixmap
 

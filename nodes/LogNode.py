@@ -15,7 +15,7 @@ from PySide6.QtGui import QPainter, QFont, QColor
 from nodes.BaseNode import BaseNode
 from data.LogNodeData import LogNodeData
 from graphics.Theme import Theme
-from widgets.PrettyEdit import PrettyEdit
+from pretty_widgets.PrettyEdit import PrettyEdit
 
 
 _BUTTON_ZONE_H = 40.0

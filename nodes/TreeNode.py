@@ -21,7 +21,7 @@ from PySide6.QtGui import QPainter, QIcon
 from nodes.BaseNode import BaseNode
 from data.TreeNodeData import TreeNodeData
 from graphics.Theme import Theme
-from widgets.PrettyEdit import PrettyEdit
+from pretty_widgets.PrettyEdit import PrettyEdit
 
 
 PADDING      = 6.0

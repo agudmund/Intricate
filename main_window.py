@@ -21,16 +21,16 @@ from graphics.View import IntricateView
 from graphics.Theme import Theme
 from nodes.ClaudeNode import ClaudeNode
 from nodes.ImageNode import ImageNode
-from widgets.PrettyButton import button
-from widgets.PrettyMenu import menu as pretty_menu
+from pretty_widgets.PrettyButton import button
+from pretty_widgets.PrettyMenu import menu as pretty_menu
 from utils.logger import setup_logger
 from utils.PhrasePicker import motivationalMessages
 from utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
 from utils.session import session_path, enter_project
-from widgets.PrettyCombo import combo as pretty_combo
-from widgets.PrettyLabel import label as pretty_label
-from widgets.PrettySlider import slider as pretty_slider
+from pretty_widgets.PrettyCombo import combo as pretty_combo
+from pretty_widgets.PrettyLabel import label as pretty_label
+from pretty_widgets.PrettySlider import slider as pretty_slider
 
 logger = setup_logger()
 

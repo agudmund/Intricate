@@ -16,7 +16,7 @@ from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 from nodes.BaseNode import BaseNode
 from data.ValueNodeData import ValueNodeData
 from graphics.Theme import Theme
-import widgets.PrettySlider as pretty_slider
+import pretty_widgets.PrettySlider as pretty_slider
 
 
 _IMAGES_DIR = Path(__file__).resolve().parent.parent / "Images" / "Value"

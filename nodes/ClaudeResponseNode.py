@@ -23,7 +23,7 @@ _PAD_V          = 8.0    # vertical padding inside text area
 from nodes.BaseNode import BaseNode
 from data.ClaudeResponseNodeData import ClaudeResponseNodeData
 from graphics.Theme import Theme
-from widgets.PrettyEdit import PrettyEdit
+from pretty_widgets.PrettyEdit import PrettyEdit
 
 
 class ClaudeResponseNode(BaseNode):

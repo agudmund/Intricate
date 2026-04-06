@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from nodes.BaseNode import BaseNode
 from data.GitNodeData import GitNodeData
 from graphics.Theme import Theme
-from widgets.PrettyButton import PrettyButton
+from pretty_widgets.PrettyButton import PrettyButton
 from utils.logger import setup_logger
 
 _log = setup_logger("git")
@@ -109,7 +109,7 @@ class _CommitDialog(QDialog):
         layout.addWidget(label)
 
         # ── Text input ───────────────────────────────────────────────────
-        from widgets.PrettyMenu import StyledLineEdit
+        from pretty_widgets.PrettyMenu import StyledLineEdit
         self._input = StyledLineEdit()
         self._input.setPlaceholderText("session sync\u2026")
         self._input.setStyleSheet(f"""
