@@ -334,19 +334,47 @@ class MergeNode(BaseNode):
     _CROSSFADE_S = 0.5   # default crossfade duration in seconds
 
     def _combine_to_file(self) -> None:
-        """Merge all listed audio files with crossfade using ffmpeg acrossfade."""
+        """Merge all listed audio/hold nodes with crossfade using ffmpeg.
+
+        AudioNodes contribute their source file. AudioHoldNodes contribute
+        inline silence via anullsrc — no temp files, no disk I/O for holds.
+        """
         import subprocess as _sp
+        from nodes.AudioHoldNode import AudioHoldNode
         from pretty_widgets.utils.logger import setup_logger
         _log = setup_logger("merge")
 
         ordered = self._get_ordered_audio_nodes()
-        paths = [n.data.source_path for n in ordered if n.data.source_path and Path(n.data.source_path).exists()]
-        if len(paths) < 2:
+        if len(ordered) < 2:
             return
 
-        src_dir = Path(paths[0]).parent
+        # Build input args and track which index is a hold
+        inputs = []
+        input_meta = []   # list of (index, is_hold, hold_seconds)
+        idx = 0
+        src_dir = None
+        ext = ".wav"
+        for node in ordered:
+            if isinstance(node, AudioHoldNode):
+                dur = node.data.hold_seconds
+                inputs.extend(["-f", "lavfi", "-t", f"{dur:.3f}",
+                               "-i", f"anullsrc=r=44100:cl=stereo"])
+                input_meta.append((idx, True, dur))
+            else:
+                p = node.data.source_path
+                if not p or not Path(p).exists():
+                    continue
+                inputs.extend(["-i", p])
+                input_meta.append((idx, False, 0))
+                if src_dir is None:
+                    src_dir = Path(p).parent
+                    ext = Path(p).suffix
+            idx += 1
+
+        if len(input_meta) < 2 or src_dir is None:
+            return
+
         stem = self.data.title or "merged"
-        ext  = Path(paths[0]).suffix
         out  = src_dir / f"{stem}{ext}"
         counter = 2
         while out.exists():
@@ -355,41 +383,25 @@ class MergeNode(BaseNode):
 
         cf = self._CROSSFADE_S
 
+        # Build acrossfade filter chain
+        filters = []
+        prev = f"[{input_meta[0][0]}]"
+        for i in range(1, len(input_meta)):
+            tag = f"[a{i:02d}]"
+            inp = f"[{input_meta[i][0]}]"
+            filters.append(
+                f"{prev}{inp}acrossfade=d={cf}:c1=tri:c2=tri{tag}"
+            )
+            prev = tag
+
+        filter_str = ";".join(filters)
+
         try:
-            if len(paths) == 2:
-                # Simple two-file crossfade
-                _sp.run([
-                    "ffmpeg", "-y",
-                    "-i", paths[0], "-i", paths[1],
-                    "-filter_complex",
-                    f"acrossfade=d={cf}:c1=tri:c2=tri",
-                    str(out),
-                ], capture_output=True, check=True)
-            else:
-                # Chain N-1 acrossfade filters for N inputs
-                inputs = []
-                for p in paths:
-                    inputs.extend(["-i", p])
-
-                # Build filter chain:
-                #   [0][1]acrossfade=d=0.5:c1=tri:c2=tri[a01];
-                #   [a01][2]acrossfade=d=0.5:c1=tri:c2=tri[a02]; ...
-                filters = []
-                prev = "[0]"
-                for i in range(1, len(paths)):
-                    tag = f"[a{i:02d}]"
-                    filters.append(
-                        f"{prev}[{i}]acrossfade=d={cf}:c1=tri:c2=tri{tag}"
-                    )
-                    prev = tag
-
-                filter_str = ";".join(filters)
-                _sp.run([
-                    "ffmpeg", "-y", *inputs,
-                    "-filter_complex", filter_str,
-                    "-map", prev, str(out),
-                ], capture_output=True, check=True)
-
+            _sp.run([
+                "ffmpeg", "-y", *inputs,
+                "-filter_complex", filter_str,
+                "-map", prev, str(out),
+            ], capture_output=True, check=True)
         except Exception as e:
             _log.warning(f"[MergeNode] combine failed: {e}")
             return
@@ -403,19 +415,20 @@ class MergeNode(BaseNode):
         my_pos = self.pos()
         node = scene.add_audio_node(pos=my_pos + QPointF(0, self.rect().height() + 30))
         node.load_from_path(str(out))
-        _log.info(f"[MergeNode] combined {len(paths)} files → {out.name}")
+        _log.info(f"[MergeNode] combined {len(input_meta)} sources → {out.name}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # CONNECTED AUDIO NODES
     # ─────────────────────────────────────────────────────────────────────────
 
     def _get_connected_audio_nodes(self) -> list:
-        """Return AudioNodes connected to this node, in connection order."""
+        """Return AudioNodes and AudioHoldNodes connected to this node."""
         from nodes.AudioNode import AudioNode
+        from nodes.AudioHoldNode import AudioHoldNode
         audio_nodes = []
         for conn in self.connections:
             other = conn.end_node if conn.start_node is self else conn.start_node
-            if other and isinstance(other, AudioNode):
+            if other and isinstance(other, (AudioNode, AudioHoldNode)):
                 audio_nodes.append(other)
         return audio_nodes
 
