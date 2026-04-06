@@ -254,6 +254,14 @@ class MergeNode(BaseNode):
         self._play_btn.setToolTip("Play / Pause")
         self._buttons.append(self._play_btn)
 
+        self._combine_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\U0001f4be",   # 💾
+            set_emoji=lambda _: self._combine_to_file(),
+        )
+        self._combine_btn.setToolTip("Combine into single file")
+        self._buttons.append(self._combine_btn)
+
     # ─────────────────────────────────────────────────────────────────────────
     # SEQUENTIAL PLAYBACK
     # ─────────────────────────────────────────────────────────────────────────
@@ -322,6 +330,80 @@ class MergeNode(BaseNode):
         self._current_index = 0
         self._play_btn.update()
         self.update()
+
+    _CROSSFADE_S = 0.5   # default crossfade duration in seconds
+
+    def _combine_to_file(self) -> None:
+        """Merge all listed audio files with crossfade using ffmpeg acrossfade."""
+        import subprocess as _sp
+        from pretty_widgets.utils.logger import setup_logger
+        _log = setup_logger("merge")
+
+        ordered = self._get_ordered_audio_nodes()
+        paths = [n.data.source_path for n in ordered if n.data.source_path and Path(n.data.source_path).exists()]
+        if len(paths) < 2:
+            return
+
+        src_dir = Path(paths[0]).parent
+        stem = self.data.title or "merged"
+        ext  = Path(paths[0]).suffix
+        out  = src_dir / f"{stem}{ext}"
+        counter = 2
+        while out.exists():
+            out = src_dir / f"{stem}_{counter}{ext}"
+            counter += 1
+
+        cf = self._CROSSFADE_S
+
+        try:
+            if len(paths) == 2:
+                # Simple two-file crossfade
+                _sp.run([
+                    "ffmpeg", "-y",
+                    "-i", paths[0], "-i", paths[1],
+                    "-filter_complex",
+                    f"acrossfade=d={cf}:c1=tri:c2=tri",
+                    str(out),
+                ], capture_output=True, check=True)
+            else:
+                # Chain N-1 acrossfade filters for N inputs
+                inputs = []
+                for p in paths:
+                    inputs.extend(["-i", p])
+
+                # Build filter chain:
+                #   [0][1]acrossfade=d=0.5:c1=tri:c2=tri[a01];
+                #   [a01][2]acrossfade=d=0.5:c1=tri:c2=tri[a02]; ...
+                filters = []
+                prev = "[0]"
+                for i in range(1, len(paths)):
+                    tag = f"[a{i:02d}]"
+                    filters.append(
+                        f"{prev}[{i}]acrossfade=d={cf}:c1=tri:c2=tri{tag}"
+                    )
+                    prev = tag
+
+                filter_str = ";".join(filters)
+                _sp.run([
+                    "ffmpeg", "-y", *inputs,
+                    "-filter_complex", filter_str,
+                    "-map", prev, str(out),
+                ], capture_output=True, check=True)
+
+        except Exception as e:
+            _log.warning(f"[MergeNode] combine failed: {e}")
+            return
+
+        # Spawn a new AudioNode with the combined file
+        scene = self.scene()
+        if not scene or not hasattr(scene, 'add_audio_node'):
+            return
+
+        from PySide6.QtCore import QPointF
+        my_pos = self.pos()
+        node = scene.add_audio_node(pos=my_pos + QPointF(0, self.rect().height() + 30))
+        node.load_from_path(str(out))
+        _log.info(f"[MergeNode] combined {len(paths)} files → {out.name}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # CONNECTED AUDIO NODES

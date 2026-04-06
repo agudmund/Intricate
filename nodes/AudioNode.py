@@ -8,7 +8,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QRectF, QUrl, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QPainter, QFont, QColor
 from PySide6.QtWidgets import QFileDialog
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -164,6 +164,79 @@ class AudioNode(BaseNode):
         self._loop_btn.setToolTip("Loop: on" if self.data.looping else "Loop: off")
         self._loop_btn.update()
 
+    def _split_at_playhead(self) -> None:
+        """Split the audio file at the current playhead position into two files.
+
+        Uses ffmpeg for lossless splitting. Creates two new AudioNodes in the
+        scene — part A (start to playhead) and part B (playhead to end).
+        """
+        if not self.data.source_path or self._duration_ms <= 0 or self._position_ms <= 0:
+            return
+        if self._position_ms >= self._duration_ms:
+            return
+
+        import subprocess as _sp
+        src = Path(self.data.source_path)
+        if not src.exists():
+            return
+
+        # Was playing? Pause first.
+        was_playing = self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        if was_playing:
+            self._player.pause()
+
+        split_ms = self._position_ms
+        split_s  = split_ms / 1000.0
+        stem     = src.stem
+        ext      = src.suffix
+
+        part_a = src.parent / f"{stem}_A{ext}"
+        part_b = src.parent / f"{stem}_B{ext}"
+
+        # Avoid overwriting — append number if exists
+        counter = 2
+        while part_a.exists():
+            part_a = src.parent / f"{stem}_A_{counter}{ext}"
+            counter += 1
+        counter = 2
+        while part_b.exists():
+            part_b = src.parent / f"{stem}_B_{counter}{ext}"
+            counter += 1
+
+        try:
+            # Part A: start to split point
+            _sp.run([
+                "ffmpeg", "-y", "-i", str(src),
+                "-t", f"{split_s:.3f}",
+                "-c", "copy", str(part_a),
+            ], capture_output=True, check=True)
+
+            # Part B: split point to end
+            _sp.run([
+                "ffmpeg", "-y", "-i", str(src),
+                "-ss", f"{split_s:.3f}",
+                "-c", "copy", str(part_b),
+            ], capture_output=True, check=True)
+        except Exception as e:
+            _log.warning(f"[AudioNode] split failed: {e}")
+            return
+
+        # Spawn two new AudioNodes in the scene
+        scene = self.scene()
+        if not scene or not hasattr(scene, 'add_audio_node'):
+            return
+
+        my_pos = self.pos()
+        offset_y = self.rect().height() + 30
+
+        node_a = scene.add_audio_node(pos=my_pos + QPointF(0, offset_y))
+        node_a.load_from_path(str(part_a))
+
+        node_b = scene.add_audio_node(pos=my_pos + QPointF(0, offset_y * 2))
+        node_b.load_from_path(str(part_b))
+
+        _log.info(f"[AudioNode] split '{stem}' at {split_s:.3f}s → {part_a.name}, {part_b.name}")
+
     def _open_file_browser(self) -> None:
         start_dir = settings.get_nested("node", "audio", "last_dir", "")
         path, _ = QFileDialog.getOpenFileName(
@@ -193,6 +266,15 @@ class AudioNode(BaseNode):
 
         # Play/pause
         # Play/pause moved to the status line — click the ▶/‖ area to toggle
+
+        # Split at playhead — scissors emoji
+        self._split_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\u2702",   # ✂
+            set_emoji=lambda _: self._split_at_playhead(),
+        )
+        self._split_btn.setToolTip("Split at playhead")
+        self._buttons.append(self._split_btn)
 
         # Loop toggle — plain arrows, no emoji background
         self._loop_btn = EmojiButton(
