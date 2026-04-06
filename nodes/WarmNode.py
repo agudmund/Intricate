@@ -41,6 +41,8 @@ class WarmNode(BaseNode):
         Both survive session save/load cleanly.
     """
 
+    _has_depth_toggle = True
+
     def __init__(self, data: WarmNodeData | None = None):
         if data is None:
             data = WarmNodeData()
@@ -79,7 +81,7 @@ class WarmNode(BaseNode):
                 font-family: {Theme.healthFontFamily};
                 font-size: 9pt;
                 border: none;
-                padding: 0px;
+                padding: 12px 0px 0px 0px;
                 selection-background-color: {Theme.primaryBorder};
             }}
         """)
