@@ -217,6 +217,22 @@ Current sections:
 [apps]            # warm_editor — external editor launched on WarmNode double-click
 ```
 
+## Pretty Widgets Package
+
+The `widgets/` directory in this repo contains **local copies** of the Pretty Widgets, but the **source of truth** is the shared pip package:
+
+- **Repo:** https://github.com/agudmund/Pretty-Widgets
+- **Local path:** `C:\Users\thisg\Desktop\Pretty Widgets`
+- **Install:** `pip install -e "C:\Users\thisg\Desktop\Pretty Widgets"`
+- **Package name:** `pretty_widgets`
+- **Version check:** `python -c "import pretty_widgets; print(pretty_widgets.__version__)"`
+
+The package contains: PrettyButton, PrettyLabel, PrettyMenu, PrettyCombo, PrettySlider, PrettyCheckbox, and PrettyEdit. All seven widgets are shared across the Single Shared Braincell app family (Intricate, Notepad++ Duplex+ Turbo, and future apps).
+
+The widgets depend on `graphics.Theme` and `utils.settings` from the consuming app — those modules are not part of the package yet (planned for a future consolidation).
+
+If you see `widgets/PrettyButton.py` etc. in this repo but need to understand why they might be out of date, check the package version against the repo. The package is the canonical version.
+
 ## Cross-App Environment Variables
 
 | Variable | Purpose |
