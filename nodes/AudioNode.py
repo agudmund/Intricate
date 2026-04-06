@@ -88,6 +88,17 @@ class AudioNode(BaseNode):
         if not self.data.caption:
             self.data.caption = path.stem
         self.data.title = self.data.caption or "Audio"
+
+        # Auto-size width to fit the title text
+        from PySide6.QtGui import QFontMetrics
+        fm = QFontMetrics(QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize)))
+        text_w = fm.horizontalAdvance(self.data.title) + self._CONTENT_PAD * 2 + 20
+        min_w = max(self.data.width, text_w)
+        if min_w > self.rect().width():
+            r = self.rect()
+            self.setRect(QRectF(r.x(), r.y(), min_w, r.height()))
+            self.data.width = min_w
+
         self.update()
 
     def _on_duration(self, ms: int) -> None:
@@ -136,7 +147,6 @@ class AudioNode(BaseNode):
             self._player.pause()
         else:
             self._player.play()
-        self._play_btn.update()
         self.update()
 
     def _toggle_mute(self) -> None:
@@ -182,13 +192,7 @@ class AudioNode(BaseNode):
         self._buttons.append(self._mute_btn)
 
         # Play/pause
-        self._play_btn = EmojiButton(
-            self,
-            get_emoji=lambda: "\u2016" if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState else "\u25b6",  # ‖ / ▶
-            set_emoji=lambda _: self._toggle_playback(),
-        )
-        self._play_btn.setToolTip("Play / Pause")
-        self._buttons.append(self._play_btn)
+        # Play/pause moved to the status line — click the ▶/‖ area to toggle
 
         # Loop toggle — plain arrows, no emoji background
         self._loop_btn = EmojiButton(
@@ -211,14 +215,17 @@ class AudioNode(BaseNode):
         return QRectF(
             r.x() + self._PROGRESS_PAD,
             r.bottom() - self._PROGRESS_H - self._PROGRESS_PAD,
-            r.width() - self._PROGRESS_PAD * 2,
+            r.width() * 0.66,
             self._PROGRESS_H,
         )
 
     def _scrub_to(self, x: float) -> None:
         pr = self._progress_rect()
         ratio = max(0.0, min(1.0, (x - pr.left()) / max(1.0, pr.width())))
+        was_playing = self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
         self._player.setPosition(int(ratio * self._duration_ms))
+        if not was_playing:
+            self._player.pause()
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION
@@ -237,17 +244,44 @@ class AudioNode(BaseNode):
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton and self._progress_rect().contains(event.pos()):
+            self._scrubbing = True
             self._scrub_to(event.pos().x())
             event.accept()
             return
+        # Click on the status area — play/pause (▶/‖) or restart (⏮)
+        if event.button() == Qt.LeftButton and self.data.source_path and self._duration_ms > 0:
+            r = self.rect()
+            pad = self._CONTENT_PAD
+            body_y = r.top() + self._body_top()
+            prog_y = self._progress_rect().top()
+            pos = event.pos()
+            if body_y <= pos.y() < prog_y:
+                btn_left = r.left() + pad
+                if btn_left <= pos.x() < btn_left + 24:
+                    # Play/pause button zone
+                    self._toggle_playback()
+                    event.accept()
+                    return
+                elif btn_left + 24 <= pos.x() < btn_left + 52:
+                    # Restart button zone
+                    self._player.setPosition(0)
+                    self._player.play()
+                    self.update()
+                    event.accept()
+                    return
+        self._scrubbing = False
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        if event.buttons() & Qt.LeftButton and self._progress_rect().contains(event.pos()):
+        if self._scrubbing and event.buttons() & Qt.LeftButton:
             self._scrub_to(event.pos().x())
             event.accept()
             return
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._scrubbing = False
+        super().mouseReleaseEvent(event)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT
@@ -293,22 +327,41 @@ class AudioNode(BaseNode):
 
         if not self.data.source_path:
             status = "Double-click to browse for audio"
-        elif self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            pos_s = self._position_ms // 1000
-            dur_s = self._duration_ms // 1000
-            status = f"Playing  {pos_s // 60}:{pos_s % 60:02d} / {dur_s // 60}:{dur_s % 60:02d}"
+            painter.drawText(
+                QRectF(r.left() + pad, y, r.width() - pad * 2, 20),
+                Qt.AlignLeft | Qt.AlignTop,
+                status,
+            )
         elif self._duration_ms > 0:
             pos_s = self._position_ms // 1000
             dur_s = self._duration_ms // 1000
-            status = f"Paused  {pos_s // 60}:{pos_s % 60:02d} / {dur_s // 60}:{dur_s % 60:02d}"
-        else:
-            status = "Ready"
+            playing = self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
 
-        painter.drawText(
-            QRectF(r.left() + pad, y, r.width() - pad * 2, 20),
-            Qt.AlignLeft | Qt.AlignTop,
-            status,
-        )
+            # Play/Pause button: ▶ or ‖  |  Restart button: ⏮
+            pp_icon = "\u2016" if playing else "\u25b6"   # ‖ / ▶
+            restart_icon = "\u23ee"                       # ⏮
+            pos_ms_frac = self._position_ms % 1000
+            dur_ms_frac = self._duration_ms % 1000
+            time_str = f"{pos_s // 60}:{pos_s % 60:02d}.{pos_ms_frac:03d} / {dur_s // 60}:{dur_s % 60:02d}.{dur_ms_frac:03d}"
+
+            x = r.left() + pad
+            # Draw transport icons at title font size for visibility at zoom
+            icon_font = QFont(self._BODY_FONT, max(1, Theme.aboutFontSize + 4))
+            painter.setFont(icon_font)
+            painter.drawText(QRectF(x, y - 2, 24, 24), Qt.AlignLeft | Qt.AlignVCenter, pp_icon)
+            x += 24
+            painter.drawText(QRectF(x, y - 2, 24, 24), Qt.AlignLeft | Qt.AlignVCenter, restart_icon)
+            x += 28
+            # Switch back to body font for time string
+            painter.setFont(body_font)
+            painter.drawText(QRectF(x, y, r.width() - pad - x + r.left(), 20),
+                             Qt.AlignLeft | Qt.AlignTop, time_str)
+        else:
+            painter.drawText(
+                QRectF(r.left() + pad, y, r.width() - pad * 2, 20),
+                Qt.AlignLeft | Qt.AlignTop,
+                "Ready",
+            )
 
         # ── Progress bar (always visible) ────────────────────────────────
         painter.setOpacity(1.0)
@@ -321,8 +374,25 @@ class AudioNode(BaseNode):
         if self._duration_ms > 0:
             ratio = self._position_ms / self._duration_ms
             fill_rect = QRectF(pr.left(), pr.top(), pr.width() * ratio, pr.height())
-            painter.setBrush(QColor(Theme.primaryBorder))
+            from PySide6.QtGui import QLinearGradient
+            grad = QLinearGradient(fill_rect.left(), 0, fill_rect.right(), 0)
+            grad.setColorAt(0.0, QColor("#1e1e1e"))
+            grad.setColorAt(0.4, QColor("#5c3e4f"))
+            grad.setColorAt(0.7, QColor("#a56a85"))
+            grad.setColorAt(1.0, QColor("#d87a9e"))
+            painter.setBrush(grad)
             painter.drawRoundedRect(fill_rect, 3, 3)
+
+        # End-of-bar marker — tall vertical line at the right edge
+        from PySide6.QtGui import QPen
+        marker_pen = QPen(QColor(Theme.textPrimary), 3)
+        painter.setPen(marker_pen)
+        painter.setBrush(Qt.NoBrush)
+        end_x = pr.right()
+        painter.drawLine(
+            int(end_x), int(pr.top() - 10),
+            int(end_x), int(pr.bottom() + 10),
+        )
 
         painter.restore()
 
