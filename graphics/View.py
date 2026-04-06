@@ -13,6 +13,7 @@ from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QCursor
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 _VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv", ".flv", ".m4v"}
+_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma"}
 
 
 class IntricateView(QGraphicsView):
@@ -369,7 +370,7 @@ class IntricateView(QGraphicsView):
         """Accept drags that contain at least one supported image or video file."""
         if event.mimeData().hasUrls():
             paths = [u.toLocalFile() for u in event.mimeData().urls()]
-            supported = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS
+            supported = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS | _AUDIO_EXTENSIONS
             if any(Path(p).suffix.lower() in supported for p in paths):
                 event.acceptProposedAction()
                 return
@@ -408,7 +409,11 @@ class IntricateView(QGraphicsView):
             scene = self.scene()
             if not scene:
                 continue
-            if ext in _VIDEO_EXTENSIONS and hasattr(scene, 'add_video_node'):
+            if ext in _AUDIO_EXTENSIONS and hasattr(scene, 'add_audio_node'):
+                node = scene.add_audio_node(pos=drop_scene_pos + offset)
+                node.load_from_path(path)
+                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+            elif ext in _VIDEO_EXTENSIONS and hasattr(scene, 'add_video_node'):
                 scene.add_video_node(
                     pos  = drop_scene_pos + offset,
                     path = path
