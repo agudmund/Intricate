@@ -488,9 +488,8 @@ class IntricateApp(QMainWindow):
             return  # same app, nothing to do
         self._last_docked_exe = exe
         offsets = self._get_dock_offsets()
-        if exe not in offsets:
-            return
-        offset = offsets[exe]
+        # Desktop / no window behind → park at top edge; known app → use its offset
+        offset = offsets.get(exe, 0)
         target_y = self.screen().availableGeometry().top() + offset
         if self.pos().y() == target_y:
             return  # already in position
