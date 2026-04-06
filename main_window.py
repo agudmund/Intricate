@@ -172,40 +172,23 @@ class IntricateApp(QMainWindow):
         self.top_toolbar.setStyleSheet(f"background-color: {Theme.windowBg};")
 
         layout = QHBoxLayout(self.top_toolbar)
-        layout.setContentsMargins(0, 2, 0, 2)
-        # layout.setSpacing(20)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        layout.addStretch()
-
-        # ── Centre group: combo + curtains in a tight sub-layout
-        #    so they share a single vertical axis regardless of Qt's
-        #    per-widget alignment quirks.
-        centre = QHBoxLayout()
-        # centre.setContentsMargins(0, 0, 0, 0)
-        # centre.setSpacing(6)
-        centre.setAlignment(Qt.AlignVCenter)
-        centre.setSpacing(4)
+        # ── Project selector: absolute child at fixed x=550 ─────────────────
         combo = self.setup_project_selector()
-        centre.addWidget(combo)
-        # Size the curtains button to match the combo height so they sit flush
-        combo_h = combo.maximumHeight() or combo.sizeHint().height()
+        combo.setMaximumWidth(140)
+        combo.setParent(self.top_toolbar)
+
+        # All toolbar buttons share the same size from Theme
+        _btn = Theme.toolbarBtnSize
+        _ico = QSize(Theme.toolbarBtnIconSize, Theme.toolbarBtnIconSize)
+
         self._curtains_btn = self.setup_iconic_button(
             clicked=self.toggle_curtains,
         )
-        self._curtains_btn.setFixedSize(combo_h, combo_h)
-        self._curtains_btn.setIconSize(QSize(combo_h - Theme.iconPadding,
-                                             combo_h - Theme.iconPadding))
-        centre.addWidget(self._curtains_btn)
-
-        # ── DEBUG: uncomment to restore the manual dock snap button ────────
-        # self._dock_btn = self.setup_iconic_button(
-        #     clicked=self._toggle_dock_position, icon=Theme.iconDock
-        # )
-        # self._dock_btn.setFixedSize(combo_h, combo_h)
-        # self._dock_btn.setIconSize(QSize(combo_h - Theme.iconPadding,
-        #                                  combo_h - Theme.iconPadding))
-        # self._dock_btn.setToolTip("Snap position")
-        # centre.addWidget(self._dock_btn)
+        self._curtains_btn.setFixedSize(_btn, _btn)
+        self._curtains_btn.setIconSize(_ico)
+        self._curtains_btn.setParent(self.top_toolbar)
 
         # Dock watcher — polls the window behind while curtains are rolled up
         self._dock_watcher = QTimer(self)
@@ -213,36 +196,28 @@ class IntricateApp(QMainWindow):
         self._dock_watcher.timeout.connect(self._check_window_behind)
         self._last_docked_exe = ""
 
-        layout.addLayout(centre)
-
-        layout.addStretch()
-
         # ── Tray / Maximize / Exit buttons: absolute children, pinned right ──
-        # Match the combo/curtains height so all toolbar controls sit flush.
-        btn_h = combo_h
-        btn_icon = QSize(btn_h - Theme.iconPadding, btn_h - Theme.iconPadding)
-
         self._tray_btn = self.setup_iconic_button(
             clicked=self._minimize_to_tray, icon=Theme.iconTray
         )
-        self._tray_btn.setFixedSize(btn_h, btn_h)
-        self._tray_btn.setIconSize(btn_icon)
+        self._tray_btn.setFixedSize(_btn, _btn)
+        self._tray_btn.setIconSize(_ico)
         self._tray_btn.setParent(self.top_toolbar)
         self._tray_btn.setToolTip("Minimize to tray")
 
         self._max_btn = self.setup_iconic_button(
             clicked=self.toggle_fullscreen, icon=Theme.iconMaximize
         )
-        self._max_btn.setFixedSize(btn_h, btn_h)
-        self._max_btn.setIconSize(btn_icon)
+        self._max_btn.setFixedSize(_btn, _btn)
+        self._max_btn.setIconSize(_ico)
         self._max_btn.setParent(self.top_toolbar)
         self._max_btn.setToolTip("Maximize")
 
         self._exit_btn = self.setup_iconic_button(
             clicked=self.close, icon=Theme.iconClose
         )
-        self._exit_btn.setFixedSize(btn_h, btn_h)
-        self._exit_btn.setIconSize(btn_icon)
+        self._exit_btn.setFixedSize(_btn, _btn)
+        self._exit_btn.setIconSize(_ico)
         self._exit_btn.setParent(self.top_toolbar)
         # Deferred first position — toolbar width isn't known at construction time
         QTimer.singleShot(0, self._reposition_exit_btn)
@@ -257,11 +232,23 @@ class IntricateApp(QMainWindow):
         if not hasattr(self, '_exit_btn') or not hasattr(self, 'top_toolbar'):
             return
         tb  = self.top_toolbar
-        gap = 2
+        gap = Theme.toolbarBtnGap
         y   = (tb.height() - self._exit_btn.height()) // 2
 
+        # Project selector — fixed at Theme.toolbarTitleX
+        if hasattr(self, 'project_selector'):
+            cy = (tb.height() - self.project_selector.height()) // 2
+            self.project_selector.move(Theme.toolbarTitleX, cy)
+            self.project_selector.raise_()
+
+        # Curtains button — fixed at Theme.toolbarCurtainsX
+        if hasattr(self, '_curtains_btn'):
+            cy = (tb.height() - self._curtains_btn.height()) // 2
+            self._curtains_btn.move(Theme.toolbarCurtainsX, cy)
+            self._curtains_btn.raise_()
+
         # Exit button flush right
-        ex = tb.width() - self._exit_btn.width() - 4
+        ex = tb.width() - self._exit_btn.width() - Theme.toolbarRightMargin
         self._exit_btn.move(ex, y)
         self._exit_btn.raise_()
 
