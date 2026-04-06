@@ -385,6 +385,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_merge_node(self, pos: QPointF | None = None):
+        """Add a MergeNode for listing connected audio files."""
+        from nodes.MergeNode import MergeNode
+        from data.MergeNodeData import MergeNodeData
+        node = MergeNode(MergeNodeData())
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_git_node(self, pos: QPointF | None = None):
         """Add a GitNode showing repo status across all Desktop projects."""
         from nodes.GitNode import GitNode
@@ -786,6 +797,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.AudioNode import AudioNode
             from data.AudioNodeData import AudioNodeData
             node = AudioNode(AudioNodeData.from_dict(d))
+
+        elif node_type == "merge":
+            from nodes.MergeNode import MergeNode
+            from data.MergeNodeData import MergeNodeData
+            node = MergeNode(MergeNodeData.from_dict(d))
 
         elif node_type == "palette":
             from nodes.PaletteNode import PaletteNode

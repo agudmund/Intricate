@@ -1137,6 +1137,9 @@ class IntricateApp(QMainWindow):
         aud_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconAudio, fallback_color="#9a8a7a")), "Audio Node"
         )
+        mrg_action = menu.addAction(
+            QIcon(Theme.icon(Theme.iconMerge, fallback_color="#8a9a7a")), "Merge Node"
+        )
 
         img_action.triggered.connect(self._spawn_image_node)
         vid_action.triggered.connect(self._spawn_video_node)
@@ -1144,6 +1147,7 @@ class IntricateApp(QMainWindow):
         val_action.triggered.connect(self._spawn_value_node)
         stk_action.triggered.connect(self._spawn_sticker_node)
         aud_action.triggered.connect(self._spawn_audio_node)
+        mrg_action.triggered.connect(self._spawn_merge_node)
 
         # Show below the button, left-aligned
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
@@ -1165,6 +1169,9 @@ class IntricateApp(QMainWindow):
 
     def _spawn_audio_node(self):
         self._spawn(self.scene.add_audio_node, "Yummi >> Tummy >> voila!")
+
+    def _spawn_merge_node(self):
+        self._spawn(self.scene.add_merge_node, "converging streams")
 
     # =========================================================================
     # The buttons and stuff at the bottom of the Ui

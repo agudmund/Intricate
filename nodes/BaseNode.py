@@ -329,7 +329,10 @@ class BaseNode(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     _has_depth_toggle = False   # set to True in subclasses that want the front/back button
-    _show_ports_btn   = False   # set to True in subclasses that want the ports toggle button
+    _show_ports_btn   = False   # DEBUG ONLY — shows port visibility toggle button.
+                                # Ports drive wire connection curves. This button is for
+                                # debug inspection of connection geometry, not for end users.
+                                # Leave False unless actively debugging wire routing.
     _show_emoji_btn   = True    # set to False in subclasses that skip the emoji shuffler
 
     def _build_buttons(self) -> None:
