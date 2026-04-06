@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QGraphicsItem, QFileDialog
 
 from nodes.BaseNode import BaseNode
 from data.StickerNodeData import StickerNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 class StickerNode(BaseNode):

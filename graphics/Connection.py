@@ -311,4 +311,4 @@ class Connection(QGraphicsPathItem):
 
 
 # Deferred — avoids circular import since Connection lives in graphics/
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme

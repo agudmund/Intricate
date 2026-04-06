@@ -24,9 +24,9 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
-from utils.logger import setup_logger, set_log_level, TRACE
-import utils.settings as settings
-from utils.settings import appName, orgName
+from pretty_widgets.utils.logger import setup_logger, set_log_level, TRACE
+import pretty_widgets.utils.settings as settings
+from pretty_widgets.utils.settings import appName, orgName
 
 _INSTANCE_PORT = int(settings.get("intricate", "instance_port", default=47321))
 _instance_lock: socket.socket | None = None
@@ -69,7 +69,7 @@ def main():
     elif args.debug:
         _debug, _trace = True, False
     else:
-        import utils.settings as _s_boot
+        import pretty_widgets.utils.settings as _s_boot
         _toml_level = str(_s_boot.get("intricate", "log_level", "info")).lower().strip()
         _trace = _toml_level == "trace"
         _debug = _toml_level == "debug"
@@ -119,11 +119,11 @@ def main():
     QImageReader.setAllocationLimit(1024)   # MB — plenty for any canvas image
 
     logger.log(TRACE, "[boot:3] importing utils.settings")
-    import utils.settings as settings
+    import pretty_widgets.utils.settings as settings
     logger.log(TRACE, "[boot:4] utils.settings imported")
 
     logger.log(TRACE, "[boot:5] importing graphics.Theme")
-    from graphics.Theme import Theme
+    from pretty_widgets.graphics.Theme import Theme
     logger.log(TRACE, "[boot:6] graphics.Theme imported")
     logger.log(TRACE, f"[boot:6a] Theme.icon = {Theme.__dict__.get('icon', 'NOT IN __dict__')}")
     logger.log(TRACE, f"[boot:6b] hasattr(Theme, 'icon') = {hasattr(Theme, 'icon')}")

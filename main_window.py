@@ -18,14 +18,14 @@ from PySide6.QtGui import QIcon, QPixmap, QColor
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
 from graphics.View import IntricateView
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 from nodes.ClaudeNode import ClaudeNode
 from nodes.ImageNode import ImageNode
 from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
-from utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger
 from utils.PhrasePicker import motivationalMessages
-from utils.settings import appName, set_nested, get_nested, set_value, get
+from pretty_widgets.utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
 from utils.session import session_path, enter_project
 from pretty_widgets.PrettyCombo import combo as pretty_combo
@@ -455,7 +455,7 @@ class IntricateApp(QMainWindow):
             "claude.exe" = 0
             "chrome.exe" = 50
         """
-        import utils.settings as _s
+        import pretty_widgets.utils.settings as _s
         return _s.get("intricate", "dock_offsets", default={})
 
     def _toggle_dock_position(self) -> None:

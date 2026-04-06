@@ -15,9 +15,9 @@ from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel
 
 from nodes.BaseNode import BaseNode
 from data.GitNodeData import GitNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyButton import PrettyButton
-from utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger
 
 _log = setup_logger("git")
 

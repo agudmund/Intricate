@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene
 from PySide6.QtCore import Qt, QPointF, QTimer
 from PySide6.QtGui import QPixmap
 
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 # ── Size tuning ───────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ from PySide6.QtGui import QPainter, QPainterPath, QPen, QColor, QBrush
 
 from .BaseNode import BaseNode
 from data.BezierNodeData import BezierNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 # Visual constants resolved from Theme at import time

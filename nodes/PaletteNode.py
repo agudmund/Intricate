@@ -18,7 +18,7 @@ from PySide6.QtGui import QPainter, QColor, QDrag, QPixmap
 
 from nodes.BaseNode import BaseNode
 from data.PaletteNodeData import PaletteNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 PADDING      = 6.0

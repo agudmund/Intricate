@@ -14,7 +14,7 @@ from PySide6.QtGui import QPainter, QFont, QColor, QPen
 from nodes.BaseNode import BaseNode
 from data.HealthNodeData import HealthNodeData
 from utils.OSClickMonitor import OSClickMonitor
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 class HealthNode(BaseNode):

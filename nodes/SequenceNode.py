@@ -16,8 +16,8 @@ from PySide6.QtGui import QPainter, QPixmap, QColor, QPen, QPainterPath, QFont
 
 from nodes.BaseNode import BaseNode
 from data.SequenceNodeData import SequenceNodeData
-from graphics.Theme import Theme
-import utils.settings as settings
+from pretty_widgets.graphics.Theme import Theme
+import pretty_widgets.utils.settings as settings
 
 
 # Layout constants

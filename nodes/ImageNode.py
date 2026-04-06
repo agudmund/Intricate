@@ -17,9 +17,9 @@ from PySide6.QtGui import (
 
 from nodes.BaseNode import BaseNode
 from data.ImageNodeData import ImageNodeData
-from graphics.Theme import Theme
-import utils.settings as settings
-from utils.logger import setup_logger
+from pretty_widgets.graphics.Theme import Theme
+import pretty_widgets.utils.settings as settings
+from pretty_widgets.utils.logger import setup_logger
 
 logger = setup_logger("image")
 

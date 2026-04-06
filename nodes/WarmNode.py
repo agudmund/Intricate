@@ -20,8 +20,8 @@ from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
 from nodes.BaseNode import BaseNode
 from data.WarmNodeData import WarmNodeData
-from graphics.Theme import Theme
-from utils.logger import setup_logger
+from pretty_widgets.graphics.Theme import Theme
+from pretty_widgets.utils.logger import setup_logger
 
 _log = setup_logger("warmnode")
 
@@ -278,7 +278,7 @@ class WarmNode(BaseNode):
 
     def _resolve_editor_cmd(self) -> list[str] | None:
         """Build the subprocess command list for the editor."""
-        import utils.settings as _settings
+        import pretty_widgets.utils.settings as _settings
         editor_path = _settings.get("apps", "warm_editor", "").strip()
 
         # If configured path is a directory with main.py, run from source

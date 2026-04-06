@@ -8,7 +8,7 @@
 
 from pathlib import Path
 
-from utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger
 
 _log = setup_logger("happytimes")
 

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QGraphicsItem
 
 from data.NodeData import NodeData
 from nodes.NodeBehaviour import NodeBehaviour
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 from nodes.NodeButton import NodeButton, EmojiButton, BUTTON_SIZE
 
 

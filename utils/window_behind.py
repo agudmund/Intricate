@@ -10,7 +10,7 @@ import ctypes
 import ctypes.wintypes as wt
 import os
 
-from utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger
 
 logger = setup_logger("window_behind")
 

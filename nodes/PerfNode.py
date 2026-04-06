@@ -14,7 +14,7 @@ from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
 from nodes.BaseNode import BaseNode
 from data.PerfNodeData import PerfNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 _WINDOW = 120   # rolling frame-time window (samples)

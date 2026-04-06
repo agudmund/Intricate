@@ -15,9 +15,9 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from nodes.BaseNode import BaseNode
 from data.AudioNodeData import AudioNodeData
-from graphics.Theme import Theme
-from utils.logger import setup_logger
-import utils.settings as settings
+from pretty_widgets.graphics.Theme import Theme
+from pretty_widgets.utils.logger import setup_logger
+import pretty_widgets.utils.settings as settings
 
 _log = setup_logger("audio_node")
 

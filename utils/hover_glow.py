@@ -11,7 +11,7 @@ from PySide6.QtCore import (
     QPropertyAnimation, QSequentialAnimationGroup, QEasingCurve,
 )
 from PySide6.QtGui import QColor
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 class HoverGlow(QObject):

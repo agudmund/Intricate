@@ -15,7 +15,7 @@ from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 
 from nodes.BaseNode import BaseNode
 from data.ValueNodeData import ValueNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 import pretty_widgets.PrettySlider as pretty_slider
 
 
@@ -103,7 +103,7 @@ class ValueNode(BaseNode):
     def _place_ports(self) -> None:
         if not self.input_ports:
             return
-        import utils.settings as _s
+        import pretty_widgets.utils.settings as _s
         r      = self.rect()
         ox     = 10
         y_off  = float(_s.get_nested("node", "value", "input_port_y_offset", 0))
@@ -167,19 +167,19 @@ class ValueNode(BaseNode):
     # ── Geometry helpers ──────────────────────────────────────────────────────
 
     def _crop_left(self) -> float:
-        import utils.settings as _s
+        import pretty_widgets.utils.settings as _s
         return float(_s.get_nested("node", "value", "crop_left", 0))
 
     def _crop_right(self) -> float:
-        import utils.settings as _s
+        import pretty_widgets.utils.settings as _s
         return float(_s.get_nested("node", "value", "crop_right", 0))
 
     def _crop_top(self) -> float:
-        import utils.settings as _s
+        import pretty_widgets.utils.settings as _s
         return float(_s.get_nested("node", "value", "crop_top", 0))
 
     def _crop_bottom(self) -> float:
-        import utils.settings as _s
+        import pretty_widgets.utils.settings as _s
         return float(_s.get_nested("node", "value", "crop_bottom", 0))
 
     def _cropped_rect(self) -> QRectF:

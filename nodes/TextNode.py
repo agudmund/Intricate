@@ -15,7 +15,7 @@ from PySide6.QtGui import QPainter, QFont, QColor
 
 from nodes.BaseNode import BaseNode
 from data.TextNodeData import TextNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyEdit import PrettyEdit
 
 

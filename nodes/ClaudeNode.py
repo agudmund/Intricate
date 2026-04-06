@@ -22,8 +22,8 @@ from pretty_widgets.PrettyMenu import StyledTextEdit as QTextEdit
 
 from nodes.BaseNode import BaseNode
 from data.ClaudeNodeData import ClaudeNodeData
-from graphics.Theme import Theme
-import utils.settings as settings
+from pretty_widgets.graphics.Theme import Theme
+import pretty_widgets.utils.settings as settings
 
 
 class _InputEdit(QTextEdit):

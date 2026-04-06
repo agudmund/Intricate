@@ -20,7 +20,7 @@ from PySide6.QtGui import QPainter, QIcon
 
 from nodes.BaseNode import BaseNode
 from data.TreeNodeData import TreeNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyEdit import PrettyEdit
 
 
@@ -403,7 +403,7 @@ class TreeNode(BaseNode):
 
     def _make_walker(self) -> _TreeWalker:
         """Build a walker from current [node.tree] TOML settings."""
-        import utils.settings as _s
+        import pretty_widgets.utils.settings as _s
         g = lambda *keys, default=None: _s.get_nested(*keys, default)
         return _TreeWalker(
             root          = Path(self.data.project_path),

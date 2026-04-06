@@ -14,7 +14,7 @@ from PySide6.QtGui import QPainter, QFont, QColor
 
 from nodes.BaseNode import BaseNode
 from data.LogNodeData import LogNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyEdit import PrettyEdit
 
 
@@ -108,7 +108,7 @@ class LogNode(BaseNode):
     @staticmethod
     def _resolve_log_path() -> Path:
         try:
-            from utils.settings import get as _get
+            from pretty_widgets.utils.settings import get as _get
             log_dir = _get("shared", "log_dir", default=None)
             if log_dir:
                 return Path(log_dir) / "nodal.log"

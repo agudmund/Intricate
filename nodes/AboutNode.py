@@ -16,7 +16,7 @@ _Z_BACK        = -10.0
 
 from nodes.BaseNode import BaseNode
 from data.AboutNodeData import AboutNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyEdit import PrettyEdit
 
 

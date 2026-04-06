@@ -18,7 +18,7 @@ try:
 except ImportError:
     _send_to_trash = None
 
-from utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger
 from utils.helpers import ensure_dir
 
 logger = setup_logger("session")

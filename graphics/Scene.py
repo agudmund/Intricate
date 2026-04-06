@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QGraphicsScene
 from PySide6.QtCore import QPointF, QTimer
 from PySide6.QtGui import QColor
 
-from utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger
 logger = setup_logger()
 
 
@@ -241,7 +241,7 @@ class IntricateScene(QGraphicsScene):
         """Add a ClaudeNode at pos. Always connects to the default session folder."""
         from nodes.ClaudeNode import ClaudeNode
         from data.ClaudeNodeData import ClaudeNodeData
-        from graphics.Theme import Theme
+        from pretty_widgets.graphics.Theme import Theme
         data = ClaudeNodeData(
             width=Theme.claudeDefaultWidth,
             height=Theme.claudeDefaultHeight,

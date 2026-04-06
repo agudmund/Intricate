@@ -9,7 +9,7 @@
 import os
 import shutil
 from pathlib import Path
-from utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger
 
 logger = setup_logger("helpers")
 
@@ -133,7 +133,7 @@ def snapshot_node(node, filename: str | None = None, scale: int = 2) -> Path | N
     """
     from PySide6.QtCore import QRectF
     from PySide6.QtGui import QImage, QPainter
-    import utils.settings as _s
+    import pretty_widgets.utils.settings as _s
 
     scene = node.scene()
     if not scene:
@@ -209,7 +209,7 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     from datetime import datetime
     from PySide6.QtCore import QRectF
     from PySide6.QtGui import QImage, QPainter
-    import utils.settings as _s
+    import pretty_widgets.utils.settings as _s
 
     scene = view.scene()
     if not scene:

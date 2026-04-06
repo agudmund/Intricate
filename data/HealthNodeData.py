@@ -8,7 +8,7 @@
 
 from dataclasses import dataclass, field
 from data.NodeData import NodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 @dataclass

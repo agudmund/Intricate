@@ -12,8 +12,8 @@ from pathlib import Path
 from PySide6.QtCore import QUrl, QTimer
 from PySide6.QtMultimedia import QSoundEffect
 
-import utils.settings as settings
-from utils.logger import setup_logger
+import pretty_widgets.utils.settings as settings
+from pretty_widgets.utils.logger import setup_logger
 
 _log = setup_logger("audio")
 

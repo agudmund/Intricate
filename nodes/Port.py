@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsDropShadowEffect
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QPen, QColor
 
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 # Port visual constants — resolved from Theme at import time

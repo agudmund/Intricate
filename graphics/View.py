@@ -427,5 +427,5 @@ class IntricateView(QGraphicsView):
 # Theme import at bottom — View.py is part of the graphics package and
 # Theme lives there too. Deferred to avoid any circular import risk at
 # package initialisation time.
-from .Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 from pathlib import Path

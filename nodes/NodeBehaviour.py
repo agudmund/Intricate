@@ -10,7 +10,7 @@ import random
 import warnings
 from PySide6.QtCore import QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QBrush
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 # Pulse values resolved from Theme

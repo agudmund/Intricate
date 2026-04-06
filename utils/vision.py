@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QTextEdit
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtCore import Qt, QThread, Signal
 
-from utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger
 
 _log = setup_logger("vision")
 

@@ -11,7 +11,7 @@ from PySide6.QtGui import QPainter, QFont, QFontMetrics, QColor
 
 from nodes.BaseNode import BaseNode
 from data.InfoNodeData import InfoNodeData
-from graphics.Theme import Theme
+from pretty_widgets.graphics.Theme import Theme
 
 
 class InfoNode(BaseNode):
