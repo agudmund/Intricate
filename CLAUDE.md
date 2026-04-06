@@ -34,6 +34,8 @@ Every Python file must have this exact 3-line docstring header:
 
 ## Architecture
 
+> **Forensic Map:** `Documents/Architecture.md` is the comprehensive reference for all three repos, shared infrastructure, design patterns, node types, and the build system. When making structural changes (new node types, new shared modules, build system changes, new apps in the family), update that document to keep it current.
+
 > The tree below shows the current structure as an example of how the project is organised — it is not a fixed inventory. New files added to any package are part of the same architecture and should be treated accordingly.
 
 ```
