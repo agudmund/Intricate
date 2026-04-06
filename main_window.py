@@ -1191,7 +1191,7 @@ class IntricateApp(QMainWindow):
 
         # ── Info bar row ──────────────────────────────────────────────────────
         _info_bar_row = QWidget()
-        _info_bar_row.setFixedHeight(18)
+        _info_bar_row.setFixedHeight(28)
         _info_bar_row.setStyleSheet("background: transparent;")
         _info_bar_layout = QHBoxLayout(_info_bar_row)
         _info_bar_layout.setContentsMargins(0, 0, 0, 0)
@@ -1199,10 +1199,10 @@ class IntricateApp(QMainWindow):
 
         self.info_label = pretty_label("", alignment=Qt.AlignCenter)
         self.info_label.setStyleSheet(
-            f"background: transparent; border: none; padding: 0px 4px;"
+            f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
             f" color: {Theme.textPrimary}; font-family: Chandler42; font-size: 16px;"
         )
-        self.info_label.setFixedHeight(18)
+        self.info_label.setFixedHeight(28)
 
         self._info_opacity = QGraphicsOpacityEffect()
         self._info_opacity.setOpacity(0.0)
