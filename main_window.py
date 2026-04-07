@@ -1266,8 +1266,12 @@ class IntricateApp(QMainWindow):
         menu = self._styled_menu()
         act_bezier  = menu.addAction(QIcon(Theme.icon(Theme.iconBezier)),  "The Prestigious Bezier Node")
         act_palette = menu.addAction(QIcon(Theme.icon(Theme.iconPalette)), "Palette")
+        act_value   = menu.addAction(QIcon(Theme.icon(Theme.iconValue)),   "Value Node")
+        act_sticker = menu.addAction(QIcon(Theme.icon(Theme.iconSticker, fallback_color="#c9b8a7")), "Sticker")
         act_bezier.triggered.connect(self._spawn_bezier_node)
         act_palette.triggered.connect(self._spawn_palette_node)
+        act_value.triggered.connect(self._spawn_value_node)
+        act_sticker.triggered.connect(self._spawn_sticker_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_health_menu(self, btn: QPushButton) -> None:
@@ -1321,12 +1325,6 @@ class IntricateApp(QMainWindow):
         seq_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconSequence)), "Image Sequence Scrubber"
         )
-        val_action = menu.addAction(
-            QIcon(Theme.icon(Theme.iconValue)), "Value Node"
-        )
-        stk_action = menu.addAction(
-            QIcon(Theme.icon(Theme.iconSticker, fallback_color="#c9b8a7")), "Sticker"
-        )
         aud_action = menu.addAction(
             QIcon(Theme.icon(Theme.iconAudio, fallback_color="#9a8a7a")), "Audio Node"
         )
@@ -1337,8 +1335,6 @@ class IntricateApp(QMainWindow):
         img_action.triggered.connect(self._spawn_image_node)
         vid_action.triggered.connect(self._spawn_video_node)
         seq_action.triggered.connect(self._spawn_sequence_node)
-        val_action.triggered.connect(self._spawn_value_node)
-        stk_action.triggered.connect(self._spawn_sticker_node)
         aud_action.triggered.connect(self._spawn_audio_node)
         mrg_action.triggered.connect(self._spawn_merge_node)
         hold_action = menu.addAction(
