@@ -1622,6 +1622,8 @@ class IntricateApp(QMainWindow):
         desktop_folders = sorted(
             p.name for p in desktop.iterdir()
             if p.is_dir() and not p.name.startswith(".")
+            and p.name != self._NEW_SESSION_SENTINEL
+            and p.name != "_runtime"
         ) if desktop.exists() else []
         self.project_selector.addItems(desktop_folders)
         self.project_selector.addItem(self._NEW_SESSION_SENTINEL)
