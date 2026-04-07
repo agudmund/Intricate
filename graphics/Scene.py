@@ -443,6 +443,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_fbx_node(self, pos: QPointF | None = None):
+        """Add an FbxNode — placeholder for future 3D model viewing."""
+        from nodes.FbxNode import FbxNode
+        from data.FbxNodeData import FbxNodeData
+        node = FbxNode(FbxNodeData())
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_sticker_node(self, pos: QPointF | None = None, path: str | None = None):
         """Add a chromeless alpha-PNG sticker pinned on the canvas."""
         from nodes.StickerNode import StickerNode
@@ -851,6 +862,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.ClaudeInfoNode import ClaudeInfoNode
             from data.ClaudeInfoNodeData import ClaudeInfoNodeData
             node = ClaudeInfoNode(ClaudeInfoNodeData.from_dict(d))
+
+        elif node_type == "fbx":
+            from nodes.FbxNode import FbxNode
+            from data.FbxNodeData import FbxNodeData
+            node = FbxNode(FbxNodeData.from_dict(d))
 
         if node is not None:
             node.setPos(QPointF(d.get("x", 0.0), d.get("y", 0.0)))

@@ -1231,6 +1231,7 @@ class IntricateApp(QMainWindow):
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
     def _spawn_value_node(self):       self._spawn(self.scene.add_value_node,        "dialing in the value")
     def _spawn_sticker_node(self):     self._spawn(self.scene.add_sticker_node,      "sticker time")
+    def _spawn_fbx_node(self):         self._spawn(self.scene.add_fbx_node,          "vertices from thin air")
     def _spawn_palette_node(self):     self._spawn(self.scene.add_palette_node,      "mixing colors")
 
     def _restore_deleted(self) -> None:
@@ -1268,10 +1269,12 @@ class IntricateApp(QMainWindow):
         act_palette = menu.addAction(QIcon(Theme.icon(Theme.iconPalette)), "The Beautiful Palette Node")
         act_value   = menu.addAction(QIcon(Theme.icon(Theme.iconValue)),   "The Oddly Important Value Node")
         act_sticker = menu.addAction(QIcon(Theme.icon(Theme.iconSticker, fallback_color="#c9b8a7")), "Snickers Stickers!")
+        act_fbx     = menu.addAction(QIcon(Theme.icon(Theme.iconFbx,     fallback_color="#c0a888")), "The Fluff and Honey Node")
         act_bezier.triggered.connect(self._spawn_bezier_node)
         act_palette.triggered.connect(self._spawn_palette_node)
         act_value.triggered.connect(self._spawn_value_node)
         act_sticker.triggered.connect(self._spawn_sticker_node)
+        act_fbx.triggered.connect(self._spawn_fbx_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_health_menu(self, btn: QPushButton) -> None:
