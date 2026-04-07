@@ -810,11 +810,13 @@ class IntricateApp(QMainWindow):
         # ── Fog slider ────────────────────────────────────────────────────────
         # Vertical, top = opaque (255), bottom = transparent (0).
         # Placeholder — will drive fog layer alpha when that arrives.
+        import pretty_widgets.utils.settings as _s
+        _fog_init = int(_s.get_nested("intricate", "canvas", "fog_alpha", 180))
         self.fog_slider = pretty_slider(
             Qt.Vertical,
             use_scroll_icon=True,
             range=(0, 255),
-            value=180,
+            value=_fog_init,
             invertedAppearance=False,
             fixedWidth=Theme.sidebarWidth() - Theme.sidebarPadding * 2,
             minimumHeight=80,
@@ -859,23 +861,27 @@ class IntricateApp(QMainWindow):
 
         layout.addSpacing(Theme.sidebarPadding)
 
-        # Depletion timer — drains 1% every 9 seconds (100% over 15 minutes)
+        # Depletion timer — drains 1% every 36 seconds (100% over 1 hour)
+        self._joy_hungry = False          # dirty flag — cleared by any feed click
         self._joy_timer = QTimer(self)
-        self._joy_timer.setInterval(9000)
+        self._joy_timer.setInterval(36000)
         self._joy_timer.timeout.connect(self._deplete_joy)
         self._joy_timer.start()
 
         return sidebar
 
     def _on_fog_slider_changed(self, value: int) -> None:
-        """Drive canvas fog transparency."""
+        """Drive canvas fog transparency and persist to settings."""
         self.view._fog_alpha = value
         self.view.viewport().update()
+        import pretty_widgets.utils.settings as _s
+        _s.set_nested("intricate", "canvas", "fog_alpha", value)
 
     def _feed_joy(self) -> None:
-        """Top up the joy bucket by 10%, capped at 100."""
+        """Feed the joy bucket — any click resets the timer and clears hunger."""
         v = min(100, self.joy_bar.value() + 10)
         self.joy_bar.setValue(v)
+        self._joy_hungry = False
         self._stop_hunger_glow()
         # Reset the depletion timer so feeding buys a full cycle of peace
         if hasattr(self, '_joy_timer') and self._joy_timer.isActive():
@@ -886,10 +892,12 @@ class IntricateApp(QMainWindow):
         v = max(0, self.joy_bar.value() - 1)
         self.joy_bar.setValue(v)
         self._maybe_meow(v)
-        # Start or stop the hunger glow based on level + curtain state
-        if v < 15 and self.is_collapsed:
+        # Flip dirty once below threshold; feeding is the only way back
+        if v < 15 and not self._joy_hungry:
+            self._joy_hungry = True
+        if self._joy_hungry and self.is_collapsed:
             self._start_hunger_glow()
-        else:
+        elif not self._joy_hungry:
             self._stop_hunger_glow()
 
     def _maybe_meow(self, hunger_pct: int) -> None:
@@ -955,12 +963,8 @@ class IntricateApp(QMainWindow):
 
     def _start_hunger_glow(self) -> None:
         """Begin a gentle looping glow on the toolbar to ask for attention."""
-        if hasattr(self, '_hunger_glow_anim') and self._hunger_glow_anim is not None:
+        if hasattr(self, '_glow_timer') and self._glow_timer.isActive():
             return  # already glowing
-
-        self._hunger_glow_anim = QPropertyAnimation(self.top_toolbar, b"styleSheet")
-        # QPropertyAnimation can't interpolate stylesheets, so use a timer-driven approach
-        self._hunger_glow_anim = None  # clear the false start
 
         self._glow_phase = 0.0
         self._glow_timer = QTimer(self)
@@ -984,10 +988,9 @@ class IntricateApp(QMainWindow):
 
     def _stop_hunger_glow(self) -> None:
         """Stop the hunger glow and restore the toolbar to its natural color."""
-        if hasattr(self, '_glow_timer'):
+        if hasattr(self, '_glow_timer') and self._glow_timer.isActive():
             self._glow_timer.stop()
         self.top_toolbar.setStyleSheet(f"background-color: {Theme.windowBg};")
-        self._hunger_glow_anim = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # NODE SPAWN ACTIONS
