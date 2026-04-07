@@ -29,8 +29,6 @@ IMAGE_PADDING   = 6.0       # Inset on all sides — prevents image clipping rou
 CLIP_RADIUS_MIN = 2.0       # Minimum clip radius inside the padding
 
 
-_BUTTON_ZONE_H = 40.0   # px reserved for button strip (4 pad + 32 button + 4 gap)
-
 
 class ImageNode(BaseNode):
     """
@@ -55,6 +53,8 @@ class ImageNode(BaseNode):
         Sessions are self-contained — no file path dependencies.
     """
 
+    _has_depth_toggle = True
+
     def __init__(self, data: ImageNodeData | None = None):
         if data is None:
             data = ImageNodeData()
@@ -63,12 +63,6 @@ class ImageNode(BaseNode):
         self._pixmap: QPixmap | None = None   # Full-resolution source pixmap
         self._scaled_cache: QPixmap | None = None          # Cached scaled pixmap
         self._scaled_cache_size: tuple[int, int] | None = None  # (w, h) key
-
-        # Button row starts hidden — double-click the top strip to reveal
-        self._buttons_visible = False
-        self._anim_top_offset = 8.0
-        for btn in self._buttons:
-            btn.hide()
 
         # ── Restore image if session data carries one ─────────────────────────
         if data.image_b64:
@@ -83,18 +77,26 @@ class ImageNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _top_offset(self) -> float:
-        """Vertical space reserved above the image — full button zone or minimal pad."""
-        return _BUTTON_ZONE_H if self._buttons_visible else 15.0
+        """Vertical space reserved above the image — tracks the animated shelf offset."""
+        return self._anim_top_offset
 
     def _image_rect(self) -> QRectF:
-        """The padded image display area below the button shelf."""
+        """The padded image display area below the button shelf.
+
+        Height is computed as if the shelf is always fully open so the
+        image keeps a constant aspect ratio regardless of shelf state.
+        Only the vertical position shifts with the animation.
+        """
         r = self.rect()
         top = r.y() + self._top_offset() + IMAGE_PADDING
+        # Fixed height — always reserve full shelf space so the image
+        # container stays the same size whether buttons are shown or not.
+        fixed_h = r.height() - self._BUTTON_ZONE_H - IMAGE_PADDING * 2
         return QRectF(
             r.x()     + IMAGE_PADDING,
             top,
             r.width() - IMAGE_PADDING * 2,
-            r.height() - (top - r.y()) - IMAGE_PADDING,
+            fixed_h,
         )
 
     def _spawn_caption_node(self, caption: str) -> None:
@@ -268,7 +270,7 @@ class ImageNode(BaseNode):
     def _build_buttons(self) -> None:
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
-        eye_pix = Theme.icon(Theme.iconVisionEye, fallback_color="#9ab8d9")
+        eye_pix = Theme.icon("vision_rename.png", fallback_color="#9ab8d9")
         self._buttons.append(NodeButton(self, eye_pix, self._vision_rename))
         stamp_pix   = Theme.icon(Theme.iconStamp, fallback_color="#d4a96a")
         confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
@@ -328,17 +330,11 @@ class ImageNode(BaseNode):
 
     def mouseDoubleClickEvent(self, event) -> None:
         """Double-click the top strip to toggle buttons, image area to browse."""
-        # Top strip above the image area — toggle button row
-        if event.pos().y() < self.rect().top() + self._top_offset():
-            self._buttons_visible = not self._buttons_visible
-            for btn in self._buttons:
-                btn.setVisible(self._buttons_visible)
-            event.accept()
-            return
         if self._image_rect().contains(event.pos()):
             self._open_file_browser()
             event.accept()
             return
+        # Fall through to BaseNode — handles shelf toggle on top-strip double-click
         super().mouseDoubleClickEvent(event)
 
     # ─────────────────────────────────────────────────────────────────────────

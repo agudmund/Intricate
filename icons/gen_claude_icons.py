@@ -103,4 +103,36 @@ for i in range(3):
 _save(img, 'claude_response')
 
 
+# ── 4. Claude Vision Eye — tent (upper) + eye symbol (lower) ────────────────
+#    An almond-shaped eye with a round pupil — represents the Vision API.
+img, draw = _base()
+_tent(draw, cy - 140, scale=0.75, stroke=36)
+
+# Eye — almond shape: two arcs sharing left/right tips + circular pupil
+eye_cy    = cy + 220
+eye_hw    = 300     # half-width of almond (tips at cx ± hw)
+peak_up   = 150     # how much upper lid curves above eye_cy
+peak_dn   = 120     # how much lower lid curves below eye_cy
+pupil_r   = 65      # pupil radius
+
+# Upper lid — top half of an ellipse centred at eye_cy
+draw.arc(
+    [cx - eye_hw, eye_cy - peak_up, cx + eye_hw, eye_cy + peak_up],
+    start=180, end=360,
+    fill=C, width=32,
+)
+# Lower lid — bottom half of a slightly flatter ellipse, same centre
+draw.arc(
+    [cx - eye_hw, eye_cy - peak_dn, cx + eye_hw, eye_cy + peak_dn],
+    start=0, end=180,
+    fill=C, width=32,
+)
+# Pupil — filled circle
+draw.ellipse(
+    [cx - pupil_r, eye_cy - pupil_r, cx + pupil_r, eye_cy + pupil_r],
+    fill=C,
+)
+_save(img, 'vision_eye')
+
+
 print('all done')

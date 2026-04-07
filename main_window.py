@@ -176,7 +176,6 @@ class IntricateApp(QMainWindow):
 
         # ── Project selector: absolute child at fixed x=550 ─────────────────
         combo = self.setup_project_selector()
-        combo.setMaximumWidth(140)
         combo.setParent(self.top_toolbar)
 
         # All toolbar buttons share the same size from Theme
@@ -1630,6 +1629,20 @@ class IntricateApp(QMainWindow):
         if saved in desktop_folders:
             self.project_selector.setCurrentText(saved)
         self._active_project = self.project_selector.currentText()
+        self._fit_project_selector()
+
+    def _fit_project_selector(self) -> None:
+        """Resize the project selector to fit the longest item name."""
+        fm = self.project_selector.fontMetrics()
+        longest = 0
+        for i in range(self.project_selector.count()):
+            w = fm.horizontalAdvance(self.project_selector.itemText(i))
+            if w > longest:
+                longest = w
+        # Fixed width — fills the space between anchor and curtains button.
+        # Short names sit trimmer inside; long names use the full width.
+        fixed_w = Theme.toolbarCurtainsX - Theme.toolbarTitleX - 4
+        self.project_selector.setFixedWidth(fixed_w)
 
     # =========================================================================
     # Mouse and Hover Events

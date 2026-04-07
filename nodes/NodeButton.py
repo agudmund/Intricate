@@ -80,7 +80,7 @@ class NodeButton(QGraphicsObject):
     # ─────────────────────────────────────────────────────────────────────────
 
     def boundingRect(self) -> QRectF:
-        return QRectF(0.0, 0.0, BUTTON_SIZE, BUTTON_SIZE)
+        return QRectF(0.0, 0.0, BUTTON_SIZE, BUTTON_SIZE + EMOJI_OVERFLOW)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT
@@ -97,8 +97,11 @@ class NodeButton(QGraphicsObject):
             if self._in_confirm and self._pix_confirm
             else self._pix_normal
         )
+        # Offset pixmap down by EMOJI_OVERFLOW so it aligns vertically
+        # with emoji glyph rendering in adjacent EmojiButtons.
+        draw_rect = QRectF(0.0, EMOJI_OVERFLOW, BUTTON_SIZE, BUTTON_SIZE)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
-        painter.drawPixmap(self.boundingRect().toRect(), pix)
+        painter.drawPixmap(draw_rect.toRect(), pix)
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION

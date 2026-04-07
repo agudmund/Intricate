@@ -35,6 +35,7 @@ ICONS = [
     "value_node",
     "palette_node",
     "image_node",
+    "vision_eye",
 ]
 
 OUT = os.path.dirname(__file__)
