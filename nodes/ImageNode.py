@@ -90,7 +90,7 @@ class ImageNode(BaseNode):
         r = self.rect()
         top = r.y() + self._top_offset() + IMAGE_PADDING
         # Fixed height — always reserve full shelf space so the image
-        # container stays the same size whether buttons are shown or not.
+        # keeps a constant aspect ratio regardless of shelf state.
         fixed_h = r.height() - self._BUTTON_ZONE_H - IMAGE_PADDING * 2
         return QRectF(
             r.x()     + IMAGE_PADDING,
@@ -295,6 +295,39 @@ class ImageNode(BaseNode):
         )
         self._border_btn.setToolTip("Toggle ivory border")
         self._buttons.append(self._border_btn)
+        convert_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\U0001F504",  # 🔄
+            set_emoji=lambda _: self._convert_to_png(),
+        )
+        convert_btn.setToolTip("Convert source image to PNG")
+        self._buttons.append(convert_btn)
+
+    def _convert_to_png(self) -> None:
+        """Convert the source file to PNG, update the node to point at the new file."""
+        src = self.data.source_path
+        if not src:
+            self._spawn_caption_node("no source path")
+            return
+        p = Path(src)
+        if not p.exists():
+            self._spawn_caption_node(f"file not found — {p.name}")
+            return
+        if p.suffix.lower() == ".png":
+            self._spawn_caption_node("already PNG")
+            return
+        png_path = p.with_suffix(".png")
+        try:
+            from PIL import Image
+            with Image.open(p) as img:
+                img.save(png_path, "PNG")
+            # Reload from the new PNG
+            self.load_from_path(png_path)
+            self._spawn_caption_node(f"converted: {p.name} → {png_path.name}")
+            logger.info(f"converted {p.name} → {png_path.name}")
+        except Exception as exc:
+            self._spawn_caption_node(f"convert failed: {exc}")
+            logger.warning(f"convert to PNG failed: {exc}")
 
     def _vision_rename(self) -> None:
         """Button action: call the vision API to identify this image and update its caption."""
@@ -334,7 +367,7 @@ class ImageNode(BaseNode):
         from utils.HappyTimes import read_png_vision_stamp
         stamp = read_png_vision_stamp(p)
         if stamp:
-            self._spawn_caption_node(f"stamp: {stamp}")
+            self._spawn_caption_node(stamp)
         else:
             self._spawn_caption_node("no stamp found")
 
@@ -368,14 +401,16 @@ class ImageNode(BaseNode):
             self._spawn_caption_node(f"stamp: file not found — {p.name}")
             return
         from utils.HappyTimes import write_png_vision_stamp
+        if not caption.startswith("Intricate: "):
+            caption = f"Intricate: {caption}"
         write_png_vision_stamp(p, caption)
         # Verify it stuck
         from utils.HappyTimes import read_png_vision_stamp
         verify = read_png_vision_stamp(p)
         if verify == caption:
-            self._spawn_caption_node(f"stamped: {caption}")
+            self._spawn_caption_node(caption)
         else:
-            self._spawn_caption_node(f"stamp failed — wrote '{caption}' but read back '{verify}'")
+            self._spawn_caption_node(f"failed — wrote '{caption}' but read back '{verify}'")
 
     def _trigger_vision(self) -> None:
         """Send this node's image to a ClaudeNode's vision API."""
