@@ -196,8 +196,9 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     alpha channel suitable for compositing or chroma-free workflows.
 
     Filename convention:
-        {timestamp}_{session}_{lowest-about-label}.png
-    Any empty segment is omitted.
+        {session}_{lowest-about-label}_{timestamp}.png
+    Any empty segment is omitted. Timestamp last so files sort by
+    session → label → time in Explorer.
 
     Args:
         view:         The IntricateView instance.
@@ -229,15 +230,17 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     scene.render(painter, QRectF(0, 0, w, h), scene_rect)
     painter.end()
 
-    # ── Build filename: timestamp_session_aboutlabel.png ─────────────────
+    # ── Build filename: session_aboutlabel_timestamp.png ──────────────────
+    # Timestamp last so Explorer sorts by session → label → time.
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    parts = [stamp]
+    parts = []
     s = _sanitize(session_name)
     if s:
         parts.append(s)
     about = _sanitize(_lowest_about_label(view))
     if about:
         parts.append(about)
+    parts.append(stamp)
     title = "_".join(parts) + ".png"
 
     out_dir = Path(_s.get("shared", "images_dir", default="."))
