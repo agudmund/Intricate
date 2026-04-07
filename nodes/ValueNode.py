@@ -16,7 +16,7 @@ from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 from nodes.BaseNode import BaseNode
 from data.ValueNodeData import ValueNodeData
 from pretty_widgets.graphics.Theme import Theme
-import pretty_widgets.PrettySlider as pretty_slider
+from pretty_widgets.PrettySlider import slider as pretty_slider
 
 
 _IMAGES_DIR = Path(__file__).resolve().parent.parent / "Images" / "Value"
@@ -49,7 +49,7 @@ class ValueNode(BaseNode):
         self._last_crop: tuple = (self._crop_left(), self._crop_right(), self._crop_top(), self._crop_bottom())
 
         # ── Slider ────────────────────────────────────────────────────────────
-        self._slider = pretty_slider.slider(
+        self._slider = pretty_slider(
             orientation=Qt.Orientation.Horizontal,
         )
         self._slider.setRange(0, max(len(self._frames) - 1, 0))
