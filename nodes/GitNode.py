@@ -18,6 +18,8 @@ _SUBPROCESS_FLAGS = (
     else 0
 )
 
+import threading
+
 from PySide6.QtCore import Qt, QRectF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
 from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel
@@ -78,6 +80,7 @@ def _scan_repos() -> list[tuple[str, str]]:
         except Exception:
             repos.append((folder.name, "dirty"))
     return repos
+
 
 
 class _CommitDialog(QDialog):
@@ -177,6 +180,14 @@ class GitNode(BaseNode):
         self._apply_depth()
 
         self._repos: list[tuple[str, bool]] = []
+        self._scanning = False
+        self._pending_repos = None          # written by worker thread
+
+        # Delivery timer — runs on main thread, checks for worker results
+        self._delivery_timer = QTimer()
+        self._delivery_timer.setInterval(250)
+        self._delivery_timer.timeout.connect(self._check_delivery)
+
         self._poll_timer = QTimer()
         self._poll_timer.timeout.connect(self._refresh)
         self._poll_timer.start(_POLL_MS)
@@ -184,8 +195,28 @@ class GitNode(BaseNode):
         QTimer.singleShot(0, self._refresh)
 
     def _refresh(self) -> None:
+        if self._scanning:
+            return
+        self._scanning = True
+        self._delivery_timer.start()
+        threading.Thread(target=self._scan_worker, daemon=True).start()
+
+    def _scan_worker(self) -> None:
         try:
-            self._repos = _scan_repos()
+            self._pending_repos = _scan_repos()
+        except Exception:
+            self._pending_repos = []
+
+    def _check_delivery(self) -> None:
+        """Main-thread timer that picks up results from the worker."""
+        if self._pending_repos is None:
+            return
+        repos = self._pending_repos
+        self._pending_repos = None
+        self._scanning = False
+        self._delivery_timer.stop()
+        try:
+            self._repos = repos
             self._auto_height()
             self.update()
         except RuntimeError:
@@ -233,7 +264,6 @@ class GitNode(BaseNode):
         if result != QDialog.DialogCode.Accepted or not dlg.message().strip():
             return
 
-        import threading
         threading.Thread(
             target=self._push_worker,
             args=(session_repos, dlg.message().strip()),
@@ -359,6 +389,7 @@ class GitNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         self._poll_timer.stop()
+        self._delivery_timer.stop()
         super()._prepare_for_removal()
 
     def to_dict(self) -> dict:
