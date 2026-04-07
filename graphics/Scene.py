@@ -633,6 +633,7 @@ class IntricateScene(QGraphicsScene):
         from nodes.AudioNode import AudioNode
         from nodes.PerfNode import PerfNode
         from nodes.GitNode import GitNode
+        from nodes.WarmNode import WarmNode
         for item in list(self.items()):
             if isinstance(item, BaseNode):
                 try:
@@ -643,6 +644,13 @@ class IntricateScene(QGraphicsScene):
                 if isinstance(item, (PerfNode, GitNode)):
                     try:
                         item._poll_timer.stop()
+                    except Exception:
+                        pass
+                # Tear down bridge watcher + file so Notepad++ doesn't
+                # write stale data into a session that's no longer loaded.
+                if isinstance(item, WarmNode):
+                    try:
+                        item._teardown_bridge()
                     except Exception:
                         pass
                 # Stop media players so VideoNodes don't keep decoding in RAM.
