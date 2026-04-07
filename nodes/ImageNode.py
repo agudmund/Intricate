@@ -206,8 +206,9 @@ class ImageNode(BaseNode):
             self.update()
 
     def _on_vision_failed(self, error: str) -> None:
-        """Log Vision failure quietly — filename stem caption stays."""
-        logger.debug(f"vision caption skipped: {error[:80]}")
+        """Spawn an AboutNode with the full API error so it's always visible on canvas."""
+        self._spawn_caption_node(error)
+        logger.warning(f"vision failed: {error}")
 
     def _restore_from_path(self, path: Path) -> None:
         """Load pixmap from path for session restore — no b64 encode, render context not ready yet."""
@@ -267,19 +268,32 @@ class ImageNode(BaseNode):
         self.update()
 
     def _build_buttons(self) -> None:
-        from nodes.NodeButton import NodeButton
+        from nodes.NodeButton import NodeButton, EmojiButton
         super()._build_buttons()
         eye_pix = Theme.icon("vision_rename.png", fallback_color="#9ab8d9")
         vision_btn = NodeButton(self, eye_pix, self._vision_rename)
         vision_btn.setToolTip("Ask Claude what this image is about")
         self._buttons.append(vision_btn)
-        stamp_pix   = Theme.icon(Theme.iconStamp, fallback_color="#d4a96a")
-        confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
-        self._buttons.append(NodeButton(self, stamp_pix, self._stamp_source_file, confirm_pix))
-        border_off_pix = Theme.icon(Theme.iconBorderOff, fallback_color="#7a8a9a")
-        border_on_pix  = Theme.icon(Theme.iconBorderOn,  fallback_color="#e1d5c6")
-        self._border_btn = NodeButton(self, border_off_pix, self._toggle_border, border_on_pix, toggle=True)
-        self._border_btn._in_confirm = self.data.show_border
+        stamp_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\U0001F48E",  # 💎
+            set_emoji=lambda _: self._stamp_source_file(),
+        )
+        stamp_btn.setToolTip("Goddess level and Stamp On It")
+        self._buttons.append(stamp_btn)
+        inspect_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\U0001F50D",  # 🔍
+            set_emoji=lambda _: self._inspect_stamp(),
+        )
+        inspect_btn.setToolTip("Read PNG metadata stamp")
+        self._buttons.append(inspect_btn)
+        self._border_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\u25cb",  # ○
+            set_emoji=lambda _: self._toggle_border(),
+        )
+        self._border_btn.setToolTip("Toggle ivory border")
         self._buttons.append(self._border_btn)
 
     def _vision_rename(self) -> None:
@@ -301,18 +315,52 @@ class ImageNode(BaseNode):
         except Exception:
             pass
 
+    def _inspect_stamp(self) -> None:
+        """Read the PNG tEXt stamp and spawn an AboutNode showing its contents."""
+        src = self.data.source_path
+        if not src:
+            self._spawn_caption_node("no source path")
+            return
+        p = Path(src)
+        # Check if the file is actually a PNG at the binary level
+        try:
+            magic = p.read_bytes()[:8]
+            if magic != b'\x89PNG\r\n\x1a\n':
+                self._spawn_caption_node(f"not a real PNG — magic: {magic[:4]}")
+                return
+        except Exception as exc:
+            self._spawn_caption_node(f"cannot read file: {exc}")
+            return
+        from utils.HappyTimes import read_png_vision_stamp
+        stamp = read_png_vision_stamp(p)
+        if stamp:
+            self._spawn_caption_node(f"stamp: {stamp}")
+        else:
+            self._spawn_caption_node("no stamp found")
+
     def _stamp_source_file(self) -> None:
         """Write the current caption into the source PNG's tEXt metadata."""
         src = self.data.source_path
         if not src:
-            logger.debug("stamp skipped — no source path")
+            self._spawn_caption_node("stamp: no source path")
             return
         caption = self.data.caption
         if not caption:
-            logger.debug("stamp skipped — no caption to write")
+            self._spawn_caption_node("stamp: no caption to write")
+            return
+        p = Path(src)
+        if not p.exists():
+            self._spawn_caption_node(f"stamp: file not found — {p.name}")
             return
         from utils.HappyTimes import write_png_vision_stamp
-        write_png_vision_stamp(Path(src), caption)
+        write_png_vision_stamp(p, caption)
+        # Verify it stuck
+        from utils.HappyTimes import read_png_vision_stamp
+        verify = read_png_vision_stamp(p)
+        if verify == caption:
+            self._spawn_caption_node(f"stamped: {caption}")
+        else:
+            self._spawn_caption_node(f"stamp failed — wrote '{caption}' but read back '{verify}'")
 
     def _trigger_vision(self) -> None:
         """Send this node's image to a ClaudeNode's vision API."""
