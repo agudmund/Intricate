@@ -879,6 +879,18 @@ class IntricateApp(QMainWindow):
         btn_container.setLayout(joy_btn_row)
         layout.addWidget(btn_container, alignment=Qt.AlignHCenter)
 
+        # ── Joy bucket counter ─────────────────────────────────────────────
+        import pretty_widgets.utils.settings as _s
+        self._joy_bucket_count = int(_s.get_nested("intricate", "joy", "buckets", 0))
+        self._joy_happy_secs   = float(_s.get_nested("intricate", "joy", "happy_secs", 0.0))
+        self._joy_bucket_label = pretty_label(
+            str(self._joy_bucket_count),
+            alignment=Qt.AlignCenter,
+        )
+        self._joy_bucket_label.setToolTip(self._joy_bucket_tooltip())
+        self._joy_bucket_label.setStyleSheet(f"color: {Theme.textPrimary}; font-size: 10pt;")
+        layout.addWidget(self._joy_bucket_label, alignment=Qt.AlignHCenter)
+
         layout.addSpacing(Theme.sidebarPadding)
 
         # Depletion timer — drains 1% every 36 seconds (100% over 1 hour)
@@ -891,6 +903,19 @@ class IntricateApp(QMainWindow):
         self._joy_timer.setInterval(self._JOY_AWAKE_INTERVAL)
         self._joy_timer.timeout.connect(self._deplete_joy)
         self._joy_timer.start()
+
+        # Grace + happy accumulator — ticks every second while at 100%
+        self._JOY_GRACE_SECS      = 600     # 10 minutes of grace before depletion
+        self._JOY_BUCKET_SECS     = 3600    # 1 hour of total happy time = +1 bucket
+        self._joy_grace_remaining = 0.0     # seconds left in current grace window
+        self._joy_in_grace        = False   # True while bar is 100% and grace active
+        self._happy_timer = QTimer(self)
+        self._happy_timer.setInterval(1000)  # 1-second resolution
+        self._happy_timer.timeout.connect(self._tick_happy)
+
+        # If we launch at 100%, start the grace immediately
+        if self.joy_bar.value() == 100:
+            self._begin_grace()
 
         # App-wide event filter — any mouse/key interaction wakes from sleep
         from PySide6.QtWidgets import QApplication
@@ -914,6 +939,9 @@ class IntricateApp(QMainWindow):
         # Reset the depletion timer so feeding buys a full cycle of peace
         if hasattr(self, '_joy_timer') and self._joy_timer.isActive():
             self._joy_timer.start()
+        # If we just hit 100%, start the grace period (happy time begins)
+        if v == 100 and not self._joy_in_grace:
+            self._begin_grace()
 
     def _toggle_joy_sleep(self) -> None:
         """Put the joy system to sleep or wake it up."""
@@ -940,8 +968,70 @@ class IntricateApp(QMainWindow):
         self._sleep_btn.setText("\U0001f319")  # 🌙 — press to sleep
         self._sleep_btn.setToolTip("Tuck me in")
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # HAPPY ACCUMULATOR — time spent at 100% earns joy buckets
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _joy_bucket_tooltip(self) -> str:
+        """Build a tooltip showing bucket count and progress to next."""
+        mins = int(self._joy_happy_secs) // 60
+        secs = int(self._joy_happy_secs) % 60
+        return f"{self._joy_bucket_count} joy buckets  —  {mins}m {secs}s happy toward next"
+
+    def _begin_grace(self) -> None:
+        """Start the grace period — bar is at 100%, happy time begins."""
+        self._joy_in_grace = True
+        self._joy_grace_remaining = self._JOY_GRACE_SECS
+        self._happy_timer.start()
+
+    def _end_grace(self) -> None:
+        """Grace expired — bar will start depleting on next timer tick."""
+        self._joy_in_grace = False
+        self._happy_timer.stop()
+
+    def _tick_happy(self) -> None:
+        """Called every second while at 100%. Accumulates happy time."""
+        if self.joy_bar.value() < 100:
+            # Shouldn't happen, but guard against it
+            self._end_grace()
+            return
+
+        # Count this second as happy time
+        self._joy_happy_secs += 1.0
+
+        # Update tooltip with live progress
+        self._joy_bucket_label.setToolTip(self._joy_bucket_tooltip())
+
+        # Check if we earned a bucket
+        if self._joy_happy_secs >= self._JOY_BUCKET_SECS:
+            self._joy_happy_secs -= self._JOY_BUCKET_SECS
+            self._joy_bucket_count += 1
+            self._joy_bucket_label.setText(str(self._joy_bucket_count))
+            self._persist_happy()
+
+        # Burn down the grace window
+        self._joy_grace_remaining -= 1.0
+        if self._joy_grace_remaining <= 0:
+            self._end_grace()
+
+        # Persist happy progress periodically (every 30 seconds)
+        if int(self._joy_happy_secs) % 30 == 0:
+            self._persist_happy()
+
+    def _persist_happy(self) -> None:
+        """Save happy accumulator and bucket count to settings."""
+        import pretty_widgets.utils.settings as _s
+        _s.set_nested("intricate", "joy", "happy_secs", round(self._joy_happy_secs, 1))
+        _s.set_nested("intricate", "joy", "buckets", self._joy_bucket_count)
+
     def _deplete_joy(self) -> None:
-        """Drain 1% from the joy bucket. Meow with escalating urgency."""
+        """Drain 1% from the joy bucket. Meow with escalating urgency.
+
+        While in grace (bar at 100%), depletion is suppressed — the happy
+        accumulator handles the countdown instead.
+        """
+        if self._joy_in_grace:
+            return                        # grace period absorbs this tick
         v = max(0, self.joy_bar.value() - 1)
         self.joy_bar.setValue(v)
         if not self._joy_sleeping:
