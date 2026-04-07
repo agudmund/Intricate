@@ -282,6 +282,19 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_cushions_node(self, pos: QPointF | None = None, label: str = ""):
+        """Add a CushionsNode at pos, optionally pre-filled with label text."""
+        from nodes.CushionsNode import CushionsNode
+        from data.CushionsNodeData import CushionsNodeData
+        data = CushionsNodeData(label=label) if label else CushionsNodeData()
+        node = CushionsNode(data)
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_log_node(self, pos: QPointF | None = None):
         """Add a LogNode at pos — live tail of the current session log."""
         from nodes.LogNode import LogNode
@@ -787,6 +800,10 @@ class IntricateScene(QGraphicsScene):
             from nodes.TextNode import TextNode
             from data.TextNodeData import TextNodeData
             node = TextNode(TextNodeData.from_dict(d))
+        elif node_type == "cushions":
+            from nodes.CushionsNode import CushionsNode
+            from data.CushionsNodeData import CushionsNodeData
+            node = CushionsNode(CushionsNodeData.from_dict(d))
 
         elif node_type == "log":
             from nodes.LogNode import LogNode

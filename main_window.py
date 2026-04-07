@@ -1228,6 +1228,7 @@ class IntricateApp(QMainWindow):
     def _spawn_image_node(self):       self._spawn(self.scene.add_image_node,        "a picture is worth everything")
     def _spawn_video_node(self):       self._spawn(self.scene.add_video_node,        "lights, camera, action")
     def _spawn_text_node(self):        self._spawn(self.scene.add_text_node,         "words, words, words")
+    def _spawn_cushions_node(self):    self._spawn(self.scene.add_cushions_node,     "fluffing the cushions")
     def _spawn_log_node(self):         self._spawn(self.scene.add_log_node,          "tailing the log")
 
     def _spawn_readme_node(self) -> None:
@@ -1297,13 +1298,15 @@ class IntricateApp(QMainWindow):
     def _show_text_menu(self, btn: QPushButton) -> None:
         """Pop a styled context menu under the text group button."""
         menu = self._styled_menu()
-        act_about = menu.addAction(QIcon(Theme.icon(Theme.iconAbout)), "The Glorious About Node")
-        act_warm  = menu.addAction(QIcon(Theme.icon(Theme.iconWarm)),  "The Comfortable Warm Node")
-        act_text  = menu.addAction(QIcon(Theme.icon(Theme.iconText)),  "The Simple Text Node")
-        act_read  = menu.addAction(QIcon(Theme.icon(Theme.iconTree)),  "The Readme that Hasn't Decided It's Name")
+        act_about    = menu.addAction(QIcon(Theme.icon(Theme.iconAbout)),    "The Glorious About Node")
+        act_warm     = menu.addAction(QIcon(Theme.icon(Theme.iconWarm)),     "The Comfortable Warm Node")
+        act_text     = menu.addAction(QIcon(Theme.icon(Theme.iconText)),     "The Simple Text Node")
+        act_cushions = menu.addAction(QIcon(Theme.icon(Theme.iconCushions)), "The Cushions Node")
+        act_read     = menu.addAction(QIcon(Theme.icon(Theme.iconTree)),     "The Readme that Hasn't Decided It's Name")
         act_about.triggered.connect(self._spawn_about_node)
         act_warm.triggered.connect(self._spawn_warm_node)
         act_text.triggered.connect(self._spawn_text_node)
+        act_cushions.triggered.connect(self._spawn_cushions_node)
         act_read.triggered.connect(self._spawn_readme_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
