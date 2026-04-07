@@ -343,6 +343,11 @@ class IntricateApp(QMainWindow):
             if event.button() == Qt.LeftButton:
                 self.toggle_fullscreen()
                 return True
+        # Wake from joy sleep on any meaningful interaction
+        if self._joy_sleeping and event.type() in (
+            QEvent.MouseButtonPress, QEvent.KeyPress, QEvent.Wheel,
+        ):
+            self._wake_joy()
         return super().eventFilter(obj, event)
 
     def toggle_fullscreen(self):
@@ -851,22 +856,45 @@ class IntricateApp(QMainWindow):
         """)
         layout.addWidget(self.joy_bar, alignment=Qt.AlignHCenter)
 
-        # Feed button — 10% per click, capped at 100
+        # Feed + Sleep buttons — side by side
+        joy_btn_row = QHBoxLayout()
+        joy_btn_row.setContentsMargins(0, 0, 0, 0)
+        joy_btn_row.setSpacing(4)
+
         self._feed_btn = button("", clicked=self._feed_joy)
         self._feed_btn.setMinimumSize(0, 0)
         self._feed_btn.setFixedSize(QSize(24, 24))
         self._feed_btn.setText("\U0001f331")  # 🌱
         self._feed_btn.setToolTip("Feed me")
-        layout.addWidget(self._feed_btn, alignment=Qt.AlignHCenter)
+        joy_btn_row.addWidget(self._feed_btn)
+
+        self._sleep_btn = button("", clicked=self._toggle_joy_sleep)
+        self._sleep_btn.setMinimumSize(0, 0)
+        self._sleep_btn.setFixedSize(QSize(24, 24))
+        self._sleep_btn.setText("\U0001f319")  # 🌙
+        self._sleep_btn.setToolTip("Tuck me in")
+        joy_btn_row.addWidget(self._sleep_btn)
+
+        btn_container = QWidget()
+        btn_container.setLayout(joy_btn_row)
+        layout.addWidget(btn_container, alignment=Qt.AlignHCenter)
 
         layout.addSpacing(Theme.sidebarPadding)
 
         # Depletion timer — drains 1% every 36 seconds (100% over 1 hour)
+        # Sleep mode slows to 360 seconds per tick (10 hours full drain)
         self._joy_hungry = False          # dirty flag — cleared by any feed click
+        self._joy_sleeping = False        # sleep mode — slower depletion
+        self._JOY_AWAKE_INTERVAL  = 36000   # 36s per tick  → 1 hour
+        self._JOY_SLEEP_INTERVAL  = 360000  # 360s per tick → 10 hours
         self._joy_timer = QTimer(self)
-        self._joy_timer.setInterval(36000)
+        self._joy_timer.setInterval(self._JOY_AWAKE_INTERVAL)
         self._joy_timer.timeout.connect(self._deplete_joy)
         self._joy_timer.start()
+
+        # App-wide event filter — any mouse/key interaction wakes from sleep
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().installEventFilter(self)
 
         return sidebar
 
@@ -887,11 +915,37 @@ class IntricateApp(QMainWindow):
         if hasattr(self, '_joy_timer') and self._joy_timer.isActive():
             self._joy_timer.start()
 
+    def _toggle_joy_sleep(self) -> None:
+        """Put the joy system to sleep or wake it up."""
+        if self._joy_sleeping:
+            self._wake_joy()
+        else:
+            self._sleep_joy()
+
+    def _sleep_joy(self) -> None:
+        """Enter sleep mode — slow depletion, muted meows."""
+        self._joy_sleeping = True
+        self._joy_timer.setInterval(self._JOY_SLEEP_INTERVAL)
+        self._joy_timer.start()          # restart with new interval
+        self._sleep_btn.setText("\u2600\ufe0f")  # ☀️ — press to wake
+        self._sleep_btn.setToolTip("Wake me up")
+
+    def _wake_joy(self) -> None:
+        """Exit sleep mode — normal depletion resumes."""
+        if not self._joy_sleeping:
+            return
+        self._joy_sleeping = False
+        self._joy_timer.setInterval(self._JOY_AWAKE_INTERVAL)
+        self._joy_timer.start()          # restart with new interval
+        self._sleep_btn.setText("\U0001f319")  # 🌙 — press to sleep
+        self._sleep_btn.setToolTip("Tuck me in")
+
     def _deplete_joy(self) -> None:
         """Drain 1% from the joy bucket. Meow with escalating urgency."""
         v = max(0, self.joy_bar.value() - 1)
         self.joy_bar.setValue(v)
-        self._maybe_meow(v)
+        if not self._joy_sleeping:
+            self._maybe_meow(v)
         # Flip dirty once below threshold; feeding is the only way back
         if v < 15 and not self._joy_hungry:
             self._joy_hungry = True
