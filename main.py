@@ -114,6 +114,7 @@ def main():
 
     # Set the window/taskbar icon — .exe builds embed this via PyInstaller,
     # but pythonw needs it explicitly or Windows shows the default Python icon.
+    from pathlib import Path
     from PySide6.QtGui import QIcon
     _app_icon = Path(__file__).resolve().parent / "icons" / "intricate.ico"
     if _app_icon.exists():
