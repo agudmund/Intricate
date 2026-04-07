@@ -893,6 +893,11 @@ class IntricateApp(QMainWindow):
 
         layout.addSpacing(Theme.sidebarPadding)
 
+        # Feed rate limit — 3 meals per rolling 10-minute window
+        self._feed_timestamps: list[float] = []
+        self._FEED_WINDOW   = 600.0       # 10 minutes in seconds
+        self._FEED_MAX      = 3           # meals allowed per window
+
         # Depletion timer — drains 1% every 36 seconds (100% over 1 hour)
         # Sleep mode slows to 360 seconds per tick (10 hours full drain)
         self._joy_hungry = False          # dirty flag — cleared by any feed click
@@ -931,7 +936,22 @@ class IntricateApp(QMainWindow):
         _s.set_nested("intricate", "canvas", "fog_alpha", value)
 
     def _feed_joy(self) -> None:
-        """Feed the joy bucket — any click resets the timer and clears hunger."""
+        """Feed the joy bucket — any click resets the timer and clears hunger.
+
+        Rate-limited to 3 feeds per rolling 10-minute window.
+        It's stuffed beyond that — can only eat so much at a time.
+        """
+        import time
+        now = time.monotonic()
+        # Prune timestamps outside the window
+        self._feed_timestamps = [
+            t for t in self._feed_timestamps
+            if now - t < self._FEED_WINDOW
+        ]
+        if len(self._feed_timestamps) >= self._FEED_MAX:
+            return                        # stuffed — can't eat any more right now
+
+        self._feed_timestamps.append(now)
         v = min(100, self.joy_bar.value() + 10)
         self.joy_bar.setValue(v)
         self._joy_hungry = False
