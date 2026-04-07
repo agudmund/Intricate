@@ -229,7 +229,8 @@ class WarmNode(BaseNode):
 
         # Apply body_text changes
         new_body = data.get("body_text", "")
-        if new_body != self.data.body_text:
+        body_changed = new_body != self.data.body_text
+        if body_changed:
             self.data.body_text = new_body
             if self._editor:
                 self._editor.blockSignals(True)
@@ -241,6 +242,9 @@ class WarmNode(BaseNode):
         if new_title != self.data.title:
             self.data.title = new_title
             self.update()
+
+        if body_changed:
+            self._auto_fit_height()
 
     # ─────────────────────────────────────────────────────────────────────────
     # BRIDGE — LAUNCH
@@ -365,6 +369,23 @@ class WarmNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
     # GEOMETRY
     # ─────────────────────────────────────────────────────────────────────────
+
+    def _auto_fit_height(self) -> None:
+        """Resize the node to fit the current text content."""
+        if not self._editor:
+            return
+        r = self.rect()
+        # Tell the document to wrap at the current node width
+        body_w = r.width() - PADDING * 2
+        self._editor.document().setTextWidth(body_w)
+        doc_h = self._editor.document().size().height()
+        # Total: body top offset + document height + padding + a small buffer
+        needed = BODY_TOP + doc_h + PADDING + 16.0
+        if needed > r.height():
+            self.prepareGeometryChange()
+            new_rect = QRectF(r.x(), r.y(), r.width(), needed)
+            self.setRect(new_rect)
+            self.data.height = needed
 
     def setRect(self, rect: QRectF) -> None:
         super().setRect(rect)
