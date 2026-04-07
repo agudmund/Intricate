@@ -343,11 +343,21 @@ class IntricateApp(QMainWindow):
             if event.button() == Qt.LeftButton:
                 self.toggle_fullscreen()
                 return True
-        # Wake from joy sleep on any meaningful interaction
+        # Wake from joy sleep on any meaningful interaction —
+        # except curtains, minimize-to-tray, and the sleep button itself,
+        # so we can tuck it in without it waking up on the way out.
         if self._joy_sleeping and event.type() in (
             QEvent.MouseButtonPress, QEvent.KeyPress, QEvent.Wheel,
         ):
-            self._wake_joy()
+            if event.type() == QEvent.MouseButtonPress:
+                clicked = getattr(obj, 'parent', lambda: obj)()
+                exempt = {self._curtains_btn, self._tray_btn, self._sleep_btn}
+                if obj in exempt or clicked in exempt:
+                    pass  # let them sleep
+                else:
+                    self._wake_joy()
+            else:
+                self._wake_joy()
         return super().eventFilter(obj, event)
 
     def toggle_fullscreen(self):
