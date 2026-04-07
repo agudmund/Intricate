@@ -378,8 +378,7 @@ class IntricateApp(QMainWindow):
         if not self.is_collapsed:
             self.original_height = self.height()
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
-            self.central.hide()
-            self.bottomToolbar.hide()
+            self._v_splitter.hide()
             # Pause all videos — curtains hide the canvas
             if self.scene:
                 self.scene.pause_all_videos()
@@ -393,8 +392,7 @@ class IntricateApp(QMainWindow):
             y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
             y = max(avail.top(), y)
             end_rect = QRect(start_rect.x(), y, start_rect.width(), self.original_height)
-            self.central.show()
-            self.bottomToolbar.show()
+            self._v_splitter.show()
 
         self._animate_curtains(start_rect, end_rect)
         self.is_collapsed = not self.is_collapsed
@@ -561,7 +559,20 @@ class IntricateApp(QMainWindow):
         
         self.sidebar_layout.addWidget(self.splitter)
 
-        self.grid.addWidget(self.central, 1, 0)
+        # ── Vertical splitter — central canvas above, bottom toolbar below ───
+        # Dragging the handle collapses the bottom toolbar for distraction-free
+        # canvas work. Height persists across sessions via settings.
+        self._v_splitter = QSplitter(Qt.Vertical)
+        self._v_splitter.setHandleWidth(4)
+        self._v_splitter.setStyleSheet(f"""
+            QSplitter::handle {{
+                background-color: {Theme.windowBg};
+            }}
+        """)
+        self._v_splitter.addWidget(self.central)
+        # bottomToolbar is added later by _setupBottomToolbar
+
+        self.grid.addWidget(self._v_splitter, 1, 0)
 
     # =================================================================================
     # Right panel — image preview
@@ -688,6 +699,22 @@ class IntricateApp(QMainWindow):
         if len(sizes) == 3:
             set_value("ui", "sidebar_width", sizes[0])
             set_value("ui", "preview_width", sizes[2])
+
+    def _restore_bottom_height(self) -> None:
+        """Restore saved bottom toolbar height from settings."""
+        saved = get("ui", "bottom_height", None)
+        if saved is not None:
+            sizes = self._v_splitter.sizes()
+            if len(sizes) == 2:
+                total = sizes[0] + sizes[1]
+                self._v_splitter.setSizes([total - saved, saved])
+        self._v_splitter.splitterMoved.connect(self._on_v_splitter_moved)
+
+    def _on_v_splitter_moved(self, _pos: int, _index: int) -> None:
+        """Persist bottom toolbar height whenever the vertical splitter moves."""
+        sizes = self._v_splitter.sizes()
+        if len(sizes) == 2:
+            set_value("ui", "bottom_height", sizes[1])
 
     def _on_pin_toggled(self, pinned: bool) -> None:
         self._preview_pinned = pinned
@@ -1480,7 +1507,15 @@ class IntricateApp(QMainWindow):
         buttons_row = _ButtonBar(left_group, right_group, self._bottom_progress)
         outer.addWidget(buttons_row)
 
-        self.grid.addWidget(self.bottomToolbar, 2, 0)
+        # Add to vertical splitter — canvas stretches, toolbar stays compact
+        self._v_splitter.addWidget(self.bottomToolbar)
+        self._v_splitter.setStretchFactor(0, 1)   # canvas takes all slack
+        self._v_splitter.setStretchFactor(1, 0)   # toolbar keeps its size
+        self._v_splitter.setCollapsible(0, False)  # never collapse the canvas
+        self._v_splitter.setCollapsible(1, True)   # toolbar can collapse fully
+
+        # Restore saved bottom bar height
+        QTimer.singleShot(0, self._restore_bottom_height)
 
     def _on_zoom_slider(self, value: int) -> None:
         """Slider dragged — set the view zoom to the slider's value."""
