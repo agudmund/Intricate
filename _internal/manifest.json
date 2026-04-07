@@ -1,0 +1,11 @@
+{
+  "built": "2026-04-06T12:45:11",
+  "hash": "6ed7a92c23f7a334",
+  "python": "3.13.3",
+  "PySide6": "6.10.2",
+  "pretty_widgets": "0.2.0",
+  "tomli_w": "1.2.0",
+  "send2trash": "unknown",
+  "shiboken6": "6.10.2",
+  "requests": "2.32.5"
+}

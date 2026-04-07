@@ -4,17 +4,17 @@
     {
       "node_id": 0,
       "node_type": "about",
-      "title": "This is an about node",
-      "uuid": "3e9c330865a64e64a3a285ceb3455f49",
-      "x": 2570.1262384113106,
-      "y": -1100.2994139687974,
-      "width": 262.0671793261263,
-      "height": 84.85619312773645,
+      "title": "The Official Mascot\nYes her name is HCm3ErpbQAAMQ6I\nand I don't know how to pronounce it either.",
+      "uuid": "6331d87abd4c47e2afc3779918ddfec7",
+      "x": 2192.2789539227883,
+      "y": -1160.6528590669382,
+      "width": 473.68425726390024,
+      "height": 110.44018513404137,
       "z_value": 10.0,
       "ports_visible": false,
       "shelf_visible": false,
       "emoji": "\ud83d\ude2f",
-      "label": "This is an about node",
+      "label": "The Official Mascot\nYes her name is HCm3ErpbQAAMQ6I\nand I don't know how to pronounce it either.",
       "depth_front": true,
       "node_tint": "#2a3a2f"
     },
@@ -23,24 +23,42 @@
       "node_type": "info",
       "title": "Intricate",
       "uuid": "fba2e1876a2742cfa44097878b291110",
-      "x": -74.08228045943753,
-      "y": -1024.268051569613,
+      "x": 1038.8071775004428,
+      "y": -1470.0213592947523,
       "width": 290.0,
       "height": 385.0,
       "z_value": 0.0,
       "ports_visible": false,
       "shelf_visible": true,
-      "emoji": "\ud83d\ude12",
+      "emoji": "\ud83d\ude25",
       "depth_front": false,
       "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "image",
+      "title": "Image",
+      "uuid": "6fdd7d146a9d4c5e8a6090de8e253eef",
+      "x": 2003.569946035699,
+      "y": -1072.436695724367,
+      "width": 483.09996258541287,
+      "height": 668.5376764249676,
+      "z_value": -9.993000000000004,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "emoji": "\ud83d\ude42\u200d\u2194\ufe0f",
+      "image_b64": "",
+      "caption": "HCm3ErpbQAAMQ6I",
+      "source_path": "C:\\Users\\thisg\\Desktop\\_asset\\Snips\\HCm3ErpbQAAMQ6I.jpg",
+      "show_border": false
     },
     {
       "node_id": 0,
       "node_type": "warm",
       "title": "Sweetums Cookies",
       "uuid": "a9aa4b1cf6e045d6910317a671eb1401",
-      "x": 1323.1043478260876,
-      "y": -316.3565217391307,
+      "x": 1550.0453534751937,
+      "y": -935.6176259317417,
       "width": 300.0,
       "height": 200.0,
       "z_value": -9.994000000000003,
@@ -52,31 +70,31 @@
     {
       "node_id": 0,
       "node_type": "warm",
-      "title": "Sweetums",
+      "title": "Sweetums Recipe",
       "uuid": "bdc310781f6740f5a824947e220096a0",
-      "x": 1739.9608695652187,
-      "y": -344.3217391304351,
+      "x": 1763.1634414424184,
+      "y": -1178.6182395726175,
       "width": 300.0,
       "height": 200.0,
       "z_value": -9.995000000000003,
       "ports_visible": false,
       "shelf_visible": true,
       "emoji": "\ud83e\udd70",
-      "body_text": "The recipe for a perfect Sweetums cookie\n\nSoft, soft, and irresistible."
+      "body_text": "The recipe for a perfect Sweetums cookie\n\nSoft, sweet, and irresistible."
     },
     {
       "node_id": 0,
       "node_type": "about",
       "title": "Note",
       "uuid": "d43d8174c2124279a77cf4a7e84d7f07",
-      "x": 1247.9478260869578,
-      "y": -436.0826086956524,
+      "x": 1634.0003916472658,
+      "y": -1260.4625011280164,
       "width": 177.0,
       "height": 54.0,
       "z_value": -9.996000000000002,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude07",
+      "emoji": "\ud83d\ude0d",
       "label": "Infinite Wisdom",
       "depth_front": false,
       "node_tint": "#2a3a2f"
@@ -86,14 +104,14 @@
       "node_type": "about",
       "title": "Note",
       "uuid": "2a62d2a355cb4fe9af19a66122593add",
-      "x": 288.2371232508029,
-      "y": -765.1958443346399,
+      "x": 905.9958553235683,
+      "y": -1028.8894251549877,
       "width": 112.404434101592,
       "height": 48.91214960356996,
       "z_value": -9.997000000000002,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude2e",
+      "emoji": "\u2764",
       "label": "Kinetic",
       "depth_front": false,
       "node_tint": "#2a3a2f"
@@ -103,8 +121,8 @@
       "node_type": "warm",
       "title": "Golden Hour",
       "uuid": "6795b78cec03417d80df0ce69e846d5c",
-      "x": 218.51059316007127,
-      "y": -966.7648967042953,
+      "x": 2717.263491303461,
+      "y": -1363.743733691166,
       "width": 711.4155047134166,
       "height": 934.6980456460913,
       "z_value": -9.998000000000001,
@@ -118,32 +136,48 @@
       "node_type": "text",
       "title": "Text",
       "uuid": "3808cd42222440afbed0cdaa1226bc9a",
-      "x": -531.8548332391069,
-      "y": -642.5294981759025,
+      "x": 259.5276794920385,
+      "y": -1179.7470727059406,
       "width": 548.2657300210898,
       "height": 843.731087745253,
       "z_value": -9.999,
       "ports_visible": false,
       "shelf_visible": true,
-      "emoji": "\ud83e\uddf8",
+      "emoji": "\ud83d\udc9b",
       "label": "# Intricate\n\n**Intricate** is a frameless, always-on-top node-based visual canvas built with PySide6. You place nodes on an infinite zoomable canvas, connect them via ports, and arrange your thoughts spatially rather than linearly. It is part of a \"Single Shared Braincell\" family of apps that share live configuration via a common `settings.toml` file and a set of environment variables.\n\nCurrent node types: **WarmNode** (free-form text with emoji accent), **HealthNode** (live system monitor \u2014 GC census and OS-level click tracking), **BezierNode** (interactive bezier curve with draggable control handles), **ImageNode** (drag-and-drop or browse images with editable caption), and **AboutNode** (sticky note for labelling groups of nodes).\n\nThe canvas supports cursor-anchored zoom, middle-mouse pan, and drag-and-drop of image files directly from Explorer. Nodes have ambient hover pulse animations driven by a separate `NodeBehaviour` personality system. The entire theme \u2014 colors, icons, layout \u2014 hot-reloads the moment `settings.toml` is saved by any app in the family.\n\n## Architecture\n\n```\n\ud83d\udcc4 main.py\n\u2514\u2500\u2500 \ud83d\udcc4 main_window.py (IntricateApp \u2014 QMainWindow)\n      \u251c\u2500\u2500 \ud83d\udcc1 graphics/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 Scene.py          \u2014 IntricateScene, canvas and node factory\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 View.py           \u2014 IntricateView, pan / zoom / drag-drop\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 Theme.py          \u2014 all visual values, icons, live reload\n      \u251c\u2500\u2500 \ud83d\udcc1 nodes/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 BaseNode.py       \u2014 base class every node builds on\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeBehaviour.py  \u2014 hover pulse and personality system\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeButton.py     \u2014 node-embedded controls\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 Port.py           \u2014 connection ports\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 WarmNode.py       \u2014 text + emoji content node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 HealthNode.py     \u2014 live system monitor node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 BezierNode.py     \u2014 bezier curve node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 ImageNode.py      \u2014 image display node\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 AboutNode.py      \u2014 sticky note node\n      \u251c\u2500\u2500 \ud83d\udcc1 data/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeData.py       \u2014 base dataclass, no Qt\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 XxxNodeData.py    \u2014 one per node type, state + serialization\n      \u251c\u2500\u2500 \ud83d\udcc1 widgets/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NoteEditor.py     \u2014 text editor dialog\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 PrettyButton.py   \u2014 themed button\n      \u2514\u2500\u2500 \ud83d\udcc1 utils/\n            \u251c\u2500\u2500 \ud83d\udcc4 settings.py       \u2014 TOML loader + file watcher\n            \u251c\u2500\u2500 \ud83d\udcc4 logger.py         \u2014 3-slot rotating log\n            \u251c\u2500\u2500 \ud83d\udcc4 vision.py         \u2014 image processing\n            \u2514\u2500\u2500 \ud83d\udcc4 OSClickMonitor.py \u2014 global Windows mouse hook\n```\n\n---\n*It is what it is*\n",
       "depth_front": false
     }
   ],
   "connections": [
     {
+      "start_uuid": "6fdd7d146a9d4c5e8a6090de8e253eef",
+      "end_uuid": "6331d87abd4c47e2afc3779918ddfec7"
+    },
+    {
       "start_uuid": "bdc310781f6740f5a824947e220096a0",
-      "end_uuid": "d43d8174c2124279a77cf4a7e84d7f07"
+      "end_uuid": "a9aa4b1cf6e045d6910317a671eb1401"
+    },
+    {
+      "start_uuid": "2a62d2a355cb4fe9af19a66122593add",
+      "end_uuid": "3808cd42222440afbed0cdaa1226bc9a"
+    },
+    {
+      "start_uuid": "fba2e1876a2742cfa44097878b291110",
+      "end_uuid": "2a62d2a355cb4fe9af19a66122593add"
     },
     {
       "start_uuid": "d43d8174c2124279a77cf4a7e84d7f07",
       "end_uuid": "bdc310781f6740f5a824947e220096a0"
+    },
+    {
+      "start_uuid": "bdc310781f6740f5a824947e220096a0",
+      "end_uuid": "d43d8174c2124279a77cf4a7e84d7f07"
     }
   ],
   "viewport": {
-    "camera_x": 1587.0260869565232,
-    "camera_y": -305.86956521739154,
-    "camera_zoom": 1.1442786069651731
+    "camera_x": 2104.109589041096,
+    "camera_y": -769.8630136986301,
+    "camera_zoom": 0.7300000000000001
   },
-  "checksum": "40a8ef9078e841e2"
+  "checksum": "2bc07a16d2f9813e"
 }
