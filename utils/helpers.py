@@ -196,7 +196,7 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     alpha channel suitable for compositing or chroma-free workflows.
 
     Filename convention:
-        {session}_{lowest-about-label}_{timestamp}.png
+        {session} {lowest-about-label} - {timestamp}.png
     Any empty segment is omitted. Timestamp last so files sort by
     session → label → time in Explorer.
 
@@ -230,9 +230,9 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     scene.render(painter, QRectF(0, 0, w, h), scene_rect)
     painter.end()
 
-    # ── Build filename: session_aboutlabel_timestamp.png ──────────────────
+    # ── Build filename: session aboutlabel - timestamp.png ─────────────────
     # Timestamp last so Explorer sorts by session → label → time.
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
     parts = []
     s = _sanitize(session_name)
     if s:
@@ -240,8 +240,8 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     about = _sanitize(_lowest_about_label(view))
     if about:
         parts.append(about)
-    parts.append(stamp)
-    title = "_".join(parts) + ".png"
+    name = " ".join(parts) if parts else ""
+    title = f"{name} - {stamp}.png" if name else f"{stamp}.png"
 
     out_dir = Path(_s.get("shared", "images_dir", default="."))
     ensure_dir(out_dir)
