@@ -1512,7 +1512,7 @@ class IntricateApp(QMainWindow):
         path = snapshot_viewport(self.view, session_name=self.project_selector.currentText())
         if path:
             import os
-            self.show_info(f"Snap saved → {path.name}", on_click=lambda: os.startfile(path))
+            self.show_info(f"Snap saved → {path.name}", on_click=lambda: subprocess.Popen(["explorer", "/select,", str(path)]))
 
     def show_info(self, message: str, on_click=None) -> None:
         """Typewriter reveal with simultaneous fade-in, hold 3 s, then fade out."""
