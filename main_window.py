@@ -700,10 +700,10 @@ class IntricateApp(QMainWindow):
     def _restore_preview_width(self) -> None:
         """Restore saved splitter sizes (sidebar and preview panel widths persisted in settings)."""
         saved_preview = get("ui", "preview_width", None)
-        saved_sidebar = get("ui", "sidebar_width", 0)
+        saved_sidebar = get("ui", "sidebar_width", None)
         sizes = self.splitter.sizes()
         if len(sizes) == 3:
-            new_sidebar  = saved_sidebar if saved_sidebar > 0 else sizes[0]
+            new_sidebar  = saved_sidebar if saved_sidebar is not None else sizes[0]
             new_preview  = saved_preview if saved_preview is not None else sizes[2]
             slack        = sizes[0] + sizes[1] + sizes[2] - new_sidebar - new_preview
             self.splitter.setSizes([new_sidebar, max(0, slack), new_preview])
@@ -880,7 +880,7 @@ class IntricateApp(QMainWindow):
         self.joy_bar = QProgressBar()
         self.joy_bar.setOrientation(Qt.Vertical)
         self.joy_bar.setRange(0, 100)
-        self.joy_bar.setValue(100)
+        self.joy_bar.setValue(int(_s.get_nested("intricate", "joy", "bar_value", 100)))
         self.joy_bar.setTextVisible(False)
         self.joy_bar.setFixedWidth((Theme.sidebarWidth() - Theme.sidebarPadding * 2) // 4)
         self.joy_bar.setMinimumHeight(60)
@@ -1086,6 +1086,7 @@ class IntricateApp(QMainWindow):
         import pretty_widgets.utils.settings as _s
         _s.set_nested("intricate", "joy", "happy_secs", round(self._joy_happy_secs, 1))
         _s.set_nested("intricate", "joy", "buckets", self._joy_bucket_count)
+        _s.set_nested("intricate", "joy", "bar_value", self.joy_bar.value())
 
     def _deplete_joy(self) -> None:
         """Drain 1% from the joy bucket. Meow with escalating urgency.
@@ -1262,8 +1263,36 @@ class IntricateApp(QMainWindow):
 
     def _styled_menu(self):
         """Create a PrettyMenu styled to match the app's visual language."""
-        return pretty_menu(self)
+        menu = pretty_menu(self)
+        menu.setToolTipsVisible(False)
+        menu.hovered.connect(self._menu_tooltip_delay)
+        menu.aboutToHide.connect(self._cancel_menu_tooltip)
         return menu
+
+    def _menu_tooltip_delay(self, action):
+        """Show action tooltip after a 2-second delay."""
+        from functools import partial
+        # Cancel any pending tooltip
+        self._cancel_menu_tooltip()
+        tip = action.toolTip()
+        if not tip or tip == action.text():
+            return
+        self._tooltip_timer = QTimer()
+        self._tooltip_timer.setSingleShot(True)
+        self._tooltip_timer.setInterval(1000)
+        self._tooltip_timer.timeout.connect(partial(self._show_menu_tooltip, tip))
+        self._tooltip_timer.start()
+
+    def _show_menu_tooltip(self, text):
+        from PySide6.QtWidgets import QToolTip
+        from PySide6.QtGui import QCursor
+        QToolTip.showText(QCursor.pos(), text)
+
+    def _cancel_menu_tooltip(self):
+        if hasattr(self, '_tooltip_timer'):
+            self._tooltip_timer.stop()
+        from PySide6.QtWidgets import QToolTip
+        QToolTip.hideText()
 
     def _show_text_menu(self, btn: QPushButton) -> None:
         """Pop a styled context menu under the text group button."""
@@ -1307,16 +1336,21 @@ class IntricateApp(QMainWindow):
     def _show_tools_menu(self, btn: QPushButton) -> None:
         """Pop a styled context menu under the tools group button."""
         menu = self._styled_menu()
-        act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "There Comes a Time In Everyone's life...")
-        act_restore = menu.addAction(QIcon(Theme.icon(Theme.iconRestore, fallback_color="#8aaa88")), "The Grand Restoration")
-        act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Stuff and Stuff")
         act_info    = menu.addAction(QIcon(Theme.icon(Theme.iconInfo,    fallback_color="#9a9aaa")), "Intricate")
-        act_git     = menu.addAction(QIcon(Theme.icon(Theme.iconGit,     fallback_color="#8a9a8a")), "The Boring But Necessary Node")
-        act_snip.triggered.connect(self._start_wire_snip)
-        act_restore.triggered.connect(self._restore_deleted)
-        act_tree.triggered.connect(self._spawn_tree_node)
+        act_restore = menu.addAction(QIcon(Theme.icon(Theme.iconRestore, fallback_color="#8aaa88")), "The Grand Restoration")
+        act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "There comes a time in everyone's life...")
+        act_git     = menu.addAction(QIcon(Theme.icon(Theme.iconGit,     fallback_color="#8a9a8a")), "The boring but necessary one")
+        act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Stuff and Stuff")
+        act_info.setToolTip("General Info")
+        act_restore.setToolTip("Bring back the last deleted node")
+        act_snip.setToolTip("Remove an explicit wire connection")
+        act_git.setToolTip("Git status report")
+        act_tree.setToolTip("Session file content")
         act_info.triggered.connect(self._spawn_info_node)
+        act_restore.triggered.connect(self._restore_deleted)
+        act_snip.triggered.connect(self._start_wire_snip)
         act_git.triggered.connect(self._spawn_git_node)
+        act_tree.triggered.connect(self._spawn_tree_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_claude_menu(self, btn: QPushButton) -> None:
