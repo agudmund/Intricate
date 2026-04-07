@@ -350,11 +350,17 @@ class IntricateApp(QMainWindow):
             QEvent.MouseButtonPress, QEvent.KeyPress, QEvent.Wheel,
         ):
             if event.type() == QEvent.MouseButtonPress:
-                clicked = getattr(obj, 'parent', lambda: obj)()
+                # Walk up the widget tree — the click may land on a child
+                # (icon label, inner frame) rather than the button itself.
                 exempt = {self._curtains_btn, self._tray_btn, self._sleep_btn}
-                if obj in exempt or clicked in exempt:
-                    pass  # let them sleep
-                else:
+                w = obj
+                is_exempt = False
+                while w is not None:
+                    if w in exempt:
+                        is_exempt = True
+                        break
+                    w = getattr(w, 'parent', lambda: None)()
+                if not is_exempt:
                     self._wake_joy()
             else:
                 self._wake_joy()
