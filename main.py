@@ -111,6 +111,14 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName(appName)
     app.setOrganizationName(orgName)
+
+    # Set the window/taskbar icon — .exe builds embed this via PyInstaller,
+    # but pythonw needs it explicitly or Windows shows the default Python icon.
+    from PySide6.QtGui import QIcon
+    _app_icon = Path(__file__).resolve().parent / "icons" / "intricate.ico"
+    if _app_icon.exists():
+        app.setWindowIcon(QIcon(str(_app_icon)))
+
     logger.log(TRACE, "[boot:2] QApplication created — Qt event loop ready")
 
     # Raise Qt's image allocation cap — the default 256 MB is hit by any modern
