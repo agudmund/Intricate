@@ -7,7 +7,16 @@
 """
 
 import subprocess
+import sys
 from pathlib import Path
+
+# On pythonw (no console) every subprocess.run spawns a visible console window
+# unless we explicitly suppress it with CREATE_NO_WINDOW.
+_SUBPROCESS_FLAGS = (
+    subprocess.CREATE_NO_WINDOW
+    if sys.platform == "win32" and not sys.stdout
+    else 0
+)
 
 from PySide6.QtCore import Qt, QRectF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
@@ -55,6 +64,7 @@ def _scan_repos() -> list[tuple[str, str]]:
                 ["git", "status", "--porcelain"],
                 cwd=str(folder),
                 capture_output=True, text=True, timeout=5,
+                creationflags=_SUBPROCESS_FLAGS,
             )
             lines = result.stdout.strip().splitlines()
             if not lines:
@@ -239,7 +249,7 @@ class GitNode(BaseNode):
         for name in repos:
             cwd = str(desktop / name)
             try:
-                _run = lambda cmd: _sp.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=30)
+                _run = lambda cmd: _sp.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=30, creationflags=_SUBPROCESS_FLAGS)
                 _run(["git", "add", "-A"])
                 _run(["git", "commit", "-m", msg])
                 _run(["git", "push"])
