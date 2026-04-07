@@ -181,8 +181,7 @@ class ImageNode(BaseNode):
                 return
 
             if not os.environ.get("SingleSharedBraincell_ApiKey", "").strip():
-                return  # No key — skip silently, filename stem stays
-
+                return
             self._vision_worker = VisionWorker(
                 image_path = path,
                 prompt     = (
@@ -195,8 +194,8 @@ class ImageNode(BaseNode):
             self._vision_worker.finished.connect(self._on_vision_result)
             self._vision_worker.failed.connect(self._on_vision_failed)
             self._vision_worker.start()
-        except Exception:
-            pass  # Vision is a convenience — never crash the canvas over it
+        except Exception as exc:
+            logger.warning(f"vision rename failed: {exc}")
 
     def _on_vision_result(self, text: str) -> None:
         """Update caption with Vision result, spawn a new AboutNode label."""
@@ -271,7 +270,9 @@ class ImageNode(BaseNode):
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
         eye_pix = Theme.icon("vision_rename.png", fallback_color="#9ab8d9")
-        self._buttons.append(NodeButton(self, eye_pix, self._vision_rename))
+        vision_btn = NodeButton(self, eye_pix, self._vision_rename)
+        vision_btn.setToolTip("Ask Claude what this image is about")
+        self._buttons.append(vision_btn)
         stamp_pix   = Theme.icon(Theme.iconStamp, fallback_color="#d4a96a")
         confirm_pix = Theme.icon(Theme.iconConfirm, fallback_color="#d4a96a")
         self._buttons.append(NodeButton(self, stamp_pix, self._stamp_source_file, confirm_pix))
@@ -286,6 +287,19 @@ class ImageNode(BaseNode):
         src = self.data.source_path
         if src:
             self._run_vision(Path(src))
+
+    def _show_info(self, msg: str) -> None:
+        """Push a message to the window's info label."""
+        try:
+            scene = self.scene()
+            if scene:
+                for view in scene.views():
+                    win = view.window()
+                    if hasattr(win, 'show_info'):
+                        win.show_info(msg)
+                        return
+        except Exception:
+            pass
 
     def _stamp_source_file(self) -> None:
         """Write the current caption into the source PNG's tEXt metadata."""
