@@ -338,15 +338,30 @@ class ImageNode(BaseNode):
         else:
             self._spawn_caption_node("no stamp found")
 
+    def _find_connected_about(self) -> str | None:
+        """Return the label from the single connected AboutNode, or None."""
+        from nodes.AboutNode import AboutNode
+        abouts = []
+        for conn in list(self.connections):
+            try:
+                other = conn.end_node if conn.start_node is self else conn.start_node
+            except RuntimeError:
+                continue
+            if isinstance(other, AboutNode):
+                abouts.append(other)
+        if len(abouts) == 1:
+            return abouts[0].data.label or None
+        return None
+
     def _stamp_source_file(self) -> None:
-        """Write the current caption into the source PNG's tEXt metadata."""
+        """Write the connected AboutNode's label into the source PNG's tEXt metadata."""
         src = self.data.source_path
         if not src:
             self._spawn_caption_node("stamp: no source path")
             return
-        caption = self.data.caption
+        caption = self._find_connected_about()
         if not caption:
-            self._spawn_caption_node("stamp: no caption to write")
+            self._spawn_caption_node("stamp: connect exactly 1 AboutNode")
             return
         p = Path(src)
         if not p.exists():
