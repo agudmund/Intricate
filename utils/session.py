@@ -144,6 +144,87 @@ def _rotate_session(filepath: str):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Node sanitisation — runs before from_dict() sees the data
+# ═════════════════════════════════════════════════════════════════════════════
+
+_KNOWN_TYPES = frozenset({
+    "warm", "about", "bezier", "health", "claude", "claude_response",
+    "text", "cushions", "code", "log", "image", "video", "sequence",
+    "tree", "info", "git", "audio", "merge", "audio_hold", "palette",
+    "sticker", "value", "perf", "claude_info", "fbx",
+})
+
+_PATH_FIELDS = ("source_path", "project_path", "folder_path")
+
+_GEOM_DEFAULTS = {"x": 0.0, "y": 0.0, "width": 300.0, "height": 200.0, "z_value": 0.0}
+
+
+def _sanitise_node(node: dict, index: int, issues: list) -> dict | None:
+    """
+    Sanitise a single node dict in-place. Returns None to drop the node.
+    Appends human-readable warnings to *issues*.
+    """
+    import math
+    import re
+    import uuid as _uuid
+
+    tag = f"node[{index}]"
+
+    # ── node_type whitelist ───────────────────────────────────────────────
+    ntype = node.get("node_type", "")
+    if ntype not in _KNOWN_TYPES:
+        issues.append(f"{tag} unknown node_type '{ntype}' — dropped")
+        return None
+
+    # ── UUID — alphanumeric + hyphens only ────────────────────────────────
+    raw_uuid = str(node.get("uuid", ""))
+    clean_uuid = re.sub(r'[^a-zA-Z0-9_-]', '', raw_uuid)
+    if not clean_uuid:
+        clean_uuid = _uuid.uuid4().hex
+        issues.append(f"{tag} invalid uuid — assigned fresh: {clean_uuid[:8]}")
+    if clean_uuid != raw_uuid:
+        issues.append(f"{tag} uuid sanitised: {raw_uuid[:16]!r} → {clean_uuid[:8]}")
+    node["uuid"] = clean_uuid
+
+    # ── Geometry — safe float, reject NaN/Inf, clamp dimensions ──────────
+    for field, default in _GEOM_DEFAULTS.items():
+        raw = node.get(field, default)
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            issues.append(f"{tag} {field} not numeric ({raw!r}) — using default {default}")
+            val = default
+        if math.isnan(val) or math.isinf(val):
+            issues.append(f"{tag} {field} is NaN/Inf — using default {default}")
+            val = default
+        node[field] = val
+
+    # Clamp width/height to sane bounds
+    for dim in ("width", "height"):
+        node[dim] = max(10.0, min(node[dim], 10_000.0))
+
+    # ── String fields — truncate to prevent memory bombs ─────────────────
+    title = node.get("title", "")
+    if isinstance(title, str) and len(title) > 500:
+        node["title"] = title[:500]
+        issues.append(f"{tag} title truncated to 500 chars")
+
+    emoji = node.get("emoji", "")
+    if isinstance(emoji, str) and len(emoji) > 32:
+        node["emoji"] = emoji[:32]
+        issues.append(f"{tag} emoji truncated to 32 chars")
+
+    # ── Path fields — reject null bytes ──────────────────────────────────
+    for pf in _PATH_FIELDS:
+        pval = node.get(pf)
+        if isinstance(pval, str) and '\x00' in pval:
+            node[pf] = ""
+            issues.append(f"{tag} {pf} contained null bytes — cleared")
+
+    return node
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # SessionManager
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -237,9 +318,9 @@ class SessionManager:
     @staticmethod
     def validate_session_data(data: dict, filepath: str) -> dict:
         """
-        Validate and report session data anomalies without rejecting the session.
-        Logs warnings for anything suspicious so patterns can be identified.
-        Sanitises only the minimum needed to prevent crashes — never silently drops data.
+        Validate, sanitise, and report session data anomalies.
+        Runs _sanitise_node() on every node dict before from_dict() sees it.
+        Drops nodes that can't be salvaged, logs everything suspicious.
         """
         name = Path(filepath).stem
 
@@ -256,26 +337,30 @@ class SessionManager:
             issues.append("viewport key missing or not a dict")
             data["viewport"] = {}
 
-        # Node integrity checks
+        # Per-node sanitisation + dedup
         seen_uuids = set()
+        clean_nodes = []
         for i, node in enumerate(data["nodes"]):
-            uuid = node.get("uuid")
-            node_type = node.get("node_type", "unknown")
-            title = node.get("title", "untitled")
+            if not isinstance(node, dict):
+                issues.append(f"node[{i}] is not a dict — dropped")
+                continue
 
+            sanitised = _sanitise_node(node, i, issues)
+            if sanitised is None:
+                continue
+
+            uuid = sanitised.get("uuid")
             if not uuid:
-                issues.append(f"node[{i}] '{title}' ({node_type}) has no uuid")
-            elif uuid in seen_uuids:
-                issues.append(f"node[{i}] '{title}' ({node_type}) has duplicate uuid: {uuid[:8]}")
-            else:
-                seen_uuids.add(uuid)
+                issues.append(f"node[{i}] has no uuid after sanitisation — dropped")
+                continue
+            if uuid in seen_uuids:
+                issues.append(f"node[{i}] duplicate uuid {uuid[:8]} — dropped")
+                continue
 
-            for field in ("x", "y", "width", "height"):
-                val = node.get(field)
-                if val is None:
-                    issues.append(f"node[{i}] '{title}' missing field: {field}")
-                elif not isinstance(val, (int, float)):
-                    issues.append(f"node[{i}] '{title}' field {field} is not numeric: {val!r}")
+            seen_uuids.add(uuid)
+            clean_nodes.append(sanitised)
+
+        data["nodes"] = clean_nodes
 
         # Connection integrity checks
         for i, conn in enumerate(data["connections"]):

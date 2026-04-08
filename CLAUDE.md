@@ -117,10 +117,11 @@ When removing a node, `BaseNode._prepare_for_removal()` must be called first. It
 
 1. Create `data/XxxNodeData.py` subclassing `NodeData` — add fields, implement `to_dict()`/`from_dict()`
 2. Create `nodes/XxxNode.py` subclassing `BaseNode` — override `paint_content(painter)`
-3. If your node adds signal connections, override `_prepare_for_removal()` and disconnect them before `super()`
+3. If your node adds signal connections, override `_prepare_for_removal()` and disconnect them before `super()`. Every `QTimer.timeout.connect()` and `QVariantAnimation.valueChanged.connect()` must have a matching `.disconnect()` in `_prepare_for_removal()` — `.stop()` alone does not sever the C++ signal reference and will cause a GC leak
 4. Add a factory method to `IntricateScene` (e.g., `add_xxx_node(pos)`)
-5. Wire a sidebar button in `main_window.py`
-6. Create an icon (see below) and register it in `[theme.icons]` in `settings.toml`
+5. Register the `node_type` string in `_KNOWN_TYPES` in `utils/session.py` — the session validator whitelists known types and will silently drop any node whose type is not in this set
+6. Wire a sidebar button in `main_window.py`
+7. Create an icon (see below) and register it in `[theme.icons]` in `settings.toml`
 
 ### Creating Node Icons with Pillow
 

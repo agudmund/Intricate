@@ -261,9 +261,14 @@ class WarmNode(BaseNode):
         # Clean up any stale bridge session
         self._teardown_bridge()
 
-        # Create bridge file
+        # Create bridge file — sanitise uuid to prevent path traversal
+        import re
+        safe_uuid = re.sub(r'[^a-zA-Z0-9_-]', '', self.data.uuid)
+        if not safe_uuid:
+            _log.warning("[WarmNode] Invalid uuid — cannot create bridge")
+            return
         os.makedirs(str(_BRIDGE_DIR), exist_ok=True)
-        self._bridge_path = str(_BRIDGE_DIR / f".warm_bridge_{self.data.uuid}.json")
+        self._bridge_path = str(_BRIDGE_DIR / f".warm_bridge_{safe_uuid}.json")
         self._write_bridge()
 
         # Resolve editor command
@@ -285,23 +290,41 @@ class WarmNode(BaseNode):
         import pretty_widgets.utils.settings as _settings
         editor_path = _settings.get("apps", "warm_editor", "").strip()
 
-        # If configured path is a directory with main.py, run from source
-        if editor_path:
-            p = Path(editor_path)
-            if p.is_dir() and (p / "main.py").exists():
-                return [sys.executable, str(p / "main.py"),
-                        "--bridge", self._bridge_path]
-            if p.is_file() and p.exists():
-                return [str(p), "--bridge", self._bridge_path]
-            # Configured path doesn't exist — fall through to sibling
+        if not editor_path:
+            return None
 
-        # Fall back to the known sibling project
-        sibling = Path(r"C:\Users\thisg\Desktop\Notepad++ Duplex+ Turbo\main.py")
-        if sibling.exists():
-            return [sys.executable, str(sibling),
-                    "--bridge", self._bridge_path]
+        p = Path(editor_path).resolve()
 
+        # Reject paths with traversal or shell metacharacters
+        raw = str(p)
+        if any(c in raw for c in ('&', '|', ';', '`', '$', '\n')):
+            _log.warning(f"[WarmNode] warm_editor rejected — suspicious characters: {editor_path}")
+            return None
+
+        bridge = self._validated_bridge_path()
+        if bridge is None:
+            return None
+
+        # Directory with main.py → run from source
+        if p.is_dir() and (p / "main.py").exists():
+            return [sys.executable, str(p / "main.py"), "--bridge", bridge]
+        # Executable file
+        if p.is_file() and p.suffix in ('.exe', '.py', '.pyw'):
+            return [str(p), "--bridge", bridge]
+
+        _log.warning(f"[WarmNode] warm_editor path not found or not an executable: {editor_path}")
         return None
+
+    def _validated_bridge_path(self) -> str | None:
+        """Return the bridge path only if it lives inside the expected directory."""
+        if not self._bridge_path:
+            return None
+        bp = Path(self._bridge_path).resolve()
+        expected = _BRIDGE_DIR.resolve()
+        if not str(bp).startswith(str(expected)):
+            _log.warning(f"[WarmNode] bridge path outside expected directory: {bp}")
+            return None
+        return str(bp)
 
     def _teardown_bridge(self) -> None:
         """Stop watching and clean up the bridge file."""
