@@ -240,6 +240,15 @@ class GitNode(BaseNode):
             self.data.height = h
 
     def _build_buttons(self) -> None:
+        super()._build_buttons()
+        from nodes.NodeButton import NodeButton as _NodeButton
+
+        # GitHub Desktop launcher
+        gh_pix = Theme.icon(Theme.iconGithubDesktop, fallback_color="#8a9a8a")
+        gh_btn = _NodeButton(self, gh_pix, lambda: self._launch_github_desktop())
+        gh_btn.setToolTip("Open GitHub Desktop")
+        self._buttons.append(gh_btn)
+
         from nodes.NodeButton import EmojiButton
         # Bulk push session-only repos
         self._push_btn = EmojiButton(
@@ -249,7 +258,15 @@ class GitNode(BaseNode):
         )
         self._push_btn.setToolTip("Push all session-only repos")
         self._buttons.append(self._push_btn)
-        super()._build_buttons()
+
+    def _launch_github_desktop(self) -> None:
+        """Launch GitHub Desktop as a detached process."""
+        import os
+        try:
+            os.startfile("github-windows://")
+            _log.info("[git] launched GitHub Desktop")
+        except Exception:
+            _log.warning("[git] failed to launch GitHub Desktop", exc_info=True)
 
     def _bulk_push_sessions(self) -> None:
         """Prompt for a commit message, then git add+commit+push all green-dot repos on a worker thread."""

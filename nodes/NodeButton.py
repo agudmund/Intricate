@@ -97,9 +97,13 @@ class NodeButton(QGraphicsObject):
             if self._in_confirm and self._pix_confirm
             else self._pix_normal
         )
-        # Offset pixmap down by EMOJI_OVERFLOW so it aligns vertically
-        # with emoji glyph rendering in adjacent EmojiButtons.
-        draw_rect = QRectF(0.0, EMOJI_OVERFLOW, BUTTON_SIZE, BUTTON_SIZE)
+        # Scale up the icon so the visible ring matches emoji glyph size.
+        # Icon PNGs have transparent padding around the outer ring (~78% fill),
+        # so we inflate by ~1/0.78 ≈ 1.28 to compensate.
+        scale   = 1.28
+        scaled  = BUTTON_SIZE * scale
+        inset   = (BUTTON_SIZE - scaled) / 2.0
+        draw_rect = QRectF(inset, EMOJI_OVERFLOW + inset, scaled, scaled)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
         painter.drawPixmap(draw_rect.toRect(), pix)
 

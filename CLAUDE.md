@@ -175,14 +175,32 @@ xxx = "xxx_node.ico"
 
 ### Icon Rule — Every Button Gets an Icon
 
-Whenever you add a new button **anywhere** in the app — sidebar, toolbar, node-embedded control, dialog — you **must** also generate a matching `.ico` icon using the Pillow recipe above. No button ships without its own icon. The steps:
+Whenever you add a new button **anywhere** in the app — sidebar, toolbar, node-embedded control, dialog — you **must** also generate a matching `.ico` icon. No button ships without its own icon. There are two pipelines depending on where the icon appears:
+
+#### Sidebar & Toolbar Icons (Pillow line-art)
+
+For sidebar buttons, toolbar actions, and menu entries — use the Pillow recipe above (outer ring + symbol in the centre). These are minimal cream-on-transparent line drawings.
 
 1. Write a standalone Python script following the recipe (outer ring + symbol in the centre).
 2. Run it to produce both the `.png` and multi-resolution `.ico` in `./icons/`.
 3. Register the icon in `[theme.icons]` in `settings.toml`.
 4. Reference it via `Theme.iconXxx` in the button code — the metaclass resolves it automatically.
 
-This applies to node-type icons, toolbar actions, modal buttons, and any future UI surface that presents a clickable control. If it is a button, it gets an icon.
+#### Node-Embedded Button Icons (emoji-style)
+
+For buttons that sit on the node button strip (alongside emoji buttons like "More Glory", depth toggle, tint) — the icon must match the 3D emoji aesthetic so the strip reads as a consistent row. The pipeline:
+
+1. **Draft the shape** — use the Pillow recipe to create a clean vector silhouette of the icon (outer ring + symbol). This serves as the structural reference.
+2. **Generate the emoji render** — feed the silhouette through an image generator to produce a 3D shaded emoji-style version that matches the native OS emoji look (warm gradients, soft lighting, subtle depth).
+3. **Extract and clean** — write a Python script (see `icons/extract_github_icon.py` as reference) that:
+   - Crops the icon from the generated image
+   - Removes the background via colour-distance masking (`numpy`)
+   - Removes any drop shadow underneath (dark pixels in the bottom region)
+   - Trims transparent edges, pads to square, resamples to 1024×1024
+   - Produces both `.png` and multi-resolution `.ico`
+4. Register in `[theme.icons]` in `settings.toml` and reference via `Theme.iconXxx`.
+
+The result is an icon with a transparent background that picks up the node's tint colour, sitting visually flush with the emoji buttons on either side. `NodeButton` in `NodeButton.py` scales icon-based buttons up by 1.28× to compensate for transparent padding and match emoji glyph size.
 
 ### Logging
 
