@@ -196,6 +196,12 @@ class VideoNode(BaseNode):
             if hasattr(self, '_restore_pos') and self._restore_pos > 0:
                 self._player.setPosition(self._restore_pos)
                 self._restore_pos = 0
+            # Auto-play if looping was on at save time — the video stays
+            # alive as a permanent visual loop without user interaction.
+            if self.data.looping and self.data.was_playing:
+                self._player.play()
+                self.data.was_playing = False
+            elif not self._frame_pixmap:
                 # Grab one frame so the node isn't blank
                 self._player.play()
                 self._player.pause()
@@ -594,6 +600,10 @@ class VideoNode(BaseNode):
         self.data.playback_pos = self._position_ms
         self.data.volume = int(self._target_volume * 100)
         self.data.muted = self._audio.isMuted()
+        self.data.was_playing = (
+            self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+            or self._was_playing_before_cull
+        )
         self.sync_data()
         return self.data.to_dict()
 

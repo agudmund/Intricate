@@ -35,6 +35,7 @@ class VideoNodeData(NodeData):
     looping:      bool = field(default=False)   # Whether playback loops
     muted:        bool = field(default=False)   # Whether audio is muted
     show_border:  bool = field(default=False)   # White border around video frame
+    was_playing:  bool = field(default=False)   # Whether video was playing at save time
 
     def to_dict(self) -> dict:
         data = super().to_dict()
@@ -45,6 +46,7 @@ class VideoNodeData(NodeData):
         data["looping"]       = self.looping
         data["muted"]         = self.muted
         data["show_border"]   = self.show_border
+        data["was_playing"]   = self.was_playing
         return data
 
     @classmethod
@@ -66,4 +68,5 @@ class VideoNodeData(NodeData):
             looping       = data.get("looping",       False),
             muted         = data.get("muted",         False),
             show_border   = data.get("show_border",   False),
+            was_playing   = data.get("was_playing",   False),
         )
