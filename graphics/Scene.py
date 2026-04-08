@@ -295,6 +295,19 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_code_node(self, pos: QPointF | None = None, label: str = ""):
+        """Add a CodeNode at pos, optionally pre-filled with code text."""
+        from nodes.CodeNode import CodeNode
+        from data.CodeNodeData import CodeNodeData
+        data = CodeNodeData(label=label) if label else CodeNodeData()
+        node = CodeNode(data)
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_log_node(self, pos: QPointF | None = None):
         """Add a LogNode at pos — live tail of the current session log."""
         from nodes.LogNode import LogNode
@@ -804,6 +817,10 @@ class IntricateScene(QGraphicsScene):
             from nodes.CushionsNode import CushionsNode
             from data.CushionsNodeData import CushionsNodeData
             node = CushionsNode(CushionsNodeData.from_dict(d))
+        elif node_type == "code":
+            from nodes.CodeNode import CodeNode
+            from data.CodeNodeData import CodeNodeData
+            node = CodeNode(CodeNodeData.from_dict(d))
 
         elif node_type == "log":
             from nodes.LogNode import LogNode
