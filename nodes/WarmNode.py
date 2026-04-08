@@ -216,13 +216,13 @@ class WarmNode(BaseNode):
 
     def _process_bridge_change(self) -> None:
         """Read the bridge file and apply changes from Eddie."""
-        if not self._bridge_path or not os.path.exists(self._bridge_path):
+        if not self._bridge_path:
             return
         try:
             with open(self._bridge_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return  # mid-write partial file — skip silently
+        except (json.JSONDecodeError, OSError, FileNotFoundError):
+            return  # missing or mid-write partial file — skip silently
 
         if data.get("writer") == "intricate":
             return  # echo of our own write
@@ -333,8 +333,9 @@ class WarmNode(BaseNode):
         self._stop_bridge_watcher()
         if self._bridge_path:
             try:
-                if os.path.exists(self._bridge_path):
-                    os.remove(self._bridge_path)
+                os.remove(self._bridge_path)
+            except FileNotFoundError:
+                pass
             except OSError:
                 pass
             self._bridge_path = None
