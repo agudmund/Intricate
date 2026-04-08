@@ -381,7 +381,7 @@ class TreeNode(BaseNode):
 
         # Standard particle burst + deferred removal — same path as shake-delete
         from graphics.Particles import sprinkle
-        sprinkle(scene, self.mapToScene(self.rect().center()), count=3000)
+        sprinkle(scene, self.mapToScene(self.rect().center()), count=8000)
         from PySide6.QtCore import QTimer
         QTimer.singleShot(0, lambda: scene.removeItem(self))
 

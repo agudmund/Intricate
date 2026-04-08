@@ -27,8 +27,12 @@ LINGER_MS    = 150      # fully visible after spawning before fade begins
 FADE_MS      = 300      # fade-out duration per particle
 
 # ── Burst timing ──────────────────────────────────────────────────────────
-BURST_BASE_MS = 1200    # burst window at the reference count (8000 particles)
-BURST_BASE_N  = 8000    # reference count — scales linearly above this
+BURST_BASE_MS = 1200    # burst window at the reference count (16000 particles)
+
+# ── Icon cache (resolved once per app run) ────────────────────────────────
+_icon_base_cache: dict[str, QPixmap] = {}   # icon_name → MAX_SIZE base pixmap
+_icon_size_cache: dict[str, dict[int, QPixmap]] = {}  # icon_name → {size: pixmap}
+BURST_BASE_N  = 16000   # reference count — scales linearly above this
 BURST_EASE    = 2.0     # exponent — >1 means fast start, decelerates outward
 
 # ── Spiral tuning ─────────────────────────────────────────────────────────
@@ -113,17 +117,20 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
     All particles are registered immediately; a single global QTimer drives
     every opacity update — no per-particle timers.
     """
-    # Load once at MAX_SIZE — no need to pull the full 1024px source
-    # when particles never exceed 32px. If the icon file is already small
-    # this is a no-op; if it's a 1k PNG this avoids scaling from 1024 → 32
-    # on every size variant.
-    raw = Theme.icon(icon_name or "heart.png", fallback_color=Theme.primaryBorder)
-    base = raw.scaled(MAX_SIZE, MAX_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-
-    # Pre-scale every possible size from the small base
-    size_cache = {MAX_SIZE: base}
-    for s in range(MIN_SIZE, MAX_SIZE):
-        size_cache[s] = base.scaled(s, s, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    # Resolve the icon once per app run — Theme.icon() hits the file system
+    # and logs on every cache miss. For the particle simulator every
+    # microsecond counts, so we skip both the lookup and the log after the
+    # first call by caching the scaled pixmaps at module level.
+    key = icon_name or "heart.png"
+    if key not in _icon_size_cache:
+        raw = Theme.icon(key, fallback_color=Theme.primaryBorder)
+        base = raw.scaled(MAX_SIZE, MAX_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        _icon_base_cache[key] = base
+        sc = {MAX_SIZE: base}
+        for s in range(MIN_SIZE, MAX_SIZE):
+            sc[s] = base.scaled(s, s, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        _icon_size_cache[key] = sc
+    size_cache = _icon_size_cache[key]
 
     # Get the visible viewport rect in scene coordinates for clipping
     view_rect = None

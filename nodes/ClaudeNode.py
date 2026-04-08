@@ -1020,12 +1020,12 @@ class ClaudeNode(BaseNode):
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         font.setStyleName("MediumOblique")
         painter.setFont(font)
-        painter.setPen(QColor(Theme.nodeFontColor))
+        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
         title_rect = QRectF(
             r.left() + pad,
-            r.top() + self._BUTTON_ZONE_H + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop,
+            r.top() + self._anim_top_offset + Theme.nodeFontVerticalOffset + Theme.nodeTextPaddingTop,
             r.width() - pad * 2,
-            r.height() - self._BUTTON_ZONE_H,
+            r.height() - self._anim_top_offset,
         )
         painter.drawText(title_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, self.data.title)
 

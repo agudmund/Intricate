@@ -86,6 +86,7 @@ class _PaintTimer(QObject):
 
 
 class PerfNode(BaseNode):
+    _has_depth_toggle = True
     """
     Live UI performance monitor.
 
@@ -196,7 +197,7 @@ class PerfNode(BaseNode):
         r      = self.rect()
         pad    = 12
         x      = r.x() + pad
-        y      = r.y() + pad
+        y      = r.y() + self._anim_top_offset + pad
         w      = r.width() - pad * 2
         line_h = 18
 
@@ -209,15 +210,15 @@ class PerfNode(BaseNode):
         f_label  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeLabel))
         f_value  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeValue))
         f_value.setBold(True)
-        f_header = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeHeader))
-        f_header.setBold(True)
+        f_header = QFont(self._TITLE_FONT, max(1, Theme.healthFontSizeHeader + self._TITLE_FONT_BUMP))
+        f_header.setStyleName(self._TITLE_STYLE)
         f_footer = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeFooter))
 
         # ── HEADER ────────────────────────────────────────────────────────────
         painter.setFont(f_header)
-        painter.setPen(c_text)
+        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
         painter.drawText(int(x), int(y), int(w), line_h + 4,
-                         Qt.AlignLeft | Qt.AlignVCenter, "📊  Paint Performance")
+                         Qt.AlignLeft | Qt.AlignVCenter, "Performance")
         y += line_h + 6
 
         # ── DIVIDER ───────────────────────────────────────────────────────────

@@ -89,7 +89,7 @@ class ClaudeResponseNode(BaseNode):
     def _edit_rect(self) -> QRectF:
         r   = self.rect()
         pad = Theme.aboutTextPaddingLeft
-        content_top = r.top() + _BUTTON_ZONE_H + _PAD_V
+        content_top = r.top() + self._anim_top_offset + _PAD_V
         return QRectF(r.left() + pad,
                       content_top,
                       r.width() - pad * 2,
@@ -137,7 +137,7 @@ class ClaudeResponseNode(BaseNode):
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         painter.setFont(font)
         painter.setPen(QColor(Theme.nodeFontColor))
-        content_top = r.top() + _BUTTON_ZONE_H + _PAD_V
+        content_top = r.top() + self._anim_top_offset + _PAD_V
         text_rect = QRectF(r.left() + pad,
                            content_top,
                            r.width() - pad * 2,

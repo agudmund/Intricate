@@ -22,7 +22,7 @@ class ClaudeInfoNodeData(NodeData):
     node_type:   str   = field(default="claude_info")
     title:       str   = field(default="Claude Info")
     width:       float = field(default=280.0)
-    height:      float = field(default=320.0)
+    height:      float = field(default=360.0)
     folder_path: str   = field(default="")
 
     def to_dict(self) -> dict:

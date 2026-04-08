@@ -29,7 +29,7 @@ class HealthNodeData(NodeData):
     node_type: str  = field(default="health")
     title:     str  = field(default="Health")
     width:     float = field(default_factory=lambda: Theme.healthNodeWidth)
-    height:    float = field(default_factory=lambda: Theme.healthNodeHeight)
+    height:    float = field(default_factory=lambda: Theme.healthNodeHeight + 140.0)
 
     def to_dict(self) -> dict:
         """Structural identity only — readings are always live."""
