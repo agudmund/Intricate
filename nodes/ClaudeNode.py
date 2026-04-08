@@ -142,20 +142,9 @@ class ClaudeNode(BaseNode):
             f"Let the spirit of \"{seed_phrase}\" color the mood of your greeting — "
             "don't quote it directly, just let it influence the feeling and tone."
         )
-        import tempfile
-        _tf = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", encoding="utf-8", delete=False
-        )
-        _tf.write(_GREETING_PROMPT)
-        _tf.close()
-        _tmp = _tf.name.replace("\\", "/")
-        resume_flag = f"--resume={self._current_uuid} " if self._current_uuid else ""
-        _ps_cmd = (
-            f"$p = [System.IO.File]::ReadAllText('{_tmp}', "
-            f"[System.Text.Encoding]::UTF8); "
-            f"Remove-Item '{_tmp}' -ErrorAction SilentlyContinue; "
-            f"$p | claude {resume_flag}--print"
-        )
+        cmd = ["claude", "--print"]
+        if self._current_uuid:
+            cmd.append(f"--resume={self._current_uuid}")
         _project_cwd = str(Path(__file__).resolve().parent.parent)
 
         self._reply_received = False
@@ -181,15 +170,17 @@ class ClaudeNode(BaseNode):
         self._status_q = queue.SimpleQueue()
 
         proc = subprocess.Popen(
-            ["powershell.exe", "-Command", _ps_cmd],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             cwd=_project_cwd,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
+        proc.stdin.write(_GREETING_PROMPT)
+        proc.stdin.close()
         threading.Thread(target=self._read_proc_stdout, args=(proc, self._stream_q), daemon=True).start()
         threading.Thread(target=self._read_proc_stderr, args=(proc, self._status_q), daemon=True).start()
         self._stream_timer = QTimer()
@@ -872,29 +863,11 @@ class ClaudeNode(BaseNode):
         self._stream_q  = queue.SimpleQueue()
         self._status_q  = queue.SimpleQueue()
 
-        # Write prompt to a temp file so PowerShell can read it back into $p —
-        # this avoids both the Windows 32K command-line length limit and all
-        # special-character escaping issues (brackets, dollar signs, backticks).
-        import tempfile
-        _tf = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", encoding="utf-8", delete=False
-        )
-        _tf.write(text)
-        _tf.close()
-        _tmp = _tf.name.replace("\\", "/")
-
-        # --resume if we have a session, plain `claude` otherwise (creates one)
+        # Call claude directly and pipe prompt via stdin — no tempfile,
+        # no PowerShell, no string interpolation (injection-safe).
+        cmd = ["claude", "--print"]
         if self._current_uuid:
-            resume_flag = f"--resume={self._current_uuid} "
-        else:
-            resume_flag = ""
-
-        _ps_cmd = (
-            f"$p = [System.IO.File]::ReadAllText('{_tmp}', "
-            f"[System.Text.Encoding]::UTF8); "
-            f"Remove-Item '{_tmp}' -ErrorAction SilentlyContinue; "
-            f"$p | claude {resume_flag}--print"
-        )
+            cmd.append(f"--resume={self._current_uuid}")
         # CWD must match the project the session was created in —
         # claude --resume maps sessions by project directory.
         _project_cwd = str(Path(__file__).resolve().parent.parent)
@@ -904,15 +877,17 @@ class ClaudeNode(BaseNode):
             self._stream_timer.stop()
 
         proc = subprocess.Popen(
-            ["powershell.exe", "-Command", _ps_cmd],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             cwd=_project_cwd,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
+        proc.stdin.write(text)
+        proc.stdin.close()
         threading.Thread(target=self._read_proc_stdout, args=(proc, self._stream_q), daemon=True).start()
         threading.Thread(target=self._read_proc_stderr, args=(proc, self._status_q), daemon=True).start()
         self._stream_timer = QTimer()
@@ -1125,7 +1100,27 @@ class ClaudeNode(BaseNode):
                 settings.watcher.changed.disconnect(self._on_theme_reload)
             except RuntimeError:
                 pass
+
+        # ── Timers — stop + disconnect signals that pin self ─────────────
+        self._reply_done_timer.stop()
+        try:
+            self._reply_done_timer.timeout.disconnect(self._on_reply_done)
+        except RuntimeError:
+            pass
+
         self._jsonl_debounce.stop()
+        try:
+            self._jsonl_debounce.timeout.disconnect(self._process_jsonl_change)
+        except RuntimeError:
+            pass
+
+        if hasattr(self, '_stream_timer') and self._stream_timer:
+            self._stream_timer.stop()
+            try:
+                self._stream_timer.timeout.disconnect(self._flush_stream_title)
+            except RuntimeError:
+                pass
+
         if self._watcher:
             self._watcher.fileChanged.disconnect()
             self._watcher.deleteLater()

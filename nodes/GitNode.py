@@ -403,7 +403,15 @@ class GitNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         self._poll_timer.stop()
+        try:
+            self._poll_timer.timeout.disconnect(self._refresh)
+        except RuntimeError:
+            pass
         self._delivery_timer.stop()
+        try:
+            self._delivery_timer.timeout.disconnect(self._check_delivery)
+        except RuntimeError:
+            pass
         super()._prepare_for_removal()
 
     def to_dict(self) -> dict:

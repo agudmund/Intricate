@@ -10,7 +10,7 @@ import time
 from collections import deque
 
 from PySide6.QtCore import Qt, QTimer, QObject, QEvent
-from PySide6.QtGui import QPainter, QFont, QColor, QPen
+from PySide6.QtGui import QPainter, QColor
 
 from nodes.BaseNode import BaseNode
 from data.PerfNodeData import PerfNodeData
@@ -185,6 +185,10 @@ class PerfNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         self._poll_timer.stop()
+        try:
+            self._poll_timer.timeout.disconnect(self._refresh)
+        except RuntimeError:
+            pass
         self._uninstall_filter()
         super()._prepare_for_removal()
 
@@ -193,90 +197,48 @@ class PerfNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
-        t = self._timer_obj
-        r      = self.rect()
-        pad    = 12
-        x      = r.x() + pad
-        y      = r.y() + self._anim_top_offset + pad
-        w      = r.width() - pad * 2
-        line_h = 18
+        from utils.paint import make_kit, draw_header, draw_rows, draw_footer
 
-        c_label = QColor(Theme.healthColorLabel)
-        c_calm  = QColor(Theme.healthColorCalm)
-        c_warn  = QColor(Theme.healthColorWarn)
-        c_high  = QColor(Theme.healthColorHigh)
-        c_text  = QColor(Theme.textPrimary)
+        t   = self._timer_obj
+        kit = make_kit(self._TITLE_FONT, self._TITLE_STYLE, self._TITLE_FONT_BUMP)
+        r   = self.rect()
+        x   = r.x() + kit.pad
+        y   = r.y() + self._anim_top_offset + kit.pad
+        w   = r.width() - kit.pad * 2
 
-        f_label  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeLabel))
-        f_value  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeValue))
-        f_value.setBold(True)
-        f_header = QFont(self._TITLE_FONT, max(1, Theme.healthFontSizeHeader + self._TITLE_FONT_BUMP))
-        f_header.setStyleName(self._TITLE_STYLE)
-        f_footer = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeFooter))
-
-        # ── HEADER ────────────────────────────────────────────────────────────
-        painter.setFont(f_header)
-        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
-        painter.drawText(int(x), int(y), int(w), line_h + 4,
-                         Qt.AlignLeft | Qt.AlignVCenter, "Performance")
-        y += line_h + 6
-
-        # ── DIVIDER ───────────────────────────────────────────────────────────
-        div_pen = QPen(QColor(Theme.primaryBorder), 1, Qt.DotLine)
-        painter.setPen(div_pen)
-        painter.drawLine(int(x), int(y), int(x + w), int(y))
-        y += 8
+        y = draw_header(painter, kit, x, y, w, "Performance")
 
         if t is None or t.sample_count == 0:
-            painter.setFont(f_label)
-            painter.setPen(c_label)
-            painter.drawText(int(x), int(y), int(w), line_h * 3,
+            painter.setFont(kit.f_label)
+            painter.setPen(kit.c_label)
+            painter.drawText(int(x), int(y), int(w), kit.line_h * 3,
                              Qt.AlignCenter, "waiting for paint events…")
             return
 
-        fps     = t.fps
-        avg     = t.avg_ms
-        last    = t.last_ms
-        mn      = t.min_ms
-        mx      = t.max_ms
-        samples = t.sample_count
-        total   = t.total_paints
+        c_calm = QColor(Theme.healthColorCalm)
+        c_warn = QColor(Theme.healthColorWarn)
+        c_high = QColor(Theme.healthColorHigh)
+        c_text = QColor(Theme.textPrimary)
 
-        # Colour-code fps: ≥50 calm, ≥25 warn, <25 hot
+        fps, avg, last = t.fps, t.avg_ms, t.last_ms
+        mn, mx         = t.min_ms, t.max_ms
+        samples, total = t.sample_count, t.total_paints
+
         fps_color = c_calm if fps >= 50 else c_warn if fps >= 25 else c_high
-        # Frame time colour mirrors fps thresholds (inverse)
         avg_color = c_calm if avg <= 20 else c_warn if avg <= 40 else c_high
 
         rows: list[tuple[str, str, QColor]] = [
-            ("FPS",       f"{fps:.1f}",        fps_color),
-            ("Last",      f"{last:.1f} ms",    avg_color),
-            ("Avg",       f"{avg:.1f} ms",      avg_color),
-            ("Min",       f"{mn:.1f} ms",       c_calm),
-            ("Max",       f"{mx:.1f} ms",       c_warn if mx > 40 else c_text),
-            ("Samples",   f"{samples}/{_WINDOW}", c_label),
-            ("Total paints", str(total),        c_label),
+            ("FPS",          f"{fps:.1f}",           fps_color),
+            ("Last",         f"{last:.1f} ms",       avg_color),
+            ("Avg",          f"{avg:.1f} ms",        avg_color),
+            ("Min",          f"{mn:.1f} ms",         c_calm),
+            ("Max",          f"{mx:.1f} ms",         c_warn if mx > 40 else c_text),
+            ("Samples",      f"{samples}/{_WINDOW}", kit.c_label),
+            ("Total paints", str(total),             kit.c_label),
         ]
 
-        for label, value, value_color in rows:
-            painter.setFont(f_label)
-            painter.setPen(c_label)
-            painter.drawText(int(x), int(y), int(w * 0.6), line_h,
-                             Qt.AlignLeft | Qt.AlignVCenter, label)
-            painter.setFont(f_value)
-            painter.setPen(value_color)
-            painter.drawText(int(x), int(y), int(w), line_h,
-                             Qt.AlignRight | Qt.AlignVCenter, value)
-            y += line_h + 3
-
-        # ── FOOTER ───────────────────────────────────────────────────────────
-        y += 2
-        painter.setPen(div_pen)
-        painter.drawLine(int(x), int(y), int(x + w), int(y))
-        y += 6
-        painter.setFont(f_footer)
-        painter.setPen(c_label)
-        painter.drawText(int(x), int(y), int(w), line_h,
-                         Qt.AlignCenter, "100 ms poll  ·  120-frame window")
+        y = draw_rows(painter, kit, x, y, w, rows)
+        draw_footer(painter, kit, x, y, w, "100 ms poll  ·  120-frame window")
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

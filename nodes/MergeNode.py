@@ -454,8 +454,21 @@ class MergeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        # Disconnect from ALL queued AudioNode players, not just the current one
+        for node in self._play_queue:
+            if hasattr(node, '_player'):
+                try:
+                    node._player.mediaStatusChanged.disconnect(self._on_media_status_changed)
+                except RuntimeError:
+                    pass
         self._stop_sequence()
+
         self._refresh_timer.stop()
+        try:
+            self._refresh_timer.timeout.disconnect(self._sync_list)
+        except RuntimeError:
+            pass
+
         if self._list_proxy:
             self._list_proxy.hide()
         super()._prepare_for_removal()

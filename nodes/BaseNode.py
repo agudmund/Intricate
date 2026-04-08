@@ -284,14 +284,40 @@ class BaseNode(QGraphicsRectItem):
         """
         self._heal_connections()
         self._detach_buttons()
+        self._detach_ports()
+
+        # ── Shelf animation — disconnect signals that hold self alive ────
+        if hasattr(self, '_shelf_anim'):
+            self._shelf_anim.stop()
+            try:
+                self._shelf_anim.valueChanged.disconnect(self._on_shelf_tick)
+            except RuntimeError:
+                pass
+            try:
+                self._shelf_anim.finished.disconnect(self._on_shelf_done)
+            except RuntimeError:
+                pass
+
+        # ── Throttle timer — disconnect before nulling ───────────────────
+        if self._update_throttle_timer:
+            self._update_throttle_timer.stop()
+            try:
+                self._update_throttle_timer.timeout.disconnect(self._flush_connection_update)
+            except RuntimeError:
+                pass
+            self._update_throttle_timer = None
 
         if hasattr(self, 'behaviour') and self.behaviour:
             self.behaviour.disconnect_all()
 
         for conn in list(self.connections):
-            # Stop the glide animation before touching any node references
+            # Stop the glide animation and disconnect its signal
             if hasattr(conn, '_glide_timer'):
                 conn._glide_timer.stop()
+                try:
+                    conn._glide_timer.timeout.disconnect(conn._glide_tick)
+                except RuntimeError:
+                    pass
             # Remove from the other endpoint's connection list so it doesn't
             # hold a stale reference after this node is gone
             other = conn.end_node if conn.start_node is self else conn.start_node
@@ -470,6 +496,17 @@ class BaseNode(QGraphicsRectItem):
         for btn in self._buttons:
             btn.detach()
         self._buttons.clear()
+
+    def _detach_ports(self) -> None:
+        """Null back-references so C++-owned port wrappers don't pin the node."""
+        for p in self.input_ports:
+            p.parent_node = None
+        for p in self.output_ports:
+            p.parent_node = None
+        self.input_ports.clear()
+        self.output_ports.clear()
+        self.input_port  = None
+        self.output_port = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # PORTS

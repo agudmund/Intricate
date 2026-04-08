@@ -148,10 +148,11 @@ class NodeButton(QGraphicsObject):
 
     def detach(self) -> None:
         """
-        Stop the timer before the button is removed.
+        Sever all reference paths before the button is removed.
         Called by BaseNode._prepare_for_removal via _detach_buttons().
         """
         self._reset_timer.stop()
+        self._callback = None
 
 
 EMOJI_OVERFLOW = 4.0  # extra height so emoji glyphs don't clip at the bottom
@@ -193,4 +194,6 @@ class EmojiButton(QGraphicsObject):
         event.accept()
 
     def detach(self) -> None:
-        pass
+        """Sever callback references that capture the parent node."""
+        self._get_emoji = None
+        self._set_emoji = None

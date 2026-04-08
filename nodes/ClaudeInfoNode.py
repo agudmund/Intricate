@@ -10,7 +10,7 @@ import json
 import threading
 from pathlib import Path
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPainter, QFont, QColor, QPen
+from PySide6.QtGui import QPainter, QColor
 
 from nodes.BaseNode import BaseNode
 from data.ClaudeInfoNodeData import ClaudeInfoNodeData
@@ -133,6 +133,10 @@ class ClaudeInfoNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         self._poll_timer.stop()
+        try:
+            self._poll_timer.timeout.disconnect(self._kick_scan)
+        except RuntimeError:
+            pass
         super()._prepare_for_removal()
 
     def itemChange(self, change, value):
@@ -145,43 +149,21 @@ class ClaudeInfoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
-        r      = self.rect()
-        pad    = 12
-        x      = r.x() + pad
-        y      = r.y() + self._anim_top_offset + pad
-        w      = r.width() - pad * 2
-        line_h = 18
+        from utils.paint import make_kit, draw_header, draw_hero, draw_rows, draw_footer
 
-        c_label = QColor(Theme.healthColorLabel)
-        c_calm  = QColor(Theme.healthColorCalm)
-        c_warn  = QColor(Theme.healthColorWarn)
-        c_high  = QColor(Theme.healthColorHigh)
-        c_text  = QColor(Theme.textPrimary)
+        kit = make_kit(self._TITLE_FONT, self._TITLE_STYLE, self._TITLE_FONT_BUMP)
+        r   = self.rect()
+        x   = r.x() + kit.pad
+        y   = r.y() + self._anim_top_offset + kit.pad
+        w   = r.width() - kit.pad * 2
 
-        f_label  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeLabel))
-        f_value  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeValue))
-        f_value.setBold(True)
-        f_header = QFont(self._TITLE_FONT, max(1, Theme.healthFontSizeHeader + self._TITLE_FONT_BUMP))
-        f_header.setStyleName(self._TITLE_STYLE)
-        f_footer = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeFooter))
+        y = draw_header(painter, kit, x, y, w, "Token Census")
 
-        # ── HEADER ───────────────────────────────────────────────────────
-        painter.setFont(f_header)
-        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
-        painter.drawText(int(x), int(y), int(w), line_h + 4,
-                         Qt.AlignLeft | Qt.AlignVCenter, "Token Census")
-        y += line_h + 6
-
-        # ── DIVIDER ──────────────────────────────────────────────────────
-        div_pen = QPen(QColor(Theme.primaryBorder), 1, Qt.DotLine)
-        painter.setPen(div_pen)
-        painter.drawLine(int(x), int(y), int(x + w), int(y))
-        y += 8
-
-        # ── HERO — total tokens ──────────────────────────────────────────
-        hero_font = QFont(Theme.healthFontFamily, max(1, 16))
-        hero_font.setBold(True)
-        painter.setFont(hero_font)
+        # ── Hero — total tokens ──────────────────────────────────────────
+        c_calm = QColor(Theme.healthColorCalm)
+        c_warn = QColor(Theme.healthColorWarn)
+        c_high = QColor(Theme.healthColorHigh)
+        c_text = QColor(Theme.textPrimary)
 
         if self._total_tokens >= 1_000_000:
             hero_color = c_high
@@ -190,48 +172,23 @@ class ClaudeInfoNode(BaseNode):
         else:
             hero_color = c_calm
 
-        painter.setPen(hero_color)
-        painter.drawText(int(x), int(y), int(w), 28,
-                         Qt.AlignCenter | Qt.AlignVCenter,
-                         _human_tokens(self._total_tokens) + " tokens")
-        y += 32
+        y = draw_hero(painter, kit, x, y, w,
+                      _human_tokens(self._total_tokens) + " tokens", hero_color)
 
-        # ── DIVIDER ──────────────────────────────────────────────────────
-        painter.setPen(div_pen)
-        painter.drawLine(int(x), int(y), int(x + w), int(y))
-        y += 8
-
-        # ── ROWS ─────────────────────────────────────────────────────────
-        rows = [
+        # ── Rows ─────────────────────────────────────────────────────────
+        rows: list[tuple[str, str, QColor]] = [
             ("Input",         _human_tokens(self._input_tokens),  c_calm),
             ("Output",        _human_tokens(self._output_tokens), c_warn),
-            ("Cache create",  _human_tokens(self._cache_create),  c_label),
-            ("Cache read",    _human_tokens(self._cache_read),    c_label),
+            ("Cache create",  _human_tokens(self._cache_create),  kit.c_label),
+            ("Cache read",    _human_tokens(self._cache_read),    kit.c_label),
             ("Sessions",      str(self._session_count),           c_text),
             ("Messages",      f"{self._message_count:,}",         c_text),
         ]
 
-        for label, value, value_color in rows:
-            painter.setFont(f_label)
-            painter.setPen(c_label)
-            painter.drawText(int(x), int(y), int(w * 0.6), line_h,
-                             Qt.AlignLeft | Qt.AlignVCenter, label)
-            painter.setFont(f_value)
-            painter.setPen(value_color)
-            painter.drawText(int(x), int(y), int(w), line_h,
-                             Qt.AlignRight | Qt.AlignVCenter, value)
-            y += line_h + 3
+        y = draw_rows(painter, kit, x, y, w, rows)
 
-        # ── FOOTER ───────────────────────────────────────────────────────
-        y += 4
-        painter.setPen(div_pen)
-        painter.drawLine(int(x), int(y), int(x + w), int(y))
-        y += 6
-        painter.setFont(f_footer)
-        painter.setPen(c_label)
         status = "scanning…" if self._scanning else f"scan #{self._scan_count}"
-        painter.drawText(int(x), int(y), int(w), line_h,
-                         Qt.AlignCenter, f"every 10 s  ·  {status}")
+        draw_footer(painter, kit, x, y, w, f"every 10 s  ·  {status}", gap=4)
 
     # ─────────────────────────────────────────────────────────────────────
     # SERIALIZATION

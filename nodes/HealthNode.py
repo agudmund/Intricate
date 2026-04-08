@@ -9,7 +9,7 @@
 import gc
 import time
 from PySide6.QtCore import Qt, QTimer, QPointF
-from PySide6.QtGui import QPainter, QFont, QColor, QPen
+from PySide6.QtGui import QPainter, QColor
 
 from nodes.BaseNode import BaseNode
 from data.HealthNodeData import HealthNodeData
@@ -208,45 +208,36 @@ class HealthNode(BaseNode):
 
         return super().itemChange(change, value)
 
+    def _prepare_for_removal(self) -> None:
+        self._poll_timer.stop()
+        try:
+            self._poll_timer.timeout.disconnect(self._poll_gc)
+        except RuntimeError:
+            pass
+        self._uninstall_monitor()
+        super()._prepare_for_removal()
+
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
-        r      = self.rect()
-        pad    = 12
-        x      = r.x() + pad
-        y      = r.y() + self._anim_top_offset + pad
-        w      = r.width() - pad * 2
-        line_h = 18
+        from utils.paint import make_kit, draw_header, draw_rows, draw_footer
 
-        c_label = QColor(Theme.healthColorLabel)
-        c_calm  = QColor(Theme.healthColorCalm)
-        c_warn  = QColor(Theme.healthColorWarn)
-        c_high  = QColor(Theme.healthColorHigh)
-        c_text  = QColor(Theme.textPrimary)
+        kit = make_kit(self._TITLE_FONT, self._TITLE_STYLE, self._TITLE_FONT_BUMP)
+        r   = self.rect()
+        x   = r.x() + kit.pad
+        y   = r.y() + self._anim_top_offset + kit.pad
+        w   = r.width() - kit.pad * 2
 
-        f_label  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeLabel))
-        f_value  = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeValue))
-        f_value.setBold(True)
-        f_header = QFont(self._TITLE_FONT, max(1, Theme.healthFontSizeHeader + self._TITLE_FONT_BUMP))
-        f_header.setStyleName(self._TITLE_STYLE)
-        f_footer = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeFooter))
+        y = draw_header(painter, kit, x, y, w, "Intricate Health")
 
-        # ── HEADER ────────────────────────────────────────────────────────────
-        painter.setFont(f_header)
-        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
-        painter.drawText(int(x), int(y), int(w), line_h + 4,
-                         Qt.AlignLeft | Qt.AlignVCenter, "Intricate Health")
-        y += line_h + 6
+        # ── Row data ──────────────────────────────────────────────────────────
+        c_calm = QColor(Theme.healthColorCalm)
+        c_warn = QColor(Theme.healthColorWarn)
+        c_high = QColor(Theme.healthColorHigh)
+        c_text = QColor(Theme.textPrimary)
 
-        # ── DIVIDER ───────────────────────────────────────────────────────────
-        div_pen = QPen(QColor(Theme.primaryBorder), 1, Qt.DotLine)
-        painter.setPen(div_pen)
-        painter.drawLine(int(x), int(y), int(x + w), int(y))
-        y += 8
-
-        # ── ROWS ──────────────────────────────────────────────────────────────
         delta      = self._living_nodes - self._scene_nodes
         delta_str  = f"+{delta}" if delta > 0 else str(delta)
         node_color = (
@@ -256,16 +247,14 @@ class HealthNode(BaseNode):
         )
         delta_color = c_warn if delta > 0 else c_calm
 
-        # ── Video buffer formatting ───────────────────────────────────────────
         def _fmt_bytes(b: int) -> str:
             if abs(b) < 1024:
                 return f"{b} B"
             elif abs(b) < 1024 * 1024:
                 return f"{b / 1024:.1f} KB"
-            else:
-                return f"{b / (1024 * 1024):.1f} MB"
+            return f"{b / (1024 * 1024):.1f} MB"
 
-        vid_delta_str = f"+{_fmt_bytes(self._video_buf_delta)}" if self._video_buf_delta > 0 else _fmt_bytes(self._video_buf_delta)
+        vid_delta_str   = f"+{_fmt_bytes(self._video_buf_delta)}" if self._video_buf_delta > 0 else _fmt_bytes(self._video_buf_delta)
         vid_delta_color = c_warn if self._video_buf_delta > 0 else c_calm
 
         rows: list[tuple[str, str, QColor]] = [
@@ -273,46 +262,26 @@ class HealthNode(BaseNode):
             ("Scene nodes",   str(self._scene_nodes),               node_color),
             ("RAM delta",     delta_str,                             delta_color),
             ("Last click",    self._last_clicked_type,               c_text),
-            ("  └ identity",  self._last_clicked_item,               c_label),
+            ("  └ identity",  self._last_clicked_item,               kit.c_label),
             ("GC time",       f"{self._last_gc_time * 1000:.1f}ms",  c_text),
-            ("Poll #",        str(self._poll_count),                 c_label),
+            ("Poll #",        str(self._poll_count),                 kit.c_label),
         ]
 
-        # ── Video buffer section (only when videos exist) ─────────────────
         if self._video_node_count > 0:
             rows.extend([
-                ("",             "",                                     c_label),   # spacer
+                ("",             "",                                     kit.c_label),
                 ("🎬 Videos",    str(self._video_node_count),            c_text),
                 ("Vid buffers",  _fmt_bytes(self._video_buf_bytes),      c_text),
                 ("Vid Δ/poll",   vid_delta_str,                          vid_delta_color),
-                ("Vid peak",     _fmt_bytes(self._video_buf_peak),       c_label),
+                ("Vid peak",     _fmt_bytes(self._video_buf_peak),       kit.c_label),
             ])
 
-        for label, value, value_color in rows:
-            painter.setFont(f_label)
-            painter.setPen(c_label)
-            painter.drawText(int(x), int(y), int(w * 0.6), line_h,
-                             Qt.AlignLeft | Qt.AlignVCenter, label)
-            painter.setFont(f_value)
-            painter.setPen(value_color)
-            painter.drawText(int(x), int(y), int(w), line_h,
-                             Qt.AlignRight | Qt.AlignVCenter, value)
-            y += line_h + 3
+        y = draw_rows(painter, kit, x, y, w, rows)
 
-        # ── FOOTER DIVIDER ────────────────────────────────────────────────────
-        y += 2
-        painter.setPen(div_pen)
-        painter.drawLine(int(x), int(y), int(x + w), int(y))
-        y += 6
-
-        # ── FOOTER ───────────────────────────────────────────────────────────
-        painter.setFont(f_footer)
-        painter.setPen(c_label)
-        interval_s      = Theme.healthPollIntervalMs / 1000
-        monitor_status  = "hook ✅" if self._monitor else "hook ⬜"
-        painter.drawText(int(x), int(y), int(w), line_h,
-                         Qt.AlignCenter,
-                         f"every {interval_s:.0f}s  ·  {monitor_status}")
+        interval_s     = Theme.healthPollIntervalMs / 1000
+        monitor_status = "hook ✅" if self._monitor else "hook ⬜"
+        draw_footer(painter, kit, x, y, w,
+                    f"every {interval_s:.0f}s  ·  {monitor_status}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

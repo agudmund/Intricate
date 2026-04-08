@@ -110,8 +110,12 @@ class NodeBehaviour:
     def _ensure_base(self) -> QColor:
         """Return the node's resting brush color, capturing it on first call."""
         if self._bg_base is None:
-            self._bg_base    = QColor(self._node.brush().color())
-            self._current_bg = QColor(self._bg_base)
+            if self._node is None:
+                self._bg_base = QColor(Theme.windowBg)
+                self._current_bg = QColor(self._bg_base)
+            else:
+                self._bg_base    = QColor(self._node.brush().color())
+                self._current_bg = QColor(self._bg_base)
         return self._bg_base
 
     def _bg_normal(self)   -> QColor: return QColor(self._ensure_base())
@@ -128,6 +132,8 @@ class NodeBehaviour:
 
     def _on_bg_changed(self, color: QColor) -> None:
         self._current_bg = color
+        if self._node is None:
+            return
         try:
             self._node.setBrush(QBrush(color))
         except RuntimeError:
@@ -149,6 +155,8 @@ class NodeBehaviour:
         Breathe out — scale settles via _on_pulse_finished.
         Background returns to selected tint if selected, otherwise to normal.
         """
+        if self._node is None:
+            return
         target = self._bg_selected() if self._node.isSelected() else self._bg_normal()
         self._animate_bg_to(target, 450)
 
@@ -194,3 +202,4 @@ class NodeBehaviour:
                 pass
         self.pulse_anim.stop()
         self.bg_anim.stop()
+        self._node = None

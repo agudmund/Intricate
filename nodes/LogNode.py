@@ -168,6 +168,10 @@ class LogNode(BaseNode):
     def _prepare_for_removal(self) -> None:
         self._poll_timer.stop()
         try:
+            self._poll_timer.timeout.disconnect(self._refresh)
+        except RuntimeError:
+            pass
+        try:
             self._watcher.fileChanged.disconnect(self._on_file_changed)
         except RuntimeError:
             pass
