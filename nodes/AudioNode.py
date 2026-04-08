@@ -91,7 +91,9 @@ class AudioNode(BaseNode):
 
         # Auto-size width to fit the title text
         from PySide6.QtGui import QFontMetrics
-        fm = QFontMetrics(QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize)))
+        _f = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+        _f.setStyleName("MediumOblique")
+        fm = QFontMetrics(_f)
         text_w = fm.horizontalAdvance(self.data.title) + self._CONTENT_PAD * 2 + 20
         min_w = max(self.data.width, text_w)
         if min_w > self.rect().width():
@@ -392,6 +394,7 @@ class AudioNode(BaseNode):
 
         # Title
         title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        title_font.setStyleName(self._TITLE_STYLE)
         painter.setFont(title_font)
         painter.setPen(QColor(Theme.nodeFontColor))
         label = self.data.caption or self.data.title

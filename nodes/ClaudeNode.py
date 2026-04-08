@@ -1018,6 +1018,7 @@ class ClaudeNode(BaseNode):
         r    = self.rect()
         pad  = Theme.nodeTextPaddingLeft
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+        font.setStyleName("MediumOblique")
         painter.setFont(font)
         painter.setPen(QColor(Theme.nodeFontColor))
         title_rect = QRectF(
@@ -1034,6 +1035,7 @@ class ClaudeNode(BaseNode):
         r    = self.rect()
         pad  = Theme.nodeTextPaddingLeft
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+        font.setStyleName("MediumOblique")
         fm   = QFontMetrics(font)
         text_w = int(r.width() - pad * 2)
         bound  = fm.boundingRect(0, 0, text_w, 0,

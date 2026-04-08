@@ -63,6 +63,8 @@ class _SwatchCell(QWidget):
                 color:       {Theme.textPrimary};
                 border:      none;
                 font-family: 'Chandler42';
+                font-weight: 500;
+                font-style:  italic;
                 font-size:   8pt;
                 padding:     0;
             }}
@@ -85,6 +87,8 @@ class _SwatchCell(QWidget):
                 color:       {Theme.textPrimary};
                 border:      none;
                 font-family: 'Chandler42';
+                font-weight: 500;
+                font-style:  italic;
                 font-size:   8pt;
                 padding:     0;
             }}

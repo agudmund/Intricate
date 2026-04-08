@@ -41,6 +41,7 @@ class AboutNode(BaseNode):
             data.height = Theme.aboutMinHeight + 2
         if data.width == 0.0:
             font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+            font.setStyleName(self._TITLE_STYLE)
             text_w = QFontMetrics(font).horizontalAdvance(data.label or data.title)
             data.width = text_w + 28   # snug right edge
 
@@ -175,8 +176,9 @@ class AboutNode(BaseNode):
             return
         painter.save()
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+        font.setStyleName(self._TITLE_STYLE)
         painter.setFont(font)
-        painter.setPen(QColor(Theme.nodeFontColor))
+        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
         r = self.rect()
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight

@@ -1237,7 +1237,7 @@ class IntricateApp(QMainWindow):
         path = self._session_path()
         if not path:
             return
-        readme = path.parent / "README.md"
+        readme = path.parent.parent.parent / "README.md"
         if not readme.exists():
             self._status("no README.md found in project root")
             return
@@ -1345,7 +1345,7 @@ class IntricateApp(QMainWindow):
         act_info    = menu.addAction(QIcon(Theme.icon(Theme.iconInfo,    fallback_color="#9a9aaa")), "Intricate")
         act_restore = menu.addAction(QIcon(Theme.icon(Theme.iconRestore, fallback_color="#8aaa88")), "The Grand Restoration")
         act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "There Comes A Time In Everyone's Life...")
-        act_git     = menu.addAction(QIcon(Theme.icon(Theme.iconGit,     fallback_color="#8a9a8a")), "The Boring But Necessary One")
+        act_git     = menu.addAction(QIcon(Theme.icon(Theme.iconGit,     fallback_color="#8a9a8a")), "The Not So Boring Anymore Node")
         act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Stuff and Stuff")
         act_info.setToolTip("General Info")
         act_restore.setToolTip("Bring back the last deleted node")
@@ -1451,7 +1451,7 @@ class IntricateApp(QMainWindow):
         self.info_label = pretty_label("", alignment=Qt.AlignCenter)
         self.info_label.setStyleSheet(
             f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
-            f" color: {Theme.textPrimary}; font-family: Chandler42; font-size: 16px;"
+            f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: 16px;"
         )
         self.info_label.setFixedHeight(28)
 

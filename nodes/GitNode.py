@@ -325,8 +325,9 @@ class GitNode(BaseNode):
         pad = self._CONTENT_PAD
         top = self._content_top()
         title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        title_font.setStyleName(self._TITLE_STYLE)
         painter.setFont(title_font)
-        painter.setPen(QColor(Theme.nodeFontColor))
+        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant — teal lifted for plum contrast
         painter.drawText(
             QRectF(r.left() + pad, r.top() + top, r.width() - pad * 2, self._TITLE_HEIGHT),
             Qt.AlignLeft | Qt.AlignTop,

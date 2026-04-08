@@ -34,6 +34,7 @@ class ClaudeResponseNode(BaseNode):
             data = ClaudeResponseNodeData()
         if data.width == 0.0 or data.height == 0.0:
             font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+            font.setStyleName("MediumOblique")
             fm   = QFontMetrics(font)
             wrap_width = max(_MIN_WIDTH, min(_MAX_WIDTH, fm.horizontalAdvance(data.label) + _PAD_H))
             text_w     = int(wrap_width - _PAD_H)

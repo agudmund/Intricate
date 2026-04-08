@@ -80,6 +80,7 @@ class InfoNode(BaseNode):
 
         # Title
         title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        title_font.setStyleName(self._TITLE_STYLE)
         painter.setFont(title_font)
         painter.setPen(QColor(Theme.nodeFontColor))
         painter.drawText(

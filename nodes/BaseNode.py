@@ -905,6 +905,7 @@ class BaseNode(QGraphicsRectItem):
     _TITLE_HEIGHT    = 40.0   # rect height allocated for title text
     _BODY_OFFSET     = 36.0   # px below title top where body text starts
     _TITLE_FONT      = "Chandler42"
+    _TITLE_STYLE     = "MediumOblique"   # Chandler42's pretty variant
     _TITLE_FONT_BUMP = 6      # added to Theme.aboutFontSize for title
     _BODY_FONT       = "Lato"
     _BODY_FONT_BUMP  = -1     # added to Theme.aboutFontSize for body
@@ -947,8 +948,10 @@ class BaseNode(QGraphicsRectItem):
         (no super() needed), or call super() to inherit the title row.
         """
         painter.save()
-        painter.setFont(QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize)))
-        painter.setPen(QColor(Theme.nodeFontColor))
+        _f = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+        _f.setStyleName(self._TITLE_STYLE)
+        painter.setFont(_f)
+        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
         painter.drawText(self._title_rect(), Qt.AlignLeft | Qt.AlignTop, self.data.title)
         painter.restore()
 
