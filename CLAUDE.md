@@ -175,23 +175,23 @@ xxx = "xxx_node.ico"
 
 ### Icon Rule — Every Button Gets an Icon
 
-Whenever you add a new button **anywhere** in the app — sidebar, toolbar, node-embedded control, dialog — you **must** also generate a matching `.ico` icon. No button ships without its own icon. There are two pipelines depending on where the icon appears:
+Whenever you add a new button **anywhere** in the app — sidebar, toolbar, node-embedded control, dialog — you **must** also generate a matching `.ico` icon. No button ships without its own icon. There are three icon families, each with its own visual language and pipeline:
 
-#### Sidebar & Toolbar Icons (Pillow line-art)
+#### 1. Sidebar & Toolbar Icons (Pillow line-art) — elegant, passive, corporate
 
-For sidebar buttons, toolbar actions, and menu entries — use the Pillow recipe above (outer ring + symbol in the centre). These are minimal cream-on-transparent line drawings.
+For sidebar buttons, toolbar actions, and menu entries. Minimal cream-on-transparent line drawings inside a circle ring. These are the quiet, professional icons that frame the workspace.
 
-1. Write a standalone Python script following the recipe (outer ring + symbol in the centre).
+1. Write a standalone Python script following the Pillow recipe above (outer ring + symbol in the centre).
 2. Run it to produce both the `.png` and multi-resolution `.ico` in `./icons/`.
 3. Register the icon in `[theme.icons]` in `settings.toml`.
 4. Reference it via `Theme.iconXxx` in the button code — the metaclass resolves it automatically.
 
-#### Node-Embedded Button Icons (emoji-style)
+#### 2. Node Function Buttons (emoji-style) — overtly cute, primary actions
 
-For buttons that sit on the node button strip (alongside emoji buttons like "More Glory", depth toggle, tint) — the icon must match the 3D emoji aesthetic so the strip reads as a consistent row. The pipeline:
+For primary node function buttons on the button strip — actions core to what the node *does*. These match the 3D emoji aesthetic so they sit flush with the native emoji buttons (More Glory, depth, tint). Bold, warm, character-driven. Example: the GitHub Desktop octocat on GitNode.
 
-1. **Draft the shape** — use the Pillow recipe to create a clean vector silhouette of the icon (outer ring + symbol). This serves as the structural reference.
-2. **Generate the emoji render** — feed the silhouette through an image generator to produce a 3D shaded emoji-style version that matches the native OS emoji look (warm gradients, soft lighting, subtle depth).
+1. **Draft the shape** — use the Pillow recipe to create a clean vector silhouette (outer ring + symbol). This is the structural reference.
+2. **Generate the emoji render** — feed the silhouette through an image generator to produce a 3D shaded emoji-style version (warm gradients, soft lighting, subtle depth, matching the native OS emoji look).
 3. **Extract and clean** — write a Python script (see `icons/extract_github_icon.py` as reference) that:
    - Crops the icon from the generated image
    - Removes the background via colour-distance masking (`numpy`)
@@ -200,7 +200,20 @@ For buttons that sit on the node button strip (alongside emoji buttons like "Mor
    - Produces both `.png` and multi-resolution `.ico`
 4. Register in `[theme.icons]` in `settings.toml` and reference via `Theme.iconXxx`.
 
-The result is an icon with a transparent background that picks up the node's tint colour, sitting visually flush with the emoji buttons on either side. `NodeButton` in `NodeButton.py` scales icon-based buttons up by 1.28× to compensate for transparent padding and match emoji glyph size.
+#### 3. Node Utility Buttons (sticker-style) — clear, functional, secondary
+
+For utility and housekeeping actions on the button strip — things the node *can do* but that aren't its primary identity. Flat sticker aesthetic: bold shape, coloured fill, dark outline, white peel border. Visually distinct from the emoji buttons so the user reads them as tools rather than characters. Example: the push arrow on GitNode.
+
+1. **Draft or source the shape** — create or find a clean icon of the action (arrow, gear, refresh, etc.). A simple flat vector with a sticker border treatment works best.
+2. **Generate the sticker render** — feed the shape through an image generator requesting a "sticker" style: flat coloured fill (purple/blue tones fit the palette), dark outline, white cut-out border, no drop shadow.
+3. **Extract and clean** — write a Python script (see `icons/extract_push_icon.py` as reference) that:
+   - Crops the icon from the generated image
+   - Removes the background via colour-distance masking and warm-fringe removal
+   - Trims transparent edges, pads to square, resamples to 1024×1024
+   - Produces both `.png` and multi-resolution `.ico`
+4. Register in `[theme.icons]` in `settings.toml` and reference via `Theme.iconXxx`.
+
+All three families use `NodeButton` for rendering on the button strip. `NodeButton` in `NodeButton.py` scales icon-based buttons up by 1.28× to compensate for transparent padding and match emoji glyph size. The visual hierarchy reads as: emoji buttons are the stars, sticker buttons are the tools, sidebar icons are the furniture.
 
 ### Logging
 
