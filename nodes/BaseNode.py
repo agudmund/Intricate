@@ -745,7 +745,16 @@ class BaseNode(QGraphicsRectItem):
             self._pending_shake_delete = False
             scene = self.scene()
             if scene:
-                QTimer.singleShot(0, lambda: scene.removeItem(self))
+                def _deferred_remove(node=self, sc=scene):
+                    # Last-moment grab release — Qt can re-establish grabs
+                    # between mouseReleaseEvent and the deferred callback.
+                    try:
+                        if sc.mouseGrabberItem() is node:
+                            node.ungrabMouse()
+                    except RuntimeError:
+                        pass
+                    sc.removeItem(node)
+                QTimer.singleShot(0, _deferred_remove)
 
 
     def _try_splice_into_wire(self) -> None:
