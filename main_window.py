@@ -224,7 +224,7 @@ class IntricateApp(QMainWindow):
 
         self._setup_system_tray()
 
-        self.grid.addWidget(self.top_toolbar, 0, 0)
+        self.grid.addWidget(self.top_toolbar, 0, 0, 1, 2)  # span both columns
         self.top_toolbar.installEventFilter(self)
         self.top_toolbar.setContextMenuPolicy(Qt.CustomContextMenu)
         self.top_toolbar.customContextMenuRequested.connect(
@@ -586,21 +586,18 @@ class IntricateApp(QMainWindow):
         QSplitter gives us the harmonica — drag the divider to collapse
         or expand any zone. The right zone starts at zero width until needed.
         """
-        self.central = QWidget()
-        self.scene   = IntricateScene()
-        self.view    = IntricateView(self.scene)
+        self.scene = IntricateScene()
+        self.view  = IntricateView(self.scene)
         self.view._on_zoom_changed = lambda: self._sync_zoom_slider()
 
-        # ── Left sidebar ──────────────────────────────────────────────────────
-        self.sidebar_layout = QHBoxLayout(self.central)
-        self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        self.sidebar_layout.setSpacing(0)
+        # ── Left sidebar — full height, grid column 0 ────────────────────────
         self.sidebar = self._build_sidebar()
+        self.grid.addWidget(self.sidebar, 1, 0)
 
         # ── Right panel — image preview zone ──────────────────────────────────
         self.rightPanel = self._build_preview_panel()
 
-        # ── Splitter ──────────────────────────────────────────────────────────
+        # ── Horizontal splitter — canvas + preview (no sidebar) ───────────────
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setHandleWidth(4)
         self.splitter.setStyleSheet(f"""
@@ -608,32 +605,22 @@ class IntricateApp(QMainWindow):
                 background-color: {Theme.windowBg};
             }}
         """)
-        self.splitter.addWidget(self.sidebar)
         self.splitter.addWidget(self.view)
         self.splitter.addWidget(self.rightPanel)
-        # Force arrow cursor on splitter handles — prevent sticky resize cursors
         for i in range(1, self.splitter.count()):
             handle = self.splitter.handle(i)
             if handle:
                 handle.setCursor(Qt.ArrowCursor)
 
-        # Canvas takes all slack; sidebar and preview zone follow their own minimums
-        self.splitter.setStretchFactor(0, 0)
-        self.splitter.setStretchFactor(1, 1)
-        self.splitter.setStretchFactor(2, 0)
+        # Canvas takes all slack; preview zone follows its own minimum
+        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(1, 0)
+        self.splitter.setCollapsible(1, True)
 
-        # Allow the right panel to collapse fully to zero width when dragged shut
-        self.splitter.setCollapsible(2, True)
-
-        # Restore saved preview panel width, default to 0 (collapsed)
         QTimer.singleShot(0, self._restore_preview_width)
 
-        
-        self.sidebar_layout.addWidget(self.splitter)
-
-        # ── Vertical splitter — central canvas above, bottom toolbar below ───
-        # Dragging the handle collapses the bottom toolbar for distraction-free
-        # canvas work. Height persists across sessions via settings.
+        # ── Vertical splitter — canvas above, bottom toolbar below ────────────
+        # Sidebar is NOT inside this splitter — it spans full height in the grid.
         self._v_splitter = QSplitter(Qt.Vertical)
         self._v_splitter.setHandleWidth(4)
         self._v_splitter.setStyleSheet(f"""
@@ -641,10 +628,10 @@ class IntricateApp(QMainWindow):
                 background-color: {Theme.windowBg};
             }}
         """)
-        self._v_splitter.addWidget(self.central)
+        self._v_splitter.addWidget(self.splitter)
         # bottomToolbar is added later by _setupBottomToolbar
 
-        self.grid.addWidget(self._v_splitter, 1, 0)
+        self.grid.addWidget(self._v_splitter, 1, 1)
 
     # =================================================================================
     # Right panel — image preview
@@ -754,23 +741,19 @@ class IntricateApp(QMainWindow):
         return panel
 
     def _restore_preview_width(self) -> None:
-        """Restore saved splitter sizes (sidebar and preview panel widths persisted in settings)."""
+        """Restore saved preview panel width from settings."""
         saved_preview = get("ui", "preview_width", None)
-        saved_sidebar = get("ui", "sidebar_width", None)
         sizes = self.splitter.sizes()
-        if len(sizes) == 3:
-            new_sidebar  = saved_sidebar if saved_sidebar is not None else sizes[0]
-            new_preview  = saved_preview if saved_preview is not None else sizes[2]
-            slack        = sizes[0] + sizes[1] + sizes[2] - new_sidebar - new_preview
-            self.splitter.setSizes([new_sidebar, max(0, slack), new_preview])
+        if len(sizes) == 2 and saved_preview is not None:
+            total = sizes[0] + sizes[1]
+            self.splitter.setSizes([max(0, total - saved_preview), saved_preview])
         self.splitter.splitterMoved.connect(self._on_splitter_moved)
 
     def _on_splitter_moved(self, _pos: int, _index: int) -> None:
-        """Persist sidebar and preview panel widths whenever the splitter moves."""
+        """Persist preview panel width whenever the splitter moves."""
         sizes = self.splitter.sizes()
-        if len(sizes) == 3:
-            set_value("ui", "sidebar_width", sizes[0])
-            set_value("ui", "preview_width", sizes[2])
+        if len(sizes) == 2:
+            set_value("ui", "preview_width", sizes[1])
 
     def _restore_bottom_height(self) -> None:
         """Restore saved bottom toolbar height from settings."""
@@ -880,7 +863,7 @@ class IntricateApp(QMainWindow):
 
         sidebar = QWidget()
         sidebar.setFixedWidth(Theme.sidebarWidth())
-        sidebar.setStyleSheet("background-color: transparent;")
+        sidebar.setStyleSheet(f"background-color: {Theme.windowBg};")
 
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(
@@ -888,7 +871,6 @@ class IntricateApp(QMainWindow):
             Theme.sidebarPadding, Theme.sidebarPadding
         )
         layout.setSpacing(Theme.sidebarButtonGap)
-        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
         def _cat_btn(icon_name, tooltip, menu_fn):
             """Category button — icon fills the entire button, no Qt frame overhead."""
@@ -899,7 +881,7 @@ class IntricateApp(QMainWindow):
             b.setFlat(True)
             b.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
             b.clicked.connect(lambda _=None, btn=b: menu_fn(btn))
-            layout.addWidget(b)
+            layout.addWidget(b, alignment=Qt.AlignHCenter)
 
         _cat_btn(Theme.iconImagesGroup,  "Images", self._show_images_menu)
         _cat_btn(Theme.iconText,        "Text",   self._show_text_menu)
@@ -930,16 +912,24 @@ class IntricateApp(QMainWindow):
 
         layout.addSpacing(4)
 
-        # ── Joy bucket — tamagotchi energy bar ────────────────────────────────
-        # Depletes from 100 → 0 over 15 minutes. Click the feed button to
-        # top it up by 10% each press. Purely nurturing, zero utility.
+        # ── Joy bucket — own bottom-anchored container ────────────────────────
+        # Separated from the top category buttons so stretch works between them.
+        sz = Theme.iconButtonSize
+
+        joy_container = QWidget()
+        joy_container.setStyleSheet("background-color: transparent;")
+        joy_layout = QVBoxLayout(joy_container)
+        joy_layout.setContentsMargins(0, 0, 0, 0)
+        joy_layout.setSpacing(0)
+        joy_layout.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
+
         self.joy_bar = QProgressBar()
         self.joy_bar.setOrientation(Qt.Vertical)
         self.joy_bar.setRange(0, 100)
         self.joy_bar.setValue(int(_s.get_nested("intricate", "joy", "bar_value", 100)))
         self.joy_bar.setTextVisible(False)
-        self.joy_bar.setFixedWidth((Theme.sidebarWidth() - Theme.sidebarPadding * 2) // 4)
-        self.joy_bar.setMinimumHeight(60)
+        self.joy_bar.setFixedWidth(sz // 3)
+        self.joy_bar.setMinimumHeight(sz * 2)
         self.joy_bar.setStyleSheet(f"""
             QProgressBar {{
                 background: {Theme.backDrop};
@@ -953,30 +943,29 @@ class IntricateApp(QMainWindow):
                 border-radius: 2px;
             }}
         """)
-        layout.addWidget(self.joy_bar, alignment=Qt.AlignHCenter)
+        joy_layout.addWidget(self.joy_bar, alignment=Qt.AlignHCenter)
+        joy_layout.addStretch()
 
-        # Feed + Sleep buttons — side by side
-        joy_btn_row = QHBoxLayout()
-        joy_btn_row.setContentsMargins(0, 0, 0, 0)
-        joy_btn_row.setSpacing(4)
-
-        self._feed_btn = button("", clicked=self._feed_joy)
-        self._feed_btn.setMinimumSize(0, 0)
-        self._feed_btn.setFixedSize(QSize(24, 24))
-        self._feed_btn.setText("\U0001f331")  # 🌱
+        # Feed button — full sidebar icon scale
+        self._feed_btn = button("", icon_name=Theme.iconCatnipFeed, clicked=self._feed_joy)
+        self._feed_btn.setFixedSize(sz, sz)
+        self._feed_btn.setIconSize(QSize(sz, sz))
+        self._feed_btn.setFlat(True)
+        self._feed_btn.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
         self._feed_btn.setToolTip("Feed me")
-        joy_btn_row.addWidget(self._feed_btn)
+        joy_layout.addWidget(self._feed_btn, alignment=Qt.AlignHCenter)
 
+        # Sleep toggle — small and gentle
         self._sleep_btn = button("", clicked=self._toggle_joy_sleep)
         self._sleep_btn.setMinimumSize(0, 0)
         self._sleep_btn.setFixedSize(QSize(24, 24))
+        self._sleep_btn.setFlat(True)
+        self._sleep_btn.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
         self._sleep_btn.setText("\U0001f319")  # 🌙
         self._sleep_btn.setToolTip("Tuck me in")
-        joy_btn_row.addWidget(self._sleep_btn)
+        joy_layout.addWidget(self._sleep_btn, alignment=Qt.AlignHCenter)
 
-        btn_container = QWidget()
-        btn_container.setLayout(joy_btn_row)
-        layout.addWidget(btn_container, alignment=Qt.AlignHCenter)
+        layout.addWidget(joy_container)
 
         # ── Joy bucket counter ─────────────────────────────────────────────
         import pretty_widgets.utils.settings as _s
