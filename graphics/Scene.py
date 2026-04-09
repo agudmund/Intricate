@@ -494,6 +494,20 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_session_node(self, pos: QPointF | None = None, source_path: str | None = None):
+        """Add a SessionNode for inspecting and importing session files."""
+        from nodes.SessionNode import SessionNode
+        from data.SessionNodeData import SessionNodeData
+        data = SessionNodeData()
+        node = SessionNode(data)
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        if source_path:
+            node.load_session_file(source_path)
+        return node
+
     # ─────────────────────────────────────────────────────────────────────────
     # PROJECT IMAGE SYNC
     # ─────────────────────────────────────────────────────────────────────────
@@ -652,6 +666,75 @@ class IntricateScene(QGraphicsScene):
                                      c.get("start_uuid"), c.get("end_uuid"))
 
         return payload.get("viewport", {})
+
+    def import_session(self, payload: dict, anchor: QPointF) -> list:
+        """
+        Append nodes and connections from a session payload onto the canvas.
+
+        Unlike load_session(), this does NOT clear the scene first. All imported
+        nodes receive fresh UUIDs and their positions are offset so they spawn
+        near *anchor* (typically the SessionNode's position).
+
+        Returns the list of created node objects.
+        """
+        import copy
+        import uuid as _uuid
+
+        nodes_raw   = payload.get("nodes", [])
+        conns_raw   = payload.get("connections", [])
+        if not nodes_raw:
+            return []
+
+        # ── Compute position offset ──────────────────────────────────────────
+        xs = [float(n.get("x", 0.0)) for n in nodes_raw]
+        ys = [float(n.get("y", 0.0)) for n in nodes_raw]
+        min_x, min_y = min(xs), min(ys)
+        offset = anchor - QPointF(min_x, min_y) + QPointF(50.0, 50.0)
+
+        # ── Remap UUIDs and apply offset ─────────────────────────────────────
+        old_to_new: dict[str, str] = {}
+        prepared: list[dict] = []
+        for n in nodes_raw:
+            d = copy.deepcopy(n)
+            old_uuid = d.get("uuid", "")
+            new_uuid = _uuid.uuid4().hex
+            old_to_new[old_uuid] = new_uuid
+            d["uuid"] = new_uuid
+            d["x"] = float(d.get("x", 0.0)) + offset.x()
+            d["y"] = float(d.get("y", 0.0)) + offset.y()
+            prepared.append(d)
+
+        # ── Restore nodes ────────────────────────────────────────────────────
+        uuid_map: dict[str, object] = {}
+        created: list = []
+        for d in prepared:
+            try:
+                node = self._restore_node(d)
+            except Exception:
+                logger.exception("import_session: failed to restore %s (uuid=%s)",
+                                 d.get("node_type"), d.get("uuid"))
+                node = None
+            if node:
+                uuid_map[d["uuid"]] = node
+                created.append(node)
+
+        # ── Wire connections ─────────────────────────────────────────────────
+        from graphics.Connection import Connection
+        for c in conns_raw:
+            new_start = old_to_new.get(c.get("start_uuid", ""))
+            new_end   = old_to_new.get(c.get("end_uuid",   ""))
+            start = uuid_map.get(new_start)
+            end   = uuid_map.get(new_end)
+            if start and end and start is not end:
+                try:
+                    conn = Connection(start, end)
+                    self.addItem(conn)
+                    conn.update_path()
+                except Exception:
+                    logger.exception("import_session: failed to wire %s → %s",
+                                     c.get("start_uuid"), c.get("end_uuid"))
+
+        return created
 
     def _release_all(self) -> None:
         """
@@ -901,6 +984,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.FbxNode import FbxNode
             from data.FbxNodeData import FbxNodeData
             node = FbxNode(FbxNodeData.from_dict(d))
+
+        elif node_type == "session":
+            from nodes.SessionNode import SessionNode
+            from data.SessionNodeData import SessionNodeData
+            node = SessionNode(SessionNodeData.from_dict(d))
 
         if node is not None:
             node.setPos(QPointF(d.get("x", 0.0), d.get("y", 0.0)))

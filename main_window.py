@@ -1347,16 +1347,19 @@ class IntricateApp(QMainWindow):
         act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "There Comes A Time In Everyone's Life...")
         act_git     = menu.addAction(QIcon(Theme.icon(Theme.iconGit,     fallback_color="#8a9a8a")), "The Not So Boring Anymore Node")
         act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Stuff and Stuff")
+        act_session = menu.addAction(QIcon(Theme.icon(Theme.iconSession, fallback_color="#8a9aaa")), "The Recall")
         act_info.setToolTip("General Info")
         act_restore.setToolTip("Bring back the last deleted node")
         act_snip.setToolTip("Remove an explicit wire connection")
         act_git.setToolTip("Git status report")
         act_tree.setToolTip("Session file content")
+        act_session.setToolTip("Import a session file")
         act_info.triggered.connect(self._spawn_info_node)
         act_restore.triggered.connect(self._restore_deleted)
         act_snip.triggered.connect(self._start_wire_snip)
         act_git.triggered.connect(self._spawn_git_node)
         act_tree.triggered.connect(self._spawn_tree_node)
+        act_session.triggered.connect(self._spawn_session_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_claude_menu(self, btn: QPushButton) -> None:
@@ -1418,6 +1421,9 @@ class IntricateApp(QMainWindow):
 
     def _spawn_git_node(self):
         self._spawn(self.scene.add_git_node, "the boring but necessary one")
+
+    def _spawn_session_node(self):
+        self._spawn(self.scene.add_session_node, "ready for a session file")
 
     def _spawn_audio_node(self):
         self._spawn(self.scene.add_audio_node, "Yummi >> Tummy >> voila!")
