@@ -348,27 +348,8 @@ class IntricateApp(QMainWindow):
             if event.button() == Qt.LeftButton:
                 self.toggle_fullscreen()
                 return True
-        # Wake from joy sleep on any meaningful interaction —
-        # except curtains, minimize-to-tray, and the sleep button itself,
-        # so we can tuck it in without it waking up on the way out.
-        if self._joy_sleeping and event.type() in (
-            QEvent.MouseButtonPress, QEvent.KeyPress, QEvent.Wheel,
-        ):
-            if event.type() == QEvent.MouseButtonPress:
-                # Walk up the widget tree — the click may land on a child
-                # (icon label, inner frame) rather than the button itself.
-                exempt = {self._curtains_btn, self._tray_btn, self._sleep_btn}
-                w = obj
-                is_exempt = False
-                while w is not None:
-                    if w in exempt:
-                        is_exempt = True
-                        break
-                    w = getattr(w, 'parent', lambda: None)()
-                if not is_exempt:
-                    self._wake_joy()
-            else:
-                self._wake_joy()
+        # Joy wake — deliberate button press only. No passive interaction wake.
+        # The sleep/wake button is the sole controller of the sleep state.
         return super().eventFilter(obj, event)
 
     def toggle_fullscreen(self):
@@ -1084,32 +1065,22 @@ class IntricateApp(QMainWindow):
     def _toggle_joy_sleep(self) -> None:
         """Put the joy system to sleep or wake it up."""
         if self._joy_sleeping:
-            self._wake_joy(deliberate=True)
+            self._wake_joy()
         else:
             self._sleep_joy()
 
     def _sleep_joy(self) -> None:
         """Enter sleep mode — slow depletion, muted meows."""
         self._joy_sleeping = True
-        self._joy_sleep_armed_at = time.monotonic()  # cooldown — ignore wake for 500ms
         self._joy_timer.setInterval(self._JOY_SLEEP_INTERVAL)
         self._joy_timer.start()          # restart with new interval
         self._sleep_btn.setText("\u2600\ufe0f")  # ☀️ — press to wake
         self._sleep_btn.setToolTip("Wake me up")
 
-    def _wake_joy(self, deliberate: bool = False) -> None:
-        """Exit sleep mode — normal depletion resumes.
-
-        deliberate=True bypasses the cooldown (direct button press).
-        deliberate=False is the event-filter path (passive interaction)
-        which respects the 500ms cooldown to avoid the toggle race.
-        """
+    def _wake_joy(self) -> None:
+        """Exit sleep mode — normal depletion resumes."""
         if not self._joy_sleeping:
             return
-        if not deliberate:
-            armed = getattr(self, '_joy_sleep_armed_at', 0.0)
-            if time.monotonic() - armed < 0.5:
-                return
         self._joy_sleeping = False
         self._joy_timer.setInterval(self._JOY_AWAKE_INTERVAL)
         self._joy_timer.start()          # restart with new interval
