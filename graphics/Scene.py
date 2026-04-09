@@ -633,12 +633,25 @@ class IntricateScene(QGraphicsScene):
                 except RuntimeError:
                     pass
 
+        # Preserve existing description if one was loaded with this session
+        description = getattr(self, '_session_description', "")
+
         SessionManager.save_session(str(path), {
             "version":     SessionManager.VERSION,
+            "description": description,
             "nodes":       nodes,
             "connections": connections,
             "viewport":    viewport or {},
         })
+
+    @property
+    def session_description(self) -> str:
+        """Current session description — read by SessionNode, written by ClaudeNode."""
+        return getattr(self, '_session_description', "")
+
+    @session_description.setter
+    def session_description(self, value: str) -> None:
+        self._session_description = value
 
     def load_session(self, path) -> dict:
         """Clear the scene and restore from a session.json via SessionManager.
@@ -650,6 +663,9 @@ class IntricateScene(QGraphicsScene):
         payload = SessionManager.get_session_data(str(path))
         if payload is None:
             return {}
+
+        # Store session description for round-trip persistence
+        self._session_description = payload.get("description", "")
 
         uuid_map = {}
         for d in payload.get("nodes", []):

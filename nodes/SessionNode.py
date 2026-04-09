@@ -132,6 +132,7 @@ class SessionNode(BaseNode):
 
         self.data.node_count       = len(nodes)
         self.data.connection_count = len(connections)
+        self.data.description      = payload.get("description", "")
 
         # Build type breakdown string
         counts = Counter(n.get("node_type", "?") for n in nodes)
@@ -234,7 +235,21 @@ class SessionNode(BaseNode):
                 Qt.AlignLeft | Qt.AlignTop,
                 self.data.session_name,
             )
-            y += line_h + 6
+            y += line_h + 4
+
+            # Description — if present
+            if self.data.description:
+                painter.setOpacity(0.65)
+                desc_font = QFont(self._BODY_FONT, max(1, Theme.aboutFontSize + self._BODY_FONT_BUMP - 1))
+                painter.setFont(desc_font)
+                painter.drawText(
+                    QRectF(r.left() + pad, y, r.width() - pad * 2, 36),
+                    Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap,
+                    self.data.description,
+                )
+                y += line_h + 8
+                painter.setOpacity(0.85)
+                painter.setFont(body_font)
 
             # Node count
             painter.drawText(
