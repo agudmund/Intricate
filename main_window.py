@@ -849,9 +849,9 @@ class IntricateApp(QMainWindow):
             b.clicked.connect(lambda _=None, btn=b: menu_fn(btn))
             layout.addWidget(b)
 
+        _cat_btn(Theme.iconVisualGroup,  "Visual", self._show_visual_menu)
         _cat_btn(Theme.iconText,        "Text",   self._show_text_menu)
         _cat_btn(Theme.iconImagesGroup,  "Images", self._show_images_menu)
-        _cat_btn(Theme.iconVisualGroup,  "Visual", self._show_visual_menu)
         _cat_btn(Theme.iconHealthGroup,  "Health", self._show_health_menu)
         _cat_btn(Theme.iconToolsGroup,   "Tools",  self._show_tools_menu)
         _cat_btn(Theme.iconClaude,       "Claude", self._show_claude_menu)
