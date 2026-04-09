@@ -685,6 +685,9 @@ class IntricateScene(QGraphicsScene):
         if not nodes_raw:
             return []
 
+        logger.log(5, "[import] starting — %d nodes, %d connections",
+                    len(nodes_raw), len(conns_raw))
+
         # ── Compute position offset ──────────────────────────────────────────
         xs = [float(n.get("x", 0.0)) for n in nodes_raw]
         ys = [float(n.get("y", 0.0)) for n in nodes_raw]
@@ -707,16 +710,22 @@ class IntricateScene(QGraphicsScene):
         # ── Restore nodes ────────────────────────────────────────────────────
         uuid_map: dict[str, object] = {}
         created: list = []
-        for d in prepared:
+        for i, d in enumerate(prepared):
+            ntype = d.get("node_type", "?")
+            logger.log(5, "[import] restoring node %d/%d type=%s uuid=%s",
+                        i + 1, len(prepared), ntype, d.get("uuid", "?")[:8])
             try:
                 node = self._restore_node(d)
             except Exception:
-                logger.exception("import_session: failed to restore %s (uuid=%s)",
-                                 d.get("node_type"), d.get("uuid"))
+                logger.exception("[import] failed to restore node %d type=%s",
+                                 i + 1, ntype)
                 node = None
             if node:
                 uuid_map[d["uuid"]] = node
                 created.append(node)
+
+        logger.log(5, "[import] nodes done — %d/%d created, wiring %d connections",
+                    len(created), len(prepared), len(conns_raw))
 
         # ── Wire connections ─────────────────────────────────────────────────
         from graphics.Connection import Connection
@@ -731,9 +740,9 @@ class IntricateScene(QGraphicsScene):
                     self.addItem(conn)
                     conn.update_path()
                 except Exception:
-                    logger.exception("import_session: failed to wire %s → %s",
-                                     c.get("start_uuid"), c.get("end_uuid"))
+                    logger.exception("[import] failed to wire connection")
 
+        logger.log(5, "[import] complete — %d nodes, connections wired", len(created))
         return created
 
     def _release_all(self) -> None:

@@ -146,6 +146,9 @@ class SessionNode(BaseNode):
 
     def _do_import(self) -> None:
         """Spawn all nodes and connections from the loaded session onto the canvas."""
+        from pretty_widgets.utils.logger import setup_logger
+        _log = setup_logger("session")
+
         if not self.data.source_path:
             return
 
@@ -161,13 +164,27 @@ class SessionNode(BaseNode):
         if scene is None or not hasattr(scene, 'import_session'):
             return
 
-        created = scene.import_session(self._cached_payload, anchor=self.scenePos())
+        node_count = len(self._cached_payload.get("nodes", []))
+        conn_count = len(self._cached_payload.get("connections", []))
+        _log.log(5, "[SessionNode] importing %d nodes, %d connections from %s",
+                 node_count, conn_count, self.data.session_name)
+
+        try:
+            created = scene.import_session(self._cached_payload, anchor=self.scenePos())
+        except Exception:
+            _log.exception("[SessionNode] import_session crashed")
+            return
+
+        _log.log(5, "[SessionNode] import complete — %d nodes created", len(created))
 
         # Auto-select all imported nodes
         if created:
             scene.clearSelection()
             for node in created:
-                node.setSelected(True)
+                try:
+                    node.setSelected(True)
+                except RuntimeError:
+                    pass  # node may have been removed during import
 
         self.data.imported = True
         self.update()
