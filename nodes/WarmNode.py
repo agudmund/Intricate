@@ -278,8 +278,25 @@ class WarmNode(BaseNode):
             return
 
         try:
-            subprocess.Popen(cmd)
-            _log.debug(f"[WarmNode] Launched editor: {cmd}")
+            _log.log(5, "[WarmNode] Launching editor cmd=%s", cmd)
+            proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+            _log.info(f"[WarmNode] Launched editor (pid={proc.pid}): {cmd}")
+
+            # Monitor for early crash — if the subprocess exits within 2 seconds,
+            # log its stderr so silent import errors become visible.
+            def _watch_early_exit():
+                import time
+                time.sleep(2)
+                if proc.poll() is not None:
+                    stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+                    _log.warning(f"[WarmNode] Editor exited early (code={proc.returncode}): {stderr[:500]}")
+                else:
+                    # Process is still running — release stderr to avoid blocking
+                    if proc.stderr:
+                        proc.stderr.close()
+            import threading
+            threading.Thread(target=_watch_early_exit, daemon=True).start()
+
             self._start_bridge_watcher()
             self._roll_up_curtains()
         except Exception as e:

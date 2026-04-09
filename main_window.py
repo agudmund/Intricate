@@ -556,12 +556,15 @@ class IntricateApp(QMainWindow):
             QSplitter::handle {{
                 background-color: {Theme.windowBg};
             }}
-            QSplitter::handle:horizontal {{ cursor: default; }}
-            QSplitter::handle:vertical   {{ cursor: default; }}
         """)
         self.splitter.addWidget(self.sidebar)
         self.splitter.addWidget(self.view)
         self.splitter.addWidget(self.rightPanel)
+        # Force arrow cursor on splitter handles — prevent sticky resize cursors
+        for i in range(1, self.splitter.count()):
+            handle = self.splitter.handle(i)
+            if handle:
+                handle.setCursor(Qt.ArrowCursor)
 
         # Canvas takes all slack; sidebar and preview zone follow their own minimums
         self.splitter.setStretchFactor(0, 0)
@@ -586,8 +589,6 @@ class IntricateApp(QMainWindow):
             QSplitter::handle {{
                 background-color: {Theme.windowBg};
             }}
-            QSplitter::handle:horizontal {{ cursor: default; }}
-            QSplitter::handle:vertical   {{ cursor: default; }}
         """)
         self._v_splitter.addWidget(self.central)
         # bottomToolbar is added later by _setupBottomToolbar
@@ -1578,6 +1579,11 @@ class IntricateApp(QMainWindow):
         self._v_splitter.setStretchFactor(1, 0)   # toolbar keeps its size
         self._v_splitter.setCollapsible(0, False)  # never collapse the canvas
         self._v_splitter.setCollapsible(1, True)   # toolbar can collapse fully
+        # Force arrow cursor on vertical splitter handles
+        for i in range(1, self._v_splitter.count()):
+            handle = self._v_splitter.handle(i)
+            if handle:
+                handle.setCursor(Qt.ArrowCursor)
 
         # Restore saved bottom bar height
         QTimer.singleShot(0, self._restore_bottom_height)
