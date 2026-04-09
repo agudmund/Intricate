@@ -13,8 +13,8 @@ from PySide6.QtGui import QPainter, QPixmap, QColor
 
 
 # Shadow tuning
-SHADOW_DISTANCE = 4.0     # max pixel offset for the shadow
-SHADOW_OPACITY  = 0.35    # shadow alpha multiplier
+SHADOW_DISTANCE = 2.0     # max pixel offset for the shadow — subtle hint of depth
+SHADOW_OPACITY  = 0.55    # shadow alpha multiplier
 SHADOW_COLOR    = QColor(0, 0, 0, 90)  # tint applied to shadow copy
 
 
@@ -37,6 +37,28 @@ class StickerButton(QPushButton):
         self.setFlat(True)
         self.setFocusPolicy(Qt.NoFocus)
         self.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
+
+    def _build_shadow_pixmap(self) -> QPixmap:
+        """Create a shadow silhouette from the sticker's alpha channel.
+
+        Uses the sticker's shape (alpha) but fills with a dark tone —
+        reads as a real shadow cast onto the surface rather than a
+        transparent copy of the coloured icon.
+        """
+        sz = self._pixmap.size()
+        # Start with the original pixmap (preserves alpha shape)
+        shadow = QPixmap(sz)
+        shadow.fill(QColor(0, 0, 0, 0))
+
+        p = QPainter(shadow)
+        # Draw the sticker to capture its alpha channel
+        p.drawPixmap(0, 0, self._pixmap)
+        # Composite a dark fill over it using SourceAtop — replaces colour
+        # but keeps the alpha channel intact
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
+        p.fillRect(0, 0, sz.width(), sz.height(), QColor(20, 18, 16))
+        p.end()
+        return shadow
 
     def _shadow_direction(self) -> QPointF:
         """Compute the normalised direction from window centre to this button's centre."""
@@ -78,10 +100,16 @@ class StickerButton(QPushButton):
             draw_rect = QRectF(shadow_x, shadow_y, sz, sz)
             painter.drawPixmap(draw_rect.toRect(), self._pixmap)
         else:
-            # Normal — shadow on the outside edge, icon at base position
-            painter.setOpacity(SHADOW_OPACITY)
+            # Normal — shadow as a dark silhouette on the outside edge.
+            # Build the shadow pixmap once and cache it — uses the sticker's
+            # alpha channel as the shape but fills with a dark tone averaged
+            # between the sticker body and the surface it sits on.
+            if not hasattr(self, '_shadow_pix') or self._shadow_pix is None:
+                self._shadow_pix = self._build_shadow_pixmap()
+
             shadow_rect = QRectF(shadow_x, shadow_y, sz, sz)
-            painter.drawPixmap(shadow_rect.toRect(), self._pixmap)
+            painter.setOpacity(SHADOW_OPACITY)
+            painter.drawPixmap(shadow_rect.toRect(), self._shadow_pix)
 
             painter.setOpacity(1.0)
             draw_rect = QRectF(0, 0, sz, sz)
