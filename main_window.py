@@ -446,6 +446,7 @@ class IntricateApp(QMainWindow):
             self.original_height = self.height()
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
             self._v_splitter.hide()
+            self.sidebar.hide()
             # Pause all videos — curtains hide the canvas
             if self.scene:
                 self.scene.pause_all_videos()
@@ -460,6 +461,7 @@ class IntricateApp(QMainWindow):
             y = max(avail.top(), y)
             end_rect = QRect(start_rect.x(), y, start_rect.width(), self.original_height)
             self._v_splitter.show()
+            self.sidebar.show()
 
         self._animate_curtains(start_rect, end_rect)
         self.is_collapsed = not self.is_collapsed
@@ -867,7 +869,7 @@ class IntricateApp(QMainWindow):
 
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(
-            Theme.sidebarPadding, Theme.sidebarPadding,
+            Theme.sidebarPadding, 0,
             Theme.sidebarPadding, Theme.sidebarPadding
         )
         layout.setSpacing(Theme.sidebarButtonGap)
