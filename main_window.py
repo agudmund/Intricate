@@ -339,6 +339,9 @@ class IntricateApp(QMainWindow):
     # =========================================================================
 
     def eventFilter(self, obj, event):
+        if obj is self.top_toolbar and event.type() == QEvent.ContextMenu:
+            self._show_toolbar_context_menu(event.globalPos())
+            return True
         if obj is self.top_toolbar and event.type() == QEvent.MouseButtonDblClick:
             if event.button() == Qt.LeftButton:
                 self.toggle_fullscreen()
@@ -378,6 +381,54 @@ class IntricateApp(QMainWindow):
             self._pre_fullscreen_geometry = self.geometry()
             self.setGeometry(screen)
             self._is_fullscreen = True
+
+    # =========================================================================
+    # Toolbar context menu — hidden unlock/lock for folder management
+    # =========================================================================
+
+    _folders_unlocked = False
+
+    def _show_toolbar_context_menu(self, global_pos) -> None:
+        """Right-click the top toolbar to unlock/lock project folders."""
+        menu = self._styled_menu()
+        if self._folders_unlocked:
+            act = menu.addAction("Lock Folders")
+            act.setToolTip("Re-acquire working directory lock on the active project")
+            act.triggered.connect(self._lock_folders)
+        else:
+            act = menu.addAction("Unlock Folders")
+            act.setToolTip("Release directory locks so folders can be deleted in Explorer")
+            act.triggered.connect(self._unlock_folders)
+        menu.exec(global_pos)
+
+    def _unlock_folders(self) -> None:
+        """Release the CWD lock on the active project folder.
+
+        On Windows, a process's working directory holds a handle that prevents
+        the folder from being deleted in Explorer. Temporarily moving CWD to
+        the Intricate root releases that lock.
+        """
+        safe_dir = Path(__file__).resolve().parent
+        try:
+            os.chdir(str(safe_dir))
+            logger.info("[unlock] CWD moved to %s — project folder released", safe_dir)
+        except OSError:
+            pass
+        self._folders_unlocked = True
+
+    def _lock_folders(self) -> None:
+        """Re-acquire the CWD lock by chdir-ing back to the active project."""
+        path = self._session_path()
+        if path:
+            from utils.session import project_root_from_session
+            project_root = project_root_from_session(path)
+            if project_root.exists():
+                try:
+                    os.chdir(str(project_root))
+                    logger.info("[lock] CWD restored to %s", project_root)
+                except OSError:
+                    pass
+        self._folders_unlocked = False
 
     # =========================================================================
     # Curtains, The Window Rollup Thing
