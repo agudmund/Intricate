@@ -139,9 +139,17 @@ class JoyStatsNode(BaseNode):
             state = "Awake"
             state_color = "#b8b872"
 
-        # Count active feeds in window
+        # Count active feeds in window + time until next slot opens
         now = time.monotonic()
-        active_feeds = len([t for t in feed_ts if now - t < feed_window])
+        active_in_window = [t for t in feed_ts if now - t < feed_window]
+        active_feeds = len(active_in_window)
+        if active_feeds >= feed_max and active_in_window:
+            # Oldest feed in window — time until it expires and a slot opens
+            oldest = min(active_in_window)
+            reset_secs = int(feed_window - (now - oldest))
+            feed_reset = f"  (reset {reset_secs}s)"
+        else:
+            feed_reset = ""
 
         # Draw stats
         lines = [
@@ -153,7 +161,7 @@ class JoyStatsNode(BaseNode):
             (f"Buckets:  {bucket_count}", None),
             ("", None),
             (f"Depletion:  {depl_interval / 1000:.0f}s per tick", None),
-            (f"Feeds:  {active_feeds}/{feed_max}  ({int(feed_window)}s window)", None),
+            (f"Feeds:  {active_feeds}/{feed_max}{feed_reset}", None),
             (f"Hungry:  {'yes' if hungry else 'no'}", "#d87a7a" if hungry else None),
         ]
 
