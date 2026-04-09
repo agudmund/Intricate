@@ -946,13 +946,13 @@ class IntricateApp(QMainWindow):
         joy_layout.addWidget(self.joy_bar, alignment=Qt.AlignHCenter)
         joy_layout.addStretch()
 
-        # Feed button — full sidebar icon scale
-        self._feed_btn = button("", icon_name=Theme.iconCatnipFeed, clicked=self._feed_joy)
-        self._feed_btn.setFixedSize(sz, sz)
-        self._feed_btn.setIconSize(QSize(sz, sz))
-        self._feed_btn.setFlat(True)
-        self._feed_btn.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
+        # Feed button — dynamic radial shadow, physical press depth
+        from widgets.StickerButton import StickerButton
+        clean_pix = Theme.icon(Theme.iconCatnipFeedClean, fallback_color="#d87a9e")
+        self._feed_btn = StickerButton(clean_pix, sz, parent=joy_container)
         self._feed_btn.setToolTip("Feed me")
+        self._feed_btn.pressed.connect(self._on_feed_pressed)
+        self._feed_btn.released.connect(self._on_feed_released)
         joy_layout.addWidget(self._feed_btn, alignment=Qt.AlignHCenter)
 
         # Sleep toggle — small and gentle
@@ -1023,13 +1023,20 @@ class IntricateApp(QMainWindow):
         import pretty_widgets.utils.settings as _s
         _s.set_nested("intricate", "canvas", "fog_alpha", value)
 
+    def _on_feed_pressed(self) -> None:
+        """Mouse down — StickerButton handles the depth shift visually."""
+        pass
+
+    def _on_feed_released(self) -> None:
+        """Mouse up — trigger the feed action."""
+        self._feed_joy()
+
     def _feed_joy(self) -> None:
         """Feed the joy bucket — any click resets the timer and clears hunger.
 
         Rate-limited to 3 feeds per rolling 10-minute window.
         It's stuffed beyond that — can only eat so much at a time.
         """
-        import time
         now = time.monotonic()
         # Prune timestamps outside the window
         self._feed_timestamps = [

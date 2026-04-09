@@ -86,6 +86,11 @@ class NodeButton(QGraphicsObject):
     # PAINT
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Set True on sticker-style buttons to get dynamic radial shadow
+    _sticker_shadow = False
+    _SHADOW_DIST    = 3.0     # px offset in scene coords
+    _SHADOW_OPACITY = 0.35
+
     def paint(self, painter: QPainter, option, widget=None) -> None:
         # LOD gate — hide at low zoom, no overhead below threshold
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
@@ -105,6 +110,30 @@ class NodeButton(QGraphicsObject):
         inset   = (BUTTON_SIZE - scaled) / 2.0
         draw_rect = QRectF(inset, EMOJI_OVERFLOW + inset, scaled, scaled)
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+
+        # Dynamic radial shadow — radiates outward from canvas view centre
+        if self._sticker_shadow and self.scene():
+            import math
+            views = self.scene().views()
+            if views:
+                view = views[0]
+                vp_centre = view.mapToScene(
+                    view.viewport().rect().center()
+                )
+                btn_centre = self.mapToScene(self.boundingRect().center())
+                dx = btn_centre.x() - vp_centre.x()
+                dy = btn_centre.y() - vp_centre.y()
+                length = math.sqrt(dx * dx + dy * dy)
+                if length > 1.0:
+                    nx, ny = dx / length, dy / length
+                else:
+                    nx, ny = 0.0, 1.0
+                sd = self._SHADOW_DIST / lod  # compensate for zoom
+                shadow_rect = draw_rect.translated(nx * sd, ny * sd)
+                painter.setOpacity(self._SHADOW_OPACITY)
+                painter.drawPixmap(shadow_rect.toRect(), pix)
+                painter.setOpacity(1.0)
+
         painter.drawPixmap(draw_rect.toRect(), pix)
 
     # ─────────────────────────────────────────────────────────────────────────

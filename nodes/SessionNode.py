@@ -66,6 +66,7 @@ class SessionNode(BaseNode):
         from nodes.NodeButton import NodeButton as _NB
         import_pix = Theme.icon(Theme.iconSpawnNodes, fallback_color="#7ab88a")
         self._import_btn = _NB(self, import_pix, self._do_import)
+        self._import_btn._sticker_shadow = True
         self._import_btn.setToolTip("Import session nodes onto canvas")
         self._buttons.append(self._import_btn)
 
