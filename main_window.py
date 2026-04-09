@@ -8,6 +8,7 @@
 
 import json
 import random
+import time
 
 import subprocess
 import sys
@@ -1090,6 +1091,7 @@ class IntricateApp(QMainWindow):
     def _sleep_joy(self) -> None:
         """Enter sleep mode — slow depletion, muted meows."""
         self._joy_sleeping = True
+        self._joy_sleep_armed_at = time.monotonic()  # cooldown — ignore wake for 500ms
         self._joy_timer.setInterval(self._JOY_SLEEP_INTERVAL)
         self._joy_timer.start()          # restart with new interval
         self._sleep_btn.setText("\u2600\ufe0f")  # ☀️ — press to wake
@@ -1098,6 +1100,12 @@ class IntricateApp(QMainWindow):
     def _wake_joy(self) -> None:
         """Exit sleep mode — normal depletion resumes."""
         if not self._joy_sleeping:
+            return
+        # Cooldown — the same click that put us to sleep can propagate through
+        # the app-wide event filter and immediately wake us. Ignore wake events
+        # within 500ms of entering sleep.
+        armed = getattr(self, '_joy_sleep_armed_at', 0.0)
+        if time.monotonic() - armed < 0.5:
             return
         self._joy_sleeping = False
         self._joy_timer.setInterval(self._JOY_AWAKE_INTERVAL)
