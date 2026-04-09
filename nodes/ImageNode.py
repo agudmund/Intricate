@@ -199,6 +199,8 @@ class ImageNode(BaseNode):
 
     def _on_vision_result(self, text: str) -> None:
         """Update caption with Vision result, spawn a new AboutNode label."""
+        if self.scene() is None:
+            return  # Node already removed — worker finished after deletion
         caption = text.strip().strip(".")
         if caption:
             self.data.caption = caption
@@ -207,6 +209,8 @@ class ImageNode(BaseNode):
 
     def _on_vision_failed(self, error: str) -> None:
         """Spawn an AboutNode with the full API error so it's always visible on canvas."""
+        if self.scene() is None:
+            return  # Node already removed
         self._spawn_caption_node(error)
         logger.warning(f"vision failed: {error}")
 
@@ -522,7 +526,22 @@ class ImageNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         """Clean up ImageNode-specific resources before scene departure."""
+        # Sever VisionWorker signals FIRST — if the worker finishes after
+        # removal it would call _spawn_caption_node on a dead node, creating
+        # a Connection to a stale C++ pointer and hard-crashing Qt.
+        worker = getattr(self, '_vision_worker', None)
+        if worker is not None:
+            try:
+                worker.finished.disconnect(self._on_vision_result)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                worker.failed.disconnect(self._on_vision_failed)
+            except (RuntimeError, TypeError):
+                pass
+            self._vision_worker = None
         self._pixmap = None
+        self._scaled_cache = None
         super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
