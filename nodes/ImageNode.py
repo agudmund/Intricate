@@ -89,14 +89,11 @@ class ImageNode(BaseNode):
         """
         r = self.rect()
         top = r.y() + self._top_offset() + IMAGE_PADDING
-        # Fixed height — always reserve full shelf space so the image
-        # keeps a constant aspect ratio regardless of shelf state.
-        fixed_h = r.height() - self._BUTTON_ZONE_H - IMAGE_PADDING * 2
         return QRectF(
             r.x()     + IMAGE_PADDING,
             top,
             r.width() - IMAGE_PADDING * 2,
-            fixed_h,
+            r.height() - (top - r.y()) - IMAGE_PADDING,
         )
 
     def _spawn_caption_node(self, caption: str) -> None:
