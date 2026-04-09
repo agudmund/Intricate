@@ -1405,11 +1405,14 @@ class IntricateApp(QMainWindow):
     def _show_health_menu(self, btn: QPushButton) -> None:
         """Pop a styled context menu under the health group button."""
         menu = self._styled_menu()
-        act_health = menu.addAction(QIcon(Theme.icon(Theme.iconHealth)), "The Health Node")
-        act_perf   = menu.addAction(QIcon(Theme.icon(Theme.iconPerf)), "The Performance Beast")
-        act_log    = menu.addAction(QIcon(Theme.icon(Theme.iconLog, fallback_color="#8aaa88")), "Tinkerbells Tail")
+        act_health    = menu.addAction(QIcon(Theme.icon(Theme.iconHealth)), "The Health Node")
+        act_perf      = menu.addAction(QIcon(Theme.icon(Theme.iconPerf)), "The Performance Beast")
+        act_log       = menu.addAction(QIcon(Theme.icon(Theme.iconLog, fallback_color="#8aaa88")), "Tinkerbells Tail")
+        act_joy_stats = menu.addAction(QIcon(Theme.icon(Theme.iconHealth, fallback_color="#d87a9e")), "The Joy Inspector")
+        act_joy_stats.setToolTip("Live tamagotchi debug stats")
         act_health.triggered.connect(self._spawn_health_node)
         act_perf.triggered.connect(self._spawn_perf_node)
+        act_joy_stats.triggered.connect(self._spawn_joy_stats_node)
         act_log.triggered.connect(self._spawn_log_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
@@ -1481,6 +1484,7 @@ class IntricateApp(QMainWindow):
         # Show below the button, left-aligned
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
     def _spawn_perf_node(self):        self._spawn(self.scene.add_perf_node,         "watching the paint loop")
+    def _spawn_joy_stats_node(self):   self._spawn(self.scene.add_joy_stats_node,    "inspecting the joy bucket")
     def _spawn_claude_info_node(self): self._spawn(self.scene.add_claude_info_node,  "counting every token with pride")
 
     def _spawn_tree_node(self):
