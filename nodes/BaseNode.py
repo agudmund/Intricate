@@ -770,8 +770,12 @@ class BaseNode(QGraphicsRectItem):
         except Exception:
             pass
         _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
-        from graphics.Particles import sprinkle
-        sprinkle(scene, self.mapToScene(self.rect().center()), count=8000)
+        from graphics.Particles import sprinkle, orbital_burst, shake_mode
+        center = self.mapToScene(self.rect().center())
+        if shake_mode == "orbital":
+            orbital_burst(scene, center)
+        else:
+            sprinkle(scene, center, count=8000)
         self._pending_shake_delete = True
 
     def mouseReleaseEvent(self, event):

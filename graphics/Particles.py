@@ -9,9 +9,9 @@
 import math
 import random
 import time
-from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene
+from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsEllipseItem, QGraphicsScene
 from PySide6.QtCore import Qt, QPointF, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QColor, QBrush, QPen
 
 from pretty_widgets.graphics.Theme import Theme
 
@@ -42,6 +42,10 @@ _GOLDEN_ANGLE = math.pi * (3.0 - math.sqrt(5.0))   # ≈ 137.5° in radians
 
 # ── Global tick ───────────────────────────────────────────────────────────
 _TICK_MS = 16           # ~60 fps — one timer drives every living particle
+
+# ── Shake mode toggle ────────────────────────────────────────────────────
+# "sprinkle" = original sunflower burst, "orbital" = torus knot swarm
+shake_mode: str = "sprinkle"
 
 _alive: list = []
 _tick_timer: QTimer | None = None
@@ -209,3 +213,135 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
         _alive.append(_FadingParticle(scene, item, spawn_at))
 
     _ensure_ticking()
+
+
+# ── Orbital torus knot burst ─────────────────────────────────────────────
+
+ORBITAL_COUNT     = 2000    # particle count for the orbital swarm
+ORBITAL_SCALE     = 6.0     # swarm coordinates → scene pixels
+ORBITAL_LIVE_MS   = 2800    # how long the swarm animates before fading
+ORBITAL_FADE_MS   = 600     # fade-out after the live phase
+ORBITAL_DOT_SIZE  = 5       # diameter of each dot in scene pixels
+
+_orbital_bursts: list = []  # active _OrbitalBurst instances
+
+
+class _OrbitalBurst:
+    """Manages a swarm of moving dots driven by OrbitalSwarm, then fades them out."""
+
+    __slots__ = ('_scene', '_swarm', '_items', '_cx', '_cy', '_born',
+                 '_fade_start', '_fade_end', '_removed', '_scale')
+
+    def __init__(self, scene: QGraphicsScene, center: QPointF, count: int):
+        from utils.OrbitalMotion import OrbitalSwarm
+
+        self._scene = scene
+        self._cx    = center.x()
+        self._cy    = center.y()
+        self._scale = ORBITAL_SCALE
+        self._born  = time.monotonic() * 1000.0
+        self._fade_start = self._born + ORBITAL_LIVE_MS
+        self._fade_end   = self._fade_start + ORBITAL_FADE_MS
+        self._removed = False
+
+        self._swarm = OrbitalSwarm(
+            count=count, rings=21.79, radius=10.0,
+            spread=69.0, twist=0.6, speed=0.7,
+            morph=1.0, lerp_rate=0.1,
+        )
+
+        # Create dot items — small ellipses, colored per tick
+        no_pen = QPen(Qt.NoPen)
+        self._items = []
+        for _ in range(count):
+            dot = QGraphicsEllipseItem(0, 0, ORBITAL_DOT_SIZE, ORBITAL_DOT_SIZE)
+            dot.setPen(no_pen)
+            dot.setBrush(QBrush(QColor(255, 255, 255)))
+            dot.setZValue(9999)
+            dot.setOpacity(0.0)
+            scene.addItem(dot)
+            self._items.append(dot)
+
+    def _update(self, now_ms: float) -> bool:
+        """Tick — advance swarm, reposition dots, handle fade. Returns True while alive."""
+        try:
+            if self._removed:
+                return False
+
+            # Advance the pure-math swarm
+            self._swarm.tick(_TICK_MS / 1000.0)
+
+            # Fade multiplier
+            if now_ms >= self._fade_end:
+                self._cleanup()
+                return False
+            elif now_ms >= self._fade_start:
+                fade = 1.0 - (now_ms - self._fade_start) / ORBITAL_FADE_MS
+            elif now_ms < self._born + 200:
+                # Quick fade-in over 200ms
+                fade = (now_ms - self._born) / 200.0
+            else:
+                fade = 1.0
+
+            cx, cy, scale = self._cx, self._cy, self._scale
+            half = ORBITAL_DOT_SIZE * 0.5
+            items = self._items
+
+            for i in range(len(items)):
+                x, y, z, h, s, l = self._swarm.particle(i)
+                # Depth → opacity (nearer = brighter)
+                depth_factor = 0.3 + 0.7 * (z / (self._swarm.radius * 5.0) + 0.5)
+                depth_factor = max(0.1, min(1.0, depth_factor))
+
+                items[i].setPos(cx + x * scale - half, cy + y * scale - half)
+                items[i].setOpacity(fade * depth_factor)
+
+                color = QColor.fromHslF(h, max(0.0, min(1.0, s)),
+                                        max(0.05, min(1.0, l)))
+                items[i].setBrush(QBrush(color))
+
+            return True
+
+        except RuntimeError:
+            return False
+
+    def _cleanup(self):
+        if self._removed:
+            return
+        self._removed = True
+        for item in self._items:
+            try:
+                if item.scene():
+                    self._scene.removeItem(item)
+            except RuntimeError:
+                pass
+        self._items.clear()
+
+
+def _orbital_tick() -> None:
+    """Drive all active orbital bursts from the same global timer."""
+    global _orbital_bursts
+    now = time.monotonic() * 1000.0
+    _orbital_bursts = [b for b in _orbital_bursts if b._update(now)]
+
+
+def orbital_burst(scene: QGraphicsScene, center: QPointF,
+                  count: int = ORBITAL_COUNT) -> None:
+    """Spawn an orbital torus knot particle swarm at a scene position."""
+    burst = _OrbitalBurst(scene, center, count)
+    _orbital_bursts.append(burst)
+    _ensure_orbital_ticking()
+
+
+# ── Orbital tick integration ─────────────────────────────────────────────
+_orbital_tick_timer: QTimer | None = None
+
+
+def _ensure_orbital_ticking() -> None:
+    global _orbital_tick_timer
+    if _orbital_tick_timer is None:
+        _orbital_tick_timer = QTimer()
+        _orbital_tick_timer.setInterval(_TICK_MS)
+        _orbital_tick_timer.timeout.connect(_orbital_tick)
+    if not _orbital_tick_timer.isActive():
+        _orbital_tick_timer.start()
