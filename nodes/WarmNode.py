@@ -286,19 +286,49 @@ class WarmNode(BaseNode):
             _log.warning(f"[WarmNode] Failed to launch editor: {e}")
 
     def _resolve_editor_cmd(self) -> list[str] | None:
-        """Build the subprocess command list for the editor."""
+        """Build the subprocess command list for the editor.
+
+        Resolution order for the warm_editor setting:
+            1. Absolute or relative path → resolve directly
+            2. Bare filename → shutil.which() (checks PATH)
+            3. Bare filename → scan sibling directories on Desktop
+               (Single Shared Braincell apps live next to each other)
+        """
+        import shutil
         import pretty_widgets.utils.settings as _settings
         editor_path = _settings.get("apps", "warm_editor", "").strip()
 
         if not editor_path:
+            _log.log(5, "[WarmNode] warm_editor setting is empty")
             return None
 
         p = Path(editor_path).resolve()
+        _log.log(5, "[WarmNode] warm_editor raw=%r resolved=%s", editor_path, p)
 
-        # Reject paths with traversal or shell metacharacters
+        # If direct resolution doesn't find a file, try alternative lookups
+        if not p.exists():
+            _log.log(5, "[WarmNode] resolved path does not exist, trying alternatives")
+            # Try shutil.which (checks PATH)
+            which = shutil.which(editor_path)
+            if which:
+                p = Path(which)
+                _log.log(5, "[WarmNode] found via which: %s", p)
+            else:
+                # Scan sibling directories on Desktop for the bare filename
+                # or a directory whose main.py matches the app name pattern
+                desktop = Path(__file__).resolve().parent.parent.parent
+                found = self._find_editor_on_desktop(desktop, editor_path)
+                if found:
+                    p = found
+                    _log.log(5, "[WarmNode] found via Desktop sibling: %s", p)
+                else:
+                    _log.warning("[WarmNode] warm_editor not found: %s", editor_path)
+                    return None
+
+        # Reject paths with shell metacharacters
         raw = str(p)
         if any(c in raw for c in ('&', '|', ';', '`', '$', '\n')):
-            _log.warning(f"[WarmNode] warm_editor rejected — suspicious characters: {editor_path}")
+            _log.warning("[WarmNode] warm_editor rejected — suspicious characters: %s", editor_path)
             return None
 
         bridge = self._validated_bridge_path()
@@ -307,12 +337,47 @@ class WarmNode(BaseNode):
 
         # Directory with main.py → run from source
         if p.is_dir() and (p / "main.py").exists():
-            return [sys.executable, str(p / "main.py"), "--bridge", bridge]
+            cmd = [sys.executable, str(p / "main.py"), "--bridge", bridge]
+            _log.log(5, "[WarmNode] resolved to directory with main.py: %s", cmd)
+            return cmd
         # Executable file
         if p.is_file() and p.suffix in ('.exe', '.py', '.pyw'):
-            return [str(p), "--bridge", bridge]
+            cmd = [str(p), "--bridge", bridge]
+            _log.log(5, "[WarmNode] resolved to executable: %s", cmd)
+            return cmd
 
-        _log.warning(f"[WarmNode] warm_editor path not found or not an executable: {editor_path}")
+        _log.warning("[WarmNode] warm_editor path not found or not an executable: %s (resolved: %s)",
+                     editor_path, p)
+        return None
+
+    @staticmethod
+    def _find_editor_on_desktop(desktop: Path, editor_name: str) -> Path | None:
+        """Scan Desktop siblings for the editor — matches .exe by name or directory with main.py.
+
+        Normalisation replaces '+' with 'plus' before stripping non-alnum,
+        so 'Notepad++ Duplex+ Turbo' → 'notepadplusplusduplexplusturbo'
+        matches exe stem 'NotepadPlusPlusDuplexPlusTurbo' exactly.
+        """
+        stem = Path(editor_name).stem  # "NotepadPlusPlusDuplexPlusTurbo"
+        if not desktop.is_dir():
+            return None
+        import re
+        def _norm(s: str) -> str:
+            return re.sub(r'[^a-z0-9]', '', s.lower().replace('+', 'plus'))
+        norm_stem = _norm(stem)
+        if not norm_stem:
+            return None
+        for child in desktop.iterdir():
+            if not child.is_dir():
+                continue
+            if _norm(child.name) != norm_stem:
+                continue
+            # Prefer directory with main.py (dev/source mode) over frozen .exe
+            if (child / "main.py").is_file():
+                return child
+            exe = child / editor_name
+            if exe.is_file():
+                return exe
         return None
 
     def _validated_bridge_path(self) -> str | None:
