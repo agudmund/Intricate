@@ -435,6 +435,13 @@ class DebouncedSpellHighlighter(QSyntaxHighlighter):
 
         self.document().contentsChanged.connect(self._on_text_changed)
 
+        # Initial check — if the document already has content (e.g. loaded via
+        # setPlainText before construction), the debounce logic won't trigger
+        # because _last_was_word_boundary matches the document state.  Kick off
+        # a check on a short delay so existing text gets highlighted immediately.
+        if self._worker and self._worker.is_ready():
+            QTimer.singleShot(300, self._perform_spell_check)
+
     def _poll_worker_ready(self):
         """Poll until the COM worker finishes initialising, then run first check."""
         if self._worker and self._worker.is_ready():
@@ -481,11 +488,10 @@ class DebouncedSpellHighlighter(QSyntaxHighlighter):
             # Just finished a word — check soon
             self._check_timer.stop()
             self._check_timer.start(150)
-            self._last_was_word_boundary = True
-        elif not is_word_boundary:
-            self._last_was_word_boundary = False
-            if not self._check_timer.isActive():
-                self._check_timer.start(self.DEBOUNCE_DELAY_MS)
+        elif not self._check_timer.isActive():
+            # Mid-word or bulk text change — start the slow debounce
+            self._check_timer.start(self.DEBOUNCE_DELAY_MS)
+        self._last_was_word_boundary = is_word_boundary
 
     def _perform_spell_check(self):
         """
