@@ -1084,7 +1084,7 @@ class IntricateApp(QMainWindow):
     def _toggle_joy_sleep(self) -> None:
         """Put the joy system to sleep or wake it up."""
         if self._joy_sleeping:
-            self._wake_joy()
+            self._wake_joy(deliberate=True)
         else:
             self._sleep_joy()
 
@@ -1097,16 +1097,19 @@ class IntricateApp(QMainWindow):
         self._sleep_btn.setText("\u2600\ufe0f")  # ☀️ — press to wake
         self._sleep_btn.setToolTip("Wake me up")
 
-    def _wake_joy(self) -> None:
-        """Exit sleep mode — normal depletion resumes."""
+    def _wake_joy(self, deliberate: bool = False) -> None:
+        """Exit sleep mode — normal depletion resumes.
+
+        deliberate=True bypasses the cooldown (direct button press).
+        deliberate=False is the event-filter path (passive interaction)
+        which respects the 500ms cooldown to avoid the toggle race.
+        """
         if not self._joy_sleeping:
             return
-        # Cooldown — the same click that put us to sleep can propagate through
-        # the app-wide event filter and immediately wake us. Ignore wake events
-        # within 500ms of entering sleep.
-        armed = getattr(self, '_joy_sleep_armed_at', 0.0)
-        if time.monotonic() - armed < 0.5:
-            return
+        if not deliberate:
+            armed = getattr(self, '_joy_sleep_armed_at', 0.0)
+            if time.monotonic() - armed < 0.5:
+                return
         self._joy_sleeping = False
         self._joy_timer.setInterval(self._JOY_AWAKE_INTERVAL)
         self._joy_timer.start()          # restart with new interval
