@@ -1037,6 +1037,10 @@ class IntricateApp(QMainWindow):
         Rate-limited to 3 feeds per rolling 10-minute window.
         It's stuffed beyond that — can only eat so much at a time.
         """
+        # Already full — didn't eat anything, don't count it
+        if self.joy_bar.value() >= 100:
+            return
+
         now = time.monotonic()
         # Prune timestamps outside the window
         self._feed_timestamps = [
