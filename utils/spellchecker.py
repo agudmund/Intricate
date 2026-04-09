@@ -52,18 +52,82 @@ try:
             COMMETHOD([], HRESULT, 'Reset'),
         ]
 
+    class IOptionDescription(IUnknown):
+        _iid_ = GUID('{432E5F85-35CF-4606-A801-6F70277E1D7A}')
+        _methods_ = [
+            COMMETHOD(['propget'], HRESULT, 'Id',          (['out', 'retval'], POINTER(c_wchar_p), 'value')),
+            COMMETHOD(['propget'], HRESULT, 'Heading',     (['out', 'retval'], POINTER(c_wchar_p), 'value')),
+            COMMETHOD(['propget'], HRESULT, 'Description', (['out', 'retval'], POINTER(c_wchar_p), 'value')),
+            COMMETHOD(['propget'], HRESULT, 'Labels',      (['out', 'retval'], POINTER(POINTER(IEnumString)), 'value')),
+        ]
+
     class ISpellChecker(IUnknown):
+        """
+        Full ISpellChecker vtable from spellcheck.idl (Windows SDK 10.0.26100.0).
+        Every slot must be present and in IDL order even if we don't call it —
+        comtypes resolves methods by vtable offset, so skipping a slot would
+        cause all subsequent method calls to hit the wrong function pointer.
+        """
         _iid_ = GUID('{B6FD0B71-E2BC-4653-8D05-F197E412770B}')
         _methods_ = [
+            # 1. get_LanguageTag
             COMMETHOD(['propget'], HRESULT, 'LanguageTag',
                 (['out', 'retval'], POINTER(c_wchar_p), 'value')),
+            # 2. Check — batch checking, suited for large text
             COMMETHOD([], HRESULT, 'Check',
-                (['in'],          c_wchar_p,                         'text'),
+                (['in'],            c_wchar_p,                           'text'),
                 (['out', 'retval'], POINTER(POINTER(IEnumSpellingError)), 'value')),
+            # 3. Suggest
             COMMETHOD([], HRESULT, 'Suggest',
-                (['in'],          c_wchar_p,                    'word'),
+                (['in'],            c_wchar_p,                      'word'),
+                (['out', 'retval'], POINTER(POINTER(IEnumString)),   'value')),
+            # 4. Add — permanent dictionary addition
+            COMMETHOD([], HRESULT, 'Add',
+                (['in'], c_wchar_p, 'word')),
+            # 5. Ignore — session-scoped ignore
+            COMMETHOD([], HRESULT, 'Ignore',
+                (['in'], c_wchar_p, 'word')),
+            # 6. AutoCorrect — automatic replacement rule
+            COMMETHOD([], HRESULT, 'AutoCorrect',
+                (['in'], c_wchar_p, 'from_'),
+                (['in'], c_wchar_p, 'to')),
+            # 7. GetOptionValue
+            COMMETHOD([], HRESULT, 'GetOptionValue',
+                (['in'],            c_wchar_p,                   'optionId'),
+                (['out', 'retval'], POINTER(ctypes.c_ubyte),      'value')),
+            # 8. get_OptionIds
+            COMMETHOD(['propget'], HRESULT, 'OptionIds',
                 (['out', 'retval'], POINTER(POINTER(IEnumString)), 'value')),
-            COMMETHOD([], HRESULT, 'Add', (['in'], c_wchar_p, 'word')),
+            # 9. get_Id
+            COMMETHOD(['propget'], HRESULT, 'Id',
+                (['out', 'retval'], POINTER(c_wchar_p), 'value')),
+            # 10. get_LocalizedName
+            COMMETHOD(['propget'], HRESULT, 'LocalizedName',
+                (['out', 'retval'], POINTER(c_wchar_p), 'value')),
+            # 11. add_SpellCheckerChanged
+            COMMETHOD([], HRESULT, 'add_SpellCheckerChanged',
+                (['in'],            POINTER(IUnknown),   'handler'),
+                (['out', 'retval'], POINTER(c_ulong),     'eventCookie')),
+            # 12. remove_SpellCheckerChanged
+            COMMETHOD([], HRESULT, 'remove_SpellCheckerChanged',
+                (['in'], c_ulong, 'eventCookie')),
+            # 13. GetOptionDescription
+            COMMETHOD([], HRESULT, 'GetOptionDescription',
+                (['in'],            c_wchar_p,                              'optionId'),
+                (['out', 'retval'], POINTER(POINTER(IOptionDescription)),    'value')),
+            # 14. ComprehensiveCheck — thorough checking, suited for real-time
+            #     small text input (per MS docs: "when the user is typing a word")
+            COMMETHOD([], HRESULT, 'ComprehensiveCheck',
+                (['in'],            c_wchar_p,                           'text'),
+                (['out', 'retval'], POINTER(POINTER(IEnumSpellingError)), 'value')),
+        ]
+
+    class ISpellChecker2(ISpellChecker):
+        """ISpellChecker2 — Windows 10+. Adds Remove (undo Add/Ignore)."""
+        _iid_ = GUID('{E7ED1C71-87F7-4378-A840-C9200DACEE47}')
+        _methods_ = [
+            COMMETHOD([], HRESULT, 'Remove',
+                (['in'], c_wchar_p, 'word')),
         ]
 
     class ISpellCheckerFactory(IUnknown):
@@ -141,7 +205,8 @@ class SpellWorker:
         self._language = language
         self._ready   = threading.Event()
         self._queue   = queue.Queue()
-        self._checker = None   # only ever accessed inside _sta_loop
+        self._checker  = None   # only ever accessed inside _sta_loop
+        self._checker2 = None   # ISpellChecker2 if available (Windows 10+)
 
         # Single persistent STA thread — owns the COM checker for its lifetime.
         # All COM calls are dispatched here via _queue to respect STA rules.
@@ -153,6 +218,9 @@ class SpellWorker:
         Dedicated STA thread. Initialises COM, creates the checker, then
         processes callable work items from _queue until shutdown.
         STA COM objects must only be called from the thread that created them.
+
+        Tries to upgrade to ISpellChecker2 (Windows 10+) for Remove support.
+        Falls back to ISpellChecker if QueryInterface fails.
         """
         if not WINDOWS_SPELL_AVAILABLE:
             self._ready.set()
@@ -164,6 +232,11 @@ class SpellWorker:
                 interface=ISpellCheckerFactory,
             )
             self._checker = factory.CreateSpellChecker(self._language)
+            # Try upgrading to ISpellChecker2 for Remove support
+            try:
+                self._checker2 = self._checker.QueryInterface(ISpellChecker2)
+            except Exception:
+                self._checker2 = None
         except Exception:
             self._ready.set()
             return
@@ -210,6 +283,10 @@ class SpellWorker:
         """
         Spell-check all blocks off the main thread via the STA queue.
         Emits results_ready with (doc_start, length) tuples for misspelled words.
+
+        Uses ComprehensiveCheck (Windows 10+) which is designed for real-time
+        small text input — per the MS IDL docs: "suited for when the user is
+        typing a word". Falls back to Check on failure.
         """
         expression = QRegularExpression(r"\b[a-zA-Z']+\b")
 
@@ -221,7 +298,12 @@ class SpellWorker:
                     match = iterator.next()
                     word = match.captured(0)
                     try:
-                        if checker.Check(word).Next():  # non-null/truthy → misspelled
+                        # ComprehensiveCheck is more thorough for small text input
+                        try:
+                            errors = checker.ComprehensiveCheck(word)
+                        except Exception:
+                            errors = checker.Check(word)
+                        if errors.Next():  # non-null/truthy → misspelled
                             results.append((block_offset + match.capturedStart(), match.capturedLength()))
                     except Exception:
                         pass
@@ -244,6 +326,15 @@ class SpellWorker:
         """Add a word to the Windows personal dictionary via the STA thread."""
         self._dispatch(lambda checker: checker.Add(word))
 
+    def ignore_word(self, word: str) -> None:
+        """Ignore a word for the rest of this session (not persisted across restarts)."""
+        self._dispatch(lambda checker: checker.Ignore(word))
+
+    def remove_from_dictionary(self, word: str) -> None:
+        """Undo a previous Add or Ignore. Requires ISpellChecker2 (Windows 10+)."""
+        if self._checker2 is not None:
+            self._dispatch(lambda checker: self._checker2.Remove(word))
+
     def check_word(self, word: str) -> bool:
         """
         Synchronous single-word check for the right-click context menu.
@@ -252,7 +343,10 @@ class SpellWorker:
         """
         def _work(checker):
             try:
-                return not checker.Check(word).Next()  # null/falsy ptr → no error → correct
+                try:
+                    return not checker.ComprehensiveCheck(word).Next()
+                except Exception:
+                    return not checker.Check(word).Next()
             except Exception:
                 return True
         result = self._dispatch_sync(_work)
