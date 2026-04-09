@@ -200,6 +200,8 @@ class ImageNode(BaseNode):
     def _on_vision_result(self, text: str) -> None:
         """Update caption with Vision result, spawn a new AboutNode label."""
         if self.scene() is None:
+            logger.log(5, "[VISION] result arrived for removed image %s — discarding",
+                        self.data.uuid[:8])
             return  # Node already removed — worker finished after deletion
         caption = text.strip().strip(".")
         if caption:
@@ -210,6 +212,8 @@ class ImageNode(BaseNode):
     def _on_vision_failed(self, error: str) -> None:
         """Spawn an AboutNode with the full API error so it's always visible on canvas."""
         if self.scene() is None:
+            logger.log(5, "[VISION] failure arrived for removed image %s — discarding",
+                        self.data.uuid[:8])
             return  # Node already removed
         self._spawn_caption_node(error)
         logger.warning(f"vision failed: {error}")
@@ -526,11 +530,14 @@ class ImageNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         """Clean up ImageNode-specific resources before scene departure."""
+        logger.log(5, "[REMOVE] image %s — disconnecting VisionWorker", self.data.uuid[:8])
         # Sever VisionWorker signals FIRST — if the worker finishes after
         # removal it would call _spawn_caption_node on a dead node, creating
         # a Connection to a stale C++ pointer and hard-crashing Qt.
         worker = getattr(self, '_vision_worker', None)
         if worker is not None:
+            logger.log(5, "[REMOVE] image %s — VisionWorker was active, severing signals",
+                        self.data.uuid[:8])
             try:
                 worker.finished.disconnect(self._on_vision_result)
             except (RuntimeError, TypeError):

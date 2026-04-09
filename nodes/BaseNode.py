@@ -12,6 +12,9 @@ from PySide6.QtWidgets import QGraphicsRectItem
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
 from PySide6.QtWidgets import QGraphicsItem
+from pretty_widgets.utils.logger import setup_logger
+
+logger = setup_logger("basenode")
 
 from data.NodeData import NodeData
 from nodes.NodeBehaviour import NodeBehaviour
@@ -210,7 +213,11 @@ class BaseNode(QGraphicsRectItem):
     def itemChange(self, change, value):
         if (change == QGraphicsRectItem.GraphicsItemChange.ItemSceneChange
                 and value is None):
+            logger.log(5, "[REMOVE] %s %s leaving scene — _prepare_for_removal starting",
+                        self.data.node_type, self.data.uuid[:8])
             self._prepare_for_removal()
+            logger.log(5, "[REMOVE] %s %s _prepare_for_removal complete",
+                        self.data.node_type, self.data.uuid[:8])
 
         if change == QGraphicsRectItem.GraphicsItemChange.ItemSelectedHasChanged:
             if hasattr(self, 'behaviour') and self.behaviour:
@@ -282,7 +289,11 @@ class BaseNode(QGraphicsRectItem):
         fires re-entrantly during teardown and will segfault if behaviour is gone.
         disconnect_all() severs the connections instead — that's sufficient.
         """
+        tag = f"{self.data.node_type} {self.data.uuid[:8]}"
+        logger.log(5, "[REMOVE] %s  phase 1: heal connections (%d wires)",
+                    tag, len(self.connections))
         self._heal_connections()
+        logger.log(5, "[REMOVE] %s  phase 2: detach buttons + ports", tag)
         self._detach_buttons()
         self._detach_ports()
 
@@ -307,9 +318,11 @@ class BaseNode(QGraphicsRectItem):
                 pass
             self._update_throttle_timer = None
 
+        logger.log(5, "[REMOVE] %s  phase 3: disconnect behaviour", tag)
         if hasattr(self, 'behaviour') and self.behaviour:
             self.behaviour.disconnect_all()
 
+        logger.log(5, "[REMOVE] %s  phase 4: sever %d wire connections", tag, len(self.connections))
         for conn in list(self.connections):
             # Stop the glide animation and disconnect its signal
             if hasattr(conn, '_glide_timer'):
@@ -331,6 +344,7 @@ class BaseNode(QGraphicsRectItem):
             conn.start_node = None
             conn.end_node   = None
         self.connections.clear()
+        logger.log(5, "[REMOVE] %s  phase 5: connections cleared — base teardown done", tag)
 
     def _flush_connection_update(self):
         """Flush batched connection redraws after the throttle period."""
