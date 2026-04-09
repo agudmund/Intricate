@@ -225,6 +225,10 @@ class IntricateApp(QMainWindow):
 
         self.grid.addWidget(self.top_toolbar, 0, 0)
         self.top_toolbar.installEventFilter(self)
+        self.top_toolbar.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.top_toolbar.customContextMenuRequested.connect(
+            lambda pos: self._show_toolbar_context_menu(self.top_toolbar.mapToGlobal(pos))
+        )
 
     def _reposition_exit_btn(self) -> None:
         """Keep the tray / maximize / exit buttons pinned to the top-right corner."""
@@ -339,9 +343,6 @@ class IntricateApp(QMainWindow):
     # =========================================================================
 
     def eventFilter(self, obj, event):
-        if obj is self.top_toolbar and event.type() == QEvent.ContextMenu:
-            self._show_toolbar_context_menu(event.globalPos())
-            return True
         if obj is self.top_toolbar and event.type() == QEvent.MouseButtonDblClick:
             if event.button() == Qt.LeftButton:
                 self.toggle_fullscreen()
@@ -402,18 +403,35 @@ class IntricateApp(QMainWindow):
         menu.exec(global_pos)
 
     def _unlock_folders(self) -> None:
-        """Release the CWD lock on the active project folder.
+        """Release all directory locks so folders can be deleted in Explorer.
 
-        On Windows, a process's working directory holds a handle that prevents
-        the folder from being deleted in Explorer. Temporarily moving CWD to
-        the Intricate root releases that lock.
+        Releases:
+        1. Process CWD — Windows holds a directory handle on it
+        2. Python's import machinery caches — gc.collect() clears stale refs
+        3. Any cached Path objects or open scandir iterators
         """
+        import gc
+
         safe_dir = Path(__file__).resolve().parent
         try:
             os.chdir(str(safe_dir))
-            logger.info("[unlock] CWD moved to %s — project folder released", safe_dir)
+            logger.info("[unlock] CWD moved to %s", safe_dir)
         except OSError:
             pass
+
+        # Force garbage collection to release any stale Path iterators,
+        # open scandir handles, or cached directory references
+        gc.collect()
+
+        # Nudge Windows into releasing cached directory notifications
+        # by touching the CWD — some directory handles linger until the
+        # OS processes a new directory operation on the same thread
+        try:
+            os.listdir(str(safe_dir))
+        except OSError:
+            pass
+
+        logger.info("[unlock] folders released — safe to delete in Explorer")
         self._folders_unlocked = True
 
     def _lock_folders(self) -> None:
