@@ -67,24 +67,22 @@ class StickerButton(QPushButton):
         direction = self._shadow_direction()
         pressed = self.isDown()
 
+        # Direction points from centre outward toward the button.
+        # Shadow falls on the outside edge (same direction as the vector).
+        # Pressed: icon shifts outward (away from light, into the surface).
+        shadow_x = direction.x() * SHADOW_DISTANCE
+        shadow_y = direction.y() * SHADOW_DISTANCE
+
         if pressed:
-            # Pressed — shift icon toward centre (opposite of shadow direction),
-            # no shadow drawn. The button sinks into the surface.
-            shift_x = -direction.x() * SHADOW_DISTANCE
-            shift_y = -direction.y() * SHADOW_DISTANCE
-            draw_rect = QRectF(shift_x, shift_y, sz, sz)
+            # Pressed — icon shifts outward into where the shadow was, no shadow
+            draw_rect = QRectF(shadow_x, shadow_y, sz, sz)
             painter.drawPixmap(draw_rect.toRect(), self._pixmap)
         else:
-            # Normal — draw shadow offset outward, then icon at base position
-            shadow_x = direction.x() * SHADOW_DISTANCE
-            shadow_y = direction.y() * SHADOW_DISTANCE
-
-            # Shadow: draw the pixmap with reduced opacity and darkened
+            # Normal — shadow on the outside edge, icon at base position
             painter.setOpacity(SHADOW_OPACITY)
             shadow_rect = QRectF(shadow_x, shadow_y, sz, sz)
             painter.drawPixmap(shadow_rect.toRect(), self._pixmap)
 
-            # Icon: draw at base position, full opacity
             painter.setOpacity(1.0)
             draw_rect = QRectF(0, 0, sz, sz)
             painter.drawPixmap(draw_rect.toRect(), self._pixmap)
