@@ -307,9 +307,10 @@ class WarmNode(BaseNode):
 
         Resolution order for the warm_editor setting:
             1. Absolute or relative path → resolve directly
-            2. Bare filename → shutil.which() (checks PATH)
-            3. Bare filename → scan sibling directories on Desktop
+            2. Bare filename → scan sibling directories on Desktop
                (Single Shared Braincell apps live next to each other)
+               Prefers source repos (main.py) over frozen .exe builds
+            3. Bare filename → shutil.which() (PATH fallback)
         """
         import shutil
         import pretty_widgets.utils.settings as _settings
@@ -325,19 +326,19 @@ class WarmNode(BaseNode):
         # If direct resolution doesn't find a file, try alternative lookups
         if not p.exists():
             _log.log(5, "[WarmNode] resolved path does not exist, trying alternatives")
-            # Try shutil.which (checks PATH)
-            which = shutil.which(editor_path)
-            if which:
-                p = Path(which)
-                _log.log(5, "[WarmNode] found via which: %s", p)
+            # Desktop sibling scan first — finds the source repo (main.py)
+            # over any stale frozen build that might be on PATH
+            desktop = Path(__file__).resolve().parent.parent.parent
+            found = self._find_editor_on_desktop(desktop, editor_path)
+            if found:
+                p = found
+                _log.log(5, "[WarmNode] found via Desktop sibling: %s", p)
             else:
-                # Scan sibling directories on Desktop for the bare filename
-                # or a directory whose main.py matches the app name pattern
-                desktop = Path(__file__).resolve().parent.parent.parent
-                found = self._find_editor_on_desktop(desktop, editor_path)
-                if found:
-                    p = found
-                    _log.log(5, "[WarmNode] found via Desktop sibling: %s", p)
+                # Last resort — check PATH for a frozen .exe
+                which = shutil.which(editor_path)
+                if which:
+                    p = Path(which)
+                    _log.log(5, "[WarmNode] found via which (PATH): %s", p)
                 else:
                     _log.warning("[WarmNode] warm_editor not found: %s", editor_path)
                     return None
