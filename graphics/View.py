@@ -241,7 +241,7 @@ class IntricateView(QGraphicsView):
         if event.button() == Qt.RightButton and event.modifiers() & Qt.AltModifier:
             self._alt_zooming = True
             self._alt_zoom_start_y = event.position().y()
-            self.setCursor(Qt.SizeVerCursor)
+            self.setCursor(Qt.ArrowCursor)
             event.accept()
             return
         if event.button() == Qt.MiddleButton:

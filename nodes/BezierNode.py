@@ -51,7 +51,7 @@ class _BezierHandle(QGraphicsEllipseItem):
         self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsMovable, False)
         self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIgnoresTransformations, False)
         self.setAcceptHoverEvents(True)
-        self.setCursor(Qt.SizeAllCursor)
+        self.setCursor(Qt.ArrowCursor)
         self.setZValue(10)
 
     # ─────────────────────────────────────────────────────────────────────────

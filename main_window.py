@@ -556,6 +556,8 @@ class IntricateApp(QMainWindow):
             QSplitter::handle {{
                 background-color: {Theme.windowBg};
             }}
+            QSplitter::handle:horizontal {{ cursor: default; }}
+            QSplitter::handle:vertical   {{ cursor: default; }}
         """)
         self.splitter.addWidget(self.sidebar)
         self.splitter.addWidget(self.view)
@@ -584,6 +586,8 @@ class IntricateApp(QMainWindow):
             QSplitter::handle {{
                 background-color: {Theme.windowBg};
             }}
+            QSplitter::handle:horizontal {{ cursor: default; }}
+            QSplitter::handle:vertical   {{ cursor: default; }}
         """)
         self._v_splitter.addWidget(self.central)
         # bottomToolbar is added later by _setupBottomToolbar
@@ -1347,13 +1351,13 @@ class IntricateApp(QMainWindow):
         act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "There Comes A Time In Everyone's Life...")
         act_git     = menu.addAction(QIcon(Theme.icon(Theme.iconGit,     fallback_color="#8a9a8a")), "The Not So Boring Anymore Node")
         act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Stuff and Stuff")
-        act_session = menu.addAction(QIcon(Theme.icon(Theme.iconSession, fallback_color="#8a9aaa")), "The Recall")
+        act_session = menu.addAction(QIcon(Theme.icon(Theme.iconSession, fallback_color="#8a9aaa")), "Total Recall")
         act_info.setToolTip("General Info")
         act_restore.setToolTip("Bring back the last deleted node")
         act_snip.setToolTip("Remove an explicit wire connection")
         act_git.setToolTip("Git status report")
         act_tree.setToolTip("Session file content")
-        act_session.setToolTip("Import a session file")
+        act_session.setToolTip("( The remake, not the vintage original, its a seriously good remake )")
         act_info.triggered.connect(self._spawn_info_node)
         act_restore.triggered.connect(self._restore_deleted)
         act_snip.triggered.connect(self._start_wire_snip)
