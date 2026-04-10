@@ -102,6 +102,7 @@ class VideoNode(BaseNode):
         self._position_ms: int = 0
         self._was_playing: bool = False   # track state across scrub
         self._scrubbing: bool = False     # progress bar drag in progress
+        self._volume_scrubbing: bool = False  # volume slider drag in progress
 
         self._viewport_visible: bool = True   # assume visible until told otherwise
         self._was_playing_before_cull: bool = False
@@ -130,21 +131,34 @@ class VideoNode(BaseNode):
 
     def _progress_rect(self) -> QRectF:
         r = self.rect()
+        vol_reserve = PROGRESS_HEIGHT + VIDEO_PADDING if self._buttons_visible else 0.0
         return QRectF(
-            r.x() + VIDEO_PADDING,
+            r.x() + VIDEO_PADDING + vol_reserve,
             r.bottom() - PROGRESS_HEIGHT - VIDEO_PADDING,
-            r.width() - VIDEO_PADDING * 2,
+            r.width() - VIDEO_PADDING * 2 - vol_reserve,
             PROGRESS_HEIGHT,
+        )
+
+    def _volume_rect(self) -> QRectF:
+        """Vertical volume slider — left edge of the video area, same width as
+        the progress bar height so they feel like siblings."""
+        vr = self._video_rect()
+        return QRectF(
+            self.rect().x() + VIDEO_PADDING,
+            vr.y(),
+            PROGRESS_HEIGHT,
+            vr.height() + PROGRESS_HEIGHT + VIDEO_PADDING,
         )
 
     def _video_rect(self) -> QRectF:
         r = self.rect()
         top = r.y() + self._top_offset() + VIDEO_PADDING
         bottom_reserve = (PROGRESS_HEIGHT + VIDEO_PADDING) if self._buttons_visible else 0.0
+        vol_reserve = (PROGRESS_HEIGHT + VIDEO_PADDING) if self._buttons_visible else 0.0
         return QRectF(
-            r.x()     + VIDEO_PADDING,
+            r.x()     + VIDEO_PADDING + vol_reserve,
             top,
-            r.width() - VIDEO_PADDING * 2,
+            r.width() - VIDEO_PADDING * 2 - vol_reserve,
             r.height() - (top - r.y()) - VIDEO_PADDING - bottom_reserve,
         )
 
@@ -284,6 +298,16 @@ class VideoNode(BaseNode):
         target = int(ratio * self._duration_ms)
         self._player.setPosition(target)
 
+    def _volume_scrub_to(self, y: float) -> None:
+        """Set volume based on y coordinate within the volume slider.
+        Bottom = 0 (silent), top = 1 (full) — gradient flows upward."""
+        vr = self._volume_rect()
+        ratio = 1.0 - max(0.0, min(1.0, (y - vr.top()) / max(1.0, vr.height())))
+        self._target_volume = ratio
+        self._audio.setVolume(ratio)
+        self.data.volume = int(ratio * 100)
+        self.update()
+
     # ─────────────────────────────────────────────────────────────────────────
     # FILE BROWSER
     # ─────────────────────────────────────────────────────────────────────────
@@ -367,19 +391,29 @@ class VideoNode(BaseNode):
 
     def mousePressEvent(self, event) -> None:
         pos = event.pos()
-        if self._buttons_visible and event.button() == Qt.LeftButton and self._progress_rect().contains(pos):
-            self._scrubbing = True
-            self._was_playing = (
-                self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-            )
-            if self._was_playing:
-                self._player.pause()
-            self._scrub_to(pos.x())
-            event.accept()
-            return
+        if self._buttons_visible and event.button() == Qt.LeftButton:
+            if self._volume_rect().contains(pos):
+                self._volume_scrubbing = True
+                self._volume_scrub_to(pos.y())
+                event.accept()
+                return
+            if self._progress_rect().contains(pos):
+                self._scrubbing = True
+                self._was_playing = (
+                    self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+                )
+                if self._was_playing:
+                    self._player.pause()
+                self._scrub_to(pos.x())
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
+        if self._volume_scrubbing and event.buttons() & Qt.LeftButton:
+            self._volume_scrub_to(event.pos().y())
+            event.accept()
+            return
         if self._scrubbing and event.buttons() & Qt.LeftButton:
             self._scrub_to(event.pos().x())
             event.accept()
@@ -387,6 +421,10 @@ class VideoNode(BaseNode):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
+        if self._volume_scrubbing and event.button() == Qt.LeftButton:
+            self._volume_scrubbing = False
+            event.accept()
+            return
         if self._scrubbing and event.button() == Qt.LeftButton:
             self._scrubbing = False
             if self._was_playing and self._viewport_visible:
@@ -467,7 +505,7 @@ class VideoNode(BaseNode):
             painter.setPen(QColor(Theme.healthColorLabel))
             painter.drawText(vr, Qt.AlignCenter, "double-click\nto load video")
 
-        # ── Progress bar (only when button row is visible) ────────────────────
+        # ── Progress bar + volume slider (only when button row is visible) ────
         if self._buttons_visible:
             bar_bg = QColor(Theme.nodeBg).lighter(130)
             painter.setPen(Qt.NoPen)
@@ -485,6 +523,26 @@ class VideoNode(BaseNode):
                 grad.setColorAt(1.0, QColor("#d87a9e"))
                 painter.setBrush(grad)
                 painter.drawRoundedRect(fill_rect, 3, 3)
+
+            # ── Volume slider (vertical, left of video) ──────────────────────
+            vol_r = self._volume_rect()
+            painter.setBrush(bar_bg)
+            painter.drawRoundedRect(vol_r, 3, 3)
+
+            vol_ratio = self._target_volume
+            fill_h = vol_r.height() * vol_ratio
+            if fill_h > 0:
+                fill_rect_v = QRectF(
+                    vol_r.left(), vol_r.bottom() - fill_h,
+                    vol_r.width(), fill_h,
+                )
+                vgrad = QLinearGradient(0, fill_rect_v.bottom(), 0, fill_rect_v.top())
+                vgrad.setColorAt(0.0, QColor("#1e1e1e"))
+                vgrad.setColorAt(0.4, QColor("#5c3e4f"))
+                vgrad.setColorAt(0.7, QColor("#a56a85"))
+                vgrad.setColorAt(1.0, QColor("#d87a9e"))
+                painter.setBrush(vgrad)
+                painter.drawRoundedRect(fill_rect_v, 3, 3)
 
 
         # ── Play state indicator ─────────────────────────────────────────────

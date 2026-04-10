@@ -290,6 +290,15 @@ class BaseNode(QGraphicsRectItem):
         disconnect_all() severs the connections instead — that's sufficient.
         """
         tag = f"{self.data.node_type} {self.data.uuid[:8]}"
+
+        # ── Phase 0: sever Qt dispatch state ────────────────────────────
+        # Clear selection and disable interaction flags BEFORE any other
+        # teardown.  Without this, Qt's internal dispatch table can still
+        # route mouse events to the dead item after removeItem(), causing
+        # subsequent clicks to silently fail on other nodes.
+        self.setSelected(False)
+        self.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
+
         logger.log(5, "[REMOVE] %s  phase 1: heal connections (%d wires)",
                     tag, len(self.connections))
         self._heal_connections()
@@ -795,14 +804,17 @@ class BaseNode(QGraphicsRectItem):
             scene = self.scene()
             if scene and scene.mouseGrabberItem() is self:
                 self.ungrabMouse()
-        # Deferred shake-delete — item must already be ungrabbed before removal.
+        # Deferred shake-delete — pre-clear dispatch state NOW, then schedule
+        # the actual removeItem for the next event-loop tick.  Zeroing flags
+        # and selection immediately prevents Qt from routing any mouse events
+        # to this zombie during the deferred-removal window.
         if self._pending_shake_delete:
             self._pending_shake_delete = False
             scene = self.scene()
             if scene:
+                self.setSelected(False)
+                self.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
                 def _deferred_remove(node=self, sc=scene):
-                    # Last-moment grab release — Qt can re-establish grabs
-                    # between mouseReleaseEvent and the deferred callback.
                     try:
                         if sc.mouseGrabberItem() is node:
                             node.ungrabMouse()

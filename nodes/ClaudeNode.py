@@ -1131,6 +1131,7 @@ class ClaudeNode(BaseNode):
             self._input_proxy.hide()
         self._body  = None
         self._input = None
+        self._last_response_node = None   # sever chain reference
         super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────

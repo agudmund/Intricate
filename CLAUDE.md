@@ -103,6 +103,19 @@ Do not move these to top-level imports. The deferred placement is what prevents 
 
 `graphics/Theme.py` uses a metaclass — `Theme.iconCurtains` resolves dynamically via `__getattr__`. Icons are looked up in `icons/` first, then `$SingleSharedBraincell_AssetVault`. Missing icons silently return a circle sentinel — no crashes. Theme reloads live when `settings.toml` changes.
 
+### Progress Bar Gradient
+
+Every progress bar in the app — sidebar joy bar, video playback scrub, volume slider, or any future bar — uses the same 4-stop pink gradient. This is the canonical "progress bar look" and must never vary:
+
+```python
+grad.setColorAt(0.0, QColor("#1e1e1e"))   # dark base
+grad.setColorAt(0.4, QColor("#5c3e4f"))   # muted rose
+grad.setColorAt(0.7, QColor("#a56a85"))   # warm mauve
+grad.setColorAt(1.0, QColor("#d87a9e"))   # bright pink
+```
+
+Direction follows the fill axis: left-to-right for horizontal bars, bottom-to-top for vertical bars. Background behind the bar is `QColor(Theme.nodeBg).lighter(130)` with 3px border radius.
+
 ### Settings Contract
 
 `settings.toml` is the shared file contract with "The Settlers" companion app. Intricate reads and watches it; The Settlers writes it. Neither imports the other. The watcher triggers `Theme.reload()` and a window repaint on any change.

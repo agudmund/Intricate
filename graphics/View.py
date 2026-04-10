@@ -237,6 +237,20 @@ class IntricateView(QGraphicsView):
                 return
 
         self.setFocus()
+        # Safety net: clear any stale scene mouse grabber left behind by a
+        # removed or zombie node.  Runs on EVERY press (left, middle, right,
+        # alt-zoom) — not just middle-mouse — so no early-return path can
+        # skip it.  A grabber is stale if it left the scene entirely, OR if
+        # its interaction flags were zeroed by _prepare_for_removal Phase 0
+        # while it's still technically in the scene (deferred-removal window).
+        scene = self.scene()
+        if scene:
+            grabber = scene.mouseGrabberItem()
+            if grabber and (
+                grabber.scene() is None
+                or not int(grabber.flags())
+            ):
+                grabber.ungrabMouse()
         # Alt+Right-click → Photoshop-style drag zoom
         if event.button() == Qt.RightButton and event.modifiers() & Qt.AltModifier:
             self._alt_zooming = True
@@ -245,14 +259,6 @@ class IntricateView(QGraphicsView):
             event.accept()
             return
         if event.button() == Qt.MiddleButton:
-            # Safety net: clear any stale scene mouse grabber. A shake-deleted node
-            # that didn't fully release its grab can leave the scene routing events
-            # to a dead item, which silently breaks pan until the app restarts.
-            scene = self.scene()
-            if scene:
-                grabber = scene.mouseGrabberItem()
-                if grabber:
-                    grabber.ungrabMouse()
             self._last_pan_pos = event.position()
             self.setRenderHint(QPainter.Antialiasing, False)
             event.accept()

@@ -198,12 +198,14 @@ class MergeNode(BaseNode):
 
     @staticmethod
     def _label_for(node) -> str:
-        """Display label for an AudioNode — caption or filename."""
+        """Display label for an AudioNode/VideoNode — caption or filename."""
+        from nodes.VideoNode import VideoNode
+        prefix = "\U0001f3ac " if isinstance(node, VideoNode) else ""  # 🎬
         if node.data.caption:
-            return node.data.caption
+            return f"{prefix}{node.data.caption}"
         if node.data.source_path:
-            return Path(node.data.source_path).stem
-        return "untitled"
+            return f"{prefix}{Path(node.data.source_path).stem}"
+        return f"{prefix}untitled"
 
     def _list_context_menu(self, pos) -> None:
         """Right-click menu on list items — Move Up / Move Down."""
@@ -259,8 +261,16 @@ class MergeNode(BaseNode):
             get_emoji=lambda: "\U0001f4be",   # 💾
             set_emoji=lambda _: self._combine_to_file(),
         )
-        self._combine_btn.setToolTip("Combine into single file")
+        self._combine_btn.setToolTip("Combine sequential (crossfade)")
         self._buttons.append(self._combine_btn)
+
+        self._overlay_btn = EmojiButton(
+            self,
+            get_emoji=lambda: "\U0001f3b6",   # 🎶
+            set_emoji=lambda _: self._overlay_to_file(),
+        )
+        self._overlay_btn.setToolTip("Overlay mix (stack audio layers)")
+        self._buttons.append(self._overlay_btn)
 
     # ─────────────────────────────────────────────────────────────────────────
     # SEQUENTIAL PLAYBACK
@@ -417,18 +427,146 @@ class MergeNode(BaseNode):
         node.load_from_path(str(out))
         _log.info(f"[MergeNode] combined {len(input_meta)} sources → {out.name}")
 
+    def _overlay_to_file(self) -> None:
+        """Mix all listed audio sources into a single file, layered on top of
+        each other at their per-node volume levels.
+
+        VideoNodes have their audio extracted first via ffmpeg.  Each source
+        is scaled by its data.volume (0-100) using the ffmpeg ``volume``
+        filter, then all streams are stacked with ``amix``.
+        """
+        import subprocess as _sp
+        import tempfile
+        from nodes.AudioNode import AudioNode
+        from nodes.AudioHoldNode import AudioHoldNode
+        from nodes.VideoNode import VideoNode
+        from pretty_widgets.utils.logger import setup_logger
+        _log = setup_logger("merge")
+
+        ordered = self._get_ordered_audio_nodes()
+        if len(ordered) < 2:
+            return
+
+        # ── Collect source paths and volume scalars ──────────────────────
+        sources: list[tuple[str, float]] = []   # (wav_path, volume_0_to_1)
+        temp_files: list[str] = []              # cleanup after merge
+        src_dir = None
+
+        for node in ordered:
+            if isinstance(node, AudioHoldNode):
+                continue
+            p = node.data.source_path
+            if not p or not Path(p).exists():
+                continue
+
+            vol = node.data.volume / 100.0
+
+            if isinstance(node, VideoNode):
+                # Extract audio track to a temp wav
+                tmp = tempfile.NamedTemporaryFile(
+                    suffix=".wav", delete=False, prefix="intricate_mix_",
+                )
+                tmp.close()
+                try:
+                    _sp.run([
+                        "ffmpeg", "-y", "-loglevel", "error",
+                        "-i", p, "-vn",
+                        "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
+                        tmp.name,
+                    ], capture_output=True, check=True)
+                except Exception as e:
+                    _log.warning("[MergeNode] extract audio failed for %s: %s", p, e)
+                    continue
+                sources.append((tmp.name, vol))
+                temp_files.append(tmp.name)
+            else:
+                # AudioNode — use source directly
+                sources.append((p, vol))
+
+            if src_dir is None:
+                src_dir = Path(p).parent
+
+        if len(sources) < 2 or src_dir is None:
+            self._cleanup_temps(temp_files)
+            return
+
+        # ── Build ffmpeg command ─────────────────────────────────────────
+        # Inputs
+        inputs = []
+        for path, _ in sources:
+            inputs.extend(["-i", path])
+
+        # Filter: scale each input by its volume, then amix them together
+        n = len(sources)
+        vol_filters = []
+        mix_inputs  = []
+        for i, (_, vol) in enumerate(sources):
+            tag = f"[v{i}]"
+            vol_filters.append(f"[{i}]volume={vol:.3f}{tag}")
+            mix_inputs.append(tag)
+
+        amix_in  = "".join(mix_inputs)
+        # duration=longest keeps playing until the longest track ends;
+        # normalize=0 prevents amix from auto-scaling (we set volumes explicitly)
+        amix     = f"{amix_in}amix=inputs={n}:duration=longest:normalize=0[out]"
+        filter_str = ";".join(vol_filters) + ";" + amix
+
+        stem = self.data.title or "overlay_mix"
+        out  = src_dir / f"{stem}.wav"
+        counter = 2
+        while out.exists():
+            out = src_dir / f"{stem}_{counter}.wav"
+            counter += 1
+
+        try:
+            _sp.run([
+                "ffmpeg", "-y", *inputs,
+                "-filter_complex", filter_str,
+                "-map", "[out]",
+                "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
+                str(out),
+            ], capture_output=True, check=True)
+        except Exception as e:
+            _log.warning("[MergeNode] overlay mix failed: %s", e)
+            self._cleanup_temps(temp_files)
+            return
+
+        self._cleanup_temps(temp_files)
+
+        # Spawn AudioNode with the result
+        scene = self.scene()
+        if not scene or not hasattr(scene, 'add_audio_node'):
+            return
+        from PySide6.QtCore import QPointF
+        node = scene.add_audio_node(
+            pos=self.pos() + QPointF(0, self.rect().height() + 30),
+        )
+        node.load_from_path(str(out))
+        _log.info("[MergeNode] overlay mixed %d sources → %s", n, out.name)
+
+    @staticmethod
+    def _cleanup_temps(paths: list[str]) -> None:
+        """Remove temporary extracted audio files."""
+        import os
+        for p in paths:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
     # ─────────────────────────────────────────────────────────────────────────
     # CONNECTED AUDIO NODES
     # ─────────────────────────────────────────────────────────────────────────
 
     def _get_connected_audio_nodes(self) -> list:
-        """Return AudioNodes and AudioHoldNodes connected to this node."""
+        """Return AudioNodes, AudioHoldNodes, and VideoNodes connected to this node."""
         from nodes.AudioNode import AudioNode
         from nodes.AudioHoldNode import AudioHoldNode
+        from nodes.VideoNode import VideoNode
         audio_nodes = []
         for conn in self.connections:
             other = conn.end_node if conn.start_node is self else conn.start_node
-            if other and isinstance(other, (AudioNode, AudioHoldNode)):
+            if other and isinstance(other, (AudioNode, AudioHoldNode, VideoNode)):
                 audio_nodes.append(other)
         return audio_nodes
 

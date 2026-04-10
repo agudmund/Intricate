@@ -51,6 +51,11 @@ class AudioNode(BaseNode):
         self._duration_ms   = 0
         self._position_ms   = 0
         self._restore_pos   = 0
+        self._scrubbing          = False
+        self._volume_scrubbing   = False
+        self._viewport_visible   = True
+        self._was_playing_before_cull = False
+        self._vol_anim = None
 
         self._player.durationChanged.connect(self._on_duration)
         self._player.positionChanged.connect(self._on_position)
@@ -293,14 +298,28 @@ class AudioNode(BaseNode):
 
     _PROGRESS_H = 6.0
     _PROGRESS_PAD = 8.0
+    _VOL_SLIDER_W = 6.0   # matches progress bar height for visual pairing
 
     def _progress_rect(self) -> QRectF:
         r = self.rect()
+        vol_reserve = self._VOL_SLIDER_W + self._PROGRESS_PAD
+        return QRectF(
+            r.x() + self._PROGRESS_PAD + vol_reserve,
+            r.bottom() - self._PROGRESS_H - self._PROGRESS_PAD,
+            r.width() * 0.66 - vol_reserve,
+            self._PROGRESS_H,
+        )
+
+    def _volume_rect(self) -> QRectF:
+        """Vertical volume slider — left edge, from body top to progress bar bottom."""
+        r = self.rect()
+        top = r.y() + self._body_top()
+        pr = self._progress_rect()
         return QRectF(
             r.x() + self._PROGRESS_PAD,
-            r.bottom() - self._PROGRESS_H - self._PROGRESS_PAD,
-            r.width() * 0.66,
-            self._PROGRESS_H,
+            top,
+            self._VOL_SLIDER_W,
+            pr.bottom() - top,
         )
 
     def _scrub_to(self, x: float) -> None:
@@ -310,6 +329,15 @@ class AudioNode(BaseNode):
         self._player.setPosition(int(ratio * self._duration_ms))
         if not was_playing:
             self._player.pause()
+
+    def _volume_scrub_to(self, y: float) -> None:
+        """Set volume based on y coordinate within the volume slider."""
+        vr = self._volume_rect()
+        ratio = 1.0 - max(0.0, min(1.0, (y - vr.top()) / max(1.0, vr.height())))
+        self._target_volume = ratio
+        self._audio.setVolume(ratio)
+        self.data.volume = int(ratio * 100)
+        self.update()
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION
@@ -327,6 +355,11 @@ class AudioNode(BaseNode):
         super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and self._volume_rect().contains(event.pos()):
+            self._volume_scrubbing = True
+            self._volume_scrub_to(event.pos().y())
+            event.accept()
+            return
         if event.button() == Qt.LeftButton and self._progress_rect().contains(event.pos()):
             self._scrubbing = True
             self._scrub_to(event.pos().x())
@@ -357,6 +390,10 @@ class AudioNode(BaseNode):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
+        if self._volume_scrubbing and event.buttons() & Qt.LeftButton:
+            self._volume_scrub_to(event.pos().y())
+            event.accept()
+            return
         if self._scrubbing and event.buttons() & Qt.LeftButton:
             self._scrub_to(event.pos().x())
             event.accept()
@@ -364,6 +401,10 @@ class AudioNode(BaseNode):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
+        if self._volume_scrubbing and event.button() == Qt.LeftButton:
+            self._volume_scrubbing = False
+            event.accept()
+            return
         self._scrubbing = False
         super().mouseReleaseEvent(event)
 
@@ -480,15 +521,85 @@ class AudioNode(BaseNode):
             int(end_x), int(pr.bottom() + 10),
         )
 
+        # ── Volume slider (vertical, left of body) ──────────────────────
+        painter.setPen(Qt.NoPen)
+        vol_r = self._volume_rect()
+        painter.setBrush(bar_bg)
+        painter.drawRoundedRect(vol_r, 3, 3)
+
+        vol_ratio = self._target_volume
+        fill_h = vol_r.height() * vol_ratio
+        if fill_h > 0:
+            fill_v = QRectF(vol_r.left(), vol_r.bottom() - fill_h,
+                            vol_r.width(), fill_h)
+            vgrad = QLinearGradient(0, fill_v.bottom(), 0, fill_v.top())
+            vgrad.setColorAt(0.0, QColor("#1e1e1e"))
+            vgrad.setColorAt(0.4, QColor("#5c3e4f"))
+            vgrad.setColorAt(0.7, QColor("#a56a85"))
+            vgrad.setColorAt(1.0, QColor("#d87a9e"))
+            painter.setBrush(vgrad)
+            painter.drawRoundedRect(fill_v, 3, 3)
+
         painter.restore()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # VIEWPORT CULLING
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _set_viewport_visible(self, visible: bool) -> None:
+        """Fade audio and pause/resume playback on visibility change.
+
+        Same spatial awareness as VideoNode — only render what's in front
+        of the listener's ears.  Fade-out → pause when leaving view,
+        resume → fade-in when entering view.
+        """
+        if visible == self._viewport_visible:
+            return
+        self._viewport_visible = visible
+        if not self.data.source_path:
+            return
+
+        # Kill any in-flight fade before starting a new one
+        if hasattr(self, '_vol_anim') and self._vol_anim:
+            self._vol_anim.stop()
+            self._vol_anim = None
+
+        if visible:
+            if self._was_playing_before_cull:
+                self._audio.setVolume(0.0)
+                self._player.play()
+                self._was_playing_before_cull = False
+                from utils.audio import audio as _audio_mgr
+                if not _audio_mgr.is_muted():
+                    self._fade_volume(0.0, self._target_volume, duration=1000)
+        else:
+            playing = (
+                self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+            )
+            if playing:
+                self._was_playing_before_cull = True
+                self._fade_volume(
+                    self._audio.volume(), 0.0, duration=1000,
+                    on_finish=self._pause_after_fade,
+                )
+
+    def _pause_after_fade(self) -> None:
+        """Called when the fade-out finishes — now safe to pause."""
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._player.pause()
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
-        if hasattr(self, '_vol_anim') and self._vol_anim:
+        if self._vol_anim:
+            try:
+                self._vol_anim.finished.disconnect()
+            except RuntimeError:
+                pass
             self._vol_anim.stop()
+            self._vol_anim = None
         self._audio.setVolume(0.0)
         try:
             self._player.durationChanged.disconnect(self._on_duration)

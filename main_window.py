@@ -1669,18 +1669,28 @@ class IntricateApp(QMainWindow):
         self.view._apply_zoom(factor, anchor=centre)
 
     def _toggle_global_mute(self) -> None:
-        """Toggle master mute — silences chimes and all video audio."""
+        """Toggle master mute — silences chimes and all video audio.
+
+        On unmute, each media node fades from silence to its target volume
+        over 1 s so the listener isn't hit with a sudden wall of sound.
+        """
         from utils.audio import audio
         muted = not audio.is_muted()
         audio.set_muted(muted)
         self._mute_btn.setText("Quiet" if muted else "Sound")
         self._mute_btn.setToolTip("Unmute all" if muted else "Mute all")
-        # Mute/unmute all VideoNode and AudioNode audio outputs
         from nodes.VideoNode import VideoNode
         from nodes.AudioNode import AudioNode
         for item in self.scene.items():
             if isinstance(item, (VideoNode, AudioNode)):
-                item._audio.setMuted(muted or item.data.muted)
+                if muted or item.data.muted:
+                    item._audio.setMuted(True)
+                else:
+                    # Gentle fade-in: drop volume to 0, unmute, then
+                    # animate back to the node's target level.
+                    item._audio.setVolume(0.0)
+                    item._audio.setMuted(False)
+                    item._fade_volume(0.0, item._target_volume)
 
     def _snapshot_viewport(self) -> None:
         """Capture the current viewport with transparent background."""

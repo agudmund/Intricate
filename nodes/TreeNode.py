@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Iterator, List, Optional
 
 from PySide6.QtWidgets import (
-    QGraphicsProxyWidget, QWidget, QVBoxLayout, QPushButton,
+    QGraphicsProxyWidget, QGraphicsRectItem,
+    QWidget, QVBoxLayout, QPushButton,
 )
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QIcon
@@ -379,7 +380,15 @@ class TreeNode(BaseNode):
         new_node.setZValue(z)
         scene.addItem(new_node)
 
-        # Standard particle burst + deferred removal — same path as shake-delete
+        # Standard particle burst + deferred removal — same path as shake-delete.
+        # Pre-clear grab, selection, and interaction flags NOW so Qt doesn't
+        # route events to this zombie node during the deferred-removal window.
+        # _prepare_for_removal() fires later via itemChange when removeItem
+        # actually runs, but the dispatch state must be severed immediately.
+        self.setSelected(False)
+        self.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
+        if scene.mouseGrabberItem() is self:
+            self.ungrabMouse()
         from graphics.Particles import sprinkle
         sprinkle(scene, self.mapToScene(self.rect().center()), count=8000)
         from PySide6.QtCore import QTimer
