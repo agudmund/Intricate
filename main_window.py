@@ -1479,7 +1479,7 @@ class IntricateApp(QMainWindow):
                     project_path=str(project_root) if project_root else "")
 
     def _spawn_info_node(self):
-        self._spawn(self.scene.add_info_node, "version 0.0.5")
+        self._spawn(self.scene.add_info_node, "version 0.0.7")
 
     def _spawn_git_node(self):
         self._spawn(self.scene.add_git_node, "the boring but necessary one")

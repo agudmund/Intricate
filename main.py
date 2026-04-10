@@ -13,8 +13,8 @@ import argparse
 import ctypes
 import logging
 
-__version__ = "0.0.5"
-__era__     = "The Breath of Thought Era"
+__version__ = "0.0.7"
+__era__     = "The Dawn of a New Era of Mankind"
 
 # Reconfigure stdout/stderr to UTF-8 so emoji in log lines don't crash on
 # Windows consoles that default to cp1252 (e.g. plain cmd.exe or PowerShell).
