@@ -26,11 +26,17 @@ class StickerNodeData(NodeData):
     height:      float = field(default=200.0)
     image_b64:   str   = field(default="")
     source_path: str   = field(default="")
+    pinned:      bool  = field(default=False)  # True = fixed on screen, ignores pan/zoom
+    pin_vp_x:    float = field(default=0.0)    # viewport-relative x when pinned
+    pin_vp_y:    float = field(default=0.0)    # viewport-relative y when pinned
 
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["image_b64"]   = "" if self.source_path else self.image_b64
         data["source_path"] = self.source_path
+        data["pinned"]      = self.pinned
+        data["pin_vp_x"]    = self.pin_vp_x
+        data["pin_vp_y"]    = self.pin_vp_y
         return data
 
     @classmethod
@@ -47,4 +53,7 @@ class StickerNodeData(NodeData):
             ports_visible = data.get("ports_visible", False),
             image_b64     = data.get("image_b64",     ""),
             source_path   = data.get("source_path",   ""),
+            pinned        = data.get("pinned",        False),
+            pin_vp_x      = float(data.get("pin_vp_x", 0.0)),
+            pin_vp_y      = float(data.get("pin_vp_y", 0.0)),
         )

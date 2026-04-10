@@ -51,6 +51,12 @@ class StickerNode(BaseNode):
         elif data.image_b64:
             self._load_from_b64(data.image_b64)
 
+        # Pinned stickers track the viewport — restore pin state from data
+        self._pin_connected = False
+        if data.pinned:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, self._activate_pin)
+
     # ── No chrome ────────────────────────────────────────────────────────────
 
     def _build_buttons(self) -> None:
@@ -104,13 +110,78 @@ class StickerNode(BaseNode):
     # ── Interaction ──────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            None, "Choose Sticker Image", "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"
-        )
-        if path:
-            self._load_from_path(path)
+        if self._pixmap and not self._pixmap.isNull():
+            # Has an image — toggle pin
+            self._toggle_pin()
+        else:
+            # No image yet — browse for one
+            path, _ = QFileDialog.getOpenFileName(
+                None, "Choose Sticker Image", "",
+                "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"
+            )
+            if path:
+                self._load_from_path(path)
         event.accept()
+
+    # ── Viewport pinning ─────────────────────────────────────────────────
+
+    def _toggle_pin(self) -> None:
+        if self.data.pinned:
+            self._deactivate_pin()
+        else:
+            self._activate_pin()
+
+    def _activate_pin(self) -> None:
+        """Pin the sticker to its current viewport position."""
+        self.data.pinned = True
+        self.setFlag(QGraphicsItem.ItemIsMovable, False)
+        # Record viewport-relative position
+        view = self._get_view()
+        if view:
+            vp_pos = view.mapFromScene(self.pos())
+            self.data.pin_vp_x = vp_pos.x()
+            self.data.pin_vp_y = vp_pos.y()
+            self._connect_viewport_tracking(view)
+
+    def _deactivate_pin(self) -> None:
+        """Unpin — sticker becomes draggable again and moves with the canvas."""
+        self.data.pinned = False
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)
+        self._disconnect_viewport_tracking()
+
+    def _connect_viewport_tracking(self, view) -> None:
+        if self._pin_connected:
+            return
+        view.horizontalScrollBar().valueChanged.connect(self._on_viewport_changed)
+        view.verticalScrollBar().valueChanged.connect(self._on_viewport_changed)
+        self._pin_connected = True
+
+    def _disconnect_viewport_tracking(self) -> None:
+        if not self._pin_connected:
+            return
+        view = self._get_view()
+        if view:
+            try:
+                view.horizontalScrollBar().valueChanged.disconnect(self._on_viewport_changed)
+                view.verticalScrollBar().valueChanged.disconnect(self._on_viewport_changed)
+            except (RuntimeError, TypeError):
+                pass
+        self._pin_connected = False
+
+    def _on_viewport_changed(self, _value=None) -> None:
+        """Scrollbar moved — reposition sticker to maintain viewport-relative pos."""
+        view = self._get_view()
+        if not view:
+            return
+        from PySide6.QtCore import QPointF
+        scene_pos = view.mapToScene(int(self.data.pin_vp_x), int(self.data.pin_vp_y))
+        self.setPos(scene_pos)
+
+    def _get_view(self):
+        scene = self.scene()
+        if scene and scene.views():
+            return scene.views()[0]
+        return None
 
     # ── Transparency guard ───────────────────────────────────────────────────
 
@@ -163,6 +234,7 @@ class StickerNode(BaseNode):
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        self._disconnect_viewport_tracking()
         self._pixmap = None
         super()._prepare_for_removal()
 
