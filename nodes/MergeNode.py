@@ -245,14 +245,17 @@ class MergeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_buttons(self) -> None:
-        from nodes.NodeButton import EmojiButton
+        from nodes.NodeButton import NodeButton, EmojiButton
+        from pretty_widgets.graphics.Theme import Theme
         super()._build_buttons()
 
-        self._play_btn = EmojiButton(
-            self,
-            get_emoji=lambda: "\u2016" if self._playing else "\u25b6",  # ‖ / ▶
-            set_emoji=lambda _: self._toggle_playback(),
+        play_pix  = Theme.icon(Theme.iconPlayIconic,  fallback_color="#9a7abf")
+        pause_pix = Theme.icon(Theme.iconPauseIconic, fallback_color="#9a7abf")
+        self._play_btn = NodeButton(
+            self, play_pix, self._toggle_playback,
+            pixmap_confirm=pause_pix, toggle=True,
         )
+        self._play_btn._sticker_shadow = True
         self._play_btn.setToolTip("Play / Pause")
         self._buttons.append(self._play_btn)
 
@@ -336,6 +339,7 @@ class MergeNode(BaseNode):
                 except RuntimeError:
                     pass
         self._playing = False
+        self._play_btn._in_confirm = False   # sync visual to stopped state
         self._play_queue = []
         self._current_index = 0
         self._play_btn.update()

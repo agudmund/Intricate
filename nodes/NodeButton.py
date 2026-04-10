@@ -16,7 +16,7 @@ from pretty_widgets.graphics.Theme import Theme
 # Display size in logical pixels — source icons are 2x (32×32) for crispness
 BUTTON_SIZE     = 32.0
 CONFIRM_TIMEOUT = 2000      # ms — how long the confirm state holds before reset
-LOD_THRESHOLD   = 0.4       # Below this zoom the buttons disappear
+LOD_THRESHOLD   = 0.25      # Below this zoom the buttons disappear
 
 
 class NodeButton(QGraphicsObject):

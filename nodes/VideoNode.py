@@ -265,6 +265,11 @@ class VideoNode(BaseNode):
             if self._destroyed:
                 return
             self._position_ms = position
+            # Sync play/pause sticker to actual player state
+            playing = self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+            if hasattr(self, '_play_btn') and self._play_btn._in_confirm != playing:
+                self._play_btn._in_confirm = playing
+                self._play_btn.update()
             self.update()
         except RuntimeError:
             return
@@ -331,7 +336,7 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_buttons(self) -> None:
-        from nodes.NodeButton import EmojiButton
+        from nodes.NodeButton import NodeButton, EmojiButton
         super()._build_buttons()
 
         # Mute toggle — emoji faces, matches AudioNode
@@ -343,21 +348,26 @@ class VideoNode(BaseNode):
         self._mute_btn.setToolTip("Mute" if not self.data.muted else "Unmute")
         self._buttons.append(self._mute_btn)
 
-        # Play/pause
-        self._play_btn = EmojiButton(
-            self,
-            get_emoji=lambda: "\u2016" if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState else "\u25b6",  # ‖ / ▶
-            set_emoji=lambda _: self._toggle_playback(),
+        # Play/pause — sticker toggle
+        play_pix  = Theme.icon(Theme.iconPlayIconic,  fallback_color="#9a7abf")
+        pause_pix = Theme.icon(Theme.iconPauseIconic, fallback_color="#9a7abf")
+        self._play_btn = NodeButton(
+            self, play_pix, self._toggle_playback,
+            pixmap_confirm=pause_pix, toggle=True,
         )
+        self._play_btn._sticker_shadow = True
         self._play_btn.setToolTip("Play / Pause")
         self._buttons.append(self._play_btn)
 
-        # Loop toggle — plain arrows
-        self._loop_btn = EmojiButton(
-            self,
-            get_emoji=lambda: "\u21bb" if self.data.looping else "\u21a9",  # ↻ / ↩
-            set_emoji=lambda _: self._toggle_loop(),
+        # Loop toggle — sticker icons: direct arrow (off) / loop arrow (on)
+        loop_off_pix = Theme.icon(Theme.iconDirectAudio, fallback_color="#9a7abf")
+        loop_on_pix  = Theme.icon(Theme.iconLoopAudio,   fallback_color="#9a7abf")
+        self._loop_btn = NodeButton(
+            self, loop_off_pix, self._toggle_loop,
+            pixmap_confirm=loop_on_pix, toggle=True,
         )
+        self._loop_btn._sticker_shadow = True
+        self._loop_btn._in_confirm = self.data.looping
         self._loop_btn.setToolTip("Loop: on" if self.data.looping else "Loop: off")
         self._buttons.append(self._loop_btn)
 

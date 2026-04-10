@@ -183,6 +183,22 @@ class StickerNode(BaseNode):
             return scene.views()[0]
         return None
 
+    # ── Cursor hiding during drag ──────────────────────────────────────────
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            view = self._get_view()
+            if view:
+                view.setCursor(Qt.BlankCursor)
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.LeftButton:
+            view = self._get_view()
+            if view:
+                view.unsetCursor()
+
     # ── Transparency guard ───────────────────────────────────────────────────
 
     def setBrush(self, brush):
