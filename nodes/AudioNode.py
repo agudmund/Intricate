@@ -274,21 +274,22 @@ class AudioNode(BaseNode):
         # Play/pause
         # Play/pause moved to the status line — click the ▶/‖ area to toggle
 
-        # Split at playhead — scissors emoji
-        self._split_btn = EmojiButton(
-            self,
-            get_emoji=lambda: "\u2702",   # ✂
-            set_emoji=lambda _: self._split_at_playhead(),
-        )
+        # Split at playhead — sticker icon
+        trim_pix = Theme.icon(Theme.iconTrimAudio, fallback_color="#b0b0b0")
+        self._split_btn = NodeButton(self, trim_pix, self._split_at_playhead)
+        self._split_btn._sticker_shadow = True
         self._split_btn.setToolTip("Split at playhead")
         self._buttons.append(self._split_btn)
 
-        # Loop toggle — plain arrows, no emoji background
-        self._loop_btn = EmojiButton(
-            self,
-            get_emoji=lambda: "\u21bb" if self.data.looping else "\u21a9",  # ↻ / ↩
-            set_emoji=lambda _: self._toggle_loop(),
+        # Loop toggle — sticker icons: direct arrow (off) / loop arrow (on)
+        loop_off_pix = Theme.icon(Theme.iconDirectAudio, fallback_color="#9a7abf")
+        loop_on_pix  = Theme.icon(Theme.iconLoopAudio,   fallback_color="#9a7abf")
+        self._loop_btn = NodeButton(
+            self, loop_off_pix, self._toggle_loop,
+            pixmap_confirm=loop_on_pix, toggle=True,
         )
+        self._loop_btn._sticker_shadow = True
+        self._loop_btn._in_confirm = self.data.looping
         self._loop_btn.setToolTip("Loop: on" if self.data.looping else "Loop: off")
         self._buttons.append(self._loop_btn)
 

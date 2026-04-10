@@ -384,7 +384,17 @@ class MergeNode(BaseNode):
         if len(input_meta) < 2 or src_dir is None:
             return
 
-        stem = self.data.title or "merged"
+        # Build a descriptive name from the source filenames
+        source_stems = []
+        for node in ordered:
+            if hasattr(node, 'data') and node.data.source_path:
+                source_stems.append(Path(node.data.source_path).stem)
+        if source_stems:
+            stem = " + ".join(source_stems[:3])
+            if len(source_stems) > 3:
+                stem += f" +{len(source_stems) - 3} more"
+        else:
+            stem = self.data.title or "merged"
         out  = src_dir / f"{stem}{ext}"
         counter = 2
         while out.exists():
@@ -511,7 +521,23 @@ class MergeNode(BaseNode):
         amix     = f"{amix_in}amix=inputs={n}:duration=longest:normalize=0[out]"
         filter_str = ";".join(vol_filters) + ";" + amix
 
-        stem = self.data.title or "overlay_mix"
+        # Build a descriptive name from the source filenames
+        source_stems = []
+        for path, _ in sources:
+            source_stems.append(Path(path).stem)
+        # Filter out temp file names (intricate_mix_ prefix)
+        clean_stems = [s for s in source_stems if not s.startswith("intricate_mix_")]
+        if not clean_stems:
+            # All sources were video extractions — use the video node captions/filenames
+            for node in ordered:
+                if hasattr(node, 'data') and node.data.source_path:
+                    clean_stems.append(Path(node.data.source_path).stem)
+        if clean_stems:
+            stem = " + ".join(clean_stems[:3])
+            if len(clean_stems) > 3:
+                stem += f" +{len(clean_stems) - 3} more"
+        else:
+            stem = self.data.title or "overlay_mix"
         out  = src_dir / f"{stem}.wav"
         counter = 2
         while out.exists():

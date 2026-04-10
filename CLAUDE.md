@@ -220,11 +220,14 @@ For utility and housekeeping actions on the button strip — things the node *ca
 
 1. **Draft or source the shape** — create or find a clean icon of the action (arrow, gear, refresh, etc.). A simple flat vector with a sticker border treatment works best.
 2. **Generate the sticker render** — feed the shape through an image generator requesting a "sticker" style: flat coloured fill (purple/blue tones fit the palette), dark outline, white cut-out border, no drop shadow.
-3. **Extract and clean** — write a Python script (see `icons/extract_push_icon.py` as reference) that:
+3. **Extract and clean** — write a Python script (see `icons/extract_push_icon.py` and `icons/extract_trim_audio.py` as references) that:
    - Crops the icon from the generated image
    - Removes the background via colour-distance masking and warm-fringe removal
+   - Uses `scipy.ndimage.label` to keep only the largest connected component (kills stray dots)
+   - **Defringes white matte contamination** on semi-transparent edge pixels — this is critical for low-contrast stickers (e.g. grey icon on white background) that will sit on a dark node. Reverse the compositing math: `actual_rgb = (observed_rgb - 255 * (1 - α)) / α`. Without this step, anti-aliased edges carry baked-in white that halos visibly on dark backgrounds. See `extract_trim_audio.py` for the reference implementation.
    - Trims transparent edges, pads to square, resamples to 1024×1024
    - Produces both `.png` and multi-resolution `.ico`
+   - **Verify on dark background** — composite the result onto `(45, 52, 54)` (node background colour) and visually check for fringe before shipping.
 4. Register in `[theme.icons]` in `settings.toml` and reference via `Theme.iconXxx`.
 
 All three families use `NodeButton` for rendering on the button strip. `NodeButton` in `NodeButton.py` scales icon-based buttons up by 1.28× to compensate for transparent padding and match emoji glyph size. The visual hierarchy reads as: emoji buttons are the stars, sticker buttons are the tools, sidebar icons are the furniture.

@@ -89,7 +89,8 @@ class NodeButton(QGraphicsObject):
     # Set True on sticker-style buttons to get dynamic radial shadow
     _sticker_shadow = False
     _sticker_pressed = False   # tactile press state
-    _SHADOW_DIST    = 3.0     # px offset in scene coords
+    _SHADOW_DIST    = 3.0     # px offset for shadow in scene coords
+    _PRESS_DIST     = 1.5     # px offset for tactile press — gentle squish
     _SHADOW_OPACITY = 0.55
 
     def _build_shadow_pixmap(self, pix: QPixmap) -> QPixmap:
@@ -116,9 +117,11 @@ class NodeButton(QGraphicsObject):
             else self._pix_normal
         )
         # Scale up the icon so the visible ring matches emoji glyph size.
-        # Icon PNGs have transparent padding around the outer ring (~78% fill),
-        # so we inflate by ~1/0.78 ≈ 1.28 to compensate.
-        scale   = 1.28
+        # Sidebar/Pillow icons have transparent padding around the outer ring
+        # (~78% fill), so they inflate by ~1/0.78 ≈ 1.28 to compensate.
+        # Sticker icons fill edge-to-edge (white border included), so they
+        # use a tighter scale to leave breathing room between buttons.
+        scale   = 1.0 if self._sticker_shadow else 1.28
         scaled  = BUTTON_SIZE * scale
         inset   = (BUTTON_SIZE - scaled) / 2.0
         draw_rect = QRectF(inset, EMOJI_OVERFLOW + inset, scaled, scaled)
@@ -144,12 +147,14 @@ class NodeButton(QGraphicsObject):
                 sd = self._SHADOW_DIST / lod  # compensate for zoom
 
                 if self._sticker_pressed:
-                    # Pressed — icon shifts into the shadow position, no shadow
-                    draw_rect = draw_rect.translated(nx * sd, ny * sd)
+                    # Pressed — icon shifts partway toward shadow, gentle squish
+                    pd = self._PRESS_DIST / lod
+                    draw_rect = draw_rect.translated(nx * pd, ny * pd)
                 else:
                     # Normal — dark silhouette shadow on the outside edge
-                    if not hasattr(self, '_shadow_pix') or self._shadow_pix is None:
+                    if not hasattr(self, '_shadow_pix') or self._shadow_pix is None or self._shadow_pix_source is not pix:
                         self._shadow_pix = self._build_shadow_pixmap(pix)
+                        self._shadow_pix_source = pix
                     shadow_rect = draw_rect.translated(nx * sd, ny * sd)
                     painter.setOpacity(self._SHADOW_OPACITY)
                     painter.drawPixmap(shadow_rect.toRect(), self._shadow_pix)
