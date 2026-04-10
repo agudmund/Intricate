@@ -169,6 +169,7 @@ class VisionWorker(QThread):
                 "x-api-key":         api_key,
                 "anthropic-version": "2023-06-01",
                 "content-type":      "application/json",
+                "user-agent":        "Intricate/0.1.0 (SingleSharedBraincell)",
             },
             method="POST",
         )

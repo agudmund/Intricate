@@ -445,8 +445,7 @@ class IntricateApp(QMainWindow):
         if not self.is_collapsed:
             self.original_height = self.height()
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
-            self._v_splitter.hide()
-            self.sidebar.hide()
+            self._sidebar_splitter.hide()
             # Pause all videos — curtains hide the canvas
             if self.scene:
                 self.scene.pause_all_videos()
@@ -460,8 +459,7 @@ class IntricateApp(QMainWindow):
             y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
             y = max(avail.top(), y)
             end_rect = QRect(start_rect.x(), y, start_rect.width(), self.original_height)
-            self._v_splitter.show()
-            self.sidebar.show()
+            self._sidebar_splitter.show()
 
         self._animate_curtains(start_rect, end_rect)
         self.is_collapsed = not self.is_collapsed
@@ -592,14 +590,13 @@ class IntricateApp(QMainWindow):
         self.view  = IntricateView(self.scene)
         self.view._on_zoom_changed = lambda: self._sync_zoom_slider()
 
-        # ── Left sidebar — full height, grid column 0 ────────────────────────
+        # ── Left sidebar — full height ────────────────────────────────────────
         self.sidebar = self._build_sidebar()
-        self.grid.addWidget(self.sidebar, 1, 0)
 
         # ── Right panel — image preview zone ──────────────────────────────────
         self.rightPanel = self._build_preview_panel()
 
-        # ── Horizontal splitter — canvas + preview (no sidebar) ───────────────
+        # ── Inner horizontal splitter — canvas + preview ─────────────────────
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setHandleWidth(4)
         self.splitter.setStyleSheet(f"""
@@ -622,7 +619,6 @@ class IntricateApp(QMainWindow):
         QTimer.singleShot(0, self._restore_preview_width)
 
         # ── Vertical splitter — canvas above, bottom toolbar below ────────────
-        # Sidebar is NOT inside this splitter — it spans full height in the grid.
         self._v_splitter = QSplitter(Qt.Vertical)
         self._v_splitter.setHandleWidth(4)
         self._v_splitter.setStyleSheet(f"""
@@ -633,7 +629,23 @@ class IntricateApp(QMainWindow):
         self._v_splitter.addWidget(self.splitter)
         # bottomToolbar is added later by _setupBottomToolbar
 
-        self.grid.addWidget(self._v_splitter, 1, 1)
+        # ── Outer horizontal splitter — sidebar | canvas area ─────────────────
+        # Draggable divider lets the user collapse/expand the sidebar.
+        self._sidebar_splitter = QSplitter(Qt.Horizontal)
+        self._sidebar_splitter.setHandleWidth(4)
+        self._sidebar_splitter.setStyleSheet(f"""
+            QSplitter::handle {{
+                background-color: {Theme.windowBg};
+            }}
+        """)
+        self._sidebar_splitter.addWidget(self.sidebar)
+        self._sidebar_splitter.addWidget(self._v_splitter)
+        self._sidebar_splitter.setStretchFactor(0, 0)
+        self._sidebar_splitter.setStretchFactor(1, 1)
+        self._sidebar_splitter.setCollapsible(0, True)
+        self._sidebar_splitter.setCollapsible(1, False)
+
+        self.grid.addWidget(self._sidebar_splitter, 1, 0, 1, 2)
 
     # =================================================================================
     # Right panel — image preview
@@ -1479,7 +1491,7 @@ class IntricateApp(QMainWindow):
                     project_path=str(project_root) if project_root else "")
 
     def _spawn_info_node(self):
-        self._spawn(self.scene.add_info_node, "version 0.0.7")
+        self._spawn(self.scene.add_info_node, "version 0.1.0")
 
     def _spawn_git_node(self):
         self._spawn(self.scene.add_git_node, "the boring but necessary one")
@@ -1636,11 +1648,11 @@ class IntricateApp(QMainWindow):
         self._v_splitter.setStretchFactor(1, 0)   # toolbar keeps its size
         self._v_splitter.setCollapsible(0, False)  # never collapse the canvas
         self._v_splitter.setCollapsible(1, True)   # toolbar can collapse fully
-        # Force arrow cursor on vertical splitter handles
+        # Vertical split cursor so the handle is discoverable
         for i in range(1, self._v_splitter.count()):
             handle = self._v_splitter.handle(i)
             if handle:
-                handle.setCursor(Qt.ArrowCursor)
+                handle.setCursor(Qt.SplitVCursor)
 
         # Restore saved bottom bar height
         QTimer.singleShot(0, self._restore_bottom_height)
