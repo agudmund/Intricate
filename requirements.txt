@@ -1,2 +1,4 @@
 PySide6
 send2trash
+markdown
+Pygments

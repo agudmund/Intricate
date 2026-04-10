@@ -65,10 +65,20 @@ def process():
     canvas = Image.new("RGBA", (side + pad * 2, side + pad * 2), (0, 0, 0, 0))
     canvas.paste(img, ((side + pad * 2 - w) // 2, (side + pad * 2 - h) // 2))
 
-    # Resample to 1024
-    out = canvas.resize((1024, 1024), Image.LANCZOS)
-    out.save(os.path.join(OUT, "spawn_nodes.png"))
-    print(f"done  {os.path.join(OUT, 'spawn_nodes.png')}")
+    # ── Helper: trim, pad, resample to 1024 ─────────────────────────────────
+    def _to_1024(src, name):
+        bbox = src.getbbox()
+        cropped = src.crop(bbox) if bbox else src
+        cw, ch = cropped.size
+        side = max(cw, ch)
+        _canvas = Image.new("RGBA", (side + pad * 2, side + pad * 2), (0, 0, 0, 0))
+        _canvas.paste(cropped, ((side + pad * 2 - cw) // 2, (side + pad * 2 - ch) // 2))
+        result = _canvas.resize((1024, 1024), Image.LANCZOS)
+        result.save(os.path.join(OUT, name))
+        print(f"done  {name}")
+        return result
+
+    out = _to_1024(img, "spawn_nodes.png")
 
     # Multi-resolution ICO
     sizes = [16, 24, 32, 48, 64, 128, 256]
@@ -89,6 +99,44 @@ def process():
         append_images=frames[1:],
     )
     print(f"done  {app_ico}")
+
+    # ── Clean variant — shadow + reddish-brown outline stripped ─────────────
+    # Start from the original (pre-shadow-reduction) for a clean pass
+    orig = Image.open(SRC).convert("RGBA")
+    c_arr = np.array(orig, dtype=np.float64)
+    c_r, c_g, c_b, c_a = c_arr[:,:,0], c_arr[:,:,1], c_arr[:,:,2], c_arr[:,:,3]
+    c_brightness = (c_r + c_g + c_b) / 3.0
+    c_max = np.maximum(np.maximum(c_r, c_g), c_b)
+    c_min = np.minimum(np.minimum(c_r, c_g), c_b)
+    c_sat = np.where(c_max > 0, (c_max - c_min) / c_max, 0)
+
+    # 1. Strip shadow — dark, low-sat, reddish (same heuristic as main pass)
+    c_shadow = (c_brightness < 130) & (c_sat < 0.45) & (c_r > c_b) & (c_a > 0)
+    c_arr[:,:,3] = np.where(c_shadow, 0, c_arr[:,:,3]).astype(np.uint8)
+
+    # 2. Strip reddish-brown outline — the border glow from the source image.
+    #    These pixels are warm-toned (red dominant, r > b), moderate brightness,
+    #    and distinct from the sticker body (purple strokes have b > r or b ≈ r).
+    #    Colour-distance from known brown ~(140, 80, 70) catches the outline,
+    #    constrained to warm pixels only so the purple strokes survive.
+    brown_r, brown_g, brown_b = 140.0, 80.0, 70.0
+    dist_brown = np.sqrt(
+        (c_r - brown_r)**2 + (c_g - brown_g)**2 + (c_b - brown_b)**2
+    )
+    is_warm = c_r > c_b + 15   # must be clearly warm, not purple
+    is_brown_outline = (dist_brown < 80) & is_warm & (c_arr[:,:,3] > 0)
+    c_arr[:,:,3] = np.where(is_brown_outline, 0, c_arr[:,:,3]).astype(np.uint8)
+
+    # 3. Strip any remaining semi-transparent warm fringe at the edges
+    c_a2 = c_arr[:,:,3]
+    warm_fringe = (c_brightness < 160) & (c_sat < 0.35) & (c_r > c_b) & (c_a2 > 0) & (c_a2 < 240)
+    c_arr[:,:,3] = np.where(warm_fringe, 0, c_arr[:,:,3]).astype(np.uint8)
+
+    clean = Image.fromarray(c_arr.astype(np.uint8))
+
+    clean_out = _to_1024(clean, "spawn_nodes_clean.png")
+    clean_out.save(os.path.join(OUT, "spawn_nodes_clean_1024.png"))
+    print("done  spawn_nodes_clean_1024.png")
 
 
 if __name__ == "__main__":

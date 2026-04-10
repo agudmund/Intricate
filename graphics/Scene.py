@@ -269,11 +269,12 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
-    def add_text_node(self, pos: QPointF | None = None, label: str = ""):
+    def add_text_node(self, pos: QPointF | None = None, label: str = "",
+                      node_tint: str = "", render_html: bool = False):
         """Add a TextNode at pos, optionally pre-filled with label text."""
         from nodes.TextNode import TextNode
         from data.TextNodeData import TextNodeData
-        data = TextNodeData(label=label) if label else TextNodeData()
+        data = TextNodeData(label=label, node_tint=node_tint, render_html=render_html)
         node = TextNode(data)
         if pos is not None:
             r = node.rect()

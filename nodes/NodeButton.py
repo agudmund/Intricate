@@ -88,8 +88,21 @@ class NodeButton(QGraphicsObject):
 
     # Set True on sticker-style buttons to get dynamic radial shadow
     _sticker_shadow = False
+    _sticker_pressed = False   # tactile press state
     _SHADOW_DIST    = 3.0     # px offset in scene coords
-    _SHADOW_OPACITY = 0.35
+    _SHADOW_OPACITY = 0.55
+
+    def _build_shadow_pixmap(self, pix: QPixmap) -> QPixmap:
+        """Dark silhouette from the sticker's alpha — reads as a real shadow."""
+        sz = pix.size()
+        shadow = QPixmap(sz)
+        shadow.fill(QColor(0, 0, 0, 0))
+        p = QPainter(shadow)
+        p.drawPixmap(0, 0, pix)
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
+        p.fillRect(0, 0, sz.width(), sz.height(), QColor(20, 18, 16))
+        p.end()
+        return shadow
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
         # LOD gate — hide at low zoom, no overhead below threshold
@@ -129,10 +142,18 @@ class NodeButton(QGraphicsObject):
                 else:
                     nx, ny = 0.0, 1.0
                 sd = self._SHADOW_DIST / lod  # compensate for zoom
-                shadow_rect = draw_rect.translated(nx * sd, ny * sd)
-                painter.setOpacity(self._SHADOW_OPACITY)
-                painter.drawPixmap(shadow_rect.toRect(), pix)
-                painter.setOpacity(1.0)
+
+                if self._sticker_pressed:
+                    # Pressed — icon shifts into the shadow position, no shadow
+                    draw_rect = draw_rect.translated(nx * sd, ny * sd)
+                else:
+                    # Normal — dark silhouette shadow on the outside edge
+                    if not hasattr(self, '_shadow_pix') or self._shadow_pix is None:
+                        self._shadow_pix = self._build_shadow_pixmap(pix)
+                    shadow_rect = draw_rect.translated(nx * sd, ny * sd)
+                    painter.setOpacity(self._SHADOW_OPACITY)
+                    painter.drawPixmap(shadow_rect.toRect(), self._shadow_pix)
+                    painter.setOpacity(1.0)
 
         painter.drawPixmap(draw_rect.toRect(), pix)
 
@@ -144,6 +165,11 @@ class NodeButton(QGraphicsObject):
         if event.button() != Qt.LeftButton:
             event.ignore()
             return
+
+        # Tactile press — icon shifts into shadow position
+        if self._sticker_shadow:
+            self._sticker_pressed = True
+            self.update()
 
         if self._pix_confirm is None:
             # Single-stage action — fire immediately
@@ -164,6 +190,12 @@ class NodeButton(QGraphicsObject):
             self._callback()
 
         event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._sticker_shadow and self._sticker_pressed:
+            self._sticker_pressed = False
+            self.update()
+        super().mouseReleaseEvent(event)
 
     def _reset(self) -> None:
         """Return to normal state — called by timer or after execution."""

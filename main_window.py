@@ -1316,7 +1316,8 @@ class IntricateApp(QMainWindow):
         except Exception:
             self._status("could not read README.md")
             return
-        self._spawn(self.scene.add_text_node, "the README has arrived", label=text)
+        self._spawn(self.scene.add_text_node, "the README has arrived",
+                    label=text, node_tint="#0d1117", render_html=True)
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
     def _spawn_value_node(self):       self._spawn(self.scene.add_value_node,        "dialing in the value")
     def _spawn_sticker_node(self):     self._spawn(self.scene.add_sticker_node,      "sticker time")
