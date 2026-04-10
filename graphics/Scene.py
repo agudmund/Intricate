@@ -283,6 +283,19 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_readme_node(self, pos: QPointF | None = None, label: str = ""):
+        """Add a ReadmeNode at pos, optionally pre-filled with markdown text."""
+        from nodes.ReadmeNode import ReadmeNode
+        from data.ReadmeNodeData import ReadmeNodeData
+        data = ReadmeNodeData(label=label)
+        node = ReadmeNode(data)
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_cushions_node(self, pos: QPointF | None = None, label: str = ""):
         """Add a CushionsNode at pos, optionally pre-filled with label text."""
         from nodes.CushionsNode import CushionsNode
@@ -934,6 +947,10 @@ class IntricateScene(QGraphicsScene):
             from nodes.TextNode import TextNode
             from data.TextNodeData import TextNodeData
             node = TextNode(TextNodeData.from_dict(d))
+        elif node_type == "readme":
+            from nodes.ReadmeNode import ReadmeNode
+            from data.ReadmeNodeData import ReadmeNodeData
+            node = ReadmeNode(ReadmeNodeData.from_dict(d))
         elif node_type == "cushions":
             from nodes.CushionsNode import CushionsNode
             from data.CushionsNodeData import CushionsNodeData

@@ -152,7 +152,7 @@ _KNOWN_TYPES = frozenset({
     "text", "cushions", "code", "log", "image", "video", "sequence",
     "tree", "info", "git", "audio", "merge", "audio_hold", "palette",
     "sticker", "value", "perf", "claude_info", "fbx", "session",
-    "joy_stats",
+    "joy_stats", "readme",
 })
 
 _PATH_FIELDS = ("source_path", "project_path", "folder_path")
