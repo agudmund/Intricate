@@ -447,19 +447,15 @@ class IntricateApp(QMainWindow):
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
             if self.scene:
                 self.scene.pause_all_videos()
-            # Hide fixed-height elements that would poke through during the
-            # roll-up, but keep the canvas view visible so corner icons leave
-            # a motion trail as the window shrinks.
-            self.sidebar.hide()
-            self.bottomToolbar.hide()
+            # Hide everything below the titlebar for a clean tuck.
+            self._sidebar_splitter.hide()
             self._last_docked_exe = ""
             self._dock_watcher.start()
         else:
             self._dock_watcher.stop()
             self._stop_hunger_glow()
             # Show content before the roll-down so it expands into view.
-            self.sidebar.show()
-            self.bottomToolbar.show()
+            self._sidebar_splitter.show()
             # Clamp so the bottom edge never drops below the screen
             avail = self.screen().availableGeometry()
             y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
