@@ -274,7 +274,14 @@ class WarmNode(BaseNode):
         --bridge <path>.  A QFileSystemWatcher monitors the file for changes
         from the editor side.
         """
-        print(f">>> _launch_editor CALLED uuid={self.data.uuid[:8]}", flush=True)
+        # Direct write to a breadcrumb file — bypasses ALL logging to confirm
+        # this function actually runs.  Remove after debugging.
+        try:
+            with open("_bridge_debug.txt", "a") as _dbg:
+                _dbg.write(f"_launch_editor called uuid={self.data.uuid[:8]} at {time.time()}\n")
+                _dbg.flush()
+        except Exception:
+            pass
         _log.info(f"[WarmNode] _launch_editor called — uuid={self.data.uuid[:8]}")
         # Clean up any stale bridge session
         self._teardown_bridge()
