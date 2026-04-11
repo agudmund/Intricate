@@ -248,7 +248,7 @@ class IntricateView(QGraphicsView):
             grabber = scene.mouseGrabberItem()
             if grabber and (
                 grabber.scene() is None
-                or not int(grabber.flags())
+                or not grabber.flags()
             ):
                 grabber.ungrabMouse()
         # Alt+Right-click → Photoshop-style drag zoom
