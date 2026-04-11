@@ -261,13 +261,47 @@ class GitNode(BaseNode):
         self._buttons.append(self._push_btn)
 
     def _launch_github_desktop(self) -> None:
-        """Launch GitHub Desktop as a detached process."""
-        import os
+        """Focus GitHub Desktop if running, otherwise launch it. Roll up curtains."""
+        import ctypes
+        user32 = ctypes.windll.user32
+
+        # Try to find an existing GitHub Desktop window
+        hwnd = user32.FindWindowW(None, None)
+        found = 0
+        while hwnd:
+            if user32.IsWindowVisible(hwnd):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    if "GitHub Desktop" in buf.value:
+                        found = hwnd
+                        break
+            hwnd = user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT
+
+        # Roll up curtains before switching
         try:
-            os.startfile("github-windows://")
-            _log.info("[git] launched GitHub Desktop")
+            views = self.scene().views() if self.scene() else []
+            if views:
+                mw = views[0].window()
+                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
+                    mw.toggle_curtains()
         except Exception:
-            _log.warning("[git] failed to launch GitHub Desktop", exc_info=True)
+            pass
+
+        if found:
+            # Restore and focus the existing window
+            SW_RESTORE = 9
+            user32.ShowWindow(found, SW_RESTORE)
+            user32.SetForegroundWindow(found)
+            _log.info("[git] focused existing GitHub Desktop")
+        else:
+            import os
+            try:
+                os.startfile("github-windows://")
+                _log.info("[git] launched GitHub Desktop")
+            except Exception:
+                _log.warning("[git] failed to launch GitHub Desktop", exc_info=True)
 
     def _bulk_push_sessions(self) -> None:
         """Prompt for a commit message, then git add+commit+push all green-dot repos on a worker thread."""
