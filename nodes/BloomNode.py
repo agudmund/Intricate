@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QColor, QFont
-from PySide6.QtWidgets import QComboBox, QGraphicsProxyWidget
+from PySide6.QtWidgets import QComboBox, QSpinBox, QGraphicsProxyWidget
 
 from nodes.BaseNode import BaseNode
 from data.BloomNodeData import BloomNodeData
@@ -69,7 +69,33 @@ class BloomNode(BaseNode):
 
         self._combo_proxy = QGraphicsProxyWidget(self)
         self._combo_proxy.setWidget(self._combo)
-        self._position_combo()
+
+        # ── Particle count spinbox ────────────────────────────────────────
+        self._spin = QSpinBox()
+        self._spin.setRange(100, 32000)
+        self._spin.setSingleStep(500)
+        self._spin.setValue(data.particle_count)
+        self._spin.setSuffix("  particles")
+        self._spin.valueChanged.connect(self._on_count_changed)
+        self._spin.setStyleSheet(f"""
+            QSpinBox {{
+                background: {Theme.backDrop};
+                color: {Theme.textPrimary};
+                border: 1px solid {Theme.primaryBorder};
+                border-radius: 4px;
+                padding: 3px 8px;
+                font-family: '{Theme.healthFontFamily}';
+                font-size: {Theme.healthFontSizeLabel}pt;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                width: 16px;
+                border: none;
+            }}
+        """)
+
+        self._spin_proxy = QGraphicsProxyWidget(self)
+        self._spin_proxy.setWidget(self._spin)
+        self._position_widgets()
 
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -98,13 +124,23 @@ class BloomNode(BaseNode):
             28,
         )
 
-    def _position_combo(self) -> None:
+    def _spin_rect(self) -> QRectF:
+        r = self.rect()
+        return QRectF(
+            r.left() + _PAD,
+            r.top() + self._BUTTON_ZONE_H + 42,
+            r.width() - _PAD * 2,
+            28,
+        )
+
+    def _position_widgets(self) -> None:
         self._combo_proxy.setGeometry(self._combo_rect())
+        self._spin_proxy.setGeometry(self._spin_rect())
 
     def setRect(self, rect) -> None:
         super().setRect(rect)
         if hasattr(self, '_combo_proxy') and self._combo_proxy:
-            self._position_combo()
+            self._position_widgets()
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS
@@ -125,6 +161,10 @@ class BloomNode(BaseNode):
 
     def _on_mode_changed(self, index: int) -> None:
         self.data.scatter_mode = "sprinkle" if index == 0 else "orbital"
+
+    def _on_count_changed(self, value: int) -> None:
+        self.data.particle_count = value
+        self.update()  # refresh the info label
 
     def _get_input_image_name(self) -> str | None:
         """Read the connected ImageNode's source filename for the icon cache."""
@@ -176,8 +216,8 @@ class BloomNode(BaseNode):
             "Bloom",
         )
 
-        # Info label below combobox
-        info_y = self._combo_rect().bottom() + 8
+        # Info label below spinbox
+        info_y = self._spin_rect().bottom() + 8
         body_font = QFont(self._BODY_FONT, max(1, Theme.aboutFontSize + self._BODY_FONT_BUMP))
         painter.setFont(body_font)
         painter.setPen(QColor(Theme.nodeFontColor))
@@ -206,10 +246,18 @@ class BloomNode(BaseNode):
             self._combo.currentIndexChanged.disconnect(self._on_mode_changed)
         except RuntimeError:
             pass
+        try:
+            self._spin.valueChanged.disconnect(self._on_count_changed)
+        except RuntimeError:
+            pass
         if self._combo_proxy:
             self._combo_proxy.setWidget(None)
             self._combo_proxy = None
+        if self._spin_proxy:
+            self._spin_proxy.setWidget(None)
+            self._spin_proxy = None
         self._combo = None
+        self._spin = None
         super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -220,6 +268,8 @@ class BloomNode(BaseNode):
         super().sync_data()
         if self._combo:
             self.data.scatter_mode = "sprinkle" if self._combo.currentIndex() == 0 else "orbital"
+        if self._spin:
+            self.data.particle_count = self._spin.value()
 
     def to_dict(self) -> dict:
         self.sync_data()
