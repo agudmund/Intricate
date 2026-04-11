@@ -193,6 +193,8 @@ class WarmNode(BaseNode):
             return
         self._bridge_watcher = QFileSystemWatcher([self._bridge_path])
         self._bridge_watcher.fileChanged.connect(self._on_bridge_file_changed)
+        watched = self._bridge_watcher.files()
+        _log.info(f"[WarmNode] bridge watcher started — watching {len(watched)} file(s): {watched}")
 
     def _stop_bridge_watcher(self) -> None:
         """Disconnect and discard the current bridge watcher."""
@@ -206,25 +208,34 @@ class WarmNode(BaseNode):
 
     def _on_bridge_file_changed(self, path: str) -> None:
         """Watcher callback — defensive re-add, then debounce."""
+        _log.log(5, "[WarmNode] bridge file changed signal — writing=%s path=%s",
+                 self._bridge_writing, path)
         if self._bridge_writing:
+            _log.log(5, "[WarmNode] bridge change ignored — we are the writer")
             return
         # Some editors delete+recreate — re-add if missing from watch list
         if self._bridge_watcher and path not in self._bridge_watcher.files():
+            _log.log(5, "[WarmNode] bridge path dropped from watcher — re-adding")
             if os.path.exists(path):
                 self._bridge_watcher.addPath(path)
         self._bridge_debounce.start()
 
     def _process_bridge_change(self) -> None:
         """Read the bridge file and apply changes from Eddie."""
+        _log.log(5, "[WarmNode] _process_bridge_change firing — path=%s", self._bridge_path)
         if not self._bridge_path:
             return
         try:
             with open(self._bridge_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except (json.JSONDecodeError, OSError, FileNotFoundError):
+        except (json.JSONDecodeError, OSError, FileNotFoundError) as e:
+            _log.log(5, "[WarmNode] bridge read failed: %s", e)
             return  # missing or mid-write partial file — skip silently
 
-        if data.get("writer") == "intricate":
+        writer = data.get("writer")
+        _log.log(5, "[WarmNode] bridge read — writer=%s title=%s", writer, data.get("title", "")[:20])
+        if writer == "intricate":
+            _log.log(5, "[WarmNode] bridge change ignored — echo of our own write")
             return  # echo of our own write
 
         # Apply body_text changes
