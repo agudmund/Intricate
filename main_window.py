@@ -1316,6 +1316,7 @@ class IntricateApp(QMainWindow):
     def _spawn_cushions_node(self):    self._spawn(self.scene.add_cushions_node,     "fluffing the cushions")
     def _spawn_code_node(self):        self._spawn(self.scene.add_code_node,         "compiling the vibes")
     def _spawn_bloom_node(self):       self._spawn(self.scene.add_bloom_node,        "particles are blooming")
+    def _spawn_null_node(self):        self._spawn(self.scene.add_null_node,         "a point in space")
     def _spawn_log_node(self):         self._spawn(self.scene.add_log_node,          "tailing the log")
 
     def _spawn_readme_node(self) -> None:
@@ -1392,6 +1393,7 @@ class IntricateApp(QMainWindow):
         act_cushions = menu.addAction(QIcon(Theme.icon(Theme.iconCushions)), "The Cushions Node")
         act_code     = menu.addAction(QIcon(Theme.icon(Theme.iconCode)),     "The Code Node")
         act_bloom    = menu.addAction(QIcon(Theme.icon(Theme.iconBloom)),    "The Bloom Node")
+        act_null     = menu.addAction(QIcon(Theme.icon(Theme.iconNull)),     "The Null Node")
         act_read     = menu.addAction(QIcon(Theme.icon(Theme.iconTree)),     "The Readme That Hasn't Decided It's Name")
         act_about.triggered.connect(self._spawn_about_node)
         act_warm.triggered.connect(self._spawn_warm_node)
@@ -1399,6 +1401,7 @@ class IntricateApp(QMainWindow):
         act_cushions.triggered.connect(self._spawn_cushions_node)
         act_code.triggered.connect(self._spawn_code_node)
         act_bloom.triggered.connect(self._spawn_bloom_node)
+        act_null.triggered.connect(self._spawn_null_node)
         act_read.triggered.connect(self._spawn_readme_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 

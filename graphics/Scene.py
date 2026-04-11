@@ -336,6 +336,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_null_node(self, pos: QPointF | None = None):
+        """Add a NullNode at pos — transparent position anchor."""
+        from nodes.NullNode import NullNode
+        node = NullNode()
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_log_node(self, pos: QPointF | None = None):
         """Add a LogNode at pos — live tail of the current session log."""
         from nodes.LogNode import LogNode
@@ -986,6 +997,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.BloomNode import BloomNode
             from data.BloomNodeData import BloomNodeData
             node = BloomNode(BloomNodeData.from_dict(d))
+
+        elif node_type == "null":
+            from nodes.NullNode import NullNode
+            from data.NullNodeData import NullNodeData
+            node = NullNode(NullNodeData.from_dict(d))
 
         elif node_type == "log":
             from nodes.LogNode import LogNode

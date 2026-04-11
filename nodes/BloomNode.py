@@ -253,12 +253,21 @@ class BloomNode(BaseNode):
                     return Path(sp).name
         return None
 
+    def _get_scatter_origin(self):
+        """Read position from a connected NullNode, or fall back to own center."""
+        from nodes.NullNode import NullNode
+        for conn in self.connections:
+            other = conn.end_node if conn.start_node is self else conn.start_node
+            if other and isinstance(other, NullNode):
+                return other.mapToScene(other.rect().center())
+        return self.mapToScene(self.rect().center())
+
     def _fire_scatter(self) -> None:
-        """Trigger a particle scatter at this node's center."""
+        """Trigger a particle scatter at the scatter origin."""
         scene = self.scene()
         if not scene:
             return
-        center = self.mapToScene(self.rect().center())
+        center = self._get_scatter_origin()
         icon_name = self._get_input_image_name()
         count = self.data.particle_count
 
