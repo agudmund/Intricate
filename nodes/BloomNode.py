@@ -133,6 +133,26 @@ class BloomNode(BaseNode):
         self._stiffness_proxy = QGraphicsProxyWidget(self)
         self._stiffness_proxy.setWidget(self._stiffness_slider)
 
+        slider_css = self._stiffness_slider.styleSheet()
+
+        # ── Row 6: speed slider (orbital flow speed) ──────────────────────
+        self._speed_slider = QSlider(Qt.Horizontal)
+        self._speed_slider.setRange(1, 300)    # maps to 0.01–3.0
+        self._speed_slider.setValue(int(data.speed * 100))
+        self._speed_slider.valueChanged.connect(self._on_speed_changed)
+        self._speed_slider.setStyleSheet(slider_css)
+        self._speed_proxy = QGraphicsProxyWidget(self)
+        self._speed_proxy.setWidget(self._speed_slider)
+
+        # ── Row 7: distance slider (scatter radius) ──────────────────────
+        self._distance_slider = QSlider(Qt.Horizontal)
+        self._distance_slider.setRange(50, 3000)   # scene pixels
+        self._distance_slider.setValue(int(data.distance))
+        self._distance_slider.valueChanged.connect(self._on_distance_changed)
+        self._distance_slider.setStyleSheet(slider_css)
+        self._distance_proxy = QGraphicsProxyWidget(self)
+        self._distance_proxy.setWidget(self._distance_slider)
+
         self._position_widgets()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -168,6 +188,8 @@ class BloomNode(BaseNode):
         self._seed_proxy.setGeometry(self._row_rect(2))
         self._density_proxy.setGeometry(self._row_rect(3))
         self._stiffness_proxy.setGeometry(self._row_rect(4))
+        self._speed_proxy.setGeometry(self._row_rect(5))
+        self._distance_proxy.setGeometry(self._row_rect(6))
 
     def setRect(self, rect) -> None:
         super().setRect(rect)
@@ -208,6 +230,14 @@ class BloomNode(BaseNode):
         self.data.stiffness = value / 100.0
         self.update()
 
+    def _on_speed_changed(self, value: int) -> None:
+        self.data.speed = value / 100.0
+        self.update()
+
+    def _on_distance_changed(self, value: int) -> None:
+        self.data.distance = float(value)
+        self.update()
+
     # ─────────────────────────────────────────────────────────────────────────
     # SCATTER
     # ─────────────────────────────────────────────────────────────────────────
@@ -235,11 +265,14 @@ class BloomNode(BaseNode):
         from graphics.Particles import sprinkle, orbital_burst
         if self.data.scatter_mode == "orbital":
             orbital_burst(scene, center, count=count, icon_name=icon_name,
-                          stiffness=self.data.stiffness)
+                          stiffness=self.data.stiffness,
+                          speed=self.data.speed,
+                          distance=self.data.distance)
         else:
             sprinkle(scene, center, count=count, icon_name=icon_name,
                      seed=self.data.seed,
-                     density_falloff=self.data.density_falloff)
+                     density_falloff=self.data.density_falloff,
+                     distance=self.data.distance)
 
         _log.info(f"[Bloom] fired {self.data.scatter_mode} ×{count}"
                   f" seed={self.data.seed} density={self.data.density_falloff}"
@@ -267,20 +300,26 @@ class BloomNode(BaseNode):
             "Bloom",
         )
 
-        # Stiffness label next to slider
-        label_y = self._row_rect(4).top() - 14
+        # Slider labels
         body_font = QFont(self._BODY_FONT, max(1, Theme.aboutFontSize + self._BODY_FONT_BUMP))
         painter.setFont(body_font)
         painter.setPen(QColor(Theme.nodeFontColor))
         painter.setOpacity(0.5)
-        painter.drawText(
-            QRectF(r.left() + pad, label_y, r.width() - pad * 2, 14),
-            Qt.AlignLeft | Qt.AlignVCenter,
-            f"stiffness  {self.data.stiffness:.2f}",
-        )
+
+        for row, label in [
+            (4, f"stiffness  {self.data.stiffness:.2f}"),
+            (5, f"speed  {self.data.speed:.2f}"),
+            (6, f"distance  {self.data.distance:.0f}px"),
+        ]:
+            ly = self._row_rect(row).top() - 14
+            painter.drawText(
+                QRectF(r.left() + pad, ly, r.width() - pad * 2, 14),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                label,
+            )
 
         # Info line at bottom
-        info_y = self._row_rect(4).bottom() + 6
+        info_y = self._row_rect(6).bottom() + 6
         icon_name = self._get_input_image_name()
         info = icon_name if icon_name else "heart.png"
         painter.drawText(
@@ -301,19 +340,24 @@ class BloomNode(BaseNode):
             (self._seed_spin.valueChanged,           self._on_seed_changed),
             (self._density_combo.currentIndexChanged, self._on_density_changed),
             (self._stiffness_slider.valueChanged,    self._on_stiffness_changed),
+            (self._speed_slider.valueChanged,        self._on_speed_changed),
+            (self._distance_slider.valueChanged,     self._on_distance_changed),
         ]:
             try:
                 signal.disconnect(slot)
             except RuntimeError:
                 pass
         for proxy in (self._combo_proxy, self._count_proxy, self._seed_proxy,
-                      self._density_proxy, self._stiffness_proxy):
+                      self._density_proxy, self._stiffness_proxy,
+                      self._speed_proxy, self._distance_proxy):
             if proxy:
                 proxy.setWidget(None)
         self._combo_proxy = self._count_proxy = self._seed_proxy = None
         self._density_proxy = self._stiffness_proxy = None
+        self._speed_proxy = self._distance_proxy = None
         self._combo = self._count_spin = self._seed_spin = None
         self._density_combo = self._stiffness_slider = None
+        self._speed_slider = self._distance_slider = None
         super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -332,6 +376,10 @@ class BloomNode(BaseNode):
             self.data.density_falloff = ["uniform", "center", "edge"][self._density_combo.currentIndex()]
         if self._stiffness_slider:
             self.data.stiffness = self._stiffness_slider.value() / 100.0
+        if self._speed_slider:
+            self.data.speed = self._speed_slider.value() / 100.0
+        if self._distance_slider:
+            self.data.distance = float(self._distance_slider.value())
 
     def to_dict(self) -> dict:
         self.sync_data()

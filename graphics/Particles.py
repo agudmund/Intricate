@@ -131,7 +131,8 @@ class _FadingParticle:
 def sprinkle(scene: QGraphicsScene, center: QPointF,
              count: int = 6, icon_name: str | None = None,
              seed: int | None = None,
-             density_falloff: str = "uniform") -> None:
+             density_falloff: str = "uniform",
+             distance: float = SPIRAL_RADIUS) -> None:
     """
     Spawn a burst of fading particles around a scene position.
 
@@ -179,7 +180,7 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
     _min     = min
     _int     = int
     _jitter  = SPIRAL_JITTER
-    _radius  = SPIRAL_RADIUS
+    _radius  = distance
     _ga      = _GOLDEN_ANGLE
     _burst   = BURST_BASE_MS * max(1.0, count / BURST_BASE_N)
     _ease    = BURST_EASE
@@ -258,13 +259,14 @@ class _OrbitalBurst:
                  '_fade_start', '_fade_end', '_removed', '_scale')
 
     def __init__(self, scene: QGraphicsScene, center: QPointF, count: int,
-                 icon_name: str | None = None, lerp_rate: float = 0.1):
+                 icon_name: str | None = None, lerp_rate: float = 0.1,
+                 speed: float = 0.7, scale: float = ORBITAL_SCALE):
         from utils.OrbitalMotion import OrbitalSwarm
 
         self._scene = scene
         self._cx    = center.x()
         self._cy    = center.y()
-        self._scale = ORBITAL_SCALE
+        self._scale = scale
         self._born  = time.monotonic() * 1000.0
         self._fade_start = self._born + ORBITAL_LIVE_MS
         self._fade_end   = self._fade_start + ORBITAL_FADE_MS
@@ -272,7 +274,7 @@ class _OrbitalBurst:
 
         self._swarm = OrbitalSwarm(
             count=count, rings=21.79, radius=10.0,
-            spread=69.0, twist=0.6, speed=0.7,
+            spread=69.0, twist=0.6, speed=speed,
             morph=1.0, lerp_rate=lerp_rate,
         )
 
@@ -368,10 +370,12 @@ def _orbital_tick() -> None:
 def orbital_burst(scene: QGraphicsScene, center: QPointF,
                   count: int = ORBITAL_COUNT,
                   icon_name: str | None = None,
-                  stiffness: float = 0.1) -> None:
+                  stiffness: float = 0.1,
+                  speed: float = 0.7,
+                  distance: float = ORBITAL_SCALE) -> None:
     """Spawn an orbital torus knot particle swarm at a scene position."""
     burst = _OrbitalBurst(scene, center, count, icon_name=icon_name,
-                          lerp_rate=stiffness)
+                          lerp_rate=stiffness, speed=speed, scale=distance)
     _orbital_bursts.append(burst)
     _ensure_orbital_ticking()
 
