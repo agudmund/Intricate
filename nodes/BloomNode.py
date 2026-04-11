@@ -72,7 +72,7 @@ class BloomNode(BaseNode):
 
         # ── Particle count spinbox ────────────────────────────────────────
         self._spin = QSpinBox()
-        self._spin.setRange(100, 32000)
+        self._spin.setRange(100, 999999)
         self._spin.setSingleStep(500)
         self._spin.setValue(data.particle_count)
         self._spin.setSuffix("  particles")
