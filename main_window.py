@@ -447,22 +447,18 @@ class IntricateApp(QMainWindow):
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
             if self.scene:
                 self.scene.pause_all_videos()
-            # Zero out minimum heights so the layout engine lets the geometry
-            # animation compress everything naturally — content stays visible
-            # and rolls with the window instead of poking through.
-            for w in (self._sidebar_splitter, self._v_splitter,
-                      self.splitter, self.sidebar, self.bottomToolbar):
-                w.setMinimumHeight(0)
+            # Clamp the splitter's max height to 0 so the layout compresses
+            # row 1 as the geometry animation shrinks the window.  The content
+            # remains "visible" (not hidden) — Qt just gives it zero space,
+            # so the roll-up is a smooth squeeze with nothing leaking through.
+            self._sidebar_splitter.setMaximumHeight(0)
             self._last_docked_exe = ""
             self._dock_watcher.start()
         else:
             self._dock_watcher.stop()
             self._stop_hunger_glow()
-            # Restore the splitter and let children reclaim their natural sizes.
-            self._sidebar_splitter.show()
-            for w in (self._sidebar_splitter, self._v_splitter,
-                      self.splitter, self.sidebar, self.bottomToolbar):
-                w.setMinimumHeight(0)
+            # Uncap and restore before the roll-down so content expands in.
+            self._sidebar_splitter.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
             # Clamp so the bottom edge never drops below the screen
             avail = self.screen().availableGeometry()
             y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
@@ -504,10 +500,7 @@ class IntricateApp(QMainWindow):
         # visibility change would lock the view into phantom-pan mode.
         self.view._last_pan_pos = None
 
-        if self.is_collapsed:
-            # Clean tuck — hide after the roll-up animation lands.
-            self._sidebar_splitter.hide()
-        else:
+        if not self.is_collapsed:
             self.view._notify_viewport_changed()
 
 
