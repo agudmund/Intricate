@@ -9,9 +9,9 @@
 import math
 import random
 import time
-from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsEllipseItem, QGraphicsScene
+from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene
 from PySide6.QtCore import Qt, QPointF, QTimer
-from PySide6.QtGui import QPixmap, QColor, QBrush, QPen
+from PySide6.QtGui import QPixmap, QColor
 
 from pretty_widgets.graphics.Theme import Theme
 
@@ -232,22 +232,23 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
 
 # ── Orbital torus knot burst ─────────────────────────────────────────────
 
-ORBITAL_COUNT     = 2000    # particle count for the orbital swarm
+ORBITAL_COUNT     = 8000    # particle count for the orbital swarm
 ORBITAL_SCALE     = 6.0     # swarm coordinates → scene pixels
 ORBITAL_LIVE_MS   = 2800    # how long the swarm animates before fading
 ORBITAL_FADE_MS   = 600     # fade-out after the live phase
-ORBITAL_DOT_SIZE  = 5       # diameter of each dot in scene pixels
+ORBITAL_ICON_SIZE = 14      # pixel size of each PNG particle
 
 _orbital_bursts: list = []  # active _OrbitalBurst instances
 
 
 class _OrbitalBurst:
-    """Manages a swarm of moving dots driven by OrbitalSwarm, then fades them out."""
+    """Manages a swarm of PNG particles driven by OrbitalSwarm, then fades them out."""
 
     __slots__ = ('_scene', '_swarm', '_items', '_cx', '_cy', '_born',
                  '_fade_start', '_fade_end', '_removed', '_scale')
 
-    def __init__(self, scene: QGraphicsScene, center: QPointF, count: int):
+    def __init__(self, scene: QGraphicsScene, center: QPointF, count: int,
+                 icon_name: str | None = None):
         from utils.OrbitalMotion import OrbitalSwarm
 
         self._scene = scene
@@ -265,20 +266,33 @@ class _OrbitalBurst:
             morph=1.0, lerp_rate=0.1,
         )
 
-        # Create dot items — small ellipses, colored per tick
-        no_pen = QPen(Qt.NoPen)
+        # Resolve the icon pixmap — reuse the sprinkle icon cache
+        key = icon_name or "heart.png"
+        if key not in _icon_size_cache:
+            raw = Theme.icon(key, fallback_color=Theme.primaryBorder)
+            base = raw.scaled(MAX_SIZE, MAX_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            _icon_base_cache[key] = base
+            sc = {MAX_SIZE: base}
+            for s in range(MIN_SIZE, MAX_SIZE):
+                sc[s] = base.scaled(s, s, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            _icon_size_cache[key] = sc
+        pixmap = _icon_size_cache[key].get(
+            ORBITAL_ICON_SIZE,
+            _icon_base_cache[key].scaled(ORBITAL_ICON_SIZE, ORBITAL_ICON_SIZE,
+                                         Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+
+        # Create PNG particle items — all share the same pixmap
         self._items = []
         for _ in range(count):
-            dot = QGraphicsEllipseItem(0, 0, ORBITAL_DOT_SIZE, ORBITAL_DOT_SIZE)
-            dot.setPen(no_pen)
-            dot.setBrush(QBrush(QColor(255, 255, 255)))
-            dot.setZValue(9999)
-            dot.setOpacity(0.0)
-            scene.addItem(dot)
-            self._items.append(dot)
+            item = QGraphicsPixmapItem(pixmap)
+            item.setZValue(9999)
+            item.setOpacity(0.0)
+            scene.addItem(item)
+            self._items.append(item)
 
     def _update(self, now_ms: float) -> bool:
-        """Tick — advance swarm, reposition dots, handle fade. Returns True while alive."""
+        """Tick — advance swarm, reposition particles, handle fade. Returns True while alive."""
         try:
             if self._removed:
                 return False
@@ -299,7 +313,7 @@ class _OrbitalBurst:
                 fade = 1.0
 
             cx, cy, scale = self._cx, self._cy, self._scale
-            half = ORBITAL_DOT_SIZE * 0.5
+            half = ORBITAL_ICON_SIZE * 0.5
             items = self._items
 
             for i in range(len(items)):
@@ -310,10 +324,6 @@ class _OrbitalBurst:
 
                 items[i].setPos(cx + x * scale - half, cy + y * scale - half)
                 items[i].setOpacity(fade * depth_factor)
-
-                color = QColor.fromHslF(h, max(0.0, min(1.0, s)),
-                                        max(0.05, min(1.0, l)))
-                items[i].setBrush(QBrush(color))
 
             return True
 
@@ -346,9 +356,10 @@ def _orbital_tick() -> None:
 
 
 def orbital_burst(scene: QGraphicsScene, center: QPointF,
-                  count: int = ORBITAL_COUNT) -> None:
+                  count: int = ORBITAL_COUNT,
+                  icon_name: str | None = None) -> None:
     """Spawn an orbital torus knot particle swarm at a scene position."""
-    burst = _OrbitalBurst(scene, center, count)
+    burst = _OrbitalBurst(scene, center, count, icon_name=icon_name)
     _orbital_bursts.append(burst)
     _ensure_orbital_ticking()
 
