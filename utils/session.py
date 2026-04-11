@@ -23,16 +23,20 @@ from utils.helpers import ensure_dir
 
 logger = setup_logger("session")
 
+# The canonical session file extension.  It's just JSON inside, but a custom
+# extension sidesteps autotools and .gitignore rules that blanket-exclude *.json.
+SESSION_EXT = ".intricate"
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Path helpers
 # ═════════════════════════════════════════════════════════════════════════════
 
 def session_path(project_name: str) -> Path | None:
-    """Return the session.json path for a project folder name, or None if empty."""
+    """Return the session file path for a project folder name, or None if empty."""
     if not project_name:
         return None
-    return Path.home() / "Desktop" / project_name / "Documents" / "data" / "session.json"
+    return Path.home() / "Desktop" / project_name / "Documents" / "data" / f"session{SESSION_EXT}"
 
 
 def project_root_from_session(path: Path) -> Path:
@@ -41,21 +45,22 @@ def project_root_from_session(path: Path) -> Path:
 
 
 def migrate_legacy_session(path: Path, project_root: Path) -> None:
-    """Move a root-level session.json and backup/ into Documents/data/ if needed.
+    """Migrate old session layouts to the current convention.
 
-    Old layout kept session.json at the project root.  This migrates it to
-    Documents/data/session.json so the project root stays clean.
+    Handles two legacy layouts:
+      1. session.json at project root  → Documents/data/session.intricate
+      2. session.json in Documents/data → session.intricate  (extension rename)
     """
-    old_session = project_root / "session.json"
-    if old_session.exists() and not path.exists():
+    # Legacy layout 1: root-level session.json → Documents/data/
+    old_root = project_root / "session.json"
+    if old_root.exists() and not path.exists():
         ensure_dir(path.parent)
         try:
-            old_session.rename(path)
+            old_root.rename(path)
             logger.info(f"migrated session.json -> {path.relative_to(project_root)}")
         except OSError as e:
             logger.warning(f"session migration failed: {e}")
 
-        # Move the old backup/ folder too if it exists
         old_backup = project_root / "backup"
         new_backup = path.parent / "backup"
         if old_backup.exists() and old_backup.is_dir() and not new_backup.exists():
@@ -64,6 +69,24 @@ def migrate_legacy_session(path: Path, project_root: Path) -> None:
                 logger.info("migrated backup/ -> Documents/data/backup/")
             except OSError as e:
                 logger.warning(f"backup migration failed: {e}")
+
+    # Legacy layout 2: session.json in Documents/data/ → .intricate extension
+    old_json = path.with_suffix(".json")
+    if old_json.exists() and not path.exists():
+        try:
+            old_json.rename(path)
+            logger.info(f"migrated {old_json.name} -> {path.name}")
+        except OSError as e:
+            logger.warning(f"extension migration failed: {e}")
+        # Also rename backup files
+        backup_dir = path.parent / "backup"
+        if backup_dir.exists():
+            for old_bak in backup_dir.glob("session*_*.json"):
+                new_bak = old_bak.with_suffix(SESSION_EXT)
+                try:
+                    old_bak.rename(new_bak)
+                except OSError:
+                    pass
 
 
 def enter_project(path: Path) -> Path:
@@ -119,8 +142,8 @@ def _rotate_session(filepath: str):
     backup_dir = current.parent / "backup"
     ensure_dir(backup_dir)
 
-    previous = backup_dir / (current.stem + "_previous.json")
-    archive  = backup_dir / (current.stem + "_archive.json")
+    previous = backup_dir / (current.stem + "_previous" + SESSION_EXT)
+    archive  = backup_dir / (current.stem + "_archive" + SESSION_EXT)
 
     def _trash(path: Path):
         """Send to recycle bin; fall back to permanent delete if send2trash is unavailable."""
@@ -250,14 +273,18 @@ class SessionManager:
             logger.warning(f"Sessions directory not found at {sessions_path}")
             return []
 
-        session_files = sorted(sessions_path.glob("*.json"))
+        # Accept both .intricate and legacy .json files in the sessions dir
+        session_files = sorted(
+            f for f in sessions_path.iterdir()
+            if f.suffix in (SESSION_EXT, ".json") and f.is_file()
+        )
         return [f.stem for f in session_files]
 
     @staticmethod
     def get_session_filename(display_name: str) -> str:
         """Get the full absolute filepath for a session by its display name."""
         sessions_dir = _get_sessions_dir()
-        return str(sessions_dir / f"{display_name}.json")
+        return str(sessions_dir / f"{display_name}{SESSION_EXT}")
 
     @staticmethod
     def save_session(filepath: str, data: dict):

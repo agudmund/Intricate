@@ -77,7 +77,7 @@ class SessionNode(BaseNode):
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
-                if Path(url.toLocalFile()).suffix.lower() == ".json":
+                if Path(url.toLocalFile()).suffix.lower() in (".json", ".intricate"):
                     event.acceptProposedAction()
                     return
         event.ignore()
@@ -89,13 +89,13 @@ class SessionNode(BaseNode):
         event.ignore()
 
     def dropEvent(self, event) -> None:
-        """Dropping a .json on an existing SessionNode creates a new SessionNode nearby."""
+        """Dropping a session file on an existing SessionNode creates a new SessionNode nearby."""
         if not event.mimeData().hasUrls():
             event.ignore()
             return
         for url in event.mimeData().urls():
             path = url.toLocalFile()
-            if Path(path).suffix.lower() == ".json":
+            if Path(path).suffix.lower() in (".json", ".intricate"):
                 scene = self.scene()
                 if scene and hasattr(scene, 'add_session_node'):
                     offset = QPointF(40.0, 40.0)
@@ -226,7 +226,7 @@ class SessionNode(BaseNode):
             painter.drawText(
                 QRectF(r.left() + pad, y, r.width() - pad * 2, 20),
                 Qt.AlignLeft | Qt.AlignTop,
-                "Drop a .json session file here",
+                "Drop a session file here",
             )
         else:
             # Filename
