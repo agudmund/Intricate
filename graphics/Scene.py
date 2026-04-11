@@ -325,6 +325,17 @@ class IntricateScene(QGraphicsScene):
             node.load_from_path(path)
         return node
 
+    def add_bloom_node(self, pos: QPointF | None = None):
+        """Add a BloomNode at pos — particle scatter controller."""
+        from nodes.BloomNode import BloomNode
+        node = BloomNode()
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_log_node(self, pos: QPointF | None = None):
         """Add a LogNode at pos — live tail of the current session log."""
         from nodes.LogNode import LogNode
@@ -970,6 +981,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.CodeNode import CodeNode
             from data.CodeNodeData import CodeNodeData
             node = CodeNode(CodeNodeData.from_dict(d))
+
+        elif node_type == "bloom":
+            from nodes.BloomNode import BloomNode
+            from data.BloomNodeData import BloomNodeData
+            node = BloomNode(BloomNodeData.from_dict(d))
 
         elif node_type == "log":
             from nodes.LogNode import LogNode
