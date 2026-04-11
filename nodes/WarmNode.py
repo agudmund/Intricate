@@ -137,12 +137,6 @@ class WarmNode(BaseNode):
 
     def _editor_context_menu(self, event) -> None:
         """Standard context menu with 'Open in Notepad' prepended."""
-        try:
-            with open("_bridge_debug.txt", "a") as _dbg:
-                _dbg.write(f"_editor_context_menu called at {time.time()}\n")
-                _dbg.flush()
-        except Exception:
-            pass
         from pretty_widgets.PrettyMenu import menu_stylesheet
         ctx = self._editor.createStandardContextMenu()
         ctx.setStyleSheet(menu_stylesheet())
@@ -280,14 +274,6 @@ class WarmNode(BaseNode):
         --bridge <path>.  A QFileSystemWatcher monitors the file for changes
         from the editor side.
         """
-        # Direct write to a breadcrumb file — bypasses ALL logging to confirm
-        # this function actually runs.  Remove after debugging.
-        try:
-            with open("_bridge_debug.txt", "a") as _dbg:
-                _dbg.write(f"_launch_editor called uuid={self.data.uuid[:8]} at {time.time()}\n")
-                _dbg.flush()
-        except Exception:
-            pass
         _log.info(f"[WarmNode] _launch_editor called — uuid={self.data.uuid[:8]}")
         # Clean up any stale bridge session — this disconnects debounce signals,
         # so reconnect them immediately for the new session.
