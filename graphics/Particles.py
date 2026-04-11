@@ -129,7 +129,9 @@ class _FadingParticle:
 
 
 def sprinkle(scene: QGraphicsScene, center: QPointF,
-             count: int = 6, icon_name: str | None = None) -> None:
+             count: int = 6, icon_name: str | None = None,
+             seed: int | None = None,
+             density_falloff: str = "uniform") -> None:
     """
     Spawn a burst of fading particles around a scene position.
 
@@ -157,6 +159,10 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
     if views:
         v = views[0]
         view_rect = v.mapToScene(v.viewport().rect()).boundingRect()
+
+    # Seed for reproducible scatters
+    if seed is not None:
+        random.seed(seed)
 
     # Pre-compute all positions and sizes in bulk — avoid per-item trig + random overhead
     cx, cy = center.x(), center.y()
@@ -195,8 +201,12 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
     turb_y = 0.0
     turb_carry = 0.4   # how much of the previous offset carries forward
     for i in range(count):
-        # Position
-        t      = (i + 0.5) * inv_total
+        # Position — density falloff modulates radial distribution
+        t = (i + 0.5) * inv_total
+        if density_falloff == "center":
+            t = t * t                  # bias toward center (small radius)
+        elif density_falloff == "edge":
+            t = 1.0 - (1.0 - t) ** 2  # bias toward edge (large radius)
         radius = _radius * _sqrt(t)
         angle  = i * _ga
         jx = _gauss(0, _jitter) + turb_x
@@ -248,7 +258,7 @@ class _OrbitalBurst:
                  '_fade_start', '_fade_end', '_removed', '_scale')
 
     def __init__(self, scene: QGraphicsScene, center: QPointF, count: int,
-                 icon_name: str | None = None):
+                 icon_name: str | None = None, lerp_rate: float = 0.1):
         from utils.OrbitalMotion import OrbitalSwarm
 
         self._scene = scene
@@ -263,7 +273,7 @@ class _OrbitalBurst:
         self._swarm = OrbitalSwarm(
             count=count, rings=21.79, radius=10.0,
             spread=69.0, twist=0.6, speed=0.7,
-            morph=1.0, lerp_rate=0.1,
+            morph=1.0, lerp_rate=lerp_rate,
         )
 
         # Resolve the icon pixmap — reuse the sprinkle icon cache
@@ -357,9 +367,11 @@ def _orbital_tick() -> None:
 
 def orbital_burst(scene: QGraphicsScene, center: QPointF,
                   count: int = ORBITAL_COUNT,
-                  icon_name: str | None = None) -> None:
+                  icon_name: str | None = None,
+                  stiffness: float = 0.1) -> None:
     """Spawn an orbital torus knot particle swarm at a scene position."""
-    burst = _OrbitalBurst(scene, center, count, icon_name=icon_name)
+    burst = _OrbitalBurst(scene, center, count, icon_name=icon_name,
+                          lerp_rate=stiffness)
     _orbital_bursts.append(burst)
     _ensure_orbital_ticking()
 
