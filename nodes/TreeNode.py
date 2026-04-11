@@ -542,7 +542,9 @@ class TreeNode(BaseNode):
         if self._name_editor:
             self._name_editor.teardown()
         if self._toolbar_proxy:
+            self._toolbar_proxy.setWidget(None)
             self._toolbar_proxy.hide()
+            self._toolbar_proxy = None
         if self._editor:
             self._editor.teardown()
         self._editor = None

@@ -534,9 +534,13 @@ class WarmNode(BaseNode):
     def _prepare_for_removal(self) -> None:
         self._teardown_bridge()
         if self._editor_proxy:
+            self._editor_proxy.setWidget(None)
             self._editor_proxy.hide()
+            self._editor_proxy = None
         if self.scene() and self.scene().views():
             self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
+        if self._editor:
+            self._editor.deleteLater()
         self._editor = None
         super()._prepare_for_removal()
 

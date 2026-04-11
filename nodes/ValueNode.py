@@ -284,7 +284,11 @@ class ValueNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         if hasattr(self, '_slider_proxy') and self._slider_proxy:
+            self._slider_proxy.setWidget(None)
             self._slider_proxy.hide()
+            self._slider_proxy = None
+        if self._slider:
+            self._slider.deleteLater()
         self._slider = None
         super()._prepare_for_removal()
 

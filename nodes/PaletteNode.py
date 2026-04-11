@@ -504,8 +504,16 @@ class PaletteNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        if hasattr(self, '_title_proxy') and self._title_proxy:
+            self._title_proxy.setWidget(None)
+            self._title_proxy.hide()
+            self._title_proxy = None
         if self._palette_proxy:
+            self._palette_proxy.setWidget(None)
             self._palette_proxy.hide()
+            self._palette_proxy = None
+        if self._palette:
+            self._palette.deleteLater()
         self._palette = None
         super()._prepare_for_removal()
 

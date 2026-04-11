@@ -277,7 +277,10 @@ class SequenceNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         if self._slider_proxy:
+            self._slider_proxy.setWidget(None)
             self._slider_proxy.hide()
+            self._slider_proxy = None
+        self._slider = None
         self._pixmap = None
         self._frames.clear()
         super()._prepare_for_removal()
