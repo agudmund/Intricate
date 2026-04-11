@@ -435,20 +435,38 @@ class IntricateApp(QMainWindow):
     # =========================================================================
 
     def toggle_curtains(self):
-        """Animate the window into a sleek HUD strip."""
+        """Animate the window into a sleek HUD strip.
+
+        Ordering is critical — the animation object must be created and
+        configured BEFORE the hide/show calls, which must happen BEFORE
+        start().  This is the sequence that makes Qt yield the layout
+        row to the geometry animation for a graceful roll in both
+        directions.  Do not reorder.
+        """
         fw = self.focusWidget()
         if fw:
             fw.clearFocus()
-        self.setMinimumHeight(0)
-        start_rect = self.geometry()
 
-        if not self.is_collapsed:
+        # ① Unlock the window to shrink past its natural minimum
+        self.setMinimumHeight(0)
+
+        # ② Create and configure the animation BEFORE hiding/showing
+        self.view.setTransformationAnchor(QGraphicsView.NoAnchor)
+        collapsing = not self.is_collapsed
+        start_rect = self.geometry()
+        self.curtain_anim = QPropertyAnimation(self, b"geometry")
+        self.curtain_anim.setDuration(
+            Theme.windowRollTimingUp if collapsing else Theme.windowRollTimingDown
+        )
+        self.curtain_anim.setEasingCurve(
+            getattr(QEasingCurve, Theme.windowRollEasing, QEasingCurve.OutExpo)
+        )
+
+        if collapsing:
             self.original_height = self.height()
-            end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
-            # This exact ordering is critical — hide before pause before dock.
-            # setMinimumHeight(0) above unlocks the window to shrink past its
-            # natural minimum; the hide must happen here so Qt's layout yields
-            # the entire row to the geometry animation.
+            end_rect = QRect(start_rect.x(), start_rect.y(),
+                             start_rect.width(), Theme.handleHeightTop)
+            # ③ Hide content AFTER animation exists but BEFORE start()
             self._sidebar_splitter.hide()
             if self.scene:
                 self.scene.pause_all_videos()
@@ -461,27 +479,18 @@ class IntricateApp(QMainWindow):
             avail = self.screen().availableGeometry()
             y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
             y = max(avail.top(), y)
-            end_rect = QRect(start_rect.x(), y, start_rect.width(), self.original_height)
+            end_rect = QRect(start_rect.x(), y,
+                             start_rect.width(), self.original_height)
+            # ③ Show content AFTER animation exists but BEFORE start()
             self._sidebar_splitter.show()
 
-        collapsing = not self.is_collapsed
-        self._animate_curtains(start_rect, end_rect, collapsing)
-        self.is_collapsed = not self.is_collapsed
-
-    def _animate_curtains(self, start_rect: QRect, end_rect: QRect,
-                          collapsing: bool = True) -> None:
-        """Drive the geometry animation for curtain collapse / expand."""
-        self.view.setTransformationAnchor(QGraphicsView.NoAnchor)
-        self.curtain_anim = QPropertyAnimation(self, b"geometry")
-        duration = Theme.windowRollTimingUp if collapsing else Theme.windowRollTimingDown
-        self.curtain_anim.setDuration(duration)
-        self.curtain_anim.setEasingCurve(
-            getattr(QEasingCurve, Theme.windowRollEasing, QEasingCurve.OutExpo)
-        )
+        # ④ Arm and fire
         self.curtain_anim.setStartValue(start_rect)
         self.curtain_anim.setEndValue(end_rect)
         self.curtain_anim.finished.connect(self._on_curtains_settled)
         self.curtain_anim.start()
+
+        self.is_collapsed = not self.is_collapsed
 
     def _on_curtains_settled(self) -> None:
         """Called when the curtains animation finishes (both collapse and restore).
