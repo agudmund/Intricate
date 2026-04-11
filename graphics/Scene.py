@@ -309,8 +309,9 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
-    def add_code_node(self, pos: QPointF | None = None, label: str = ""):
-        """Add a CodeNode at pos, optionally pre-filled with code text."""
+    def add_code_node(self, pos: QPointF | None = None, path: str | None = None,
+                      label: str = ""):
+        """Add a CodeNode at pos, optionally loading a file or pre-filled with text."""
         from nodes.CodeNode import CodeNode
         from data.CodeNodeData import CodeNodeData
         data = CodeNodeData(label=label) if label else CodeNodeData()
@@ -320,6 +321,8 @@ class IntricateScene(QGraphicsScene):
             node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
         self.addItem(node)
         self.raise_node(node)
+        if path:
+            node.load_from_path(path)
         return node
 
     def add_log_node(self, pos: QPointF | None = None):

@@ -7,20 +7,34 @@
 """
 
 import re
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QColor, QSyntaxHighlighter, QTextCharFormat, QFont
+from PySide6.QtWidgets import QFileDialog, QGraphicsSceneDragDropEvent
 
 from nodes.BaseNode import BaseNode
 from data.CodeNodeData import CodeNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyEdit import PrettyEdit
+from pretty_widgets.utils.logger import setup_logger
+import pretty_widgets.utils.settings as settings
 
+_log = setup_logger("code")
 
 _BUTTON_ZONE_H = 40.0
 _PAD           = 8.0
 _CODE_FONT     = "Consolas"
 _CODE_SIZE     = 9
+
+_CODE_EXTENSIONS = {
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".cpp", ".c", ".h",
+    ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".json", ".xml",
+    ".yaml", ".yml", ".toml", ".sh", ".bat", ".sql", ".md", ".txt",
+    ".cfg", ".ini", ".log", ".r", ".swift", ".kt", ".lua", ".pl",
+}
+
+_CODE_FILTER = "Code Files (" + " ".join(f"*{ext}" for ext in sorted(_CODE_EXTENSIONS)) + ")"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -123,6 +137,8 @@ class CodeNode(BaseNode):
 
     Based on the TextNode pattern — always-editable PrettyEdit with a
     CodeHighlighter attached to the editor's document for live coloring.
+    Supports drag-and-drop of code files from Explorer and a file browser
+    via double-click.
     """
     _has_depth_toggle = True
 
@@ -131,6 +147,7 @@ class CodeNode(BaseNode):
             data = CodeNodeData()
         super().__init__(data)
 
+        self.setAcceptDrops(True)
         self.setBrush(self._bg_color())
         self._min_height = Theme.aboutMinHeight
         self._apply_depth()
@@ -138,6 +155,10 @@ class CodeNode(BaseNode):
         self._editor: PrettyEdit | None = None
         self._highlighter: CodeHighlighter | None = None
         self._build_editor()
+
+        # Restore from source_path if label is empty (session reload)
+        if not self.data.label and self.data.source_path:
+            self._reload_from_source()
 
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -185,6 +206,99 @@ class CodeNode(BaseNode):
         ))
 
     # ─────────────────────────────────────────────────────────────────────────
+    # FILE LOADING
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def load_from_path(self, path: str | Path) -> None:
+        """Read a code file from disk and populate the editor."""
+        path = Path(path)
+        if not path.is_file():
+            _log.warning(f"[CodeNode] file not found: {path}")
+            return
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            _log.warning(f"[CodeNode] failed to read {path}: {e}")
+            return
+
+        self.data.source_path = str(path.resolve())
+        self.data.label = text
+        self.data.title = path.name
+        if self._editor:
+            self._editor.blockSignals(True)
+            self._editor.setPlainText(text)
+            self._editor.blockSignals(False)
+        self.update()
+        _log.info(f"[CodeNode] loaded {path.name} ({len(text)} chars)")
+
+    def _reload_from_source(self) -> None:
+        """Reload content from source_path (used on session restore)."""
+        p = Path(self.data.source_path)
+        if p.is_file():
+            self.load_from_path(p)
+        else:
+            _log.warning(f"[CodeNode] source_path missing on restore: {p}")
+
+    def _open_file_browser(self) -> None:
+        """Open a file dialog to pick a code file."""
+        win = self._lower_window()
+        start_dir = settings.get_nested("node", "code", "last_dir", "")
+        path, _ = QFileDialog.getOpenFileName(
+            None,
+            "Select Code File",
+            start_dir,
+            _CODE_FILTER,
+        )
+        self._raise_window(win)
+        if path:
+            settings.set_nested("node", "code", "last_dir", str(Path(path).parent))
+            self.load_from_path(path)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # BUTTONS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_buttons(self) -> None:
+        super()._build_buttons()
+        from nodes.NodeButton import NodeButton
+
+        browse_pix = Theme.icon(Theme.iconCodeBrowse, fallback_color="#9ab8d9")
+        browse_btn = NodeButton(self, browse_pix, self._open_file_browser)
+        browse_btn.setToolTip("Browse for a code file")
+        self._buttons.append(browse_btn)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DRAG AND DROP
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if Path(url.toLocalFile()).suffix.lower() in _CODE_EXTENSIONS:
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dropEvent(self, event) -> None:
+        """Drop a code file onto an existing CodeNode to load it."""
+        if not event.mimeData().hasUrls():
+            event.ignore()
+            return
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if Path(path).suffix.lower() in _CODE_EXTENSIONS:
+                self.load_from_path(path)
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
+    # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -201,6 +315,13 @@ class CodeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
+        # Double-click the title area → open file browser
+        title_bottom = self.rect().top() + self._BUTTON_ZONE_H
+        if event.pos().y() < title_bottom:
+            self._open_file_browser()
+            event.accept()
+            return
+        # Double-click the editor area → focus the editor
         if self._editor:
             self._editor.proxy.setFocus()
             self._editor.setFocus(Qt.MouseFocusReason)

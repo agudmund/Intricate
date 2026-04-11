@@ -15,6 +15,12 @@ _IMAGE_EXTENSIONS   = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif",
 _VIDEO_EXTENSIONS   = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv", ".flv", ".m4v"}
 _AUDIO_EXTENSIONS   = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma"}
 _SESSION_EXTENSIONS = {".json"}
+_CODE_EXTENSIONS    = {
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".cpp", ".c", ".h",
+    ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".json", ".xml",
+    ".yaml", ".yml", ".toml", ".sh", ".bat", ".sql", ".md", ".txt",
+    ".cfg", ".ini", ".log", ".r", ".swift", ".kt", ".lua", ".pl",
+}
 
 
 class IntricateView(QGraphicsView):
@@ -377,7 +383,7 @@ class IntricateView(QGraphicsView):
         """Accept drags that contain at least one supported image or video file."""
         if event.mimeData().hasUrls():
             paths = [u.toLocalFile() for u in event.mimeData().urls()]
-            supported = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS | _AUDIO_EXTENSIONS | _SESSION_EXTENSIONS
+            supported = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS | _AUDIO_EXTENSIONS | _SESSION_EXTENSIONS | _CODE_EXTENSIONS
             if any(Path(p).suffix.lower() in supported for p in paths):
                 event.acceptProposedAction()
                 return
@@ -436,6 +442,12 @@ class IntricateView(QGraphicsView):
                 scene.add_session_node(
                     pos         = drop_scene_pos + offset,
                     source_path = path
+                )
+                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+            elif ext in _CODE_EXTENSIONS and hasattr(scene, 'add_code_node'):
+                scene.add_code_node(
+                    pos  = drop_scene_pos + offset,
+                    path = path
                 )
                 offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
 

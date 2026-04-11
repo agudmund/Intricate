@@ -17,11 +17,13 @@ class CodeNodeData(NodeData):
     width:       float = field(default=360.0)
     height:      float = field(default=280.0)
     label:       str   = field(default="")
+    source_path: str   = field(default="")
     depth_front: bool  = field(default=False)
 
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["label"]       = self.label
+        data["source_path"] = self.source_path
         data["depth_front"] = self.depth_front
         return data
 
@@ -38,5 +40,6 @@ class CodeNodeData(NodeData):
             height        = float(data.get("height",  280.0)),
             ports_visible = data.get("ports_visible", False),
             label         = data.get("label",         ""),
+            source_path   = data.get("source_path",   ""),
             depth_front   = data.get("depth_front",   False),
         )
