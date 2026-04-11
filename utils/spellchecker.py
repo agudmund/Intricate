@@ -502,6 +502,8 @@ class DebouncedSpellHighlighter(QSyntaxHighlighter):
         """
         if not self.spell_check_enabled or self._document_too_large or not self._worker:
             return
+        if self.document() is None:
+            return
 
         blocks = []
         block = self.document().begin()
