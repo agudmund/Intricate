@@ -445,8 +445,9 @@ class IntricateApp(QMainWindow):
         if not self.is_collapsed:
             self.original_height = self.height()
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
-            self._sidebar_splitter.hide()
-            # Pause all videos — curtains hide the canvas
+            # Pause videos but keep the splitter visible during the roll-up
+            # so the canvas content is still on screen as the window shrinks —
+            # bright corner icons create a motion trail as it rolls.
             if self.scene:
                 self.scene.pause_all_videos()
             self._last_docked_exe = ""
@@ -459,7 +460,6 @@ class IntricateApp(QMainWindow):
             y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
             y = max(avail.top(), y)
             end_rect = QRect(start_rect.x(), y, start_rect.width(), self.original_height)
-            self._sidebar_splitter.show()
 
         self._animate_curtains(start_rect, end_rect)
         self.is_collapsed = not self.is_collapsed
@@ -495,8 +495,13 @@ class IntricateApp(QMainWindow):
         # Reset pan state — a stale non-None _last_pan_pos after a
         # visibility change would lock the view into phantom-pan mode.
         self.view._last_pan_pos = None
-        # Re-evaluate video visibility after curtains expand
-        if not self.is_collapsed:
+
+        # Hide/show the sidebar AFTER the animation — during the roll-up the
+        # canvas content stays visible so corner icons create a motion trail.
+        if self.is_collapsed:
+            self._sidebar_splitter.hide()
+        else:
+            self._sidebar_splitter.show()
             self.view._notify_viewport_changed()
 
 
