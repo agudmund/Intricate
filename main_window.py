@@ -1558,7 +1558,7 @@ class IntricateApp(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
 
-        # ── Right group — zoom / Sound / eXport / eXid ──────────────────────
+        # ── Right group — zoom / Sound / Polaroid / eXid ─────────────────────
         right_group = QWidget()
         right_group.setStyleSheet("background: transparent;")
         right_layout = QHBoxLayout(right_group)
@@ -1601,7 +1601,7 @@ class IntricateApp(QMainWindow):
         HoverGlow.install(self._mute_btn, _mute_base)
         right_layout.addWidget(self._mute_btn)
 
-        self._snap_btn = button("eXport", clicked=self._snapshot_viewport)
+        self._snap_btn = button("Polaroid", clicked=self._snapshot_viewport)
         self._snap_btn.setMinimumSize(0, 0)
         self._snap_btn.setToolTip("Snapshot viewport (alpha)")
         snap_font = self._snap_btn.font()
