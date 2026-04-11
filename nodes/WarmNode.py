@@ -289,8 +289,11 @@ class WarmNode(BaseNode):
         except Exception:
             pass
         _log.info(f"[WarmNode] _launch_editor called — uuid={self.data.uuid[:8]}")
-        # Clean up any stale bridge session
+        # Clean up any stale bridge session — this disconnects debounce signals,
+        # so reconnect them immediately for the new session.
         self._teardown_bridge()
+        self._bridge_debounce.timeout.connect(self._process_bridge_change)
+        self._bridge_write_debounce.timeout.connect(self._write_bridge)
 
         # Create bridge file — sanitise uuid to prevent path traversal
         import re
