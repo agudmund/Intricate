@@ -80,11 +80,7 @@ def main():
         logger.log(TRACE, "Trace mode active — verbose diagnostics will appear in console")
     _greeting = f"{appName} is generally so happy that you are here. ✨"
     print(_greeting)
-    for _h in logger.handlers:
-        if isinstance(_h, logging.FileHandler):
-            _h.stream.write(_greeting + "\n")
-            _h.stream.flush()
-            break
+    logger.info(_greeting)
 
     # Qt warnings that are known-harmless and too noisy to keep in the log
     _QT_SUPPRESSED = (
@@ -173,7 +169,23 @@ def main():
             return
         logger.critical("Unhandled exception in event loop",
                         exc_info=(exc_type, exc_value, exc_tb))
+        # Flush the ring buffer so the crash lands on disk before we go down.
+        try:
+            import intricate_log
+            intricate_log.flush()
+        except Exception:
+            pass
     sys.excepthook = _excepthook
+
+    # Register atexit handler to flush the ring buffer on clean shutdown.
+    import atexit
+    def _flush_log():
+        try:
+            import intricate_log
+            intricate_log.flush()
+        except Exception:
+            pass
+    atexit.register(_flush_log)
 
     logger.log(TRACE, "[boot:15] window shown — entering event loop")
 
