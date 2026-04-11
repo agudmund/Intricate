@@ -447,8 +447,8 @@ class IntricateApp(QMainWindow):
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
             if self.scene:
                 self.scene.pause_all_videos()
-            # Hide everything below the titlebar for a clean tuck.
-            self._sidebar_splitter.hide()
+            # Splitter hides after the animation lands (in _on_curtains_settled)
+            # so the canvas content is visible during the roll-up.
             self._last_docked_exe = ""
             self._dock_watcher.start()
         else:
@@ -497,8 +497,10 @@ class IntricateApp(QMainWindow):
         # visibility change would lock the view into phantom-pan mode.
         self.view._last_pan_pos = None
 
-        # Re-evaluate video visibility after curtains expand
-        if not self.is_collapsed:
+        if self.is_collapsed:
+            # Clean tuck — hide after the roll-up animation lands.
+            self._sidebar_splitter.hide()
+        else:
             self.view._notify_viewport_changed()
 
 
