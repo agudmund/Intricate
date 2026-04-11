@@ -156,7 +156,13 @@ class WarmNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _write_bridge(self) -> None:
-        """Atomic write of current state to the bridge JSON file."""
+        """Write current state directly to the bridge JSON file.
+
+        Writes in-place (no temp+replace) so QFileSystemWatcher never loses
+        track of the file.  os.replace deletes+recreates on Windows which
+        drops the path from the watcher — a known issue that also prevents
+        future proxying through a networked file layer.
+        """
         if not self._bridge_path:
             return
         payload = {
@@ -167,16 +173,15 @@ class WarmNode(BaseNode):
             "writer":    "intricate",
             "timestamp": time.time(),
         }
-        tmp = self._bridge_path + ".tmp"
         try:
             self._bridge_writing = True
-            with open(tmp, "w", encoding="utf-8") as f:
+            with open(self._bridge_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False)
-            os.replace(tmp, self._bridge_path)
+                f.flush()
+                os.fsync(f.fileno())
         except OSError as e:
             _log.warning(f"[WarmNode] bridge write failed: {e}")
         finally:
-            # Clear the guard after the watcher event has had time to fire
             QTimer.singleShot(150, self._clear_bridge_writing)
 
     def _clear_bridge_writing(self) -> None:
