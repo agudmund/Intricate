@@ -445,34 +445,36 @@ class IntricateApp(QMainWindow):
         if not self.is_collapsed:
             self.original_height = self.height()
             end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), Theme.handleHeightTop)
+            # This exact ordering is critical — hide before pause before dock.
+            # setMinimumHeight(0) above unlocks the window to shrink past its
+            # natural minimum; the hide must happen here so Qt's layout yields
+            # the entire row to the geometry animation.
+            self._sidebar_splitter.hide()
             if self.scene:
                 self.scene.pause_all_videos()
-            # Clamp the splitter's max height to 0 so the layout compresses
-            # row 1 as the geometry animation shrinks the window.  The content
-            # remains "visible" (not hidden) — Qt just gives it zero space,
-            # so the roll-up is a smooth squeeze with nothing leaking through.
-            self._sidebar_splitter.setMaximumHeight(0)
             self._last_docked_exe = ""
             self._dock_watcher.start()
         else:
             self._dock_watcher.stop()
             self._stop_hunger_glow()
-            # Uncap and restore before the roll-down so content expands in.
-            self._sidebar_splitter.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
             # Clamp so the bottom edge never drops below the screen
             avail = self.screen().availableGeometry()
             y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
             y = max(avail.top(), y)
             end_rect = QRect(start_rect.x(), y, start_rect.width(), self.original_height)
+            self._sidebar_splitter.show()
 
-        self._animate_curtains(start_rect, end_rect)
+        collapsing = not self.is_collapsed
+        self._animate_curtains(start_rect, end_rect, collapsing)
         self.is_collapsed = not self.is_collapsed
 
-    def _animate_curtains(self, start_rect: QRect, end_rect: QRect) -> None:
+    def _animate_curtains(self, start_rect: QRect, end_rect: QRect,
+                          collapsing: bool = True) -> None:
         """Drive the geometry animation for curtain collapse / expand."""
         self.view.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.curtain_anim = QPropertyAnimation(self, b"geometry")
-        self.curtain_anim.setDuration(Theme.windowRollTiming)
+        duration = Theme.windowRollTimingUp if collapsing else Theme.windowRollTimingDown
+        self.curtain_anim.setDuration(duration)
         self.curtain_anim.setEasingCurve(
             getattr(QEasingCurve, Theme.windowRollEasing, QEasingCurve.OutExpo)
         )
