@@ -218,6 +218,10 @@ class NodeButton(QGraphicsObject):
         Called by BaseNode._prepare_for_removal via _detach_buttons().
         """
         self._reset_timer.stop()
+        try:
+            self._reset_timer.timeout.disconnect(self._reset)
+        except RuntimeError:
+            pass
         self._callback = None
 
 

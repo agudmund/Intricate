@@ -412,7 +412,15 @@ class WarmNode(BaseNode):
     def _teardown_bridge(self) -> None:
         """Stop watching and clean up the bridge file."""
         self._bridge_debounce.stop()
+        try:
+            self._bridge_debounce.timeout.disconnect(self._process_bridge_change)
+        except RuntimeError:
+            pass
         self._bridge_write_debounce.stop()
+        try:
+            self._bridge_write_debounce.timeout.disconnect(self._write_bridge)
+        except RuntimeError:
+            pass
         self._stop_bridge_watcher()
         if self._bridge_path:
             try:

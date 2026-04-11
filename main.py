@@ -164,6 +164,17 @@ def main():
     logger.log(TRACE, "[boot:14] IntricateApp window constructed")
 
     window.show()
+    # Install a global exception hook so unhandled errors inside Qt slots and
+    # callbacks land in the log file instead of vanishing into stderr (which is
+    # gone when running headless via pythonw or a frozen .exe).
+    def _excepthook(exc_type, exc_value, exc_tb):
+        if exc_type is KeyboardInterrupt:
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        logger.critical("Unhandled exception in event loop",
+                        exc_info=(exc_type, exc_value, exc_tb))
+    sys.excepthook = _excepthook
+
     logger.log(TRACE, "[boot:15] window shown — entering event loop")
 
     sys.exit(app.exec())

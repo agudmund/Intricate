@@ -799,6 +799,9 @@ class IntricateScene(QGraphicsScene):
         """
         from nodes.BaseNode import BaseNode
         from graphics.Connection import Connection
+        from graphics.Particles import flush_scene
+
+        flush_scene(self)
 
         from nodes.VideoNode import VideoNode
         from nodes.AudioNode import AudioNode
@@ -860,6 +863,11 @@ class IntricateScene(QGraphicsScene):
         """Tear down every node and connection in the scene cleanly."""
         from nodes.BaseNode import BaseNode
         from graphics.Connection import Connection
+        from graphics.Particles import flush_scene
+
+        # Kill any living particles FIRST — they hold scene refs and will
+        # dereference stale C++ pointers if the 16 ms tick fires mid-teardown.
+        flush_scene(self)
 
         # Stop all node pulse animations before touching anything
         for item in list(self.items()):

@@ -91,6 +91,9 @@ class _FadingParticle:
     def _update(self, now_ms: float) -> bool:
         """Tick. Returns True while alive, False when done and removed."""
         try:
+            if self._removed:
+                return False
+
             if now_ms < self._spawn_at:
                 return True
 
@@ -103,14 +106,26 @@ class _FadingParticle:
                 self._item.setOpacity(max(0.0, 1.0 - t))
                 return True
 
-            if not self._removed:
-                self._removed = True
-                if self._item.scene():
-                    self._scene.removeItem(self._item)
+            self._finish()
             return False
 
         except RuntimeError:
+            self._item = None
+            self._scene = None
             return False
+
+    def _finish(self) -> None:
+        """Remove item from scene and release references."""
+        if self._removed:
+            return
+        self._removed = True
+        try:
+            if self._item is not None and self._item.scene():
+                self._scene.removeItem(self._item)
+        except RuntimeError:
+            pass
+        self._item  = None
+        self._scene = None
 
 
 def sprinkle(scene: QGraphicsScene, center: QPointF,
@@ -303,6 +318,7 @@ class _OrbitalBurst:
             return True
 
         except RuntimeError:
+            self._cleanup()
             return False
 
     def _cleanup(self):
@@ -316,6 +332,8 @@ class _OrbitalBurst:
             except RuntimeError:
                 pass
         self._items.clear()
+        self._swarm = None
+        self._scene = None
 
 
 def _orbital_tick() -> None:
@@ -323,6 +341,8 @@ def _orbital_tick() -> None:
     global _orbital_bursts
     now = time.monotonic() * 1000.0
     _orbital_bursts = [b for b in _orbital_bursts if b._update(now)]
+    if not _orbital_bursts and _orbital_tick_timer is not None:
+        _orbital_tick_timer.stop()
 
 
 def orbital_burst(scene: QGraphicsScene, center: QPointF,
@@ -345,3 +365,34 @@ def _ensure_orbital_ticking() -> None:
         _orbital_tick_timer.timeout.connect(_orbital_tick)
     if not _orbital_tick_timer.isActive():
         _orbital_tick_timer.start()
+
+
+def flush_scene(scene: QGraphicsScene) -> None:
+    """Immediately remove all living particles belonging to a scene.
+
+    Call this before tearing down a scene so the global tick timers don't
+    dereference stale C++ pointers on the next 16 ms tick.
+    """
+    global _alive, _orbital_bursts
+
+    _alive = [p for p in _alive if not _flush_particle(p, scene)]
+    if not _alive and _tick_timer is not None:
+        _tick_timer.stop()
+
+    remaining = []
+    for burst in _orbital_bursts:
+        if burst._scene is scene:
+            burst._cleanup()
+        else:
+            remaining.append(burst)
+    _orbital_bursts = remaining
+    if not _orbital_bursts and _orbital_tick_timer is not None:
+        _orbital_tick_timer.stop()
+
+
+def _flush_particle(p: _FadingParticle, scene: QGraphicsScene) -> bool:
+    """If particle belongs to the given scene, kill it. Returns True if killed."""
+    if p._scene is not scene:
+        return False
+    p._finish()
+    return True
