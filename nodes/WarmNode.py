@@ -137,6 +137,12 @@ class WarmNode(BaseNode):
 
     def _editor_context_menu(self, event) -> None:
         """Standard context menu with 'Open in Notepad' prepended."""
+        try:
+            with open("_bridge_debug.txt", "a") as _dbg:
+                _dbg.write(f"_editor_context_menu called at {time.time()}\n")
+                _dbg.flush()
+        except Exception:
+            pass
         from pretty_widgets.PrettyMenu import menu_stylesheet
         ctx = self._editor.createStandardContextMenu()
         ctx.setStyleSheet(menu_stylesheet())
