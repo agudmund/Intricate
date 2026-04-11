@@ -271,8 +271,25 @@ class GitNode(BaseNode):
             return
 
         win = self._lower_window()
+        # Roll up curtains so the canvas tucks into the titlebar while the
+        # dialog is open, then roll back down graciously after.
+        was_collapsed = False
+        try:
+            views = self.scene().views() if self.scene() else []
+            if views:
+                mw = views[0].window()
+                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
+                    mw.toggle_curtains()
+                    was_collapsed = True
+        except Exception:
+            pass
         dlg = _CommitDialog(len(session_repos))
         result = dlg.exec()
+        if was_collapsed:
+            try:
+                mw.toggle_curtains()
+            except Exception:
+                pass
         self._raise_window(win)
         if result != QDialog.DialogCode.Accepted or not dlg.message().strip():
             return
