@@ -274,6 +274,7 @@ class WarmNode(BaseNode):
         --bridge <path>.  A QFileSystemWatcher monitors the file for changes
         from the editor side.
         """
+        _log.info(f"[WarmNode] _launch_editor called — uuid={self.data.uuid[:8]}")
         # Clean up any stale bridge session
         self._teardown_bridge()
 
