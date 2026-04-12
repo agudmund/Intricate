@@ -101,6 +101,7 @@ class IntricateApp(QMainWindow):
         # 4. Grid and widget setup
         self._setup_grid()
         self._build_top_toolbar()
+        self.sidebar = self._build_sidebar()
         self._setupTheAreaFormerlyKnownAsNodal()
         self._setupBottomToolbar()
 
@@ -607,9 +608,6 @@ class IntricateApp(QMainWindow):
         self.scene = IntricateScene()
         self.view  = IntricateView(self.scene)
         self.view._on_zoom_changed = lambda: self._sync_zoom_slider()
-
-        # ── Left sidebar — full height ────────────────────────────────────────
-        self.sidebar = self._build_sidebar()
 
         # ── Right panel — image preview zone ──────────────────────────────────
         self.rightPanel = self._build_preview_panel()
