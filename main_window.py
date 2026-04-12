@@ -273,13 +273,16 @@ class IntricateApp(QMainWindow):
     def _setup_system_tray(self) -> None:
         """Create the system tray icon with a restore / exit context menu."""
         self._tray_icon = QSystemTrayIcon(self)
-        icon = Theme.icon(Theme.iconCurtains)
-        if icon and not icon.isNull():
-            self._tray_icon.setIcon(icon)
+        from pathlib import Path as _Path
+        _sticker = _Path(__file__).resolve().parent / "Images" / "Stickers" / "Intricate Official Iconic Icon.png"
+        if _sticker.exists():
+            self._tray_icon.setIcon(QIcon(QPixmap(str(_sticker))))
         else:
-            self._tray_icon.setIcon(self.windowIcon())
+            icon = Theme.icon(Theme.iconCurtains)
+            self._tray_icon.setIcon(QIcon(icon) if icon and not icon.isNull() else self.windowIcon())
 
-        tray_menu = QMenu()
+        from pretty_widgets.PrettyMenu import PrettyMenu
+        tray_menu = PrettyMenu(self)
         tray_menu.addAction("Show", self._restore_from_tray)
         tray_menu.addSeparator()
         tray_menu.addAction("Exit", self.close)
