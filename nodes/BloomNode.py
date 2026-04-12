@@ -48,7 +48,7 @@ def _widget_css() -> str:
 
 class BloomNode(BaseNode):
     """
-    Particle scatter controller — Houdini-inspired.
+    Particle scatter controller — original Intricate algorithm.
 
     Parameters:
         Algorithm   — Sunflower (golden-angle spiral) or Orbital (torus knot)

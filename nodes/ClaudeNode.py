@@ -68,8 +68,6 @@ class ClaudeNode(BaseNode):
         self._rebuild_pens()
         if settings.watcher:
             settings.watcher.changed.connect(self._on_theme_reload)
-        self._min_width  = data.width
-        self._min_height = data.height
         self._current_uuid: str | None = None
         self._watcher: QFileSystemWatcher | None = None
         self._file_offset: int = 0
@@ -94,6 +92,7 @@ class ClaudeNode(BaseNode):
 
         self._build_body()
         self._build_input()
+        self._min_height = self._collapsed_height()
         # Fresh session each time — _current_uuid stays None until first prompt
         # self._auto_connect()
 
@@ -383,7 +382,6 @@ class ClaudeNode(BaseNode):
         self.data.body_visible = self._body_proxy.isVisible()
         self.prepareGeometryChange()
         self.setRect(QRectF(r.left(), r.top(), r.width(), new_h))
-        self._min_height = self._collapsed_height() if not self._body_proxy.isVisible() else Theme.claudeDefaultHeight
         self._position_input()
         self._position_buttons()
 
@@ -431,7 +429,6 @@ class ClaudeNode(BaseNode):
         if not self.data.body_visible:
             self._body_proxy.hide()
             collapsed = self._collapsed_height()
-            self._min_height = collapsed
             r = self.rect()
             self.prepareGeometryChange()
             self.setRect(QRectF(r.left(), r.top(), r.width(), collapsed))
@@ -492,7 +489,6 @@ class ClaudeNode(BaseNode):
         if body_hidden and abs(r.height() - collapsed_h) > 0.5:
             self.prepareGeometryChange()
             self.setRect(QRectF(r.left(), r.top(), r.width(), collapsed_h))
-            self._min_height = collapsed_h
         self._position_input()
         if not body_hidden:
             self._position_body()
@@ -1065,10 +1061,12 @@ class ClaudeNode(BaseNode):
                     background: transparent;
                 }}
             """)
-        # Inner edit — subtle light inset ring gives the bevel depth
+        # Inner edit — slightly darker than node bg for visual separation
+        input_bg = self._bg_color().darker(140)
+        input_bg.setAlpha(255)
         self._input.setStyleSheet(f"""
             QTextEdit {{
-                background: {Theme.claudeBgColorInput};
+                background: {input_bg.name()};
                 color: {Theme.nodeFontColor};
                 font-family: {Theme.claudeBodyFontFamily};
                 font-size: {Theme.claudeBodyFontSize}pt;
