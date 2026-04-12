@@ -22,7 +22,7 @@ class InfoNodeData(NodeData):
     node_type:   str   = field(default="info")
     title:       str   = field(default="Intricate")
     width:       float = field(default=280.0)
-    height:      float = field(default=385.0)
+    height:      float = field(default=500.0)
     depth_front: bool  = field(default=False)
     node_tint:   str   = field(default="")
 

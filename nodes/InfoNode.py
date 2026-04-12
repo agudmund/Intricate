@@ -44,10 +44,11 @@ class InfoNode(BaseNode):
             data = InfoNodeData()
 
         # Auto-size width from widest body line + padding
-        from main import __version__, __era__
+        from main import __version__, __era__, __version_history__
         body_font = QFont("Lato", max(1, Theme.aboutFontSize - 1))
         fm = QFontMetrics(body_font)
-        all_lines = [f"Version {__version__}", __era__] + self._BODY_LINES
+        history_lines = [f"  {v}  —  {e}" for v, e in __version_history__]
+        all_lines = [f"Version {__version__}", __era__] + history_lines + self._BODY_LINES
         max_w = max(fm.horizontalAdvance(line) for line in all_lines)
         data.width = max(data.width, max_w + 30)
 
@@ -71,7 +72,7 @@ class InfoNode(BaseNode):
         self.setBrush(self._bg_color())
 
     def paint_content(self, painter: QPainter) -> None:
-        from main import __version__, __era__
+        from main import __version__, __era__, __version_history__
 
         painter.save()
         r = self.rect()
@@ -116,6 +117,20 @@ class InfoNode(BaseNode):
                 line,
             )
             y += 16
+
+        # Version history
+        y += 12
+        history_font = QFont("Lato", max(1, Theme.aboutFontSize - 2))
+        painter.setFont(history_font)
+        for ver, era in __version_history__:
+            is_current = ver == __version__
+            painter.setOpacity(0.85 if is_current else 0.55)
+            painter.drawText(
+                QRectF(r.left() + pad, y, r.width() - pad * 2, 16),
+                Qt.AlignLeft | Qt.AlignTop,
+                f"  {ver}  —  {era}",
+            )
+            y += 14
 
         # Footnote
         y += 12
