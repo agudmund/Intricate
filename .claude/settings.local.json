@@ -64,7 +64,9 @@
       "Bash(winget list:*)",
       "Bash(find /c/Users/thisg/.claude -type f \\\\\\( -name \"*.json\" -o -name \"*.jsonl\" -o -name \"*.db\" \\\\\\) -exec ls -lh {} \\\\;)",
       "Bash(find /c/Users/thisg/AppData/Local/claude-cli-nodejs -type f -exec ls -lh {} \\\\;)",
-      "Bash(du:*)"
+      "Bash(du:*)",
+      "Bash(find /c/Users/thisg/Desktop/Intricate -name \"*.py\" -exec grep -l \"__del__\" {} \\\\;)",
+      "Bash(find \"C:\\\\Users\\\\thisg\\\\Desktop\\\\Intricate\" -name \"*.py\" -type f -exec grep -l \"mousePressEvent.*right\\\\|rightMouseButtonPressed\\\\|contextMenuEvent\" {} \\\\;)"
     ]
   }
 }
