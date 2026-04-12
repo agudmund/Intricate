@@ -102,7 +102,7 @@ class IntricateApp(QMainWindow):
         self._setup_grid()
         self._build_top_toolbar()
         self.sidebar = self._build_sidebar()
-        self._setupTheAreaFormerlyKnownAsNodal()
+        self._setupCentralArea()
         self._setupBottomToolbar()
 
         # 5. Repaint non-canvas widgets solid so WA_TranslucentBackground
@@ -594,7 +594,7 @@ class IntricateApp(QMainWindow):
     # The central area — sidebar | canvas | reserved for a special vip arriving later
     # =================================================================================
 
-    def _setupTheAreaFormerlyKnownAsNodal(self):
+    def _setupCentralArea(self):
         """
         The central shelf — three zones in a horizontal QSplitter:
 
