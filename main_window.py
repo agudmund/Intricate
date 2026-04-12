@@ -912,11 +912,13 @@ class IntricateApp(QMainWindow):
             b.clicked.connect(lambda _=None, btn=b: menu_fn(btn))
             layout.addWidget(b, alignment=Qt.AlignHCenter)
 
-        _cat_btn(Theme.iconImagesGroup,  "Images", self._show_images_menu)
         _cat_btn(Theme.iconText,        "Text",   self._show_text_menu)
+        _cat_btn(Theme.iconImagesGroup,  "Images", self._show_images_menu)
+        _cat_btn(Theme.iconAudioGroup,   "Audio",  self._show_audio_menu)
         _cat_btn(Theme.iconVisualGroup,  "Visual", self._show_visual_menu)
         _cat_btn(Theme.iconHealthGroup,  "Health", self._show_health_menu)
         _cat_btn(Theme.iconToolsGroup,   "Tools",  self._show_tools_menu)
+        _cat_btn(Theme.iconInfoGroup,    "Info",   self._show_info_menu)
         _cat_btn(Theme.iconClaude,       "Claude", self._show_claude_menu)
 
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
@@ -1335,6 +1337,8 @@ class IntricateApp(QMainWindow):
             return
         self._spawn(self.scene.add_readme_node, "the README has arrived",
                     label=text)
+    def _spawn_architecture_node(self): self._spawn(self.scene.add_architecture_node, "the blueprint unfolds")
+    def _spawn_node_schema_node(self): self._spawn(self.scene.add_node_schema_node,  "the schema reveals itself")
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
     def _spawn_value_node(self):       self._spawn(self.scene.add_value_node,        "dialing in the value")
     def _spawn_sticker_node(self):     self._spawn(self.scene.add_sticker_node,      "sticker time")
@@ -1394,7 +1398,6 @@ class IntricateApp(QMainWindow):
         act_code     = menu.addAction(QIcon(Theme.icon(Theme.iconCode)),     "The Code Node")
         act_bloom    = menu.addAction(QIcon(Theme.icon(Theme.iconBloom)),    "The Bloom Node")
         act_null     = menu.addAction(QIcon(Theme.icon(Theme.iconNull)),     "The Null Node")
-        act_read     = menu.addAction(QIcon(Theme.icon(Theme.iconTree)),     "The Readme That Hasn't Decided It's Name")
         act_about.triggered.connect(self._spawn_about_node)
         act_warm.triggered.connect(self._spawn_warm_node)
         act_text.triggered.connect(self._spawn_text_node)
@@ -1402,7 +1405,6 @@ class IntricateApp(QMainWindow):
         act_code.triggered.connect(self._spawn_code_node)
         act_bloom.triggered.connect(self._spawn_bloom_node)
         act_null.triggered.connect(self._spawn_null_node)
-        act_read.triggered.connect(self._spawn_readme_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_visual_menu(self, btn: QPushButton) -> None:
@@ -1412,12 +1414,10 @@ class IntricateApp(QMainWindow):
         act_palette = menu.addAction(QIcon(Theme.icon(Theme.iconPalette)), "The Beautiful Palette Node")
         act_value   = menu.addAction(QIcon(Theme.icon(Theme.iconValue)),   "The Oddly Important Value Node")
         act_sticker = menu.addAction(QIcon(Theme.icon(Theme.iconSticker, fallback_color="#c9b8a7")), "Snickers Stickers!")
-        act_fbx     = menu.addAction(QIcon(Theme.icon(Theme.iconFbx,     fallback_color="#c0a888")), "The Fluff and Honey Node")
         act_bezier.triggered.connect(self._spawn_bezier_node)
         act_palette.triggered.connect(self._spawn_palette_node)
         act_value.triggered.connect(self._spawn_value_node)
         act_sticker.triggered.connect(self._spawn_sticker_node)
-        act_fbx.triggered.connect(self._spawn_fbx_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_health_menu(self, btn: QPushButton) -> None:
@@ -1437,24 +1437,35 @@ class IntricateApp(QMainWindow):
     def _show_tools_menu(self, btn: QPushButton) -> None:
         """Pop a styled context menu under the tools group button."""
         menu = self._styled_menu()
-        act_info    = menu.addAction(QIcon(Theme.icon(Theme.iconInfo,    fallback_color="#9a9aaa")), "Intricate")
         act_restore = menu.addAction(QIcon(Theme.icon(Theme.iconRestore, fallback_color="#8aaa88")), "The Grand Restoration")
         act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "There Comes A Time In Everyone's Life...")
         act_git     = menu.addAction(QIcon(Theme.icon(Theme.iconGit,     fallback_color="#8a9a8a")), "The Not So Boring Anymore Node")
         act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Stuff and Stuff")
         act_session = menu.addAction(QIcon(Theme.icon(Theme.iconSession, fallback_color="#8a9aaa")), "Total Recall")
-        act_info.setToolTip("General Info")
         act_restore.setToolTip("Bring back the last deleted node")
         act_snip.setToolTip("Remove an explicit wire connection")
         act_git.setToolTip("Git status report")
         act_tree.setToolTip("Session file content")
         act_session.setToolTip("( The remake, not the vintage original, its a seriously good remake )")
-        act_info.triggered.connect(self._spawn_info_node)
         act_restore.triggered.connect(self._restore_deleted)
         act_snip.triggered.connect(self._start_wire_snip)
         act_git.triggered.connect(self._spawn_git_node)
         act_tree.triggered.connect(self._spawn_tree_node)
         act_session.triggered.connect(self._spawn_session_node)
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _show_info_menu(self, btn: QPushButton) -> None:
+        """Pop a styled context menu under the info group button."""
+        menu = self._styled_menu()
+        act_info   = menu.addAction(QIcon(Theme.icon(Theme.iconInfo,    fallback_color="#9a9aaa")), "Intricate")
+        act_readme = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Readme")
+        act_arch   = menu.addAction(QIcon(Theme.icon(Theme.iconInfoGroup, fallback_color="#8a9aaa")), "Architecture")
+        act_schema = menu.addAction(QIcon(Theme.icon(Theme.iconInfoGroup, fallback_color="#8a9aaa")), "Node Type Schema")
+        act_info.setToolTip("General Info")
+        act_info.triggered.connect(self._spawn_info_node)
+        act_readme.triggered.connect(self._spawn_readme_node)
+        act_arch.triggered.connect(self._spawn_architecture_node)
+        act_schema.triggered.connect(self._spawn_node_schema_node)
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def _show_claude_menu(self, btn: QPushButton) -> None:
@@ -1472,34 +1483,25 @@ class IntricateApp(QMainWindow):
     def _show_images_menu(self, btn: QPushButton) -> None:
         """Pop a styled context menu under the images group button."""
         menu = self._styled_menu()
-
-        img_action = menu.addAction(
-            QIcon(Theme.icon(Theme.iconImage)), "The Images"
-        )
-        vid_action = menu.addAction(
-            QIcon(Theme.icon(Theme.iconVideo)), "The Videos"
-        )
-        seq_action = menu.addAction(
-            QIcon(Theme.icon(Theme.iconSequence)), "The Sequences"
-        )
-        aud_action = menu.addAction(
-            QIcon(Theme.icon(Theme.iconAudio, fallback_color="#9a8a7a")), "The Sound"
-        )
-        mrg_action = menu.addAction(
-            QIcon(Theme.icon(Theme.iconMerge, fallback_color="#8a9a7a")), "The Merger"
-        )
-
+        img_action = menu.addAction(QIcon(Theme.icon(Theme.iconImage)),    "The Images")
+        vid_action = menu.addAction(QIcon(Theme.icon(Theme.iconVideo)),    "The Videos")
+        seq_action = menu.addAction(QIcon(Theme.icon(Theme.iconSequence)), "The Sequences")
+        fbx_action = menu.addAction(QIcon(Theme.icon(Theme.iconFbx, fallback_color="#c0a888")), "The Fluff and Honey Node")
         img_action.triggered.connect(self._spawn_image_node)
         vid_action.triggered.connect(self._spawn_video_node)
         seq_action.triggered.connect(self._spawn_sequence_node)
+        fbx_action.triggered.connect(self._spawn_fbx_node)
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _show_audio_menu(self, btn: QPushButton) -> None:
+        """Pop a styled context menu under the audio group button."""
+        menu = self._styled_menu()
+        aud_action  = menu.addAction(QIcon(Theme.icon(Theme.iconAudio, fallback_color="#9a8a7a")), "The Sound")
+        mrg_action  = menu.addAction(QIcon(Theme.icon(Theme.iconMerge, fallback_color="#8a9a7a")), "The Merger")
+        hold_action = menu.addAction(QIcon(Theme.icon(Theme.iconAudio, fallback_color="#7a9a8a")), "The Silence")
         aud_action.triggered.connect(self._spawn_audio_node)
         mrg_action.triggered.connect(self._spawn_merge_node)
-        hold_action = menu.addAction(
-            QIcon(Theme.icon(Theme.iconAudio, fallback_color="#7a9a8a")), "The Silence"
-        )
         hold_action.triggered.connect(self._spawn_audio_hold_node)
-
-        # Show below the button, left-aligned
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
     def _spawn_perf_node(self):        self._spawn(self.scene.add_perf_node,         "watching the paint loop")
     def _spawn_joy_stats_node(self):   self._spawn(self.scene.add_joy_stats_node,    "inspecting the joy bucket")

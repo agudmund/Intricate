@@ -296,6 +296,28 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_architecture_node(self, pos: QPointF | None = None):
+        """Add an ArchitectureNode at pos — loads Documents/Architecture.md."""
+        from nodes.ArchitectureNode import ArchitectureNode
+        node = ArchitectureNode()
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
+    def add_node_schema_node(self, pos: QPointF | None = None):
+        """Add a NodeSchemaNode at pos — loads Documents/Node Type Schema.md."""
+        from nodes.NodeSchemaNode import NodeSchemaNode
+        node = NodeSchemaNode()
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_cushions_node(self, pos: QPointF | None = None, label: str = ""):
         """Add a CushionsNode at pos, optionally pre-filled with label text."""
         from nodes.CushionsNode import CushionsNode
@@ -984,6 +1006,14 @@ class IntricateScene(QGraphicsScene):
             from nodes.ReadmeNode import ReadmeNode
             from data.ReadmeNodeData import ReadmeNodeData
             node = ReadmeNode(ReadmeNodeData.from_dict(d))
+        elif node_type == "architecture":
+            from nodes.ArchitectureNode import ArchitectureNode
+            from data.ArchitectureNodeData import ArchitectureNodeData
+            node = ArchitectureNode(ArchitectureNodeData.from_dict(d))
+        elif node_type == "node_schema":
+            from nodes.NodeSchemaNode import NodeSchemaNode
+            from data.NodeSchemaNodeData import NodeSchemaNodeData
+            node = NodeSchemaNode(NodeSchemaNodeData.from_dict(d))
         elif node_type == "cushions":
             from nodes.CushionsNode import CushionsNode
             from data.CushionsNodeData import CushionsNodeData
