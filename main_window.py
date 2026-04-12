@@ -1843,6 +1843,10 @@ class IntricateApp(QMainWindow):
         if not path:
             return
         enter_project(path)
+        # Ensure git repo exists — session file may predate git init
+        project_dir = path.parent.parent.parent  # Documents/data/session → project root
+        if project_dir.exists() and not (project_dir / ".git").exists():
+            self._git_init_project(project_dir, project_dir.name)
         if path.exists():
             vp = self.scene.load_session(path)
             if vp:
