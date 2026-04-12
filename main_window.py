@@ -1638,19 +1638,6 @@ class IntricateApp(QMainWindow):
         HoverGlow.install(self._snap_btn, _snap_base)
         right_layout.addWidget(self._snap_btn)
 
-        self._exid_btn = button("eXid", clicked=self.close)
-        self._exid_btn.setMinimumSize(0, 0)
-        font = self._exid_btn.font()
-        font.setPointSize(16)
-        self._exid_btn.setFont(font)
-        _exid_base = (
-            f"QPushButton {{ background-color: {Theme.buttonBg};"
-            f" border: none; border-radius: 6px;"
-            f" padding: 6px 4px 18px 2px; }}"
-        )
-        HoverGlow.install(self._exid_btn, _exid_base)
-        right_layout.addWidget(self._exid_btn)
-
         # ── Progress bar — hidden at rest, floats between the two groups ──────
         self._bottom_progress = QProgressBar()
         self._bottom_progress.setRange(0, 100)
