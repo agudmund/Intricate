@@ -23,17 +23,17 @@ MIN_SIZE     = 10
 MAX_SIZE     = 32
 
 # ── Lifetime tuning ───────────────────────────────────────────────────────
-LINGER_MS    = 150      # fully visible after spawning before fade begins
-FADE_MS      = 300      # fade-out duration per particle
+LINGER_MS    = 600      # fully visible after spawning before fade begins
+FADE_MS      = 800      # fade-out duration per particle
 
 # ── Burst timing ──────────────────────────────────────────────────────────
-BURST_BASE_MS = 1200    # burst window at the reference count (16000 particles)
+BURST_BASE_MS = 2000    # burst window at the reference count (16000 particles)
 
 # ── Icon cache (resolved once per app run) ────────────────────────────────
 _icon_base_cache: dict[str, QPixmap] = {}   # icon_name → MAX_SIZE base pixmap
 _icon_size_cache: dict[str, dict[int, QPixmap]] = {}  # icon_name → {size: pixmap}
 BURST_BASE_N  = 16000   # reference count — scales linearly above this
-BURST_EASE    = 2.0     # exponent — >1 means fast start, decelerates outward
+BURST_EASE    = 1.4     # exponent — >1 means fast start, decelerates outward
 
 # ── Spiral tuning ─────────────────────────────────────────────────────────
 SPIRAL_RADIUS = 576     # outer edge of the sunflower spiral
@@ -154,13 +154,6 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
         _icon_size_cache[key] = sc
     size_cache = _icon_size_cache[key]
 
-    # Get the visible viewport rect in scene coordinates for clipping
-    view_rect = None
-    views = scene.views()
-    if views:
-        v = views[0]
-        view_rect = v.mapToScene(v.viewport().rect()).boundingRect()
-
     # Seed for reproducible scatters
     if seed is not None:
         random.seed(seed)
@@ -187,14 +180,6 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
     _mean_sz = MEAN_SIZE
     _std_sz  = SIZE_STD_DEV
 
-    vr_x0 = vr_y0 = vr_x1 = vr_y1 = 0.0
-    do_clip = view_rect is not None
-    if do_clip:
-        vr_x0 = view_rect.x()
-        vr_y0 = view_rect.y()
-        vr_x1 = vr_x0 + view_rect.width()
-        vr_y1 = vr_y0 + view_rect.height()
-
     batch = []
     # Turbulence — each particle inherits a fraction of the previous
     # particle's offset, creating correlated drift that reads as flow
@@ -216,10 +201,6 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
         turb_y = jy * turb_carry
         px = cx + radius * _cos(angle) + jx
         py = cy + radius * _sin(angle) + jy
-
-        # Clip before creating any Qt objects
-        if do_clip and (px < vr_x0 or px > vr_x1 or py < vr_y0 or py > vr_y1):
-            continue
 
         # Size
         size = _clamp(MIN_SIZE, _min(MAX_SIZE, _int(_gauss(_mean_sz, _std_sz))))

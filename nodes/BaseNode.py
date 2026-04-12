@@ -820,15 +820,6 @@ class BaseNode(QGraphicsRectItem):
                             node.ungrabMouse()
                     except RuntimeError:
                         pass
-                    # Flush any living particles before removing the node —
-                    # Qt rebuilds its BSP index on removeItem, and if the
-                    # particle tick fires mid-rebuild it can segfault on a
-                    # stale C++ pointer.
-                    try:
-                        from graphics.Particles import flush_scene
-                        flush_scene(sc)
-                    except Exception:
-                        pass
                     try:
                         sc.removeItem(node)
                     except RuntimeError:
