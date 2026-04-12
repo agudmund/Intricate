@@ -7,9 +7,10 @@
 """
 
 import re
+import threading
 
 from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QTimer
 from PySide6.QtGui import QPainter, QColor
 
 from nodes.BaseNode import BaseNode
@@ -44,7 +45,17 @@ class MarkdownNode(BaseNode):
 
         self._html_proxy: QGraphicsProxyWidget | None = None
         self._editor: QTextEdit | None = None
+        self._pending_html: str | None = None
         self._build_html_viewer()
+
+        # Render markdown on a worker thread — node appears instantly,
+        # content arrives shortly after without blocking the canvas.
+        self._delivery_timer = QTimer()
+        self._delivery_timer.setInterval(100)
+        self._delivery_timer.timeout.connect(self._check_render_delivery)
+        if self.data.label:
+            threading.Thread(target=self._render_worker, daemon=True).start()
+            self._delivery_timer.start()
 
     # ─────────────────────────────────────────────────────────────────────────
     # BACKGROUND
@@ -80,7 +91,6 @@ class MarkdownNode(BaseNode):
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical"
             "    { height: 0px; }"
         )
-        te.setHtml(self._markdown_to_html(self.data.label))
         te.document().setDocumentMargin(8)
 
         self._html_proxy = QGraphicsProxyWidget(self)
@@ -275,6 +285,27 @@ class MarkdownNode(BaseNode):
         return f'<body style="margin:8px;">{body}</body>'
 
     # ─────────────────────────────────────────────────────────────────────────
+    # ASYNC RENDER — daemon thread produces HTML, main thread delivers it
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _render_worker(self) -> None:
+        """Background thread — convert markdown to HTML."""
+        try:
+            self._pending_html = self._markdown_to_html(self.data.label)
+        except Exception:
+            self._pending_html = "<p>Render failed</p>"
+
+    def _check_render_delivery(self) -> None:
+        """Main-thread timer that picks up the rendered HTML from the worker."""
+        if self._pending_html is None:
+            return
+        html = self._pending_html
+        self._pending_html = None
+        self._delivery_timer.stop()
+        if self._editor:
+            self._editor.setHtml(html)
+
+    # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -291,6 +322,11 @@ class MarkdownNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        self._delivery_timer.stop()
+        try:
+            self._delivery_timer.timeout.disconnect(self._check_render_delivery)
+        except RuntimeError:
+            pass
         if self._html_proxy:
             self._html_proxy.setWidget(None)
             self._html_proxy = None
