@@ -318,6 +318,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_registry_node(self, pos: QPointF | None = None):
+        """Add a RegistryNode at pos — live viewer for node_registry.toml."""
+        from nodes.RegistryNode import RegistryNode
+        node = RegistryNode()
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_cushions_node(self, pos: QPointF | None = None, label: str = ""):
         """Add a CushionsNode at pos, optionally pre-filled with label text."""
         from nodes.CushionsNode import CushionsNode
@@ -1014,6 +1025,10 @@ class IntricateScene(QGraphicsScene):
             from nodes.NodeSchemaNode import NodeSchemaNode
             from data.NodeSchemaNodeData import NodeSchemaNodeData
             node = NodeSchemaNode(NodeSchemaNodeData.from_dict(d))
+        elif node_type == "registry":
+            from nodes.RegistryNode import RegistryNode
+            from data.RegistryNodeData import RegistryNodeData
+            node = RegistryNode(RegistryNodeData.from_dict(d))
         elif node_type == "cushions":
             from nodes.CushionsNode import CushionsNode
             from data.CushionsNodeData import CushionsNodeData

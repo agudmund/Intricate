@@ -1339,6 +1339,7 @@ class IntricateApp(QMainWindow):
                     label=text)
     def _spawn_architecture_node(self): self._spawn(self.scene.add_architecture_node, "the blueprint unfolds")
     def _spawn_node_schema_node(self): self._spawn(self.scene.add_node_schema_node,  "the schema reveals itself")
+    def _spawn_registry_node(self):    self._spawn(self.scene.add_registry_node,     "the vocabulary opens")
     def _spawn_sequence_node(self):    self._spawn(self.scene.add_sequence_node,     "ready to scrub")
     def _spawn_value_node(self):       self._spawn(self.scene.add_value_node,        "dialing in the value")
     def _spawn_sticker_node(self):     self._spawn(self.scene.add_sticker_node,      "sticker time")
@@ -1388,121 +1389,107 @@ class IntricateApp(QMainWindow):
         from PySide6.QtWidgets import QToolTip
         QToolTip.hideText()
 
-    def _show_text_menu(self, btn: QPushButton) -> None:
-        """Pop a styled context menu under the text group button."""
+    # ─────────────────────────────────────────────────────────────────────────
+    # REGISTRY-DRIVEN MENUS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Dispatch map: node type_key → spawn callable.
+    # Built lazily on first menu open so all spawn methods are defined.
+    _spawn_dispatch: dict | None = None
+
+    # Action dispatch: action_key → callable
+    _action_dispatch: dict | None = None
+
+    def _ensure_dispatch(self) -> None:
+        if self._spawn_dispatch is not None:
+            return
+        self._spawn_dispatch = {
+            "about":         self._spawn_about_node,
+            "warm":          self._spawn_warm_node,
+            "text":          self._spawn_text_node,
+            "cushions":      self._spawn_cushions_node,
+            "code":          self._spawn_code_node,
+            "bloom":         self._spawn_bloom_node,
+            "null":          self._spawn_null_node,
+            "image":         self._spawn_image_node,
+            "video":         self._spawn_video_node,
+            "sequence":      self._spawn_sequence_node,
+            "fbx":           self._spawn_fbx_node,
+            "audio":         self._spawn_audio_node,
+            "merge":         self._spawn_merge_node,
+            "audio_hold":    self._spawn_audio_hold_node,
+            "bezier":        self._spawn_bezier_node,
+            "palette":       self._spawn_palette_node,
+            "value":         self._spawn_value_node,
+            "sticker":       self._spawn_sticker_node,
+            "health":        self._spawn_health_node,
+            "perf":          self._spawn_perf_node,
+            "log":           self._spawn_log_node,
+            "joy_stats":     self._spawn_joy_stats_node,
+            "git":           self._spawn_git_node,
+            "tree":          self._spawn_tree_node,
+            "session":       self._spawn_session_node,
+            "info":          self._spawn_info_node,
+            "readme":        self._spawn_readme_node,
+            "architecture":  self._spawn_architecture_node,
+            "node_schema":   self._spawn_node_schema_node,
+            "registry":      self._spawn_registry_node,
+            "claude":        self._spawn_claude_node,
+            "claude_info":   self._spawn_claude_info_node,
+        }
+        self._action_dispatch = {
+            "restore": self._restore_deleted,
+            "snip":    self._start_wire_snip,
+        }
+
+    def _show_category_menu(self, category: str, btn: QPushButton) -> None:
+        """Build a category menu from node_registry.toml entries."""
+        from utils import registry
+
+        self._ensure_dispatch()
         menu = self._styled_menu()
-        act_about    = menu.addAction(QIcon(Theme.icon(Theme.iconAbout)),    "The Glorious About Node")
-        act_warm     = menu.addAction(QIcon(Theme.icon(Theme.iconWarm)),     "The Comfortable Warm Node")
-        act_text     = menu.addAction(QIcon(Theme.icon(Theme.iconText)),     "The Simple Text Node")
-        act_cushions = menu.addAction(QIcon(Theme.icon(Theme.iconCushions)), "The Cushions Node")
-        act_code     = menu.addAction(QIcon(Theme.icon(Theme.iconCode)),     "The Code Node")
-        act_bloom    = menu.addAction(QIcon(Theme.icon(Theme.iconBloom)),    "The Bloom Node")
-        act_null     = menu.addAction(QIcon(Theme.icon(Theme.iconNull)),     "The Null Node")
-        act_about.triggered.connect(self._spawn_about_node)
-        act_warm.triggered.connect(self._spawn_warm_node)
-        act_text.triggered.connect(self._spawn_text_node)
-        act_cushions.triggered.connect(self._spawn_cushions_node)
-        act_code.triggered.connect(self._spawn_code_node)
-        act_bloom.triggered.connect(self._spawn_bloom_node)
-        act_null.triggered.connect(self._spawn_null_node)
+
+        # Non-node actions first (e.g. Restore, Snip in tools)
+        for key, entry in registry.get_actions_by_category(category):
+            icon_attr = entry.get("icon", "")
+            fallback = entry.get("icon_fallback", "#6b5a47")
+            icon_val = getattr(Theme, icon_attr, None)
+            pix = Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+            act = menu.addAction(QIcon(pix), entry.get("name", key))
+            tip = entry.get("tooltip", "")
+            if tip:
+                act.setToolTip(tip)
+            handler = self._action_dispatch.get(key)
+            if handler:
+                act.triggered.connect(handler)
+
+        # Node entries
+        for key, entry in registry.get_nodes_by_category(category):
+            icon_attr = entry.get("icon", "")
+            fallback = entry.get("icon_fallback", "#6b5a47")
+            icon_val = getattr(Theme, icon_attr, None)
+            pix = Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+            act = menu.addAction(QIcon(pix), entry.get("name", key))
+            tip = entry.get("tooltip", "")
+            if tip:
+                act.setToolTip(tip)
+            spawnable = entry.get("spawnable", True)
+            if not spawnable:
+                act.setEnabled(False)
+            handler = self._spawn_dispatch.get(key)
+            if handler and spawnable:
+                act.triggered.connect(handler)
+
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
-    def _show_visual_menu(self, btn: QPushButton) -> None:
-        """Pop a styled context menu under the visual group button."""
-        menu = self._styled_menu()
-        act_bezier  = menu.addAction(QIcon(Theme.icon(Theme.iconBezier)),  "The Prestigious Bezier Node")
-        act_palette = menu.addAction(QIcon(Theme.icon(Theme.iconPalette)), "The Beautiful Palette Node")
-        act_value   = menu.addAction(QIcon(Theme.icon(Theme.iconValue)),   "The Oddly Important Value Node")
-        act_sticker = menu.addAction(QIcon(Theme.icon(Theme.iconSticker, fallback_color="#c9b8a7")), "Snickers Stickers!")
-        act_bezier.triggered.connect(self._spawn_bezier_node)
-        act_palette.triggered.connect(self._spawn_palette_node)
-        act_value.triggered.connect(self._spawn_value_node)
-        act_sticker.triggered.connect(self._spawn_sticker_node)
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
-
-    def _show_health_menu(self, btn: QPushButton) -> None:
-        """Pop a styled context menu under the health group button."""
-        menu = self._styled_menu()
-        act_health    = menu.addAction(QIcon(Theme.icon(Theme.iconHealth)), "The Health Node")
-        act_perf      = menu.addAction(QIcon(Theme.icon(Theme.iconPerf)), "The Performance Beast")
-        act_log       = menu.addAction(QIcon(Theme.icon(Theme.iconLog, fallback_color="#8aaa88")), "Tinkerbells Tail")
-        act_joy_stats = menu.addAction(QIcon(Theme.icon(Theme.iconHealth, fallback_color="#d87a9e")), "The Joy Inspector")
-        act_joy_stats.setToolTip("Live tamagotchi debug stats")
-        act_health.triggered.connect(self._spawn_health_node)
-        act_perf.triggered.connect(self._spawn_perf_node)
-        act_joy_stats.triggered.connect(self._spawn_joy_stats_node)
-        act_log.triggered.connect(self._spawn_log_node)
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
-
-    def _show_tools_menu(self, btn: QPushButton) -> None:
-        """Pop a styled context menu under the tools group button."""
-        menu = self._styled_menu()
-        act_restore = menu.addAction(QIcon(Theme.icon(Theme.iconRestore, fallback_color="#8aaa88")), "The Grand Restoration")
-        act_snip    = menu.addAction(QIcon(Theme.icon(Theme.iconSnip,    fallback_color="#c0a888")), "There Comes A Time In Everyone's Life...")
-        act_git     = menu.addAction(QIcon(Theme.icon(Theme.iconGit,     fallback_color="#8a9a8a")), "The Not So Boring Anymore Node")
-        act_tree    = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Stuff and Stuff")
-        act_session = menu.addAction(QIcon(Theme.icon(Theme.iconSession, fallback_color="#8a9aaa")), "Total Recall")
-        act_restore.setToolTip("Bring back the last deleted node")
-        act_snip.setToolTip("Remove an explicit wire connection")
-        act_git.setToolTip("Git status report")
-        act_tree.setToolTip("Session file content")
-        act_session.setToolTip("( The remake, not the vintage original, its a seriously good remake )")
-        act_restore.triggered.connect(self._restore_deleted)
-        act_snip.triggered.connect(self._start_wire_snip)
-        act_git.triggered.connect(self._spawn_git_node)
-        act_tree.triggered.connect(self._spawn_tree_node)
-        act_session.triggered.connect(self._spawn_session_node)
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
-
-    def _show_info_menu(self, btn: QPushButton) -> None:
-        """Pop a styled context menu under the info group button."""
-        menu = self._styled_menu()
-        act_info   = menu.addAction(QIcon(Theme.icon(Theme.iconInfo,    fallback_color="#9a9aaa")), "Intricate")
-        act_readme = menu.addAction(QIcon(Theme.icon(Theme.iconTree,    fallback_color="#8888aa")), "The Readme")
-        act_arch   = menu.addAction(QIcon(Theme.icon(Theme.iconInfoGroup, fallback_color="#8a9aaa")), "Architecture")
-        act_schema = menu.addAction(QIcon(Theme.icon(Theme.iconInfoGroup, fallback_color="#8a9aaa")), "Node Type Schema")
-        act_info.setToolTip("General Info")
-        act_info.triggered.connect(self._spawn_info_node)
-        act_readme.triggered.connect(self._spawn_readme_node)
-        act_arch.triggered.connect(self._spawn_architecture_node)
-        act_schema.triggered.connect(self._spawn_node_schema_node)
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
-
-    def _show_claude_menu(self, btn: QPushButton) -> None:
-        """Pop a styled context menu under the Claude group button."""
-        menu = self._styled_menu()
-        act_claude   = menu.addAction(QIcon(Theme.icon(Theme.iconClaudeNode,     fallback_color="#7a9a7a")), "The Majestic Claude Node")
-        act_census   = menu.addAction(QIcon(Theme.icon(Theme.iconClaudeCensus,   fallback_color="#7a9a7a")), "The Curious Token Counter")
-        act_response = menu.addAction(QIcon(Theme.icon(Theme.iconClaudeResponse, fallback_color="#555566")), "Claude's Emotional Scale")
-        act_response.setEnabled(False)
-        act_response.setToolTip("This node is invoked from inside the Claude Node")
-        act_claude.triggered.connect(self._spawn_claude_node)
-        act_census.triggered.connect(self._spawn_claude_info_node)
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
-
-    def _show_images_menu(self, btn: QPushButton) -> None:
-        """Pop a styled context menu under the images group button."""
-        menu = self._styled_menu()
-        img_action = menu.addAction(QIcon(Theme.icon(Theme.iconImage)),    "The Images")
-        vid_action = menu.addAction(QIcon(Theme.icon(Theme.iconVideo)),    "The Videos")
-        seq_action = menu.addAction(QIcon(Theme.icon(Theme.iconSequence)), "The Sequences")
-        fbx_action = menu.addAction(QIcon(Theme.icon(Theme.iconFbx, fallback_color="#c0a888")), "The Fluff and Honey Node")
-        img_action.triggered.connect(self._spawn_image_node)
-        vid_action.triggered.connect(self._spawn_video_node)
-        seq_action.triggered.connect(self._spawn_sequence_node)
-        fbx_action.triggered.connect(self._spawn_fbx_node)
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
-
-    def _show_audio_menu(self, btn: QPushButton) -> None:
-        """Pop a styled context menu under the audio group button."""
-        menu = self._styled_menu()
-        aud_action  = menu.addAction(QIcon(Theme.icon(Theme.iconAudio, fallback_color="#9a8a7a")), "The Sound")
-        mrg_action  = menu.addAction(QIcon(Theme.icon(Theme.iconMerge, fallback_color="#8a9a7a")), "The Merger")
-        hold_action = menu.addAction(QIcon(Theme.icon(Theme.iconAudio, fallback_color="#7a9a8a")), "The Silence")
-        aud_action.triggered.connect(self._spawn_audio_node)
-        mrg_action.triggered.connect(self._spawn_merge_node)
-        hold_action.triggered.connect(self._spawn_audio_hold_node)
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+    def _show_text_menu(self, btn):    self._show_category_menu("text", btn)
+    def _show_images_menu(self, btn):  self._show_category_menu("images", btn)
+    def _show_audio_menu(self, btn):   self._show_category_menu("audio", btn)
+    def _show_visual_menu(self, btn):  self._show_category_menu("visual", btn)
+    def _show_health_menu(self, btn):  self._show_category_menu("health", btn)
+    def _show_tools_menu(self, btn):   self._show_category_menu("tools", btn)
+    def _show_info_menu(self, btn):    self._show_category_menu("info", btn)
+    def _show_claude_menu(self, btn):  self._show_category_menu("claude", btn)
     def _spawn_perf_node(self):        self._spawn(self.scene.add_perf_node,         "watching the paint loop")
     def _spawn_joy_stats_node(self):   self._spawn(self.scene.add_joy_stats_node,    "inspecting the joy bucket")
     def _spawn_claude_info_node(self): self._spawn(self.scene.add_claude_info_node,  "counting every token with pride")

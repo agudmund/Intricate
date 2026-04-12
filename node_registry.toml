@@ -1,0 +1,369 @@
+# Node Registry — the creative writing surface for Intricate's vocabulary.
+# Every node type's identity lives here: menu name, tooltip, category,
+# icon, and narrative notes. The sidebar menus build themselves from this file.
+# Edit freely — Intricate watches for changes and rebuilds menus live.
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TEXT CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[nodes.about]
+name = "The Glorious About Node"
+tooltip = ""
+category = "text"
+icon = "iconAbout"
+spawnable = true
+status = "a little note for later"
+notes = ""
+
+[nodes.warm]
+name = "The Comfortable Warm Node"
+tooltip = ""
+category = "text"
+icon = "iconWarm"
+spawnable = true
+status = "a warm thought arrives"
+notes = ""
+
+[nodes.text]
+name = "The Simple Text Node"
+tooltip = ""
+category = "text"
+icon = "iconText"
+spawnable = true
+status = "words, words, words"
+notes = ""
+
+[nodes.cushions]
+name = "The Cushions Node"
+tooltip = ""
+category = "text"
+icon = "iconCushions"
+spawnable = true
+status = "fluffing the cushions"
+notes = ""
+
+[nodes.code]
+name = "The Code Node"
+tooltip = ""
+category = "text"
+icon = "iconCode"
+spawnable = true
+status = "compiling the vibes"
+notes = ""
+
+[nodes.bloom]
+name = "The Bloom Node"
+tooltip = ""
+category = "text"
+icon = "iconBloom"
+spawnable = true
+status = "particles are blooming"
+notes = ""
+
+[nodes.null]
+name = "The Null Node"
+tooltip = ""
+category = "text"
+icon = "iconNull"
+spawnable = true
+status = "a point in space"
+notes = ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# IMAGES CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[nodes.image]
+name = "The Images"
+tooltip = ""
+category = "images"
+icon = "iconImage"
+spawnable = true
+status = "a picture is worth everything"
+notes = ""
+
+[nodes.video]
+name = "The Videos"
+tooltip = ""
+category = "images"
+icon = "iconVideo"
+spawnable = true
+status = "lights, camera, action"
+notes = ""
+
+[nodes.sequence]
+name = "The Sequences"
+tooltip = ""
+category = "images"
+icon = "iconSequence"
+spawnable = true
+status = "ready to scrub"
+notes = ""
+
+[nodes.fbx]
+name = "The Fluff and Honey Node"
+tooltip = ""
+category = "images"
+icon = "iconFbx"
+icon_fallback = "#c0a888"
+spawnable = true
+status = "vertices from thin air"
+notes = ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUDIO CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[nodes.audio]
+name = "The Sound"
+tooltip = ""
+category = "audio"
+icon = "iconAudio"
+icon_fallback = "#9a8a7a"
+spawnable = true
+status = "Yummi >> Tummy >> voila!"
+notes = ""
+
+[nodes.merge]
+name = "The Merger"
+tooltip = ""
+category = "audio"
+icon = "iconMerge"
+icon_fallback = "#8a9a7a"
+spawnable = true
+status = "converging streams"
+notes = ""
+
+[nodes.audio_hold]
+name = "The Silence"
+tooltip = ""
+category = "audio"
+icon = "iconAudio"
+icon_fallback = "#7a9a8a"
+spawnable = true
+status = "silence is golden"
+notes = ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VISUAL CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[nodes.bezier]
+name = "The Prestigious Bezier Node"
+tooltip = ""
+category = "visual"
+icon = "iconBezier"
+spawnable = true
+status = "curves ahead"
+notes = ""
+
+[nodes.palette]
+name = "The Beautiful Palette Node"
+tooltip = ""
+category = "visual"
+icon = "iconPalette"
+spawnable = true
+status = "mixing colors"
+notes = ""
+
+[nodes.value]
+name = "The Oddly Important Value Node"
+tooltip = ""
+category = "visual"
+icon = "iconValue"
+spawnable = true
+status = "dialing in the value"
+notes = ""
+
+[nodes.sticker]
+name = "Snickers Stickers!"
+tooltip = ""
+category = "visual"
+icon = "iconSticker"
+icon_fallback = "#c9b8a7"
+spawnable = true
+status = "sticker time"
+notes = ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HEALTH CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[nodes.health]
+name = "The Health Node"
+tooltip = ""
+category = "health"
+icon = "iconHealth"
+spawnable = true
+status = "checking in on things"
+notes = ""
+
+[nodes.perf]
+name = "The Performance Beast"
+tooltip = ""
+category = "health"
+icon = "iconPerf"
+spawnable = true
+status = "watching the paint loop"
+notes = ""
+
+[nodes.log]
+name = "Tinkerbells Tail"
+tooltip = ""
+category = "health"
+icon = "iconLog"
+icon_fallback = "#8aaa88"
+spawnable = true
+status = "tailing the log"
+notes = ""
+
+[nodes.joy_stats]
+name = "The Joy Inspector"
+tooltip = "Live tamagotchi debug stats"
+category = "health"
+icon = "iconHealth"
+icon_fallback = "#d87a9e"
+spawnable = true
+status = "inspecting the joy bucket"
+notes = ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TOOLS CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[nodes.git]
+name = "The Not So Boring Anymore Node"
+tooltip = "Git status report"
+category = "tools"
+icon = "iconGit"
+icon_fallback = "#8a9a8a"
+spawnable = true
+status = "the boring but necessary one"
+notes = ""
+
+[nodes.tree]
+name = "The Stuff and Stuff"
+tooltip = "Session file content"
+category = "tools"
+icon = "iconTree"
+icon_fallback = "#8888aa"
+spawnable = true
+status = "mapping the territory"
+notes = ""
+
+[nodes.session]
+name = "Total Recall"
+tooltip = "( The remake, not the vintage original, its a seriously good remake )"
+category = "tools"
+icon = "iconSession"
+icon_fallback = "#8a9aaa"
+spawnable = true
+status = "ready for a session file"
+notes = ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# INFO CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[nodes.info]
+name = "Intricate"
+tooltip = "General Info"
+category = "info"
+icon = "iconInfo"
+icon_fallback = "#9a9aaa"
+spawnable = true
+status = "version 0.2.0"
+notes = ""
+
+[nodes.readme]
+name = "The Readme"
+tooltip = ""
+category = "info"
+icon = "iconTree"
+icon_fallback = "#8888aa"
+spawnable = true
+status = "the README has arrived"
+notes = ""
+
+[nodes.architecture]
+name = "Architecture"
+tooltip = ""
+category = "info"
+icon = "iconInfoGroup"
+icon_fallback = "#8a9aaa"
+spawnable = true
+status = "the blueprint unfolds"
+notes = ""
+
+[nodes.node_schema]
+name = "Node Type Schema"
+tooltip = ""
+category = "info"
+icon = "iconInfoGroup"
+icon_fallback = "#8a9aaa"
+spawnable = true
+status = "the schema reveals itself"
+notes = ""
+
+[nodes.registry]
+name = "The Registry"
+tooltip = "Central node naming registry"
+category = "info"
+icon = "iconInfoGroup"
+icon_fallback = "#8a9aaa"
+spawnable = true
+status = "the vocabulary opens"
+notes = ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CLAUDE CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[nodes.claude]
+name = "The Majestic Claude Node"
+tooltip = ""
+category = "claude"
+icon = "iconClaudeNode"
+icon_fallback = "#7a9a7a"
+spawnable = true
+status = "claude has entered the chat"
+notes = ""
+
+[nodes.claude_info]
+name = "The Curious Token Counter"
+tooltip = ""
+category = "claude"
+icon = "iconClaudeCensus"
+icon_fallback = "#7a9a7a"
+spawnable = true
+status = "counting every token with pride"
+notes = ""
+
+[nodes.claude_response]
+name = "Claude's Emotional Scale"
+tooltip = "This node is invoked from inside the Claude Node"
+category = "claude"
+icon = "iconClaudeResponse"
+icon_fallback = "#555566"
+spawnable = false
+status = ""
+notes = "Auto-spawned by ClaudeNode only"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NON-NODE ACTIONS (appear in menus but don't create nodes)
+# ═══════════════════════════════════════════════════════════════════════════
+
+[actions.restore]
+name = "The Grand Restoration"
+tooltip = "Bring back the last deleted node"
+category = "tools"
+icon = "iconRestore"
+icon_fallback = "#8aaa88"
+
+[actions.snip]
+name = "There Comes A Time In Everyone's Life..."
+tooltip = "Remove an explicit wire connection"
+category = "tools"
+icon = "iconSnip"
+icon_fallback = "#c0a888"

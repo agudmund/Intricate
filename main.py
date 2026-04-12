@@ -13,7 +13,7 @@ import argparse
 import ctypes
 import logging
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __era__     = "The Prestige Era"
 
 __version_history__ = [
@@ -163,6 +163,11 @@ def main():
     _watcher.changed.connect(lambda: app.activeWindow() and app.activeWindow().update())
     logger.debug(f"[boot] File watcher active on: {settings._SETTINGS_PATH}")
     logger.log(TRACE, "[boot:12] file watcher active")
+
+    logger.log(TRACE, "[boot:12a] initialising node registry")
+    from utils import registry
+    _reg_watcher = registry.init_watcher()
+    logger.debug(f"[boot] Node registry loaded: {len(registry.get_all_nodes())} types")
 
     logger.log(TRACE, "[boot:13] constructing IntricateApp window")
     logger.log(TRACE, f"[boot:13a] Theme.icon at window construction = {getattr(Theme, 'icon', 'MISSING')}")

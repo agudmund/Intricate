@@ -1,6 +1,6 @@
 # Intricate Node Type Schema
 
-> **32 node types** across 8 sidebar categories.
+> **33 node types** across 8 sidebar categories.
 > Every node exists because it earned its place through daily use.
 > This document is the living reference — update it when nodes are added, renamed, or reorganised.
 
@@ -18,7 +18,7 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 | 4 | Visual | `iconVisualGroup` | Bezier, Palette, Value, Sticker |
 | 5 | Health | `iconHealthGroup` | Health, Perf, Log, Joy Inspector |
 | 6 | Tools | `iconToolsGroup` | Restore, Snip, Git, Tree, Session |
-| 7 | Info | `iconInfoGroup` | Intricate, Readme, Architecture, Node Schema |
+| 7 | Info | `iconInfoGroup` | Intricate, Readme, Architecture, Node Schema, Registry |
 | 8 | Claude | `iconClaude` | Claude, Census, Response (auto-spawned) |
 
 ---
@@ -225,6 +225,12 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 - Read-only viewer for `Documents/Node Type Schema.md`. Inherits MarkdownNode — loads this document from disk at creation.
 - `_has_depth_toggle = True`
 
+### The Registry
+- **Type key:** `registry` | **Icon:** `iconInfoGroup`
+- **Files:** `nodes/RegistryNode.py`, `data/RegistryNodeData.py`
+- Live viewer for `node_registry.toml` — the creative writing surface for node naming. Renders all entries as a formatted markdown table grouped by category. Watches the registry file and re-renders on changes. Edit button opens the TOML in the system editor.
+- `_has_depth_toggle = True`
+
 ---
 
 ## Claude Category
@@ -254,9 +260,9 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 
 | Metric | Count |
 |--------|-------|
-| Total node types | 32 |
-| User-spawnable from sidebar | 31 |
+| Total node types | 33 |
+| User-spawnable from sidebar | 32 |
 | Programmatically-spawned only | 1 (ClaudeResponseNode) |
-| With depth toggle | 26 |
+| With depth toggle | 27 |
 | Without depth toggle | 6 (Bezier, Palette, Value, Sticker, plus 2 non-node actions) |
 | Sidebar categories | 8 |
