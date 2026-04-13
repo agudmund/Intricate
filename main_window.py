@@ -117,7 +117,7 @@ class IntricateApp(QMainWindow):
         # 6. Restore persisted geometry
         self._restore_geometry()
 
-        # 6. Load session for the initially selected project, then start autosave
+        # 7. Load session for the initially selected project, then start autosave
         QTimer.singleShot(0, self._load_initial_session)
 
     def _setup_grid(self):
@@ -470,8 +470,8 @@ class IntricateApp(QMainWindow):
             self.original_height = self.height()
             end_rect = QRect(start_rect.x(), start_rect.y(),
                              start_rect.width(), Theme.handleHeightTop)
-            # ③ Hide content AFTER animation exists but BEFORE start()
-            self._sidebar_splitter.hide()
+            # ③ Delay-hide so the bottom toolbar is visible during the roll start
+            QTimer.singleShot(200, self._sidebar_splitter.hide)
             if self.scene:
                 self.scene.pause_all_videos()
             self._last_docked_exe = ""
