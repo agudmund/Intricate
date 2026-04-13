@@ -444,12 +444,6 @@ class IntricateView(QGraphicsView):
                     source_path = path
                 )
                 offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
-            elif ext in _CODE_EXTENSIONS and hasattr(scene, 'add_code_node'):
-                scene.add_code_node(
-                    pos  = drop_scene_pos + offset,
-                    path = path
-                )
-                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
             elif ext == ".qss" and hasattr(scene, 'add_palette_node'):
                 colors = self._parse_qss_colors(path)
                 if colors:
@@ -458,6 +452,21 @@ class IntricateView(QGraphicsView):
                         colors = colors,
                     )
                     offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+            elif ext in _CODE_EXTENSIONS and hasattr(scene, 'add_code_node'):
+                # .py files with hex colors → palette node + code node
+                if ext == ".py" and hasattr(scene, 'add_palette_node'):
+                    colors = self._parse_qss_colors(path)
+                    if colors:
+                        scene.add_palette_node(
+                            pos    = drop_scene_pos + offset,
+                            colors = colors,
+                        )
+                        offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+                scene.add_code_node(
+                    pos  = drop_scene_pos + offset,
+                    path = path
+                )
+                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
 
         event.acceptProposedAction()
 
