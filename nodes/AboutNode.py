@@ -81,9 +81,12 @@ class AboutNode(BaseNode):
         self._shuffle_emoji = random.choice(emojiIcons)
         self._shuffle_btn.update()
 
+    # Legacy hardcoded tints that mean "use Theme default" — not a real custom tint
+    _LEGACY_TINTS = {"#2a3a2f", "#322a3a"}
+
     def _bg_color(self) -> QColor:
         acc = getattr(self.data, 'node_tint', '')
-        if acc:
+        if acc and acc.lower() not in self._LEGACY_TINTS:
             c = QColor(acc)
             if not c.isValid():
                 c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)

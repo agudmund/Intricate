@@ -207,7 +207,6 @@ class IntricateScene(QGraphicsScene):
         from nodes.AboutNode import AboutNode
         from data.AboutNodeData import AboutNodeData
         data = AboutNodeData(label=label) if label is not None else AboutNodeData()
-        data.node_tint = "#2a3a2f"
         node = AboutNode(data)
         if pos is not None:
             node.setPos(pos)
