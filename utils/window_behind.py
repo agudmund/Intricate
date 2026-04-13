@@ -117,6 +117,10 @@ def get_window_behind(own_hwnd: int) -> dict | None:
             # Skip windows with no title (ghost shells, tool windows)
             if title:
                 exe = _get_exe(hwnd)
+                # Python processes are ambiguous — use window title to
+                # identify sibling apps in the Single Shared Braincell family
+                if exe.lower() in ("python.exe", "pythonw.exe"):
+                    exe = title.lower().replace(" ", "") + ".exe"
                 result = {
                     "hwnd": hwnd,
                     "title": title,
