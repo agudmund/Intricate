@@ -13,8 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-from PySide6.QtWidgets import QGraphicsProxyWidget
-from pretty_widgets.PrettyMenu import StyledTextEdit as QTextEdit
+from pretty_widgets.PrettyEdit import PrettyEdit
 from PySide6.QtCore import Qt, QRectF, QPointF, QFileSystemWatcher, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor, QPen
 
@@ -65,8 +64,7 @@ class WarmNode(BaseNode):
         super().__init__(data)
 
         # ── Body text editor ──────────────────────────────────────────────────
-        self._editor: QTextEdit | None = None
-        self._editor_proxy: QGraphicsProxyWidget | None = None
+        self._editor: PrettyEdit | None = None
         self._build_body_editor()
 
         # ── Bridge state (runtime only — not persisted) ───────────────────────
@@ -102,35 +100,30 @@ class WarmNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_body_editor(self) -> None:
-        """Build the QTextEdit proxy, hidden until double-clicked."""
-        self._editor = QTextEdit()
-        self._editor.setFrameStyle(0)
-        self._editor.setStyleSheet(f"""
-            QTextEdit {{
-                background: transparent;
-                color: {Theme.textPrimary};
-                font-family: {Theme.healthFontFamily};
-                font-size: 9pt;
-                border: none;
-                padding: 12px 0px 0px 0px;
-                selection-background-color: {Theme.primaryBorder};
-            }}
-        """)
-        self._editor.setPlainText(self.data.body_text)
+        """Build the PrettyEdit proxy, always visible — it IS the content."""
+        self._editor = PrettyEdit(
+            self,
+            font_family=Theme.healthFontFamily,
+            font_size=9,
+            font_color=Theme.textPrimary,
+            always_visible=True,
+            normalize_layout=False,
+        )
+        if self.data.body_text.lstrip().startswith(("<", "<!DOCTYPE")):
+            self._editor.setHtml(self.data.body_text)
+        else:
+            self._editor.setPlainText(self.data.body_text)
         self._editor.textChanged.connect(self._on_text_changed)
 
         # Extend the standard right-click menu with "Open in Notepad"
         self._editor.contextMenuEvent = self._editor_context_menu
 
-        self._editor_proxy = QGraphicsProxyWidget(self)
-        self._editor_proxy.setWidget(self._editor)
-        self._editor_proxy.setGeometry(self._body_rect())
-        self._editor_proxy.show()   # WarmNode shows editor by default — it IS the content
+        self._editor.proxy.setGeometry(self._body_rect())
 
     def _on_text_changed(self) -> None:
         """Sync text to data on every keystroke — no explicit commit needed."""
         if self._editor:
-            self.data.body_text = self._editor.toPlainText()
+            self.data.body_text = self._editor.toHtml()
             # Propagate inline edits to bridge if active
             if self._bridge_path and os.path.exists(self._bridge_path):
                 self._bridge_write_debounce.start()
@@ -250,7 +243,10 @@ class WarmNode(BaseNode):
             self.data.body_text = new_body
             if self._editor:
                 self._editor.blockSignals(True)
-                self._editor.setPlainText(new_body)
+                if new_body.lstrip().startswith(("<", "<!DOCTYPE")):
+                    self._editor.setHtml(new_body)
+                else:
+                    self._editor.setPlainText(new_body)
                 self._editor.blockSignals(False)
 
         # Apply title changes
@@ -477,7 +473,7 @@ class WarmNode(BaseNode):
         if self._body_rect().contains(event.pos()):
             if self.scene() and self.scene().views():
                 self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
-            self._editor_proxy.setFocus()
+            self._editor.proxy.setFocus()
             self._editor.setFocus(Qt.MouseFocusReason)
             event.accept()
             return
@@ -524,8 +520,8 @@ class WarmNode(BaseNode):
 
     def setRect(self, rect: QRectF) -> None:
         super().setRect(rect)
-        if self._editor_proxy:
-            self._editor_proxy.setGeometry(self._body_rect())
+        if self._editor and self._editor.proxy:
+            self._editor.proxy.setGeometry(self._body_rect())
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
@@ -533,14 +529,8 @@ class WarmNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         self._teardown_bridge()
-        if self._editor_proxy:
-            self._editor_proxy.setWidget(None)
-            self._editor_proxy.hide()
-            self._editor_proxy = None
-        if self.scene() and self.scene().views():
-            self.scene().views()[0].setFocusPolicy(Qt.NoFocus)
         if self._editor:
-            self._editor.deleteLater()
+            self._editor.teardown()
         self._editor = None
         super()._prepare_for_removal()
 
