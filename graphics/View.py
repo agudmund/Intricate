@@ -383,7 +383,7 @@ class IntricateView(QGraphicsView):
         """Accept drags that contain at least one supported image or video file."""
         if event.mimeData().hasUrls():
             paths = [u.toLocalFile() for u in event.mimeData().urls()]
-            supported = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS | _AUDIO_EXTENSIONS | _SESSION_EXTENSIONS | _CODE_EXTENSIONS
+            supported = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS | _AUDIO_EXTENSIONS | _SESSION_EXTENSIONS | _CODE_EXTENSIONS | {".qss"}
             if any(Path(p).suffix.lower() in supported for p in paths):
                 event.acceptProposedAction()
                 return
@@ -450,8 +450,33 @@ class IntricateView(QGraphicsView):
                     path = path
                 )
                 offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+            elif ext == ".qss" and hasattr(scene, 'add_palette_node'):
+                colors = self._parse_qss_colors(path)
+                if colors:
+                    scene.add_palette_node(
+                        pos    = drop_scene_pos + offset,
+                        colors = colors,
+                    )
+                    offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
 
         event.acceptProposedAction()
+
+    @staticmethod
+    def _parse_qss_colors(path: str) -> list:
+        """Extract unique hex colors from a .qss file as palette-ready dicts."""
+        import re
+        try:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return []
+        raw = re.findall(r'#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b', text)
+        seen = set()
+        colors = []
+        for h in raw:
+            if h.lower() not in seen:
+                seen.add(h.lower())
+                colors.append({"label": h, "hex": h})
+        return colors
 
 
 # Theme import at bottom — View.py is part of the graphics package and

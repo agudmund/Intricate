@@ -255,7 +255,7 @@ class GitNode(BaseNode):
         self._buttons.append(gh_btn)
 
         # Bulk push session-only repos
-        push_pix = Theme.icon(Theme.iconGitPush, fallback_color="#8a9a8a")
+        push_pix = Theme.icon(Theme.iconPush, fallback_color="#8a9a8a")
         self._push_btn = _NodeButton(self, push_pix, self._bulk_push_sessions)
         self._push_btn.setToolTip("Push all session-only repos")
         self._buttons.append(self._push_btn)

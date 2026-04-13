@@ -13,7 +13,7 @@ import argparse
 import ctypes
 import logging
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __era__     = "The Prestige Era"
 
 __version_history__ = [

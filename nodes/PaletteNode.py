@@ -7,6 +7,7 @@
 """
 
 import json as _json
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QGraphicsProxyWidget, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -354,11 +355,13 @@ class _PaletteWidget(QWidget):
             self._append_cell(c.get("label", "Color"), c.get("hex", "#888888"))
 
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PALETTE NODE
 # ─────────────────────────────────────────────────────────────────────────────
 
 class PaletteNode(BaseNode):
+    _has_depth_toggle = True
     """
     A swatch board for collecting and editing hex colors.
 
@@ -392,8 +395,10 @@ class PaletteNode(BaseNode):
     def _build_buttons(self) -> None:
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
-        snap_pix = Theme.icon(Theme.iconConfirm, fallback_color="#8cbea0")
-        self._buttons.append(NodeButton(self, snap_pix, self._snapshot_to_png))
+        snap_pix = Theme.icon(Theme.iconPush, fallback_color="#8cbea0")
+        snap_btn = NodeButton(self, snap_pix, self._snapshot_to_png)
+        snap_btn.setToolTip("Export the palette")
+        self._buttons.append(snap_btn)
 
     def _snapshot_to_png(self) -> None:
         """Render the entire node (border, title, swatches) to a PNG."""

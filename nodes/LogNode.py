@@ -111,10 +111,17 @@ class LogNode(BaseNode):
             from pretty_widgets.utils.settings import get as _get
             log_dir = _get("shared", "log_dir", default=None)
             if log_dir:
-                return Path(log_dir) / "nodal.log"
+                logs_dir = Path(log_dir)
+            else:
+                logs_dir = Path(__file__).resolve().parent.parent / "logs"
         except Exception:
-            pass
-        return Path(__file__).resolve().parent.parent / "logs" / "nodal.log"
+            logs_dir = Path(__file__).resolve().parent.parent / "logs"
+
+        # Most recent timestamped log (Rust logger: nodal_YYYY-MM-DD_HHMMSS.log)
+        candidates = sorted(logs_dir.glob("nodal_*.log"), key=lambda p: p.stat().st_mtime)
+        if candidates:
+            return candidates[-1]
+        return logs_dir / "nodal.log"
 
     def _refresh(self) -> None:
         if self._editor is None:

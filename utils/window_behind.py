@@ -102,11 +102,14 @@ def _get_rect(hwnd) -> dict:
     }
 
 
+_last_exe = None
+
 def get_window_behind(own_hwnd: int) -> dict | None:
     """Find the first visible, non-minimized window behind *own_hwnd* in Z-order.
 
     Returns a dict with keys: hwnd, title, exe, rect — or None if nothing found.
     """
+    global _last_exe
     hwnd = user32.GetWindow(own_hwnd, GW_HWNDNEXT)
     while hwnd:
         if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):
@@ -120,7 +123,9 @@ def get_window_behind(own_hwnd: int) -> dict | None:
                     "exe": exe,
                     "rect": _get_rect(hwnd),
                 }
-                logger.debug(f"Window behind: {exe} — \"{title}\"")
+                if exe != _last_exe:
+                    logger.debug(f"Window behind: {exe} — \"{title}\"")
+                    _last_exe = exe
                 return result
         hwnd = user32.GetWindow(hwnd, GW_HWNDNEXT)
     return None

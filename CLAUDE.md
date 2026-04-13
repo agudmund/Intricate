@@ -80,7 +80,7 @@ Three strict layers — each never crosses into another's domain:
 
 **Settings as single source of truth.** All visual values flow from `settings.toml` → `utils/settings.py` → `graphics/Theme` → nodes and widgets. Nothing is hardcoded in UI code.
 
-**Live theme reload.** `QFileSystemWatcher` in `utils/settings.py` monitors `settings.toml`. Any external write triggers `Theme.reload()` → repaint. A companion app ("The Settlers") writes to this file; Intricate only reads it. The TOML file is the entire handshake between apps.
+**Live theme reload.** `QFileSystemWatcher` in `utils/settings.py` monitors `settings.toml`. Any external write triggers `Theme.reload()` → repaint. A companion app ("The Settlers") writes to this file; Intricate only reads it at runtime (it never programmatically writes back to the TOML). The TOML file is the entire handshake between apps. Note: this is a runtime contract between the apps — freely edit `settings.toml` when working on the project (adding icons, updating values, etc.).
 
 **Theme metaclass fallback.** `Theme` uses a metaclass so that accessing any missing attribute (icon or color) returns a sentinel — a fallback circle icon or neutral color — instead of raising `AttributeError`. The canvas never crashes over a missing asset.
 
@@ -118,7 +118,7 @@ Direction follows the fill axis: left-to-right for horizontal bars, bottom-to-to
 
 ### Settings Contract
 
-`settings.toml` is the shared file contract with "The Settlers" companion app. Intricate reads and watches it; The Settlers writes it. Neither imports the other. The watcher triggers `Theme.reload()` and a window repaint on any change.
+`settings.toml` is the shared file contract with "The Settlers" companion app. At runtime, Intricate reads and watches it while The Settlers writes it — neither imports the other. The watcher triggers `Theme.reload()` and a window repaint on any change. This is a runtime separation only: edit `settings.toml` directly whenever needed during development.
 
 ### NodeBehaviour Lifecycle
 
