@@ -317,6 +317,19 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_markdown_node(self, pos: QPointF | None = None, label: str = ""):
+        """Add a generic MarkdownNode at pos, pre-filled with markdown text."""
+        from nodes.MarkdownNode import MarkdownNode
+        from data.MarkdownNodeData import MarkdownNodeData
+        data = MarkdownNodeData(label=label)
+        node = MarkdownNode(data)
+        if pos is not None:
+            r = node.rect()
+            node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     def add_registry_node(self, pos: QPointF | None = None):
         """Add a RegistryNode at pos — live viewer for node_registry.toml."""
         from nodes.RegistryNode import RegistryNode
@@ -1028,6 +1041,10 @@ class IntricateScene(QGraphicsScene):
             from nodes.RegistryNode import RegistryNode
             from data.RegistryNodeData import RegistryNodeData
             node = RegistryNode(RegistryNodeData.from_dict(d))
+        elif node_type == "markdown":
+            from nodes.MarkdownNode import MarkdownNode
+            from data.MarkdownNodeData import MarkdownNodeData
+            node = MarkdownNode(MarkdownNodeData.from_dict(d))
         elif node_type == "cushions":
             from nodes.CushionsNode import CushionsNode
             from data.CushionsNodeData import CushionsNodeData

@@ -1489,7 +1489,58 @@ class IntricateApp(QMainWindow):
     def _show_visual_menu(self, btn):  self._show_category_menu("visual", btn)
     def _show_health_menu(self, btn):  self._show_category_menu("health", btn)
     def _show_tools_menu(self, btn):   self._show_category_menu("tools", btn)
-    def _show_info_menu(self, btn):    self._show_category_menu("info", btn)
+    def _show_info_menu(self, btn):
+        """Info menu: registry entries + dynamic Documents/*.md files."""
+        from pathlib import Path
+        from utils import registry
+
+        self._ensure_dispatch()
+        menu = self._styled_menu()
+
+        # Registry-driven entries (same as _show_category_menu)
+        for key, entry in registry.get_nodes_by_category("info"):
+            icon_attr = entry.get("icon", "")
+            fallback = entry.get("icon_fallback", "#6b5a47")
+            icon_val = getattr(Theme, icon_attr, None)
+            pix = Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+            act = menu.addAction(QIcon(pix), entry.get("name", key))
+            tip = entry.get("tooltip", "")
+            if tip:
+                act.setToolTip(tip)
+            spawnable = entry.get("spawnable", True)
+            if not spawnable:
+                act.setEnabled(False)
+            handler = self._spawn_dispatch.get(key)
+            if handler and spawnable:
+                act.triggered.connect(handler)
+
+        # Dynamic Documents/*.md entries
+        docs_dir = Path(__file__).resolve().parent / "Documents"
+        _DEDICATED = {"Architecture.md", "Node Type Schema.md"}
+        if docs_dir.is_dir():
+            md_files = sorted(
+                p for p in docs_dir.iterdir()
+                if p.suffix.lower() == ".md" and p.name not in _DEDICATED
+            )
+            if md_files:
+                menu.addSeparator()
+                fallback_pix = Theme.icon(None, fallback_color="#8a9aaa")
+                for md_path in md_files:
+                    display = md_path.stem
+                    act = menu.addAction(QIcon(fallback_pix), display)
+
+                    def _spawn_doc(_, p=md_path):
+                        try:
+                            text = p.read_text(encoding="utf-8")
+                        except Exception:
+                            self._status(f"could not read {p.name}")
+                            return
+                        self._spawn(self.scene.add_markdown_node,
+                                    f"{p.stem} unfolds", label=text)
+
+                    act.triggered.connect(_spawn_doc)
+
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
     def _show_claude_menu(self, btn):  self._show_category_menu("claude", btn)
     def _spawn_perf_node(self):        self._spawn(self.scene.add_perf_node,         "watching the paint loop")
     def _spawn_joy_stats_node(self):   self._spawn(self.scene.add_joy_stats_node,    "inspecting the joy bucket")
