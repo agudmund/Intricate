@@ -1,19 +1,20 @@
 {
   "version": "1.0",
+  "description": "",
   "nodes": [
     {
       "node_id": 0,
       "node_type": "about",
       "title": "The Official Mascot\nYes her name is HCm3ErpbQAAMQ6I\nand I don't know how to pronounce it either.",
       "uuid": "6331d87abd4c47e2afc3779918ddfec7",
-      "x": 2192.2789539227883,
-      "y": -1160.6528590669382,
+      "x": 2225.1556662515554,
+      "y": -1145.5843659162535,
       "width": 473.68425726390024,
       "height": 110.44018513404137,
       "z_value": 10.0,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude2f",
+      "emoji": "\ud83e\uddf8",
       "label": "The Official Mascot\nYes her name is HCm3ErpbQAAMQ6I\nand I don't know how to pronounce it either.",
       "depth_front": true,
       "node_tint": "#2a3a2f"
@@ -25,12 +26,12 @@
       "uuid": "fba2e1876a2742cfa44097878b291110",
       "x": 1038.8071775004428,
       "y": -1470.0213592947523,
-      "width": 290.0,
+      "width": 341.0,
       "height": 385.0,
       "z_value": 0.0,
       "ports_visible": false,
       "shelf_visible": true,
-      "emoji": "\ud83d\ude25",
+      "emoji": "\ud83e\udd17",
       "depth_front": false,
       "node_tint": ""
     },
@@ -39,18 +40,19 @@
       "node_type": "image",
       "title": "Image",
       "uuid": "6fdd7d146a9d4c5e8a6090de8e253eef",
-      "x": 2003.569946035699,
-      "y": -1072.436695724367,
+      "x": 2599.4603569946034,
+      "y": -1010.7928601079286,
       "width": 483.09996258541287,
       "height": 668.5376764249676,
       "z_value": -9.993000000000004,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude42\u200d\u2194\ufe0f",
+      "emoji": "\ud83d\udc96",
       "image_b64": "",
       "caption": "HCm3ErpbQAAMQ6I",
       "source_path": "C:\\Users\\thisg\\Desktop\\_asset\\Snips\\HCm3ErpbQAAMQ6I.jpg",
-      "show_border": false
+      "show_border": false,
+      "depth_front": false
     },
     {
       "node_id": 0,
@@ -59,13 +61,13 @@
       "uuid": "a9aa4b1cf6e045d6910317a671eb1401",
       "x": 1550.0453534751937,
       "y": -935.6176259317417,
-      "width": 300.0,
-      "height": 200.0,
+      "width": 341.0958904109589,
+      "height": 494.52054794520546,
       "z_value": -9.994000000000003,
       "ports_visible": false,
       "shelf_visible": true,
       "emoji": "\ud83d\ude12",
-      "body_text": "There is a famous phrase that women use in certain groups \"Don't be a wife to a boyfriend\".  It just means you shouldn't be giving your all to people who don't really care that much about you.\n\nBut the fact of the matter is that dudes have a similar thing just not an official slogan like the women do.  So like, what that other woman over there is trying to do is get wife privileges without even being a girlfriend.\n\nAll the stories you have heard about what a lovely nice guy I am, I'm not actually that nice of a guy in general, most people call me an absolute prick even, but the stories you heard about how nice and kind I am is the reputation of how I treat my girlfriends, not random strangers.\n\nSo that woman is trying to get wife privileges without even being a girlfriend... how exactly do you expect me to respond to that?\n\nYou do not get both no, never.  Either we are spouses and glory, but thats not a thing for just random humans, and then you stalk me around because I'm nice to my spouse thinking you will get the same... what the heck is wrong with your head?"
+      "body_text": "There is a famous phrase that women use in certain groups \"Don't be a wife to a boyfriend\".  It just means you shouldn't be giving your all to people who don't really care that much about you.\n\nBut the fact of the matter is that dudes have a similar thing just not an official slogan like the women do.  So like, what that other woman over there is trying to do is get wife privileges without even being a girlfriend.\n\nAll the stories you have heard about what a lovely nice guy I am, I'm not actually that nice of a guy in general, most people call me an absolute prick even, but the stories you heard about how nice and kind I am is the reputation of how I treat my girlfriends, not random strangers.\n\nSo that woman is trying to get wife privileges without even being a girlfriend... how exactly do you expect me to respond to that?\n\nEither we are spouses and glory, but that's not a thing for just random humans, and then you stalk me around because I'm nice to my spouse thinking you will get the same... what the heck is wrong with your head?"
     },
     {
       "node_id": 0,
@@ -94,7 +96,7 @@
       "z_value": -9.996000000000002,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude0d",
+      "emoji": "\ud83d\udc96",
       "label": "Infinite Wisdom",
       "depth_front": false,
       "node_tint": "#2a3a2f"
@@ -111,7 +113,7 @@
       "z_value": -9.997000000000002,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\u2764",
+      "emoji": "\ud83d\ude0f",
       "label": "Kinetic",
       "depth_front": false,
       "node_tint": "#2a3a2f"
@@ -121,8 +123,8 @@
       "node_type": "warm",
       "title": "Golden Hour",
       "uuid": "6795b78cec03417d80df0ce69e846d5c",
-      "x": 2717.263491303461,
-      "y": -1363.743733691166,
+      "x": 3204.934724180173,
+      "y": -1330.8670213623986,
       "width": 711.4155047134166,
       "height": 934.6980456460913,
       "z_value": -9.998000000000001,
@@ -143,9 +145,11 @@
       "z_value": -9.999,
       "ports_visible": false,
       "shelf_visible": true,
-      "emoji": "\ud83d\udc9b",
+      "emoji": "\ud83d\udc9c",
       "label": "# Intricate\n\n**Intricate** is a frameless, always-on-top node-based visual canvas built with PySide6. You place nodes on an infinite zoomable canvas, connect them via ports, and arrange your thoughts spatially rather than linearly. It is part of a \"Single Shared Braincell\" family of apps that share live configuration via a common `settings.toml` file and a set of environment variables.\n\nCurrent node types: **WarmNode** (free-form text with emoji accent), **HealthNode** (live system monitor \u2014 GC census and OS-level click tracking), **BezierNode** (interactive bezier curve with draggable control handles), **ImageNode** (drag-and-drop or browse images with editable caption), and **AboutNode** (sticky note for labelling groups of nodes).\n\nThe canvas supports cursor-anchored zoom, middle-mouse pan, and drag-and-drop of image files directly from Explorer. Nodes have ambient hover pulse animations driven by a separate `NodeBehaviour` personality system. The entire theme \u2014 colors, icons, layout \u2014 hot-reloads the moment `settings.toml` is saved by any app in the family.\n\n## Architecture\n\n```\n\ud83d\udcc4 main.py\n\u2514\u2500\u2500 \ud83d\udcc4 main_window.py (IntricateApp \u2014 QMainWindow)\n      \u251c\u2500\u2500 \ud83d\udcc1 graphics/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 Scene.py          \u2014 IntricateScene, canvas and node factory\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 View.py           \u2014 IntricateView, pan / zoom / drag-drop\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 Theme.py          \u2014 all visual values, icons, live reload\n      \u251c\u2500\u2500 \ud83d\udcc1 nodes/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 BaseNode.py       \u2014 base class every node builds on\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeBehaviour.py  \u2014 hover pulse and personality system\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeButton.py     \u2014 node-embedded controls\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 Port.py           \u2014 connection ports\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 WarmNode.py       \u2014 text + emoji content node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 HealthNode.py     \u2014 live system monitor node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 BezierNode.py     \u2014 bezier curve node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 ImageNode.py      \u2014 image display node\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 AboutNode.py      \u2014 sticky note node\n      \u251c\u2500\u2500 \ud83d\udcc1 data/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeData.py       \u2014 base dataclass, no Qt\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 XxxNodeData.py    \u2014 one per node type, state + serialization\n      \u251c\u2500\u2500 \ud83d\udcc1 widgets/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NoteEditor.py     \u2014 text editor dialog\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 PrettyButton.py   \u2014 themed button\n      \u2514\u2500\u2500 \ud83d\udcc1 utils/\n            \u251c\u2500\u2500 \ud83d\udcc4 settings.py       \u2014 TOML loader + file watcher\n            \u251c\u2500\u2500 \ud83d\udcc4 logger.py         \u2014 3-slot rotating log\n            \u251c\u2500\u2500 \ud83d\udcc4 vision.py         \u2014 image processing\n            \u2514\u2500\u2500 \ud83d\udcc4 OSClickMonitor.py \u2014 global Windows mouse hook\n```\n\n---\n*It is what it is*\n",
-      "depth_front": false
+      "depth_front": false,
+      "node_tint": "",
+      "render_html": false
     }
   ],
   "connections": [
@@ -175,9 +179,9 @@
     }
   ],
   "viewport": {
-    "camera_x": 2104.109589041096,
-    "camera_y": -769.8630136986301,
+    "camera_x": 2602.739726027397,
+    "camera_y": -730.1369863013698,
     "camera_zoom": 0.7300000000000001
   },
-  "checksum": "2bc07a16d2f9813e"
+  "checksum": "bbccf7712bf44587"
 }
