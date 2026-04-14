@@ -724,6 +724,8 @@ class IntricateApp(QMainWindow):
         self._pin_btn.setChecked(False)
         self._pin_btn.setFixedSize(22, 22)
         self._pin_btn.setToolTip("Pin preview — keeps this image while you select other nodes")
+        from pretty_widgets.PrettyTooltip import install_tooltip
+        install_tooltip(self._pin_btn)
         self._pin_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
@@ -909,6 +911,7 @@ class IntricateApp(QMainWindow):
 
         def _cat_btn(icon_name, tooltip, menu_fn):
             """Category button — icon fills the entire button, no Qt frame overhead."""
+            from pretty_widgets.PrettyTooltip import install_tooltip
             sz = Theme.iconButtonSize
             b = button(icon_name=icon_name, tooltip=tooltip)
             b.setFixedSize(sz, sz)
@@ -916,6 +919,7 @@ class IntricateApp(QMainWindow):
             b.setFlat(True)
             b.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
             b.clicked.connect(lambda _=None, btn=b: menu_fn(btn))
+            install_tooltip(b)
             layout.addWidget(b, alignment=Qt.AlignHCenter)
 
         _cat_btn(Theme.iconText,        "Text",   self._show_text_menu)
@@ -988,6 +992,7 @@ class IntricateApp(QMainWindow):
         clean_pix = Theme.icon(Theme.iconCatnipFeedClean, fallback_color="#d87a9e")
         self._feed_btn = StickerButton(clean_pix, sz, parent=joy_container)
         self._feed_btn.setToolTip("Feed me")
+        install_tooltip(self._feed_btn)
         self._feed_btn.pressed.connect(self._on_feed_pressed)
         self._feed_btn.released.connect(self._on_feed_released)
         joy_layout.addWidget(self._feed_btn, alignment=Qt.AlignHCenter)
@@ -1000,6 +1005,7 @@ class IntricateApp(QMainWindow):
         self._sleep_btn.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
         self._sleep_btn.setText("\U0001f319")  # 🌙
         self._sleep_btn.setToolTip("Tuck me in")
+        install_tooltip(self._sleep_btn)
         joy_layout.addWidget(self._sleep_btn, alignment=Qt.AlignHCenter)
 
         layout.addWidget(joy_container)
@@ -1013,6 +1019,7 @@ class IntricateApp(QMainWindow):
             alignment=Qt.AlignCenter,
         )
         self._joy_bucket_label.setToolTip(self._joy_bucket_tooltip())
+        install_tooltip(self._joy_bucket_label)
         self._joy_bucket_label.setStyleSheet(f"color: {Theme.textPrimary}; font-size: 10pt;")
         layout.addWidget(self._joy_bucket_label, alignment=Qt.AlignHCenter)
 
