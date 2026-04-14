@@ -5,6 +5,7 @@
 *.md text eol=lf
 *.qss text eol=lf
 *.json text eol=lf
+*.intricate text eol=lf
 # Binary — leave untouched
 *.ico binary
 *.png binary
