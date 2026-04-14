@@ -34,7 +34,7 @@ class VideoNodeData(NodeData):
     playback_pos: int  = field(default=0)       # Milliseconds into the video at save time
     looping:      bool = field(default=False)   # Whether playback loops
     muted:        bool = field(default=False)   # Whether audio is muted
-    show_border:  bool = field(default=False)   # White border around video frame
+    show_border:  bool = field(default=True)    # White border around video frame
     was_playing:  bool = field(default=False)   # Whether video was playing at save time
 
     def to_dict(self) -> dict:

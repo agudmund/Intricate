@@ -75,6 +75,8 @@ class VideoNode(BaseNode):
         super().__init__(data)
 
         self._destroyed = False   # set by _prepare_for_removal to guard signal callbacks
+        self._spawn_label = True  # set False to suppress caption AboutNode on load
+        self._aspect_fitted = False  # True once we've auto-sized to the video's aspect ratio
 
         # ── Current frame pixmap ──────────────────────────────────────────────
         self._frame_pixmap: QPixmap | None = None
@@ -186,7 +188,7 @@ class VideoNode(BaseNode):
         if not path.exists():
             return
         self._set_source(path)
-        if not self.data.caption:
+        if not self.data.caption and self._spawn_label:
             self.data.caption = path.stem
             self._spawn_caption_node(path.stem)
         logger.info(f"video loaded: {path.name}")
@@ -210,15 +212,8 @@ class VideoNode(BaseNode):
             if hasattr(self, '_restore_pos') and self._restore_pos > 0:
                 self._player.setPosition(self._restore_pos)
                 self._restore_pos = 0
-            # Auto-play if looping was on at save time — the video stays
-            # alive as a permanent visual loop without user interaction.
-            if self.data.looping and self.data.was_playing:
-                self._player.play()
-                self.data.was_playing = False
-            elif not self._frame_pixmap:
-                # Grab one frame so the node isn't blank
-                self._player.play()
-                self._player.pause()
+            # Always autoplay on load
+            self._player.play()
         elif status == QMediaPlayer.MediaStatus.EndOfMedia:
             if self.data.looping:
                 self._player.setPosition(0)
@@ -244,6 +239,22 @@ class VideoNode(BaseNode):
         img = frame.toImage()
         if img.isNull():
             return
+
+        # Auto-fit node width to video aspect ratio on first frame
+        if not self._aspect_fitted and img.width() > 0 and img.height() > 0:
+            self._aspect_fitted = True
+            vid_aspect = img.width() / img.height()
+            r = self.rect()
+            vr = self._video_rect()
+            # Derive the ideal video-rect width from current video-rect height
+            ideal_vr_w = vr.height() * vid_aspect
+            # Add back horizontal padding to get the node width
+            h_pad = r.width() - vr.width()
+            ideal_node_w = ideal_vr_w + h_pad
+            if abs(ideal_node_w - r.width()) > 2.0:
+                self.prepareGeometryChange()
+                self.setRect(QRectF(r.x(), r.y(), ideal_node_w, r.height()))
+                self.data.width = ideal_node_w
 
         # Scale to display size right away — never keep the full-res decode
         try:

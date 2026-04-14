@@ -522,6 +522,7 @@ class IntricateScene(QGraphicsScene):
         from nodes.GitNode import GitNode
         from data.GitNodeData import GitNodeData
         node = GitNode(GitNodeData())
+        node._first_scan = True   # loading ceremony only on fresh sidebar spawn
         if pos is not None:
             node.setPos(pos)
         self.addItem(node)

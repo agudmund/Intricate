@@ -20,7 +20,7 @@ _SUBPROCESS_FLAGS = (
 
 import threading
 
-from PySide6.QtCore import Qt, QRectF, QTimer
+from PySide6.QtCore import Qt, QRectF, QPointF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
 from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel
 
@@ -187,6 +187,8 @@ class GitNode(BaseNode):
         self._repos: list[tuple[str, bool]] = []
         self._scanning = False
         self._pending_repos = None          # written by worker thread
+        self._loading_node = None           # VideoNode spawned during scan
+        self._first_scan = False            # set True by Scene.add_git_node for sidebar spawns
 
         # Delivery timer — runs on main thread, checks for worker results
         self._delivery_timer = QTimer()
@@ -203,8 +205,74 @@ class GitNode(BaseNode):
         if self._scanning:
             return
         self._scanning = True
+        if self._first_scan:
+            self._spawn_loading_node()
         self._delivery_timer.start()
         threading.Thread(target=self._scan_worker, daemon=True).start()
+
+    def _spawn_loading_node(self) -> None:
+        """Spawn a VideoNode playing the plushie animation wired to this node."""
+        scene = self.scene()
+        if not scene:
+            return
+        video_path = str(
+            Path(__file__).resolve().parent.parent / "Images" / "Progress Bar Animation.mp4"
+        )
+        # Place it to the right of this node
+        r = self.rect()
+        spawn_pos = self.mapToScene(QPointF(r.right() + 30, r.top()))
+        from nodes.VideoNode import VideoNode
+        video_node = VideoNode()
+        video_node._spawn_label = False
+        if spawn_pos is not None:
+            video_node.setPos(spawn_pos)
+        scene.addItem(video_node)
+        video_node.load_from_path(video_path)
+        # Wire them together
+        from graphics.Connection import Connection
+        wire = Connection(self, video_node)
+        scene.addItem(wire)
+        self._loading_node = video_node
+
+    def _dismiss_loading_node(self) -> None:
+        """Destroy the loading VideoNode with a particle burst."""
+        node = self._loading_node
+        self._loading_node = None
+        if node is None:
+            return
+        scene = node.scene()
+        if not scene:
+            return
+
+        from graphics.Particles import sprinkle
+        center = node.mapToScene(node.rect().center())
+
+        # Strip all wires from the video node
+        for conn in list(node.connections):
+            conn._glide_timer.stop()
+            other = conn.end_node if conn.start_node is node else conn.start_node
+            if other is not None and other is not node:
+                try:
+                    other.connections.remove(conn)
+                except ValueError:
+                    pass
+            conn.start_node = None
+            conn.end_node = None
+            if conn.scene():
+                scene.removeItem(conn)
+        node.connections.clear()
+
+        # Particle burst + deferred removal
+        # _prepare_for_removal is called automatically by BaseNode.itemChange
+        # when removeItem sets the scene to None — do NOT call it manually.
+        sprinkle(scene, center, count=8000)
+        node.setVisible(False)
+        def _remove(n=node, sc=scene):
+            try:
+                sc.removeItem(n)
+            except RuntimeError:
+                pass
+        QTimer.singleShot(0, _remove)
 
     def _scan_worker(self) -> None:
         try:
@@ -219,7 +287,9 @@ class GitNode(BaseNode):
         repos = self._pending_repos
         self._pending_repos = None
         self._scanning = False
+        self._first_scan = False
         self._delivery_timer.stop()
+        self._dismiss_loading_node()
         try:
             self._repos = repos
             self._auto_height()
@@ -429,7 +499,7 @@ class GitNode(BaseNode):
         if not self._repos:
             painter.setPen(QColor(Theme.nodeFontColor))
             painter.setOpacity(0.5)
-            msg = "Scanning repos …" if self._scanning else "No git repos found on Desktop"
+            msg = "hang on, gimme a sec..." if self._scanning else "No git repos found on Desktop"
             painter.drawText(
                 QRectF(r.left() + pad, y, r.width() - pad * 2, _ROW_H),
                 Qt.AlignLeft | Qt.AlignVCenter,
@@ -490,6 +560,7 @@ class GitNode(BaseNode):
         painter.restore()
 
     def _prepare_for_removal(self) -> None:
+        self._dismiss_loading_node()
         self._poll_timer.stop()
         try:
             self._poll_timer.timeout.disconnect(self._refresh)
