@@ -291,7 +291,13 @@ class BaseNode(QGraphicsRectItem):
         """
         tag = f"{self.data.node_type} {self.data.uuid[:8]}"
 
-        # ── Phase 0: sever Qt dispatch state ────────────────────────────
+        # ── Phase 0: flush cached pixmap + sever Qt dispatch state ──────
+        # Disable DeviceCoordinateCache and invalidate the scene region so
+        # no ghost pixels linger after removeItem().
+        from PySide6.QtWidgets import QGraphicsItem
+        self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+        if self.scene():
+            self.scene().invalidate(self.mapRectToScene(self.boundingRect()))
         # Clear selection and disable interaction flags BEFORE any other
         # teardown.  Without this, Qt's internal dispatch table can still
         # route mouse events to the dead item after removeItem(), causing
