@@ -47,5 +47,5 @@ class WarmNodeData(NodeData):
             height        = float(data.get("height",  200.0)),
             ports_visible = data.get("ports_visible", False),
             body_text     = data.get("body_text", ""),
-            emoji         = data.get("emoji",     "🌿"),
+            emoji         = "",   # shuffled on load by EmojiButton
         )

@@ -28,7 +28,7 @@ _log = setup_logger("warmnode")
 EMOJI_SIZE      = 28.0      # Emoji accent area at top-left
 TITLE_HEIGHT    = 22.0      # Title band below emoji row
 PADDING         = 10.0      # General internal padding
-BODY_TOP        = PADDING + EMOJI_SIZE + 4.0    # Body text starts here
+BODY_TOP        = PADDING + EMOJI_SIZE + 16.0   # Body text starts below title + breathing room
 
 # Bridge file lives alongside session data
 _BRIDGE_DIR = Path(__file__).resolve().parent.parent / "Documents" / "data"
@@ -119,6 +119,8 @@ class WarmNode(BaseNode):
         self._editor.contextMenuEvent = self._editor_context_menu
 
         self._editor.proxy.setGeometry(self._body_rect())
+        # Fit height on restore — accounts for layout constant changes across versions
+        self._auto_fit_height()
 
     def _on_text_changed(self) -> None:
         """Sync text to data on every keystroke — no explicit commit needed."""

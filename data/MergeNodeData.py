@@ -46,7 +46,7 @@ class MergeNodeData(NodeData):
             height        = float(data.get("height", 200.0)),
             ports_visible = data.get("ports_visible", True),
             shelf_visible = data.get("shelf_visible", True),
-            emoji         = data.get("emoji",        ""),
+            emoji         = "",   # shuffled on load by EmojiButton
             depth_front   = data.get("depth_front",  False),
             node_tint     = data.get("node_tint",    ""),
         )

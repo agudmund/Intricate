@@ -60,7 +60,7 @@ class AudioHoldNodeData(NodeData):
             height        = float(data.get("height", 100.0)),
             ports_visible = data.get("ports_visible", False),
             shelf_visible = data.get("shelf_visible", True),
-            emoji         = data.get("emoji",        ""),
+            emoji         = "",   # shuffled on load by EmojiButton
             hold_seconds  = float(data.get("hold_seconds", 2.0)),
             source_path   = data.get("source_path",  ""),
             caption       = data.get("caption",      ""),

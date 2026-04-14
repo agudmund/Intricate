@@ -400,6 +400,10 @@ class BaseNode(QGraphicsRectItem):
         so the layout holds without requiring assets to be present first.
         """
         if self._show_emoji_btn:
+            if not self.data.emoji:
+                import random
+                from utils.IconPicker import emojiIcons
+                self.data.emoji = random.choice(emojiIcons)
             self._emoji_btn = EmojiButton(
                 self,
                 get_emoji=lambda: self.data.emoji,

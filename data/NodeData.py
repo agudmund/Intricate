@@ -84,7 +84,6 @@ class NodeData:
             "z_value":       self.z_value,
             "ports_visible": self.ports_visible,
             "shelf_visible": self.shelf_visible,
-            "emoji":         self.emoji,
         }
 
     @classmethod
@@ -107,5 +106,5 @@ class NodeData:
             z_value       = float(data.get("z_value",   0.0)),
             ports_visible = data.get("ports_visible", False),
             shelf_visible = data.get("shelf_visible", True),
-            emoji         = data.get("emoji",         "🌿"),
+            emoji         = "",   # shuffled on load by EmojiButton
         )
