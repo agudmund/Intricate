@@ -14,42 +14,10 @@
       "z_value": 10.0,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83e\udd72",
+      "emoji": "\ud83d\ude07",
       "label": "The Official Mascot\nYes her name is HCm3ErpbQAAMQ6I\nand I don't know how to pronounce it either.",
       "depth_front": true,
       "node_tint": "#2a3a2f"
-    },
-    {
-      "node_id": 0,
-      "node_type": "info",
-      "title": "Intricate",
-      "uuid": "fba2e1876a2742cfa44097878b291110",
-      "x": 1038.8071775004428,
-      "y": -1470.0213592947523,
-      "width": 343.13885126620687,
-      "height": 500.19523393767577,
-      "z_value": 0.0,
-      "ports_visible": false,
-      "shelf_visible": true,
-      "emoji": "\ud83d\ude09",
-      "depth_front": false,
-      "node_tint": ""
-    },
-    {
-      "node_id": 0,
-      "node_type": "git",
-      "title": "Git Status",
-      "uuid": "1d706f49f48f4747acf444db336a2502",
-      "x": 0.0,
-      "y": 0.0,
-      "width": 300.0,
-      "height": 112.0,
-      "z_value": 0.0,
-      "ports_visible": false,
-      "shelf_visible": true,
-      "emoji": "\ud83d\ude01",
-      "depth_front": false,
-      "node_tint": "#4a3a5a"
     },
     {
       "node_id": 0,
@@ -63,9 +31,57 @@
       "z_value": 0.0,
       "ports_visible": false,
       "shelf_visible": true,
-      "emoji": "\ud83d\ude0f",
+      "emoji": "\ud83d\udc9c",
       "depth_front": false,
       "node_tint": "#4a3a5a"
+    },
+    {
+      "node_id": 0,
+      "node_type": "git",
+      "title": "Git Status",
+      "uuid": "1d706f49f48f4747acf444db336a2502",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 300.0,
+      "height": 112.0,
+      "z_value": 0.0,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "emoji": "\ud83d\ude07",
+      "depth_front": false,
+      "node_tint": "#4a3a5a"
+    },
+    {
+      "node_id": 0,
+      "node_type": "info",
+      "title": "Intricate",
+      "uuid": "fba2e1876a2742cfa44097878b291110",
+      "x": 1038.8071775004428,
+      "y": -1470.0213592947523,
+      "width": 343.13885126620687,
+      "height": 500.19523393767577,
+      "z_value": 0.0,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "emoji": "\ud83d\ude2f",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "markdown",
+      "title": "Markdown",
+      "uuid": "118a3e268a4345c2ac027dbf045ccc39",
+      "x": 3605.4794520547935,
+      "y": -1855.8904109589039,
+      "width": 527.8994859687837,
+      "height": 510.79195770706974,
+      "z_value": -9.98300000000001,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "emoji": "\ud83d\ude18",
+      "label": "# The Brilliant GitHub Node\n\nA live git status dashboard that watches every repository on the Desktop surface. What started as \"the boring but necessary node\" evolved into a fully theatrical DevOps companion with personality, offline awareness, and a dancing plushie.\n\n## What It Does\n\nThe GitNode scans all Desktop folders for `.git` directories every 10 seconds and displays them in a colour-coded list. It commits, pushes, and launches GitHub Desktop \u2014 all without leaving the canvas.\n\n## Status Indicators\n\nFour states, each with its own dot colour in the repo list:\n\n- **Blue dot** \u2014 Dirty. Uncommitted changes that are not session files.\n- **Green dot** \u2014 Session. Only session-related files have changed (auto-save artifacts). Safe to bulk-commit without review.\n- **Amber dot** \u2014 Unpushed. Working tree is clean but local commits have not been pushed to the remote. Detected via `git rev-list --count @{u}..HEAD`.\n- **No dot** \u2014 Clean. Nothing to commit, nothing to push. Everything is in sync.\n\nThe list is grouped and separated: dirty repos on top (needs attention), then session repos (auto-committable), then unpushed (needs a push), then clean (all good).\n\n## Bulk Push\n\nThe push button (sticker-style arrow icon) collects session and unpushed repos in a single operation:\n\n1. **Connectivity check** \u2014 pings `github.com:443` before anything else. If offline, spawns an AboutNode wired to the GitNode with a gentle reminder to turn the internet on, and sets the More Glory emoji to an unamused face.\n2. **Commit dialog** \u2014 if there are session repos, a frameless themed dialog asks for a commit message. Unpushed repos skip this step since they already have commits.\n3. **Worker thread** \u2014 session repos get `git add -A`, `git commit`, `git push`. Unpushed repos get just `git push`. All on a background thread so the UI stays responsive.\n4. **On completion** \u2014 the More Glory emoji shuffles to a random one (celebration), and the repo list refreshes to reflect the new state.\n\n## The Loading Ceremony\n\nWhen spawned fresh from the sidebar, the GitNode performs a loading ritual:\n\n1. A VideoNode appears to the right, wired to the GitNode, playing a looping animation of a dancing plushie bear with \"YOU GOT THIS!\" \u2014 the most encouraging progress indicator in existence.\n2. The GitNode body shows \"hang on, gimme a sec...\" while the background thread scans repos.\n3. The moment the scan completes, the VideoNode is dismissed \u2014 it bursts into a particle simulation, the wire dissolves, and the repo list slides into place.\n\nThe same ceremony plays during bulk push operations. The plushie dances while commits and pushes run on the worker thread, then bursts into particles when the operation completes.\n\nSession restores skip the animation entirely \u2014 the node loads quietly with its last known state.\n\n## GitHub Desktop Launcher\n\nThe cat emoji button (custom 3D icon inspired by the GitHub octocat) launches or focuses GitHub Desktop:\n\n- If already running, maximizes and focuses the existing window.\n- If not running, launches via the `github-windows://` protocol handler, then polls every 500ms for the window to appear and maximizes it automatically.\n\nThis works around a Windows limitation where apps do not reliably restore their maximized state across launches.\n\n## Claude App Launcher\n\nA matching launcher in the sidebar's Claude category opens the Claude desktop app with the same maximize-on-launch pattern. Accessible from the Anthropic logo menu alongside the Claude Node and Token Counter.\n\n## Emoji Mood System\n\nThe More Glory button reflects the node's operational state:\n\n- **Offline push attempt** \u2014 switches to the unamused face, a passive-aggressive but accurate status indicator.\n- **Successful push** \u2014 shuffles to a random emoji from the full More Glory pool, celebrating the accomplishment.\n\n## Technical Notes\n\n- Repo scanning runs on a daemon thread with results delivered via a 250ms poll timer on the main thread. The node appears immediately; the repo list populates asynchronously.\n- The `_is_session_path` filter identifies session-related files (`.intricate`, backup slots, warm bridge temporaries) so they can be auto-committed without cluttering the dirty list.\n- Unpushed detection uses `git rev-list --count @{u}..HEAD` which gracefully returns a non-zero exit code for repos without an upstream, falling through to clean status.\n- The VideoNode spawned during loading has its caption label suppressed (`_spawn_label = False`) and loops until dismissed. Cleanup follows BaseNode's deferred removal pattern via `itemChange` to avoid double `_prepare_for_removal` calls.\n- Push timeout is 60 seconds per repo. Failures are logged with stderr output for diagnostics.\n",
+      "depth_front": false
     },
     {
       "node_id": 0,
@@ -79,7 +95,7 @@
       "z_value": -9.984000000000009,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude32",
+      "emoji": "\ud83d\ude0e",
       "label": "Progress Bar Animation",
       "depth_front": false,
       "node_tint": ""
@@ -96,7 +112,7 @@
       "z_value": -9.987000000000007,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude1a",
+      "emoji": "\ud83d\ude0a",
       "label": "slider handle sticker",
       "depth_front": false,
       "node_tint": ""
@@ -113,25 +129,8 @@
       "z_value": -9.988000000000007,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude0f",
+      "emoji": "\ud83d\ude2c",
       "label": "about node text color",
-      "depth_front": false,
-      "node_tint": ""
-    },
-    {
-      "node_id": 0,
-      "node_type": "about",
-      "title": "git didnt notify i was offline",
-      "uuid": "71896b25831745dc94de8354fa68354d",
-      "x": 2968.493150684932,
-      "y": -1615.0684931506855,
-      "width": 364.3087748813896,
-      "height": 63.29498487388355,
-      "z_value": -9.989000000000006,
-      "ports_visible": false,
-      "shelf_visible": false,
-      "emoji": "\ud83d\ude09",
-      "label": "git didnt notify i was offline",
       "depth_front": false,
       "node_tint": ""
     },
@@ -196,7 +195,7 @@
       "z_value": -9.996000000000002,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83e\udd72",
+      "emoji": "\ud83d\ude2f",
       "label": "Infinite Wisdom",
       "depth_front": false,
       "node_tint": "#2a3a2f"
@@ -213,7 +212,7 @@
       "z_value": -9.997000000000002,
       "ports_visible": false,
       "shelf_visible": false,
-      "emoji": "\ud83d\ude0f",
+      "emoji": "\ud83d\ude01",
       "label": "Kinetic",
       "depth_front": false,
       "node_tint": "#2a3a2f"
@@ -245,7 +244,7 @@
       "z_value": -9.999,
       "ports_visible": false,
       "shelf_visible": true,
-      "emoji": "\ud83d\ude32",
+      "emoji": "\ud83d\ude18",
       "label": "# Intricate\n\n**Intricate** is a frameless, always-on-top node-based visual canvas built with PySide6. You place nodes on an infinite zoomable canvas, connect them via ports, and arrange your thoughts spatially rather than linearly. It is part of a \"Single Shared Braincell\" family of apps that share live configuration via a common `settings.toml` file and a set of environment variables.\n\nCurrent node types: **WarmNode** (free-form text with emoji accent), **HealthNode** (live system monitor \u2014 GC census and OS-level click tracking), **BezierNode** (interactive bezier curve with draggable control handles), **ImageNode** (drag-and-drop or browse images with editable caption), and **AboutNode** (sticky note for labelling groups of nodes).\n\nThe canvas supports cursor-anchored zoom, middle-mouse pan, and drag-and-drop of image files directly from Explorer. Nodes have ambient hover pulse animations driven by a separate `NodeBehaviour` personality system. The entire theme \u2014 colors, icons, layout \u2014 hot-reloads the moment `settings.toml` is saved by any app in the family.\n\n## Architecture\n\n```\n\ud83d\udcc4 main.py\n\u2514\u2500\u2500 \ud83d\udcc4 main_window.py (IntricateApp \u2014 QMainWindow)\n      \u251c\u2500\u2500 \ud83d\udcc1 graphics/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 Scene.py          \u2014 IntricateScene, canvas and node factory\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 View.py           \u2014 IntricateView, pan / zoom / drag-drop\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 Theme.py          \u2014 all visual values, icons, live reload\n      \u251c\u2500\u2500 \ud83d\udcc1 nodes/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 BaseNode.py       \u2014 base class every node builds on\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeBehaviour.py  \u2014 hover pulse and personality system\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeButton.py     \u2014 node-embedded controls\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 Port.py           \u2014 connection ports\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 WarmNode.py       \u2014 text + emoji content node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 HealthNode.py     \u2014 live system monitor node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 BezierNode.py     \u2014 bezier curve node\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 ImageNode.py      \u2014 image display node\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 AboutNode.py      \u2014 sticky note node\n      \u251c\u2500\u2500 \ud83d\udcc1 data/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NodeData.py       \u2014 base dataclass, no Qt\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 XxxNodeData.py    \u2014 one per node type, state + serialization\n      \u251c\u2500\u2500 \ud83d\udcc1 widgets/\n      \u2502     \u251c\u2500\u2500 \ud83d\udcc4 NoteEditor.py     \u2014 text editor dialog\n      \u2502     \u2514\u2500\u2500 \ud83d\udcc4 PrettyButton.py   \u2014 themed button\n      \u2514\u2500\u2500 \ud83d\udcc1 utils/\n            \u251c\u2500\u2500 \ud83d\udcc4 settings.py       \u2014 TOML loader + file watcher\n            \u251c\u2500\u2500 \ud83d\udcc4 logger.py         \u2014 3-slot rotating log\n            \u251c\u2500\u2500 \ud83d\udcc4 vision.py         \u2014 image processing\n            \u2514\u2500\u2500 \ud83d\udcc4 OSClickMonitor.py \u2014 global Windows mouse hook\n```\n\n---\n*It is what it is*\n",
       "depth_front": false,
       "node_tint": "",
@@ -254,34 +253,34 @@
   ],
   "connections": [
     {
-      "start_uuid": "6fdd7d146a9d4c5e8a6090de8e253eef",
-      "end_uuid": "6331d87abd4c47e2afc3779918ddfec7"
-    },
-    {
       "start_uuid": "bdc310781f6740f5a824947e220096a0",
-      "end_uuid": "a9aa4b1cf6e045d6910317a671eb1401"
-    },
-    {
-      "start_uuid": "2a62d2a355cb4fe9af19a66122593add",
-      "end_uuid": "3808cd42222440afbed0cdaa1226bc9a"
-    },
-    {
-      "start_uuid": "fba2e1876a2742cfa44097878b291110",
-      "end_uuid": "2a62d2a355cb4fe9af19a66122593add"
+      "end_uuid": "d43d8174c2124279a77cf4a7e84d7f07"
     },
     {
       "start_uuid": "d43d8174c2124279a77cf4a7e84d7f07",
       "end_uuid": "bdc310781f6740f5a824947e220096a0"
     },
     {
+      "start_uuid": "fba2e1876a2742cfa44097878b291110",
+      "end_uuid": "2a62d2a355cb4fe9af19a66122593add"
+    },
+    {
+      "start_uuid": "2a62d2a355cb4fe9af19a66122593add",
+      "end_uuid": "3808cd42222440afbed0cdaa1226bc9a"
+    },
+    {
       "start_uuid": "bdc310781f6740f5a824947e220096a0",
-      "end_uuid": "d43d8174c2124279a77cf4a7e84d7f07"
+      "end_uuid": "a9aa4b1cf6e045d6910317a671eb1401"
+    },
+    {
+      "start_uuid": "6fdd7d146a9d4c5e8a6090de8e253eef",
+      "end_uuid": "6331d87abd4c47e2afc3779918ddfec7"
     }
   ],
   "viewport": {
-    "camera_x": 3949.3150684931506,
-    "camera_y": -1802.7397260273972,
+    "camera_x": 3542.465753424657,
+    "camera_y": -1924.6575342465753,
     "camera_zoom": 0.7300000000000001
   },
-  "checksum": "e05a80514451b061"
+  "checksum": "a7c1cb277d41e005"
 }

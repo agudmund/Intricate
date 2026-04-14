@@ -20,7 +20,7 @@ from send2trash import send2trash
 appName      = "Intricate"
 entryPoint   = "main.py"
 iconsFolder  = "icons"
-docsFolder   = "Documents"
+docsFolder   = str(Path("Documents") / "Build")
 
 # Shared runtime — built by _runtime/build_runtime.py
 _RUNTIME_DIR = Path(os.environ.get(

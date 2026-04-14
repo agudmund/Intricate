@@ -68,6 +68,21 @@ Every Python file must have this exact 3-line docstring header:
             └── 📄 OSClickMonitor.py — global Windows mouse hook
 ```
 
+### Documents Folder Structure
+
+`Documents/` is organised into subdirectories by category. The Info sidebar menu dynamically scans this folder and builds nested context menus from its structure — subdirectories become submenus, `.md` files become entries that spawn MarkdownNodes.
+
+```
+Documents/
+├── Architecture.md          — forensic map (dedicated ArchitectureNode)
+├── Node Type Schema.md      — node type reference (dedicated NodeSchemaNode)
+├── Build/                   — build version rotation (managed by build.py)
+├── Compliance/              — header and docstring compliance reports
+├── Design/                  — design briefs and specifications
+├── Nodes/                   — per-node-type feature writeups
+└── data/                    — session persistence (not shown in menu)
+```
+
 Three strict layers — each never crosses into another's domain:
 
 **`data/`** — Pure Python dataclasses, no Qt imports. Each node type has a `NodeData` subclass with `to_dict()` / `from_dict()` for session persistence.

@@ -1515,31 +1515,53 @@ class IntricateApp(QMainWindow):
             if handler and spawnable:
                 act.triggered.connect(handler)
 
-        # Dynamic Documents/*.md entries
+        # Dynamic Documents/ entries — top-level .md files + nested subfolders
         docs_dir = Path(__file__).resolve().parent / "Documents"
         _DEDICATED = {"Architecture.md", "Node Type Schema.md"}
+        _SKIP_DIRS = {"data"}
         if docs_dir.is_dir():
-            md_files = sorted(
+            fallback_pix = Theme.icon(None, fallback_color="#8a9aaa")
+
+            def _make_doc_action(target_menu, md_path):
+                act = target_menu.addAction(QIcon(fallback_pix), md_path.stem)
+                def _spawn_doc(_, p=md_path):
+                    try:
+                        text = p.read_text(encoding="utf-8")
+                    except Exception:
+                        self._status(f"could not read {p.name}")
+                        return
+                    self._spawn(self.scene.add_markdown_node,
+                                f"{p.stem} unfolds", label=text)
+                act.triggered.connect(_spawn_doc)
+
+            # Top-level .md files (excluding dedicated nodes)
+            top_mds = sorted(
                 p for p in docs_dir.iterdir()
-                if p.suffix.lower() == ".md" and p.name not in _DEDICATED
+                if p.is_file() and p.suffix.lower() == ".md" and p.name not in _DEDICATED
             )
-            if md_files:
+            if top_mds:
                 menu.addSeparator()
-                fallback_pix = Theme.icon(None, fallback_color="#8a9aaa")
-                for md_path in md_files:
-                    display = md_path.stem
-                    act = menu.addAction(QIcon(fallback_pix), display)
+                for md_path in top_mds:
+                    _make_doc_action(menu, md_path)
 
-                    def _spawn_doc(_, p=md_path):
-                        try:
-                            text = p.read_text(encoding="utf-8")
-                        except Exception:
-                            self._status(f"could not read {p.name}")
-                            return
-                        self._spawn(self.scene.add_markdown_node,
-                                    f"{p.stem} unfolds", label=text)
-
-                    act.triggered.connect(_spawn_doc)
+            # Subdirectory submenus
+            subdirs = sorted(
+                d for d in docs_dir.iterdir()
+                if d.is_dir() and d.name not in _SKIP_DIRS
+            )
+            if subdirs:
+                if not top_mds:
+                    menu.addSeparator()
+                for subdir in subdirs:
+                    sub_mds = sorted(
+                        p for p in subdir.iterdir()
+                        if p.is_file() and p.suffix.lower() == ".md"
+                    )
+                    if sub_mds:
+                        submenu = self._styled_menu()
+                        for md_path in sub_mds:
+                            _make_doc_action(submenu, md_path)
+                        menu.addMenu(submenu).setText(subdir.name)
 
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
     def _show_claude_menu(self, btn):  self._show_category_menu("claude", btn)
