@@ -167,7 +167,7 @@ class MarkdownNode(BaseNode):
             (r'<a ',
              f'<a style="color:{_link};" '),
             (r'<table>',
-             f'<table style="border:1px solid {_border};" cellpadding="8" cellspacing="0">'),
+             f'<table style="border:1px solid {_border}; table-layout:fixed; width:100%;" cellpadding="8" cellspacing="0">'),
             (r'<th>',
              f'<th style="background-color:{_code_bg}; color:{_fg}; '
              f'font-weight:600; border:1px solid {_border}; padding:8px 14px; '
