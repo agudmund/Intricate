@@ -205,6 +205,8 @@ class IntricateApp(QMainWindow):
         self._tray_btn.setIconSize(_ico)
         self._tray_btn.setParent(self.top_toolbar)
         self._tray_btn.setToolTip("Minimize to tray")
+        from pretty_widgets.PrettyTooltip import install_tooltip
+        install_tooltip(self._tray_btn)
 
         self._max_btn = self.setup_iconic_button(
             clicked=self.toggle_fullscreen, icon=Theme.iconMaximize
@@ -213,6 +215,7 @@ class IntricateApp(QMainWindow):
         self._max_btn.setIconSize(_ico)
         self._max_btn.setParent(self.top_toolbar)
         self._max_btn.setToolTip("Maximize")
+        install_tooltip(self._max_btn)
 
         self._exit_btn = self.setup_iconic_button(
             clicked=self.close, icon=Theme.iconClose
@@ -220,6 +223,8 @@ class IntricateApp(QMainWindow):
         self._exit_btn.setFixedSize(_btn, _btn)
         self._exit_btn.setIconSize(_ico)
         self._exit_btn.setParent(self.top_toolbar)
+        self._exit_btn.setToolTip("Exid, not a typo.  It's an exit button named exid")
+        install_tooltip(self._exit_btn)
         # Deferred first position — toolbar width isn't known at construction time
         QTimer.singleShot(0, self._reposition_exit_btn)
 
