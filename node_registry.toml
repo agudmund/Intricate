@@ -9,7 +9,7 @@
 
 [nodes.about]
 name = "The Glorious About Node"
-tooltip = "A tiny sticky note — plant one near anything worth remembering"
+tooltip = "A thought you can hold in your hand and wire to another thought"
 category = "text"
 icon = "iconAbout"
 spawnable = true
