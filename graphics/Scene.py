@@ -765,6 +765,10 @@ class IntricateScene(QGraphicsScene):
         # Store session description for round-trip persistence
         self._session_description = payload.get("description", "")
 
+        # Suspend BSP indexing during bulk restore — rebuild once at the end.
+        # At 1200 nodes this turns O(n²) index rebuilds into a single O(n) pass.
+        self.setItemIndexMethod(self.ItemIndexMethod.NoIndex)
+
         uuid_map = {}
         for d in payload.get("nodes", []):
             try:
@@ -788,6 +792,9 @@ class IntricateScene(QGraphicsScene):
                 except Exception:
                     logger.exception("Failed to restore connection %s → %s",
                                      c.get("start_uuid"), c.get("end_uuid"))
+
+        # Re-enable BSP indexing — single rebuild for all items
+        self.setItemIndexMethod(self.ItemIndexMethod.BspTreeIndex)
 
         return payload.get("viewport", {})
 

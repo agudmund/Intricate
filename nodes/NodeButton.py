@@ -234,6 +234,7 @@ class EmojiButton(QGraphicsObject):
         self._cached_emoji  = None
         self.setAcceptHoverEvents(True)
         self.setCursor(Qt.PointingHandCursor)
+        self._rebuild_cache()   # pre-render at construction, not first paint
 
     def boundingRect(self) -> QRectF:
         return QRectF(0.0, 0.0, BUTTON_SIZE, BUTTON_SIZE + EMOJI_OVERFLOW)
