@@ -9,7 +9,7 @@
 
 [nodes.about]
 name = "The Glorious About Node"
-tooltip = ""
+tooltip = "A tiny sticky note — plant one near anything worth remembering"
 category = "text"
 icon = "iconAbout"
 spawnable = true
@@ -18,7 +18,7 @@ notes = ""
 
 [nodes.warm]
 name = "The Comfortable Warm Node"
-tooltip = ""
+tooltip = "Rich text with an emoji accent — the workhorse of free-form writing"
 category = "text"
 icon = "iconWarm"
 spawnable = true
@@ -27,7 +27,7 @@ notes = ""
 
 [nodes.text]
 name = "The Simple Text Node"
-tooltip = ""
+tooltip = "Plain text, no frills — when you just need words on screen"
 category = "text"
 icon = "iconText"
 spawnable = true
@@ -36,7 +36,7 @@ notes = ""
 
 [nodes.cushions]
 name = "The Cushions Node"
-tooltip = ""
+tooltip = "The original — a padded text area that started this whole adventure"
 category = "text"
 icon = "iconCushions"
 spawnable = true
@@ -45,7 +45,7 @@ notes = ""
 
 [nodes.code]
 name = "The Code Node"
-tooltip = ""
+tooltip = "Syntax-highlighted code with line numbers — load a file or type fresh"
 category = "text"
 icon = "iconCode"
 spawnable = true
@@ -54,7 +54,7 @@ notes = ""
 
 [nodes.bloom]
 name = "The Bloom Node"
-tooltip = ""
+tooltip = "Particle scatter controller — stiffness, speed, and orbital flow"
 category = "text"
 icon = "iconBloom"
 spawnable = true
@@ -63,7 +63,7 @@ notes = ""
 
 [nodes.null]
 name = "The Null Node"
-tooltip = ""
+tooltip = "An empty vessel — a point in space waiting for a purpose"
 category = "text"
 icon = "iconNull"
 spawnable = true
@@ -76,7 +76,7 @@ notes = ""
 
 [nodes.image]
 name = "The Images"
-tooltip = ""
+tooltip = "Drop an image in — cached locally so it survives even if the source file vanishes"
 category = "images"
 icon = "iconImage"
 spawnable = true
@@ -85,7 +85,7 @@ notes = ""
 
 [nodes.video]
 name = "The Videos"
-tooltip = ""
+tooltip = "Video playback with scrub bar, volume, and loop — autoplays on load"
 category = "images"
 icon = "iconVideo"
 spawnable = true
@@ -94,7 +94,7 @@ notes = ""
 
 [nodes.sequence]
 name = "The Sequences"
-tooltip = ""
+tooltip = "Image sequence scrubber — drag through a folder of frames"
 category = "images"
 icon = "iconSequence"
 spawnable = true
@@ -103,7 +103,7 @@ notes = ""
 
 [nodes.fbx]
 name = "The Fluff and Honey Node"
-tooltip = ""
+tooltip = "3D mesh viewer — vertices from thin air"
 category = "images"
 icon = "iconFbx"
 icon_fallback = "#c0a888"
@@ -117,7 +117,7 @@ notes = ""
 
 [nodes.audio]
 name = "The Sound"
-tooltip = ""
+tooltip = "Audio player with waveform, trim markers, and loop toggle"
 category = "audio"
 icon = "iconAudio"
 icon_fallback = "#9a8a7a"
@@ -127,7 +127,7 @@ notes = ""
 
 [nodes.merge]
 name = "The Merger"
-tooltip = ""
+tooltip = "Combine multiple audio streams into a single output"
 category = "audio"
 icon = "iconMerge"
 icon_fallback = "#8a9a7a"
@@ -137,7 +137,7 @@ notes = ""
 
 [nodes.audio_hold]
 name = "The Silence"
-tooltip = ""
+tooltip = "A timed pause in the audio chain — silence with intention"
 category = "audio"
 icon = "iconAudio"
 icon_fallback = "#7a9a8a"
@@ -151,7 +151,7 @@ notes = ""
 
 [nodes.bezier]
 name = "The Prestigious Bezier Node"
-tooltip = ""
+tooltip = "Interactive bezier curve with draggable control handles"
 category = "visual"
 icon = "iconBezier"
 spawnable = true
@@ -160,7 +160,7 @@ notes = ""
 
 [nodes.palette]
 name = "The Beautiful Palette Node"
-tooltip = ""
+tooltip = "A curated color collection — click swatches to copy hex values"
 category = "visual"
 icon = "iconPalette"
 spawnable = true
@@ -169,7 +169,7 @@ notes = ""
 
 [nodes.value]
 name = "The Oddly Important Value Node"
-tooltip = ""
+tooltip = "Image sequence driven by wire input — the visual data probe"
 category = "visual"
 icon = "iconValue"
 spawnable = true
@@ -178,7 +178,7 @@ notes = ""
 
 [nodes.sticker]
 name = "Snickers Stickers!"
-tooltip = ""
+tooltip = "Drop a sticker onto the canvas — pure decoration, zero function, maximum joy"
 category = "visual"
 icon = "iconSticker"
 icon_fallback = "#c9b8a7"
@@ -192,7 +192,7 @@ notes = ""
 
 [nodes.health]
 name = "The Health Node"
-tooltip = ""
+tooltip = "Live system monitor — GC census, memory, and click tracking"
 category = "health"
 icon = "iconHealth"
 spawnable = true
@@ -201,7 +201,7 @@ notes = ""
 
 [nodes.perf]
 name = "The Performance Beast"
-tooltip = ""
+tooltip = "Paint loop profiler — frame times, render budget, and the truth"
 category = "health"
 icon = "iconPerf"
 spawnable = true
@@ -210,7 +210,7 @@ notes = ""
 
 [nodes.log]
 name = "Tinkerbells Tail"
-tooltip = ""
+tooltip = "Live log viewer — the last few lines of what Intricate is thinking"
 category = "health"
 icon = "iconLog"
 icon_fallback = "#8aaa88"
@@ -278,7 +278,7 @@ notes = ""
 
 [nodes.readme]
 name = "The Readme"
-tooltip = ""
+tooltip = "The project's README.md rendered on canvas"
 category = "info"
 icon = "iconTree"
 icon_fallback = "#8888aa"
@@ -288,7 +288,7 @@ notes = ""
 
 [nodes.architecture]
 name = "Architecture"
-tooltip = ""
+tooltip = "The forensic map — all three repos, shared infrastructure, and design patterns"
 category = "info"
 icon = "iconInfoGroup"
 icon_fallback = "#8a9aaa"
@@ -298,7 +298,7 @@ notes = ""
 
 [nodes.node_schema]
 name = "Node Type Schema"
-tooltip = ""
+tooltip = "The living reference for all 33 node types and their fields"
 category = "info"
 icon = "iconInfoGroup"
 icon_fallback = "#8a9aaa"
@@ -322,7 +322,7 @@ notes = ""
 
 [nodes.claude]
 name = "The Majestic Claude Node"
-tooltip = ""
+tooltip = "Chat with Claude directly on the canvas — prompts in, responses out"
 category = "claude"
 icon = "iconClaudeNode"
 icon_fallback = "#7a9a7a"
@@ -332,7 +332,7 @@ notes = ""
 
 [nodes.claude_info]
 name = "The Curious Token Counter"
-tooltip = ""
+tooltip = "Live token census — tracks every prompt and response with pride"
 category = "claude"
 icon = "iconClaudeCensus"
 icon_fallback = "#7a9a7a"
