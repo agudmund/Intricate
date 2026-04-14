@@ -182,7 +182,7 @@ class AboutNode(BaseNode):
         font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         font.setStyleName(self._TITLE_STYLE)
         painter.setFont(font)
-        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
+        painter.setPen(QColor(Theme.aboutTextColor))
         r = self.rect()
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
