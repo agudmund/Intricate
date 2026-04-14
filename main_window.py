@@ -1620,7 +1620,7 @@ class IntricateApp(QMainWindow):
         self._spawn(self.scene.add_info_node, "version 0.1.0")
 
     def _spawn_git_node(self):
-        self._spawn(self.scene.add_git_node, "the boring but necessary one")
+        self._spawn(self.scene.add_git_node, "Remember to say the product name!")
 
     def _spawn_session_node(self):
         self._spawn(self.scene.add_session_node, "ready for a session file")

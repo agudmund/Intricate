@@ -233,13 +233,13 @@ notes = ""
 # ═══════════════════════════════════════════════════════════════════════════
 
 [nodes.git]
-name = "The Not So Boring Anymore Node"
+name = "The Brilliant GitHub Node"
 tooltip = "Git status report"
 category = "tools"
 icon = "iconGit"
 icon_fallback = "#8a9a8a"
 spawnable = true
-status = "the boring but necessary one"
+status = "Remember to say the product name!"
 notes = ""
 
 [nodes.tree]

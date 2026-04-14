@@ -55,7 +55,10 @@ def _is_session_path(raw: str) -> bool:
 
 # Status: "clean" = no changes, "session" = only session files, "dirty" = real changes
 def _scan_repos() -> list[tuple[str, str]]:
-    """Scan ~/Desktop for git repos. Returns [(name, status), ...] sorted."""
+    """Scan ~/Desktop for git repos. Returns [(name, status), ...] sorted.
+
+    Statuses: dirty, session, unpushed, clean.
+    """
     desktop = Path.home() / "Desktop"
     if not desktop.exists():
         return []
@@ -74,14 +77,25 @@ def _scan_repos() -> list[tuple[str, str]]:
                 creationflags=_SUBPROCESS_FLAGS,
             )
             lines = result.stdout.strip().splitlines()
-            if not lines:
-                repos.append((folder.name, "clean"))
-            else:
+            if lines:
                 all_session = all(
                     _is_session_path(line[3:])
                     for line in lines if len(line) > 3
                 )
                 repos.append((folder.name, "session" if all_session else "dirty"))
+            else:
+                # Working tree clean — check if ahead of remote
+                ahead = subprocess.run(
+                    ["git", "rev-list", "--count", "@{u}..HEAD"],
+                    cwd=str(folder),
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=_SUBPROCESS_FLAGS,
+                )
+                count = ahead.stdout.strip()
+                if count.isdigit() and int(count) > 0:
+                    repos.append((folder.name, "unpushed"))
+                else:
+                    repos.append((folder.name, "clean"))
         except Exception:
             repos.append((folder.name, "dirty"))
     return repos
@@ -224,6 +238,7 @@ class GitNode(BaseNode):
         from nodes.VideoNode import VideoNode
         video_node = VideoNode()
         video_node._spawn_label = False
+        video_node.data.looping = True
         if spawn_pos is not None:
             video_node.setPos(spawn_pos)
         scene.addItem(video_node)
@@ -298,12 +313,14 @@ class GitNode(BaseNode):
             self._poll_timer.stop()
 
     def _auto_height(self) -> None:
-        """Resize to fit dirty + session groups, leaving clean repos for manual expand."""
-        dirty   = sum(1 for _, s in self._repos if s == "dirty")
-        session = sum(1 for _, s in self._repos if s == "session")
-        rows = dirty + session
-        if dirty and session:
-            rows += 1   # separator
+        """Resize to fit dirty + session + unpushed groups, leaving clean repos for manual expand."""
+        dirty    = sum(1 for _, s in self._repos if s == "dirty")
+        session  = sum(1 for _, s in self._repos if s == "session")
+        unpushed = sum(1 for _, s in self._repos if s == "unpushed")
+        rows = dirty + session + unpushed
+        groups = sum(1 for g in (dirty, session, unpushed) if g)
+        if groups > 1:
+            rows += groups - 1   # separators between groups
         # Minimum: header area even if nothing dirty
         rows = max(rows, 1)
         h = self._BUTTON_ZONE_H + self._BODY_OFFSET + rows * _ROW_H + 16
@@ -406,58 +423,117 @@ class GitNode(BaseNode):
 
     def _bulk_push_sessions(self) -> None:
         """Prompt for a commit message, then git add+commit+push all green-dot repos on a worker thread."""
-        session_repos = [name for name, status in self._repos if status == "session"]
-        if not session_repos:
+        session_repos  = [name for name, status in self._repos if status == "session"]
+        unpushed_repos = [name for name, status in self._repos if status == "unpushed"]
+        if not session_repos and not unpushed_repos:
             return
 
-        win = self._lower_window()
-        # Roll up curtains so the canvas tucks into the titlebar while the
-        # dialog is open, then roll back down graciously after.
-        was_collapsed = False
-        try:
-            views = self.scene().views() if self.scene() else []
-            if views:
-                mw = views[0].window()
-                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
-                    mw.toggle_curtains()
-                    was_collapsed = True
-        except Exception:
-            pass
-        dlg = _CommitDialog(len(session_repos))
-        result = dlg.exec()
-        if was_collapsed:
+        # Check connectivity before committing — catch the "wifi is off" morning scenario
+        if not self._check_online():
+            return
+
+        # Session repos need a commit message; unpushed repos already have one
+        msg = ""
+        if session_repos:
+            win = self._lower_window()
+            was_collapsed = False
             try:
-                mw.toggle_curtains()
+                views = self.scene().views() if self.scene() else []
+                if views:
+                    mw = views[0].window()
+                    if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
+                        mw.toggle_curtains()
+                        was_collapsed = True
             except Exception:
                 pass
-        self._raise_window(win)
-        if result != QDialog.DialogCode.Accepted or not dlg.message().strip():
-            return
+            dlg = _CommitDialog(len(session_repos))
+            result = dlg.exec()
+            if was_collapsed:
+                try:
+                    mw.toggle_curtains()
+                except Exception:
+                    pass
+            self._raise_window(win)
+            if result != QDialog.DialogCode.Accepted or not dlg.message().strip():
+                return
+            msg = dlg.message().strip()
 
+        self._loading_node = None   # clear any stale ref from initial scan
+        self._spawn_loading_node()
+        _log.info("[git] plushie spawned for bulk push")
         threading.Thread(
             target=self._push_worker,
-            args=(session_repos, dlg.message().strip()),
+            args=(session_repos, unpushed_repos, msg),
             daemon=True,
         ).start()
 
-    def _push_worker(self, repos: list[str], msg: str) -> None:
-        """Run git add+commit+push for each repo on a background thread."""
+    def _check_online(self) -> bool:
+        """Quick connectivity check. Spawns an AboutNode reminder if offline."""
+        import socket
+        try:
+            socket.create_connection(("github.com", 443), timeout=3).close()
+            return True
+        except OSError:
+            pass
+        scene = self.scene()
+        if scene:
+            r = self.rect()
+            pos = self.mapToScene(QPointF(r.right() + 30, r.center().y()))
+            about = scene.add_about_node(
+                pos=pos,
+                label="You should probably turn the internet on before pushing things to git",
+            )
+            from graphics.Connection import Connection
+            wire = Connection(self, about)
+            scene.addItem(wire)
+        self.data.emoji = "\U0001f612"   # 😒
+        self.update()
+        _log.warning("[git] offline — push aborted")
+        return False
+
+    def _push_worker(self, session_repos: list[str], unpushed_repos: list[str], msg: str) -> None:
+        """Run git add+commit+push for session repos and git push for unpushed repos."""
         import subprocess as _sp
         from PySide6.QtCore import QTimer
 
         desktop = Path.home() / "Desktop"
-        for name in repos:
+
+        def _git(cmd, cwd):
+            r = _sp.run(cmd, cwd=cwd, capture_output=True, text=True,
+                        timeout=60, creationflags=_SUBPROCESS_FLAGS)
+            if r.returncode != 0:
+                _log.warning(f"[git] {cmd} failed in {Path(cwd).name}: {r.stderr.strip()}")
+            return r
+
+        # Session repos: add, commit, push
+        for name in session_repos:
             cwd = str(desktop / name)
             try:
-                _run = lambda cmd: _sp.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=30, creationflags=_SUBPROCESS_FLAGS)
-                _run(["git", "add", "-A"])
-                _run(["git", "commit", "-m", msg])
-                _run(["git", "push"])
-                _log.info(f"[git] pushed {name}")
+                _git(["git", "add", "-A"], cwd)
+                _git(["git", "commit", "-m", msg], cwd)
+                result = _git(["git", "push"], cwd)
+                if result.returncode == 0:
+                    _log.info(f"[git] pushed {name}")
+            except Exception:
+                _log.warning(f"[git] failed to push {name}", exc_info=True)
+        # Unpushed repos: just push
+        for name in unpushed_repos:
+            cwd = str(desktop / name)
+            try:
+                result = _git(["git", "push"], cwd)
+                if result.returncode == 0:
+                    _log.info(f"[git] pushed unpushed {name}")
             except Exception:
                 _log.warning(f"[git] failed to push {name}", exc_info=True)
 
-        QTimer.singleShot(0, self._refresh)
+        def _on_push_done():
+            self._dismiss_loading_node()
+            import random
+            from utils.IconPicker import emojiIcons
+            self.data.emoji = random.choice(emojiIcons)
+            self.update()
+            self._refresh()
+        QTimer.singleShot(0, _on_push_done)
 
     def _bg_color(self) -> QColor:
         tint = getattr(self.data, 'node_tint', '')
@@ -506,9 +582,10 @@ class GitNode(BaseNode):
                 msg,
             )
         else:
-            dirty   = [(n, s) for n, s in self._repos if s == "dirty"]
-            session = [(n, s) for n, s in self._repos if s == "session"]
-            clean   = [(n, s) for n, s in self._repos if s == "clean"]
+            dirty    = [(n, s) for n, s in self._repos if s == "dirty"]
+            session  = [(n, s) for n, s in self._repos if s == "session"]
+            unpushed = [(n, s) for n, s in self._repos if s == "unpushed"]
+            clean    = [(n, s) for n, s in self._repos if s == "clean"]
 
             def _draw_group(group):
                 nonlocal y
@@ -516,7 +593,12 @@ class GitNode(BaseNode):
                     if y + _ROW_H > r.bottom():
                         return
                     if status != "clean":
-                        dot_color = QColor("#7ac47a") if status == "session" else QColor("#7a9ac4")
+                        _dot_colors = {
+                            "session":  "#7ac47a",   # green
+                            "dirty":    "#7a9ac4",   # blue
+                            "unpushed": "#c4a87a",   # amber
+                        }
+                        dot_color = QColor(_dot_colors.get(status, "#7a9ac4"))
                         painter.setBrush(dot_color)
                         painter.setPen(Qt.NoPen)
                         dot_x = r.left() + pad + _DOT_R
@@ -552,8 +634,12 @@ class GitNode(BaseNode):
                 if dirty:
                     _draw_sep()
                 _draw_group(session)
-            if clean:
+            if unpushed:
                 if dirty or session:
+                    _draw_sep()
+                _draw_group(unpushed)
+            if clean:
+                if dirty or session or unpushed:
                     _draw_sep()
                 _draw_group(clean)
 
