@@ -1981,13 +1981,34 @@ class IntricateApp(QMainWindow):
         project_dir = path.parent.parent.parent  # Documents/data/session → project root
         if project_dir.exists() and not (project_dir / ".git").exists():
             self._git_init_project(project_dir, project_dir.name)
+        try:
+            from utils.image_cache import set_cache_root
+            set_cache_root(path.parent)
+        except Exception:
+            pass  # Cache setup failure is non-fatal
+        # Suspend autosave during load — a partial load must never overwrite the
+        # full session on disk.  Re-arm after the scene is fully populated.
+        self._autosave_blocked = True
+        self._autosave_timer.stop()
         if path.exists():
             vp = self.scene.load_session(path)
             if vp:
                 QTimer.singleShot(0, lambda: self._apply_viewport(vp))
+        # Unblock autosave after the initial scene.changed burst settles
+        def _unblock():
+            self._autosave_blocked = False
+        QTimer.singleShot(3000, _unblock)
 
     def _autosave(self) -> None:
         """Save the current canvas to the active project's session.json."""
+        if getattr(self, '_autosave_blocked', False):
+            return
+        # Never overwrite a session with an empty scene — protects against
+        # save-on-close after a failed load wiping valid session data.
+        from nodes.BaseNode import BaseNode
+        has_nodes = any(isinstance(i, BaseNode) for i in self.scene.items())
+        if not has_nodes:
+            return
         path = self._session_path()
         if path:
             ensure_dir(path.parent)
@@ -2007,6 +2028,7 @@ class IntricateApp(QMainWindow):
 
     def _load_initial_session(self) -> None:
         """Load the session for the startup-selected project and wire autosave."""
+        self._autosave_blocked = True
         self._init_autosave()
         self._load_session_into_scene(self._session_path())
         QTimer.singleShot(0, self._restore_camera)

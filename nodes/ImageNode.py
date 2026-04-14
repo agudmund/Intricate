@@ -64,13 +64,27 @@ class ImageNode(BaseNode):
         self._scaled_cache: QPixmap | None = None          # Cached scaled pixmap
         self._scaled_cache_size: tuple[int, int] | None = None  # (w, h) key
 
-        # ── Restore image if session data carries one ─────────────────────────
-        if data.image_b64:
-            self._load_from_b64(data.image_b64)
-        elif data.source_path:
-            p = Path(data.source_path)
-            if p.exists():
-                self._restore_from_path(p)
+        # ── Restore image — cache first, then file, then legacy base64 ────────
+        try:
+            from utils.image_cache import load_cached, cache_pixmap
+            cached = load_cached(data.cache_key)
+            if cached is not None:
+                self._pixmap = cached
+                self._scaled_cache = None
+            elif data.source_path and Path(data.source_path).exists():
+                self._restore_from_path(Path(data.source_path))
+                if self._pixmap and not self._pixmap.isNull():
+                    data.cache_key = cache_pixmap(self._pixmap)
+            elif data.image_b64:
+                self._load_from_b64(data.image_b64)
+                if self._pixmap and not self._pixmap.isNull():
+                    data.cache_key = cache_pixmap(self._pixmap)
+        except Exception:
+            # Cache failure must never prevent node from loading
+            if data.source_path and Path(data.source_path).exists():
+                self._restore_from_path(Path(data.source_path))
+            elif data.image_b64:
+                self._load_from_b64(data.image_b64)
 
     # ─────────────────────────────────────────────────────────────────────────
     # CAPTION → ABOUT NODE
@@ -152,7 +166,11 @@ class ImageNode(BaseNode):
             self._spawn_caption_node(path.stem)
 
         logger.info(f"image loaded: {path.name} ({pixmap.width()}x{pixmap.height()}px)")
-        self._encode_to_b64()
+        try:
+            from utils.image_cache import cache_pixmap
+            self.data.cache_key = cache_pixmap(self._pixmap)
+        except Exception:
+            pass  # Cache write failure is non-fatal
         self.update()
 
     def _run_vision(self, path: Path) -> None:
@@ -553,10 +571,11 @@ class ImageNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
-        # File-backed images: data layer saves source_path and discards b64 anyway —
-        # no need to encode. Paste-only images (no source_path): encode so b64 is fresh.
-        if not self.data.source_path:
-            self._encode_to_b64()
+        # Cache handles persistence — ensure pasted images without a cache_key
+        # get cached before save (belt-and-suspenders for edge cases).
+        if self._pixmap and not self.data.cache_key:
+            from utils.image_cache import cache_pixmap
+            self.data.cache_key = cache_pixmap(self._pixmap)
         self.sync_data()
         return self.data.to_dict()
 

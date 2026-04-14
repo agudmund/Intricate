@@ -126,6 +126,17 @@ def main():
     if _app_icon.exists():
         app.setWindowIcon(QIcon(str(_app_icon)))
 
+    # Purge stale bytecode BEFORE any project imports — ensures a crash that
+    # prevented closeEvent cleanup doesn't leave poisoned .pyc files behind.
+    # Uses raw shutil, not utils.helpers, to avoid loading a stale .pyc of helpers itself.
+    import shutil
+    _root = Path(__file__).resolve().parent
+    for _pc in list(_root.rglob("__pycache__")):
+        try:
+            shutil.rmtree(_pc)
+        except Exception:
+            pass
+
     logger.log(TRACE, "[boot:2] QApplication created — Qt event loop ready")
 
     # Raise Qt's image allocation cap — the default 256 MB is hit by any modern
@@ -182,8 +193,15 @@ def main():
         if exc_type is KeyboardInterrupt:
             sys.__excepthook__(exc_type, exc_value, exc_tb)
             return
-        logger.critical("Unhandled exception in event loop",
-                        exc_info=(exc_type, exc_value, exc_tb))
+        # Write traceback to log AND a crash file for forensics
+        import traceback
+        tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        logger.critical("Unhandled exception in event loop\n%s", tb_text)
+        try:
+            crash_path = Path(__file__).resolve().parent / "logs" / "crash.txt"
+            crash_path.write_text(tb_text, encoding="utf-8")
+        except Exception:
+            pass
         # Flush the ring buffer so the crash lands on disk before we go down.
         try:
             import intricate_log
@@ -201,6 +219,14 @@ def main():
         except Exception:
             pass
     atexit.register(_flush_log)
+
+    def _exit_pycache_cleanup():
+        try:
+            for _pc in list(_root.rglob("__pycache__")):
+                shutil.rmtree(_pc, ignore_errors=True)
+        except Exception:
+            pass
+    atexit.register(_exit_pycache_cleanup)
 
     logger.log(TRACE, "[boot:15] window shown — entering event loop")
 

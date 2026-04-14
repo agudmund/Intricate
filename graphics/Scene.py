@@ -731,6 +731,17 @@ class IntricateScene(QGraphicsScene):
             "viewport":    viewport or {},
         })
 
+        # Garbage-collect orphaned image cache files
+        try:
+            from utils.image_cache import gc_cache
+            live_keys = {
+                n.get("cache_key", "") for n in nodes
+                if n.get("node_type") == "image" and n.get("cache_key")
+            }
+            gc_cache(live_keys)
+        except Exception:
+            pass  # Cache GC failure is non-fatal
+
     @property
     def session_description(self) -> str:
         """Current session description — read by SessionNode, written by ClaudeNode."""

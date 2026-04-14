@@ -29,18 +29,20 @@ class ImageNodeData(NodeData):
     width:     float = field(default=280.0)
     height:    float = field(default=220.0)
 
-    image_b64:   str  = field(default="")    # Base64-encoded PNG — empty until loaded
+    image_b64:   str  = field(default="")    # Legacy base64-encoded PNG — replaced by cache_key
+    cache_key:   str  = field(default="")    # SHA-256 hash key into Documents/data/cache/
     caption:     str  = field(default="")    # Editable label shown on the node
-    source_path: str  = field(default="")    # Absolute path to the source file on disk (empty for pasted/dropped images)
+    source_path: str  = field(default="")    # Absolute path to the source file on disk (provenance)
     show_border:   bool = field(default=False) # Ivory border overlay on the image
     depth_front:   bool = field(default=False)
     shelf_visible: bool = field(default=False) # Button shelf starts collapsed
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        # Skip the blob when we have a path — reloads from disk on next session open.
-        # Only fall back to the full b64 for clipboard/pasted images with no file.
-        data["image_b64"]   = "" if self.source_path else self.image_b64
+        # Cache replaces base64 — always zero out the blob, keep the hash key.
+        # Legacy sessions without cache_key will migrate on first load.
+        data["image_b64"]   = ""
+        data["cache_key"]   = self.cache_key
         data["caption"]     = self.caption
         data["source_path"] = self.source_path
         data["show_border"]   = self.show_border
@@ -61,6 +63,7 @@ class ImageNodeData(NodeData):
             height        = float(data.get("height",  220.0)),
             ports_visible = data.get("ports_visible", False),
             image_b64     = data.get("image_b64",   ""),
+            cache_key     = data.get("cache_key",   ""),
             caption       = data.get("caption",     ""),
             source_path   = data.get("source_path", ""),
             show_border   = data.get("show_border", False),
