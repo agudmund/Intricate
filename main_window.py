@@ -1059,6 +1059,10 @@ class IntricateApp(QMainWindow):
         from PySide6.QtWidgets import QApplication
         QApplication.instance().installEventFilter(self)
 
+        # Install PrettyTooltip on all sidebar children that have a tooltip set
+        from pretty_widgets.PrettyTooltip import install_tooltips
+        install_tooltips(sidebar)
+
         return sidebar
 
     def _on_fog_slider_changed(self, value: int) -> None:
@@ -1393,15 +1397,17 @@ class IntricateApp(QMainWindow):
         self._tooltip_timer.start()
 
     def _show_menu_tooltip(self, text):
-        from PySide6.QtWidgets import QToolTip
         from PySide6.QtGui import QCursor
-        QToolTip.showText(QCursor.pos(), text)
+        from pretty_widgets.PrettyTooltip import PrettyTooltip
+        PrettyTooltip.instance().show_tip(text, QCursor.pos())
 
     def _cancel_menu_tooltip(self):
         if hasattr(self, '_tooltip_timer'):
             self._tooltip_timer.stop()
-        from PySide6.QtWidgets import QToolTip
-        QToolTip.hideText()
+        from pretty_widgets.PrettyTooltip import PrettyTooltip
+        t = PrettyTooltip.instance()
+        if t.isVisible():
+            t.hide()
 
     # ─────────────────────────────────────────────────────────────────────────
     # REGISTRY-DRIVEN MENUS
