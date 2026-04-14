@@ -273,7 +273,7 @@ category = "info"
 icon = "iconInfo"
 icon_fallback = "#9a9aaa"
 spawnable = true
-status = "version 0.2.0"
+status = "version 0.3.0 — The Expressive Era"
 notes = ""
 
 [nodes.readme]
