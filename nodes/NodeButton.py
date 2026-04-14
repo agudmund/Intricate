@@ -66,11 +66,13 @@ class NodeButton(QGraphicsObject):
         self._reset_timer.setInterval(CONFIRM_TIMEOUT)
         self._reset_timer.timeout.connect(self._reset)
 
-        # Keep full-res source pixmaps — the painter scales them into the
-        # bounding rect at paint time so icons stay crisp at every zoom level,
-        # matching the emoji button which renders vector text.
+        # Keep full-res source pixmaps — scaled once to display size and cached.
         self._pix_normal  = pixmap_normal
         self._pix_confirm = pixmap_confirm
+        self._scaled_normal  = None   # cached display-size pixmap
+        self._scaled_confirm = None
+        self._shadow_cache   = None   # cached shadow pixmap
+        self._shadow_source  = None   # tracks which source generated the shadow
 
         self.setAcceptHoverEvents(True)
         self.setCursor(Qt.PointingHandCursor)
@@ -105,13 +107,24 @@ class NodeButton(QGraphicsObject):
         p.end()
         return shadow
 
+    def _get_scaled(self, source: QPixmap, size: int) -> QPixmap:
+        """Return a display-size cached pixmap, rebuilding only when source changes."""
+        if source is self._pix_normal:
+            if self._scaled_normal is None:
+                self._scaled_normal = source.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            return self._scaled_normal
+        else:
+            if self._scaled_confirm is None and source is not None:
+                self._scaled_confirm = source.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            return self._scaled_confirm
+
     def paint(self, painter: QPainter, option, widget=None) -> None:
         # LOD gate — hide at low zoom, no overhead below threshold
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
         if lod < LOD_THRESHOLD:
             return
 
-        pix = (
+        source = (
             self._pix_confirm
             if self._in_confirm and self._pix_confirm
             else self._pix_normal
@@ -125,40 +138,17 @@ class NodeButton(QGraphicsObject):
         scaled  = BUTTON_SIZE * scale
         inset   = (BUTTON_SIZE - scaled) / 2.0
         draw_rect = QRectF(inset, EMOJI_OVERFLOW + inset, scaled, scaled)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
 
-        # Dynamic radial shadow — radiates outward from canvas view centre
-        if self._sticker_shadow and self.scene():
-            import math
-            views = self.scene().views()
-            if views:
-                view = views[0]
-                vp_centre = view.mapToScene(
-                    view.viewport().rect().center()
-                )
-                btn_centre = self.mapToScene(self.boundingRect().center())
-                dx = btn_centre.x() - vp_centre.x()
-                dy = btn_centre.y() - vp_centre.y()
-                length = math.sqrt(dx * dx + dy * dy)
-                if length > 1.0:
-                    nx, ny = dx / length, dy / length
-                else:
-                    nx, ny = 0.0, 1.0
-                sd = self._SHADOW_DIST / lod  # compensate for zoom
+        pix = self._get_scaled(source, int(scaled))
 
-                if self._sticker_pressed:
-                    # Pressed — icon shifts partway toward shadow, gentle squish
-                    pd = self._PRESS_DIST / lod
-                    draw_rect = draw_rect.translated(nx * pd, ny * pd)
-                else:
-                    # Normal — dark silhouette shadow on the outside edge
-                    if not hasattr(self, '_shadow_pix') or self._shadow_pix is None or self._shadow_pix_source is not pix:
-                        self._shadow_pix = self._build_shadow_pixmap(pix)
-                        self._shadow_pix_source = pix
-                    shadow_rect = draw_rect.translated(nx * sd, ny * sd)
-                    painter.setOpacity(self._SHADOW_OPACITY)
-                    painter.drawPixmap(shadow_rect.toRect(), self._shadow_pix)
-                    painter.setOpacity(1.0)
+        # Tactile press — gentle offset toward bottom-right
+        if self._sticker_shadow and self._sticker_pressed:
+            draw_rect = draw_rect.translated(self._PRESS_DIST, self._PRESS_DIST)
+
+        # Dynamic radial shadow engine — proof of concept validated, parked until
+        # we add literal 3D light source nodes (NullNode as light → directional
+        # shadow per button → our own shading engine inside the button framework).
+        # Re-enable by wiring a light source position into the shadow direction.
 
         painter.drawPixmap(draw_rect.toRect(), pix)
 
@@ -229,34 +219,65 @@ EMOJI_OVERFLOW = 4.0  # extra height so emoji glyphs don't clip at the bottom
 
 
 class EmojiButton(QGraphicsObject):
-    """A small button that renders the node's current emoji and shuffles on click."""
+    """A small button that renders the node's current emoji and shuffles on click.
+
+    The glyph is rendered to a cached QPixmap on first paint or emoji change —
+    subsequent paints just blit the pixmap.  At 1200+ nodes × 3 emoji buttons
+    each, this avoids 3600+ drawText calls per frame.
+    """
 
     def __init__(self, parent, get_emoji, set_emoji):
         super().__init__(parent)
         self._get_emoji = get_emoji
         self._set_emoji = set_emoji
+        self._cached_pixmap = None
+        self._cached_emoji  = None
         self.setAcceptHoverEvents(True)
         self.setCursor(Qt.PointingHandCursor)
 
     def boundingRect(self) -> QRectF:
         return QRectF(0.0, 0.0, BUTTON_SIZE, BUTTON_SIZE + EMOJI_OVERFLOW)
 
+    def _rebuild_cache(self) -> None:
+        """Render the current emoji glyph to a pixmap for fast blitting."""
+        if self._get_emoji is None:
+            return
+        emoji = self._get_emoji()
+        if emoji == self._cached_emoji and self._cached_pixmap is not None:
+            return
+        self._cached_emoji = emoji
+        from PySide6.QtGui import QFont, QPixmap, QPainter as _P
+        size = int(BUTTON_SIZE + EMOJI_OVERFLOW)
+        pix = QPixmap(size * 2, size * 2)   # 2x for smooth scaling
+        pix.fill(Qt.transparent)
+        p = _P(pix)
+        p.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7 * 2)))
+        p.setPen(QColor(Theme.nodeFontColor))
+        p.drawText(pix.rect(), Qt.AlignCenter, emoji)
+        p.end()
+        self._cached_pixmap = pix.scaled(
+            size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+
     def paint(self, painter: QPainter, option, widget=None) -> None:
+        if self._get_emoji is None:
+            return
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
         if lod < LOD_THRESHOLD:
             return
-        from PySide6.QtGui import QFont
-        painter.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7)))
-        painter.setPen(QColor(Theme.nodeFontColor))
-        painter.drawText(self.boundingRect(), Qt.AlignCenter, self._get_emoji())
+        self._rebuild_cache()
+        if self._cached_pixmap:
+            painter.drawPixmap(0, 0, self._cached_pixmap)
 
     def mousePressEvent(self, event) -> None:
-        if event.button() != Qt.LeftButton:
+        if event.button() != Qt.LeftButton or self._set_emoji is None:
             event.ignore()
             return
         import random
         from utils.IconPicker import emojiIcons
         self._set_emoji(random.choice(emojiIcons))
+        self._cached_pixmap = None   # invalidate cache
+        self._cached_emoji  = None
         self.update()
         # Repaint the parent node so the title-row emoji updates too
         if self.parentItem():
@@ -265,5 +286,6 @@ class EmojiButton(QGraphicsObject):
 
     def detach(self) -> None:
         """Sever callback references that capture the parent node."""
+        self._cached_pixmap = None
         self._get_emoji = None
         self._set_emoji = None
