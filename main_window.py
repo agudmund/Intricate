@@ -898,6 +898,8 @@ class IntricateApp(QMainWindow):
             Diagnostic — HealthNode (one per scene, button reflects this)
         """
 
+        from pretty_widgets.PrettyTooltip import install_tooltip
+
         sidebar = QWidget()
         sidebar.setFixedWidth(Theme.sidebarWidth())
         sidebar.setStyleSheet(f"background-color: {Theme.windowBg};")
@@ -911,7 +913,6 @@ class IntricateApp(QMainWindow):
 
         def _cat_btn(icon_name, tooltip, menu_fn):
             """Category button — icon fills the entire button, no Qt frame overhead."""
-            from pretty_widgets.PrettyTooltip import install_tooltip
             sz = Theme.iconButtonSize
             b = button(icon_name=icon_name, tooltip=tooltip)
             b.setFixedSize(sz, sz)
