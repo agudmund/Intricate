@@ -290,18 +290,49 @@ class GitNode(BaseNode):
             pass
 
         if found:
-            # Restore and focus the existing window
-            SW_RESTORE = 9
-            user32.ShowWindow(found, SW_RESTORE)
+            # Maximize and focus the existing window
+            SW_MAXIMIZE = 3
+            user32.ShowWindow(found, SW_MAXIMIZE)
             user32.SetForegroundWindow(found)
             _log.info("[git] focused existing GitHub Desktop")
         else:
             import os
             try:
                 os.startfile("github-windows://")
-                _log.info("[git] launched GitHub Desktop")
+                _log.info("[git] launched GitHub Desktop — polling for window")
+                self._poll_maximize_github(user32)
             except Exception:
                 _log.warning("[git] failed to launch GitHub Desktop", exc_info=True)
+
+    def _poll_maximize_github(self, user32) -> None:
+        """Poll for the GitHub Desktop window to appear, then maximize it."""
+        attempts = [0]
+        timer = QTimer()
+        timer.setInterval(500)
+
+        def _check():
+            attempts[0] += 1
+            hwnd = user32.FindWindowW(None, None)
+            while hwnd:
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        import ctypes
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buf, length + 1)
+                        if "GitHub Desktop" in buf.value:
+                            user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+                            user32.SetForegroundWindow(hwnd)
+                            _log.info("[git] maximized GitHub Desktop after launch")
+                            timer.stop()
+                            return
+                hwnd = user32.GetWindow(hwnd, 2)
+            if attempts[0] >= 20:  # ~10 seconds
+                _log.warning("[git] gave up waiting for GitHub Desktop window")
+                timer.stop()
+
+        timer.timeout.connect(_check)
+        timer.start()
 
     def _bulk_push_sessions(self) -> None:
         """Prompt for a commit message, then git add+commit+push all green-dot repos on a worker thread."""
@@ -398,10 +429,11 @@ class GitNode(BaseNode):
         if not self._repos:
             painter.setPen(QColor(Theme.nodeFontColor))
             painter.setOpacity(0.5)
+            msg = "Scanning repos …" if self._scanning else "No git repos found on Desktop"
             painter.drawText(
                 QRectF(r.left() + pad, y, r.width() - pad * 2, _ROW_H),
                 Qt.AlignLeft | Qt.AlignVCenter,
-                "No git repos found on Desktop",
+                msg,
             )
         else:
             dirty   = [(n, s) for n, s in self._repos if s == "dirty"]

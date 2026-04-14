@@ -1439,8 +1439,9 @@ class IntricateApp(QMainWindow):
             "claude_info":   self._spawn_claude_info_node,
         }
         self._action_dispatch = {
-            "restore": self._restore_deleted,
-            "snip":    self._start_wire_snip,
+            "restore":      self._restore_deleted,
+            "snip":         self._start_wire_snip,
+            "launch_claude": self._launch_claude_app,
         }
 
     def _show_category_menu(self, category: str, btn: QPushButton) -> None:
@@ -1542,6 +1543,68 @@ class IntricateApp(QMainWindow):
 
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
     def _show_claude_menu(self, btn):  self._show_category_menu("claude", btn)
+
+    def _launch_claude_app(self) -> None:
+        """Launch or focus+maximize the Claude desktop app."""
+        import ctypes
+        user32 = ctypes.windll.user32
+
+        # Look for an existing Claude window
+        hwnd = user32.FindWindowW(None, None)
+        found = 0
+        while hwnd:
+            if user32.IsWindowVisible(hwnd):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    if "Claude" in buf.value and "Intricate" not in buf.value:
+                        found = hwnd
+                        break
+            hwnd = user32.GetWindow(hwnd, 2)
+
+        if found:
+            user32.ShowWindow(found, 3)  # SW_MAXIMIZE
+            user32.SetForegroundWindow(found)
+        else:
+            import os, subprocess
+            local = os.path.expandvars(r"%LOCALAPPDATA%\AnthropicClaude\claude.exe")
+            try:
+                subprocess.Popen([local])
+            except FileNotFoundError:
+                try:
+                    os.startfile("claude://")
+                except Exception:
+                    return
+            self._poll_maximize_window("Claude", user32)
+
+    def _poll_maximize_window(self, title_substring: str, user32) -> None:
+        """Poll for a window matching *title_substring* to appear, then maximize it."""
+        attempts = [0]
+        timer = QTimer()
+        timer.setInterval(500)
+
+        def _check():
+            import ctypes
+            attempts[0] += 1
+            hwnd = user32.FindWindowW(None, None)
+            while hwnd:
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buf, length + 1)
+                        if title_substring in buf.value and "Intricate" not in buf.value:
+                            user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+                            user32.SetForegroundWindow(hwnd)
+                            timer.stop()
+                            return
+                hwnd = user32.GetWindow(hwnd, 2)
+            if attempts[0] >= 20:
+                timer.stop()
+
+        timer.timeout.connect(_check)
+        timer.start()
     def _spawn_perf_node(self):        self._spawn(self.scene.add_perf_node,         "watching the paint loop")
     def _spawn_joy_stats_node(self):   self._spawn(self.scene.add_joy_stats_node,    "inspecting the joy bucket")
     def _spawn_claude_info_node(self): self._spawn(self.scene.add_claude_info_node,  "counting every token with pride")

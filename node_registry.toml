@@ -361,6 +361,13 @@ category = "tools"
 icon = "iconRestore"
 icon_fallback = "#8aaa88"
 
+[actions.launch_claude]
+name = "Launch Claude"
+tooltip = "Open the Claude desktop app (maximized)"
+category = "claude"
+icon = "iconClaude"
+icon_fallback = "#7a9a7a"
+
 [actions.snip]
 name = "There Comes A Time In Everyone's Life..."
 tooltip = "Remove an explicit wire connection"

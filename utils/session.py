@@ -157,7 +157,12 @@ def _rotate_session(filepath: str):
 
     try:
         if archive.exists():
-            _trash(archive)
+            # Timestamp before trashing so each recycle bin entry has a unique name
+            from datetime import datetime
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            stamped = backup_dir / f"{current.stem}_archive_{stamp}{SESSION_EXT}"
+            archive.rename(stamped)
+            _trash(stamped)
         if previous.exists():
             previous.rename(archive)
         if current.exists():
