@@ -247,11 +247,11 @@ class EmojiButton(QGraphicsObject):
         if emoji == self._cached_emoji and self._cached_pixmap is not None:
             return
         self._cached_emoji = emoji
-        from PySide6.QtGui import QFont, QPixmap, QPainter as _P
+        from PySide6.QtGui import QFont
         size = int(BUTTON_SIZE + EMOJI_OVERFLOW)
         pix = QPixmap(size * 2, size * 2)   # 2x for smooth scaling
         pix.fill(Qt.transparent)
-        p = _P(pix)
+        p = QPainter(pix)
         p.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7 * 2)))
         p.setPen(QColor(Theme.nodeFontColor))
         p.drawText(pix.rect(), Qt.AlignCenter, emoji)

@@ -283,6 +283,11 @@ class ValueNode(BaseNode):
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        if self._slider:
+            try:
+                self._slider.valueChanged.disconnect(self._seek)
+            except RuntimeError:
+                pass
         if hasattr(self, '_slider_proxy') and self._slider_proxy:
             self._slider_proxy.setWidget(None)
             self._slider_proxy.hide()

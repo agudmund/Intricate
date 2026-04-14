@@ -276,6 +276,11 @@ class SequenceNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        if self._slider:
+            try:
+                self._slider.valueChanged.disconnect(self._on_slider_changed)
+            except RuntimeError:
+                pass
         if self._slider_proxy:
             self._slider_proxy.setWidget(None)
             self._slider_proxy.hide()
