@@ -1520,7 +1520,7 @@ class IntricateApp(QMainWindow):
         _DEDICATED = {"Architecture.md", "Node Type Schema.md"}
         _SKIP_DIRS = {"data"}
         if docs_dir.is_dir():
-            fallback_pix = Theme.icon(None, fallback_color="#8a9aaa")
+            fallback_pix = Theme.icon(Theme.iconSession, fallback_color="#8a9aaa")
 
             def _make_doc_action(target_menu, md_path):
                 act = target_menu.addAction(QIcon(fallback_pix), md_path.stem)
