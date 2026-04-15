@@ -279,7 +279,9 @@ class TreeNode(BaseNode):
     def _build_toolbar(self) -> None:
         btn_size = int(TOOLBAR_W - 4)
         self._tb_new_folder = QPushButton("📁")
-        self._tb_new_folder.setToolTip("New Folder")
+        self._tb_new_folder.setToolTip("Plant a new folder in the project")
+        from pretty_widgets.PrettyTooltip import install_tooltip
+        install_tooltip(self._tb_new_folder)
         self._tb_new_folder.setFixedSize(btn_size, btn_size)
         self._tb_new_folder.setFlat(True)
         self._tb_new_folder.setStyleSheet(f"""
