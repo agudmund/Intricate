@@ -246,6 +246,7 @@ class TreeNode(BaseNode):
 
         if data.project_path:
             self._ensure_init_files()
+            self._cleanup_legacy()
 
     # ─────────────────────────────────────────────────────────────────────────
     # TREE VIEW
@@ -288,6 +289,26 @@ class TreeNode(BaseNode):
         root = Path(self.data.project_path)
         if root.is_dir():
             ensure_init_tree(root)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # LEGACY CLEANUP
+    # ─────────────────────────────────────────────────────────────────────────
+
+    _LEGACY_FILES = ("cozy-tree.txt",)
+
+    def _cleanup_legacy(self) -> None:
+        """Ambient cleanup — remove legacy temp files from the project root."""
+        if not self.data.project_path:
+            return
+        root = Path(self.data.project_path)
+        for name in self._LEGACY_FILES:
+            legacy = root / name
+            if legacy.is_file():
+                try:
+                    legacy.unlink()
+                    _log.info("[cleanup] removed legacy file: %s", legacy)
+                except (PermissionError, OSError) as e:
+                    _log.debug("[cleanup] could not remove %s: %s", legacy, e)
 
     # ─────────────────────────────────────────────────────────────────────────
     # LEFT TOOLBAR
