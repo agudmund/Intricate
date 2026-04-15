@@ -7,7 +7,7 @@ Visual language and layout specification for settings categories in The Settlers
 Every row in every category — regardless of control type — must follow this layout:
 
 ```
-labels (200px) | shorthands (36px) | content (stretch) | applicators (60px)
+labels (200px) | shorthands (36px) | content (stretch) | applicators (80px)
 ```
 
 | Column | Width | Purpose |
@@ -15,16 +15,16 @@ labels (200px) | shorthands (36px) | content (stretch) | applicators (60px)
 | **labels** | 200px fixed | Field name. Always a `pretty_label` at 12pt. |
 | **shorthands** | 36px fixed | Value readout (pink `#ffb6c1`) for sliders. **Empty placeholder** for chip and checkbox rows — the space is reserved even when unused. |
 | **content** | stretch (fills) | The interactive control: slider, chip container, checkbox indicator. |
-| **applicators** | 60px fixed | Action widget: apply button, add-input pill, or empty placeholder. Always the same width regardless of what's inside. |
+| **applicators** | 80px fixed | Action widget: apply button, add-input pill, or empty placeholder. Always the same width regardless of what's inside. |
 
 These values are defined as class constants on `MainWindow`:
 ```python
 _COL_LABEL      = 200
 _COL_SHORTHAND  =  36
-_COL_APPLICATOR =  60
+_COL_APPLICATOR =  80
 ```
 
-**Rule:** A row that lacks a particular column still reserves its width. Use `QSpacerItem(width, 1, QSizePolicy.Fixed, QSizePolicy.Minimum)` as the placeholder. Every row is the same effective width — the four columns are the visual skeleton of the category page.
+**Rule:** A row that lacks a particular column still reserves its width. Use `QSpacerItem(width, 24, QSizePolicy.Fixed, QSizePolicy.Fixed)` as the placeholder. Every row is the same effective width — the four columns are the visual skeleton of the category page.
 
 ## Page Structure
 
@@ -47,7 +47,7 @@ The canonical control for integer attributes. One row per TOML key.
 | Label | `pretty_label` | `_COL_LABEL` (200px) | 12pt, display name derived from TOML key (`_` to space, title case) |
 | Value readout | `pretty_label` | `_COL_SHORTHAND` (36px) | 12pt, right-aligned, `#ffb6c1` pink, transparent background, no border |
 | Slider | `PrettySlider` | fills remaining | Horizontal, `slider_handle.png` at 24px, 24px fixed height |
-| Applicator | `QSpacerItem` or button | `_COL_APPLICATOR` (60px) | Empty spacer for plain sliders; apply button (`setFixedSize(60, 24)`) for dock offsets |
+| Applicator | `QSpacerItem` or button | `_COL_APPLICATOR` (80px) | Empty spacer for plain sliders; apply button (`setFixedSize(80, 24)`) for dock offsets |
 | Hidden field | `QLineEdit` | hidden | Stores the string value for TOML sync via `_on_field_changed` |
 
 **Range:** Determined per category. Dock offsets use `(0, screen_height)`. About Node attributes use `(-50, 50)`. Future categories set their own range as appropriate.
@@ -98,9 +98,10 @@ For TOML fields that store a Python list as a string (e.g. `"['__pycache__', 'no
 
 | Widget | Type | Width | Details |
 |--------|------|-------|---------|
-| Label | `pretty_label` | 200px fixed | 12pt, display name derived from TOML key |
+| Label | `pretty_label` | `_COL_LABEL` (200px) | 12pt, display name derived from TOML key |
+| Shorthand spacer | `QSpacerItem` | `_COL_SHORTHAND` (36px) | Empty placeholder — reserves the column even though chips have no value readout |
 | Chip container | `QWidget` (stretch=1) | fills remaining | `QHBoxLayout`, spacing 4px, stretch appended after chips |
-| Add input | `QLineEdit` | 60px fixed | Pill-shaped, Chandler42 italic 9px, placeholder "+", returnPressed adds entry |
+| Add input | `QLineEdit` | `_COL_APPLICATOR` (80px) | Pill-shaped, Chandler42 italic 9px, placeholder "+", returnPressed adds entry |
 | Hidden field | `QLineEdit` | hidden | Canonical string representation — `str(list)` — synced to TOML |
 
 **Chip anatomy:**
@@ -117,19 +118,21 @@ For TOML fields that store a Python list as a string (e.g. `"['__pycache__', 'no
 
 ## Boolean Toggle Row
 
-For TOML fields that store string booleans (`"True"` / `"False"`). Rendered as a `PrettyCheckbox` whose label column aligns with slider label columns.
+For TOML fields that store string booleans (`"True"` / `"False"`). Rendered as a `pretty_label` for the field name plus a `PrettyCheckbox` with `show_indicator=False` — the checkbox hides its native indicator box and instead displays a pink `#ffb6c1` glyph (`✓` when checked, `—` when unchecked) as its label text. The glyph sits in the shorthands column, visually aligned with slider value readouts.
 
 **Layout (left to right):**
 
-| Widget | Type | Details |
-|--------|------|---------|
-| `PrettyCheckbox` | `pretty_widgets.PrettyCheckbox` | `indicator_right=True` (default); `_label.setFixedWidth(200)` pins label to the shared label column |
-| Stretch | — | Fills remaining row width after the indicator |
-| Hidden field | `QLineEdit` (hidden) | Stores `"True"` or `"False"` for TOML sync |
+| Widget | Type | Width | Details |
+|--------|------|-------|---------|
+| Label | `pretty_label` | `_COL_LABEL` (200px) | 12pt, display name derived from TOML key |
+| Checkbox glyph | `PrettyCheckbox` | `_COL_SHORTHAND` (36px) | `show_indicator=False`, empty text — displays `✓` / `—` in `#ffb6c1` pink, center-aligned. Click toggles state. |
+| Stretch | — | fills remaining | Empty content column |
+| Applicator | `QSpacerItem` | `_COL_APPLICATOR` (80px) | Empty placeholder |
+| Hidden field | `QLineEdit` | hidden | Stores `"True"` or `"False"` for TOML sync |
 
-**Signal:** `cb.toggled.connect(lambda checked, f=field: f.setText("True" if checked else "False"))`
+**Signal:** `chk.toggled.connect(lambda checked, f=field: f.setText("True" if checked else "False"))`
 
-**Alignment rule:** `cb._label.setFixedWidth(200)` must be set after constructing the checkbox so the indicator lands at the same x-position as slider controls and chip containers — the 200px label column is the shared visual axis of the category page.
+**PrettyCheckbox `show_indicator=False` mode:** When constructed with `show_indicator=False`, `PrettyCheckbox` hides the native `QCheckBox` indicator (0px width) and instead uses its internal `PrettyLabel` as the visual toggle. The label text swaps between `✓` and `—` on each toggle, styled `#ffb6c1` pink with center alignment. Clicking anywhere on the label toggles the underlying checkbox state. This mode is the standard for boolean rows — no visible checkbox box, just the pink lettering.
 
 ## Adding a New Category
 

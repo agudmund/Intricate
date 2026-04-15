@@ -7,10 +7,11 @@
 """
 
 import base64
+import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import QFileDialog
-from PySide6.QtCore import Qt, QRectF, QPointF, QBuffer, QByteArray, QIODevice
+from PySide6.QtCore import Qt, QRectF, QPointF, QBuffer, QByteArray, QIODevice, QTimer
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QImageReader, QColor, QPen, QPainterPath
 )
@@ -64,27 +65,20 @@ class ImageNode(BaseNode):
         self._scaled_cache: QPixmap | None = None          # Cached scaled pixmap
         self._scaled_cache_size: tuple[int, int] | None = None  # (w, h) key
 
-        # ── Restore image — cache first, then file, then legacy base64 ────────
-        try:
-            from utils.image_cache import load_cached, cache_pixmap
-            cached = load_cached(data.cache_key)
-            if cached is not None:
-                self._pixmap = cached
-                self._scaled_cache = None
-            elif data.source_path and Path(data.source_path).exists():
-                self._restore_from_path(Path(data.source_path))
-                if self._pixmap and not self._pixmap.isNull():
-                    data.cache_key = cache_pixmap(self._pixmap)
-            elif data.image_b64:
-                self._load_from_b64(data.image_b64)
-                if self._pixmap and not self._pixmap.isNull():
-                    data.cache_key = cache_pixmap(self._pixmap)
-        except Exception:
-            # Cache failure must never prevent node from loading
-            if data.source_path and Path(data.source_path).exists():
-                self._restore_from_path(Path(data.source_path))
-            elif data.image_b64:
-                self._load_from_b64(data.image_b64)
+        # ── Async image loading state ─────────────────────────────────────────
+        self._pending_pixmap: QPixmap | None = None
+        self._pending_cache_key: str | None = None   # "" = done with no key
+        self._loading: bool = False
+
+        self._image_delivery_timer = QTimer()
+        self._image_delivery_timer.setInterval(100)
+        self._image_delivery_timer.timeout.connect(self._check_image_delivery)
+
+        # ── Kick off async restore if there's anything to load ────────────────
+        if data.cache_key or data.source_path or data.image_b64:
+            self._loading = True
+            threading.Thread(target=self._image_load_worker, daemon=True).start()
+            self._image_delivery_timer.start()
 
     # ─────────────────────────────────────────────────────────────────────────
     # CAPTION → ABOUT NODE
@@ -133,45 +127,39 @@ class ImageNode(BaseNode):
         Load an image from a file path.
 
         Sets the caption to the filename stem if no caption exists yet.
-        Encodes to base64 PNG for session persistence.
+        Heavy I/O (file read, scaling, cache write) runs in a daemon thread;
+        the delivery timer picks up the pixmap when ready.
         Public — called by file browser and by View.dropEvent.
         """
         path = Path(path)
-        reader = QImageReader(str(path))
-        reader.setAutoTransform(True)  # apply EXIF orientation
-        img = reader.read()
-        if img.isNull():
-            return
-        pixmap = QPixmap.fromImage(img)
 
-        # Scale down large images at load time — keeps session base64 small and
-        # paint calls fast.  2048px on the longest side is sharp at any node size.
-        _MAX = 2048
-        if pixmap.width() > _MAX or pixmap.height() > _MAX:
-            pixmap = pixmap.scaled(
-                _MAX, _MAX,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-
-        self._pixmap = pixmap
-        self._scaled_cache = None  # invalidate on new image
-
-        # Record the resolved absolute path so sync_project_images can skip it next load
+        # Set metadata immediately — no I/O needed
         self.data.source_path = str(path.resolve())
-
-        # Set filename stem as initial caption and spawn an AboutNode label
         if not self.data.caption:
             self.data.caption = path.stem
             self._spawn_caption_node(path.stem)
 
-        logger.info(f"image loaded: {path.name} ({pixmap.width()}x{pixmap.height()}px)")
-        try:
-            from utils.image_cache import cache_pixmap
-            self.data.cache_key = cache_pixmap(self._pixmap)
-        except Exception:
-            pass  # Cache write failure is non-fatal
+        # Clear current image and kick off async load
+        self._pixmap = None
+        self._scaled_cache = None
+        self._loading = True
         self.update()
+
+        def _worker(p=path):
+            pixmap = self._read_and_scale(p)
+            cache_key = ""
+            if pixmap and not pixmap.isNull():
+                try:
+                    from utils.image_cache import cache_pixmap
+                    cache_key = cache_pixmap(pixmap)
+                except Exception:
+                    pass
+                logger.info(f"image loaded: {p.name} ({pixmap.width()}x{pixmap.height()}px)")
+            self._pending_pixmap = pixmap
+            self._pending_cache_key = cache_key
+
+        threading.Thread(target=_worker, daemon=True).start()
+        self._image_delivery_timer.start()
 
     def _run_vision(self, path: Path) -> None:
         """
@@ -233,30 +221,95 @@ class ImageNode(BaseNode):
         self._spawn_caption_node(error)
         logger.warning(f"vision failed: {error}")
 
-    def _restore_from_path(self, path: Path) -> None:
-        """Load pixmap from path for session restore — no b64 encode, render context not ready yet."""
+    # ── Async image loading ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _read_and_scale(path: Path) -> QPixmap | None:
+        """Read an image file and scale to 2048px max. Thread-safe — no widget interaction."""
         reader = QImageReader(str(path))
-        reader.setAutoTransform(True)  # apply EXIF orientation
+        reader.setAutoTransform(True)
         img = reader.read()
         if img.isNull():
-            return
+            return None
         pixmap = QPixmap.fromImage(img)
         _MAX = 2048
         if pixmap.width() > _MAX or pixmap.height() > _MAX:
             pixmap = pixmap.scaled(_MAX, _MAX, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self._pixmap = pixmap
-        self._scaled_cache = None
+        return pixmap
 
-    def _load_from_b64(self, b64_str: str) -> None:
-        """Reconstruct the pixmap from a base64 PNG string (session restore)."""
+    @staticmethod
+    def _decode_b64(b64_str: str) -> QPixmap | None:
+        """Decode a base64 PNG string to a QPixmap. Thread-safe."""
         try:
             raw = base64.b64decode(b64_str)
             img = QImage.fromData(raw, "PNG")
             if not img.isNull():
-                self._pixmap = QPixmap.fromImage(img)
-                self._scaled_cache = None  # invalidate on new image
+                return QPixmap.fromImage(img)
         except Exception:
             pass
+        return None
+
+    def _image_load_worker(self) -> None:
+        """Background thread — loads image via cache/path/b64, writes to pending fields."""
+        pixmap = None
+        cache_key = ""
+        try:
+            from utils.image_cache import load_cached, cache_pixmap
+
+            # Path 1: cached
+            if self.data.cache_key:
+                pixmap = load_cached(self.data.cache_key)
+                if pixmap is not None:
+                    cache_key = self.data.cache_key
+
+            # Path 2: source file → load + generate cache
+            if pixmap is None and self.data.source_path:
+                p = Path(self.data.source_path)
+                if p.exists():
+                    pixmap = self._read_and_scale(p)
+                    if pixmap and not pixmap.isNull():
+                        cache_key = cache_pixmap(pixmap)
+
+            # Path 3: legacy base64
+            if pixmap is None and self.data.image_b64:
+                pixmap = self._decode_b64(self.data.image_b64)
+                if pixmap and not pixmap.isNull():
+                    cache_key = cache_pixmap(pixmap)
+
+        except Exception:
+            # Cache subsystem failure — try raw fallbacks
+            try:
+                if self.data.source_path and Path(self.data.source_path).exists():
+                    pixmap = self._read_and_scale(Path(self.data.source_path))
+                elif self.data.image_b64:
+                    pixmap = self._decode_b64(self.data.image_b64)
+            except Exception:
+                pass
+
+        # Atomic writes under GIL — main thread timer picks these up
+        self._pending_pixmap = pixmap
+        self._pending_cache_key = cache_key  # "" sentinel = done, no key
+
+    def _check_image_delivery(self) -> None:
+        """Main-thread timer callback — picks up the loaded pixmap from the worker."""
+        if self._pending_cache_key is None:
+            return  # worker still running
+
+        pixmap = self._pending_pixmap
+        cache_key = self._pending_cache_key
+        self._pending_pixmap = None
+        self._pending_cache_key = None
+
+        self._image_delivery_timer.stop()
+        self._loading = False
+
+        if pixmap is not None and not pixmap.isNull():
+            self._pixmap = pixmap
+            self._scaled_cache = None
+        if cache_key:
+            self.data.cache_key = cache_key
+
+        self.update()
 
     def _encode_to_b64(self) -> None:
         """Encode the current pixmap to base64 PNG and store in data."""
@@ -535,7 +588,8 @@ class ImageNode(BaseNode):
             painter.setBrush(Qt.NoBrush)
             painter.drawRoundedRect(ir, CLIP_RADIUS_MIN, CLIP_RADIUS_MIN)
             painter.setPen(QColor(Theme.healthColorLabel))
-            painter.drawText(ir, Qt.AlignCenter, "double-click\nto load image")
+            text = "loading\u2026" if self._loading else "double-click\nto load image"
+            painter.drawText(ir, Qt.AlignCenter, text)
 
         painter.restore()
 
@@ -546,6 +600,16 @@ class ImageNode(BaseNode):
     def _prepare_for_removal(self) -> None:
         """Clean up ImageNode-specific resources before scene departure."""
         logger.log(5, "[REMOVE] image %s — disconnecting VisionWorker", self.data.uuid[:8])
+        # Stop the async image delivery timer — a late-finishing daemon thread
+        # may still write to _pending_pixmap but nobody reads it after this.
+        self._image_delivery_timer.stop()
+        try:
+            self._image_delivery_timer.timeout.disconnect(self._check_image_delivery)
+        except RuntimeError:
+            pass
+        self._pending_pixmap = None
+        self._pending_cache_key = None
+        self._loading = False
         # Sever VisionWorker signals FIRST — if the worker finishes after
         # removal it would call _spawn_caption_node on a dead node, creating
         # a Connection to a stale C++ pointer and hard-crashing Qt.
