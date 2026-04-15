@@ -487,7 +487,12 @@ class TreeNode(BaseNode):
         chrome_x = PADDING * 2 + TOOLBAR_W + 12
         chrome_y = self._BUTTON_ZONE_H + TITLE_GAP + PADDING * 2 + 8
 
-        new_w = max(200, ideal_w + chrome_x)
+        # Account for title width so long project names don't clip
+        from PySide6.QtGui import QFont, QFontMetrics
+        title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        title_w = QFontMetrics(title_font).horizontalAdvance(self.data.title) + chrome_x
+
+        new_w = max(200, ideal_w + chrome_x, title_w)
         new_h = max(120, doc_h   + chrome_y)
 
         r = self.rect()
