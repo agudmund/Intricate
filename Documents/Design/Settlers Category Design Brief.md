@@ -65,10 +65,58 @@ Optional poetic/explanatory text below all fields in a category.
 
 All visual values flow from `Theme` except the pink value readout color `#ffb6c1`, which is the one deliberate hardcoded accent. Background colors, border colors, text colors, and scrollbar styling all reference Theme attributes so they hot-reload when `settings.toml` changes.
 
+## Tag Chip Row
+
+For TOML fields that store a Python list as a string (e.g. `"['__pycache__', 'node_modules']"`). Each list entry renders as a removable pill. A small inline input at the row's right edge adds new entries.
+
+**Layout (left to right):**
+
+| Widget | Type | Width | Details |
+|--------|------|-------|---------|
+| Label | `pretty_label` | 200px fixed | 12pt, display name derived from TOML key |
+| Chip container | `QWidget` (stretch=1) | fills remaining | `QHBoxLayout`, spacing 4px, stretch appended after chips |
+| Add input | `QLineEdit` | 60px fixed | Pill-shaped, Chandler42 italic 9px, placeholder "+", returnPressed adds entry |
+| Hidden field | `QLineEdit` | hidden | Canonical string representation — `str(list)` — synced to TOML |
+
+**Chip anatomy:**
+- `QFrame`, fixed height 20px, `QSizePolicy.Fixed` both axes
+- `QHBoxLayout`, margins `(8, 0, 4, 0)`, spacing 2px
+- `QLabel` — Chandler42 italic, 9px, `Theme.textPrimary`
+- `QPushButton("×")` — 12×12px, flat, transparent; hover turns `#d87a9e`
+- Border radius 10px (half of 20px height → true pill shape)
+- Background `Theme.windowBg`, border `1px solid Theme.primaryBorder`
+
+**Data flow:** `ast.literal_eval` parses the hidden field text → Python list → chips rebuild. Removing or adding a chip immediately serializes back to `str(list)` and triggers the standard `_on_field_changed` → TOML write pipeline.
+
+**Add input tooltip:** "Type a name and press Enter — use > for nested paths (e.g. Documents>data)"
+
+## Boolean Toggle Row
+
+For TOML fields that store string booleans (`"True"` / `"False"`). Rendered as a `PrettyCheckbox` whose label column aligns with slider label columns.
+
+**Layout (left to right):**
+
+| Widget | Type | Details |
+|--------|------|---------|
+| `PrettyCheckbox` | `pretty_widgets.PrettyCheckbox` | `indicator_right=True` (default); `_label.setFixedWidth(200)` pins label to the shared label column |
+| Stretch | — | Fills remaining row width after the indicator |
+| Hidden field | `QLineEdit` (hidden) | Stores `"True"` or `"False"` for TOML sync |
+
+**Signal:** `cb.toggled.connect(lambda checked, f=field: f.setText("True" if checked else "False"))`
+
+**Alignment rule:** `cb._label.setFixedWidth(200)` must be set after constructing the checkbox so the indicator lands at the same x-position as slider controls and chip containers — the 200px label column is the shared visual axis of the category page.
+
 ## Adding a New Category
 
 1. Add the TOML section (e.g. `[node.xxx]`) to `settings.toml`
 2. Register a display name in `_SECTION_LABELS`
-3. Optionally define field grouping in `_SECTION_FIELD_ORDER`
+3. Optionally define field grouping in `_SECTION_FIELD_ORDER` — each inner list is a chunk separated by a spacer; use this to group related controls visually
 4. Optionally add a description in `_SECTION_DESCRIPTIONS`
-5. Add a section-specific branch in `_add_field_row()` if the fields need sliders or other custom controls (otherwise they render as plain `QLineEdit` text fields, with hex colors automatically getting swatch cells)
+5. Add a section-specific branch in `_add_field_row()` for any fields needing custom controls:
+   - Integer attributes → Slider Row
+   - Hex color attributes → Color Swatch Cell (automatic, no branch needed)
+   - List attributes (TOML string-encoded Python lists) → Tag Chip Row
+   - Boolean string attributes (`"True"`/`"False"`) → Boolean Toggle Row
+   - Everything else → plain `QLineEdit` (default fallback)
+
+**The Tree Node category is the worked example** of combining all three custom control types in one page: one slider (max_depth), three chip rows (exclude lists), three boolean toggles (display options), with `_SECTION_FIELD_ORDER` providing the visual grouping.
