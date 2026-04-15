@@ -159,7 +159,9 @@ class PerfNode(BaseNode):
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
         reset_pix = Theme.icon(Theme.iconReset, fallback_color="#7a9aaa")
-        self._buttons.append(NodeButton(self, reset_pix, self._reset_stats))
+        reset_btn = NodeButton(self, reset_pix, self._reset_stats)
+        reset_btn.setToolTip("Clear the slate and start counting fresh")
+        self._buttons.append(reset_btn)
 
     def _reset_stats(self) -> None:
         if self._timer_obj:
