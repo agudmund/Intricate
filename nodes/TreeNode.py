@@ -512,7 +512,9 @@ class TreeNode(BaseNode):
         from nodes.NodeButton import NodeButton
         super()._build_buttons()
         refresh_pix = Theme.icon(Theme.iconTreeRefresh, fallback_color="#8cbea0")
-        self._buttons.append(NodeButton(self, refresh_pix, self.refresh))
+        refresh_btn = NodeButton(self, refresh_pix, self.refresh)
+        refresh_btn.setToolTip("Take a fresh look at the folder structure")
+        self._buttons.append(refresh_btn)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT
