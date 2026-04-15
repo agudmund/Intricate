@@ -231,7 +231,7 @@ class TreeNode(BaseNode):
         self._build_tree_view()
 
         if data.tree_text:
-            self._editor.setPlainText(data.tree_text)
+            self._editor.setHtml(self._tree_to_html(data.tree_text))
         elif data.project_path:
             self.refresh()
 
@@ -410,7 +410,7 @@ class TreeNode(BaseNode):
     def _build_tree_view(self) -> None:
         self._editor = PrettyEdit(
             self,
-            font_family="Cascadia Mono",
+            font_family="Lato",
             font_size=8,
             font_color=Theme.textPrimary,
             always_visible=True,
@@ -496,10 +496,31 @@ class TreeNode(BaseNode):
         scene.addItem(new_node)
         scene.raise_node(new_node)
 
+    @staticmethod
+    def _tree_to_html(text: str) -> str:
+        """Build an HTML document with bold folder lines, regular file lines."""
+        import html as _html
+        lines = []
+        for raw in text.split("\n"):
+            escaped = _html.escape(raw)
+            if raw.rstrip().endswith("/"):
+                lines.append(
+                    f'<span style="font-weight:700; color:#ffffff;">{escaped}</span>'
+                )
+            else:
+                lines.append(
+                    f'<span style="font-weight:400;">{escaped}</span>'
+                )
+        body = "<br>".join(lines)
+        return (
+            f'<pre style="font-family:Lato; font-size:8pt; '
+            f'white-space:pre-wrap; margin:0;">{body}</pre>'
+        )
+
     def _set_text(self, text: str) -> None:
         self.data.tree_text = text
         if self._editor:
-            self._editor.setPlainText(text)
+            self._editor.setHtml(self._tree_to_html(text))
             self._auto_size(text)
 
     def _auto_size(self, text: str) -> None:
