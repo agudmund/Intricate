@@ -109,6 +109,12 @@ class WarmNode(BaseNode):
             always_visible=True,
             normalize_layout=False,
         )
+        # Give emoji glyphs 3px extra descent room without affecting text layout.
+        # CSS padding-bottom on the body element adds space below each line's
+        # content box — just enough to prevent emoji circle clipping.
+        self._editor.document().setDefaultStyleSheet(
+            "body { padding-bottom: 3px; }"
+        )
         if self.data.body_text.lstrip().startswith(("<", "<!DOCTYPE")):
             self._editor.setHtml(self.data.body_text)
         else:

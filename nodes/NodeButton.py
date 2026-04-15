@@ -260,7 +260,8 @@ class EmojiButton(QGraphicsObject):
         p = QPainter(pix)
         p.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7 * 2)))
         p.setPen(QColor(Theme.nodeFontColor))
-        p.drawText(pix.rect(), Qt.AlignCenter, emoji)
+        r = pix.rect().adjusted(0, -6, 0, -6)   # nudge glyph up (2x space)
+        p.drawText(r, Qt.AlignCenter, emoji)
         p.end()
         self._cached_pixmap = pix.scaled(
             size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation
@@ -277,7 +278,8 @@ class EmojiButton(QGraphicsObject):
             from PySide6.QtGui import QFont
             painter.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7)))
             painter.setPen(QColor(Theme.nodeFontColor))
-            painter.drawText(self.boundingRect(), Qt.AlignCenter, self._get_emoji())
+            r = self.boundingRect().adjusted(0, -3, 0, -3)  # nudge glyph up
+            painter.drawText(r, Qt.AlignCenter, self._get_emoji())
         else:
             # Zoomed out — use cached pixmap for performance
             self._rebuild_cache()
