@@ -13,21 +13,28 @@ from pathlib import Path
 from typing import Iterator, List, Optional
 
 from PySide6.QtWidgets import (
-    QGraphicsProxyWidget, QGraphicsRectItem,
+    QGraphicsPixmapItem, QGraphicsProxyWidget, QGraphicsRectItem,
     QWidget, QVBoxLayout, QPushButton,
 )
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QPainter, QIcon
+from PySide6.QtGui import QPainter, QIcon, QPixmap
 
 from nodes.BaseNode import BaseNode
 from data.TreeNodeData import TreeNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyEdit import PrettyEdit
+from pretty_widgets.utils.logger import setup_logger
+
+_log = setup_logger("intricate.tree")
 
 
 PADDING      = 6.0
 TITLE_GAP    = 8.0    # breathing room between title row and tree body
 TOOLBAR_W    = 28.0   # width of the left-hand toolbar strip
+HEART_SIZE   = 18     # heart icon render size (bigger than line height → chain overlap)
+HEART_COL_W  = 20     # horizontal space reserved for the heart column
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -188,7 +195,7 @@ class _TreeWalker:
             if not self.use_emoji:
                 icon = ""
             elif entry.is_file():
-                icon = "📄 "
+                icon = ""
             elif depth > 0:
                 icon = "📁 "
             else:
@@ -224,6 +231,8 @@ class TreeNode(BaseNode):
         super().__init__(data)
 
         self._editor: PrettyEdit | None = None
+        self._hearts: list[QGraphicsPixmapItem] = []
+        self._heart_pixmap: QPixmap | None = None
         self._toolbar_proxy: QGraphicsProxyWidget | None = None
         self._name_editor: PrettyEdit | None = None
         self._build_toolbar()
@@ -231,7 +240,7 @@ class TreeNode(BaseNode):
         self._build_tree_view()
 
         if data.tree_text:
-            self._editor.setHtml(self._tree_to_html(data.tree_text))
+            self._set_text(data.tree_text)
         elif data.project_path:
             self.refresh()
 
@@ -414,8 +423,7 @@ class TreeNode(BaseNode):
             font_size=8,
             font_color=Theme.textPrimary,
             always_visible=True,
-            scrollbar=True,
-            scrollbar_width=6,
+            scrollbar=False,
         )
         self._editor.position(self._body_rect())
 
@@ -496,46 +504,123 @@ class TreeNode(BaseNode):
         scene.addItem(new_node)
         scene.raise_node(new_node)
 
+    _FILE_ICON = str(Path(__file__).resolve().parent.parent / "icons" / "tree_file_icon.png")
+
     @staticmethod
-    def _tree_to_html(text: str) -> str:
-        """Build an HTML document with bold folder lines, regular file lines."""
+    def _tree_to_html(text: str) -> tuple[str, set[int]]:
+        """Build HTML and return (html_string, set_of_file_line_indices).
+
+        Each line becomes its own <p> block so QTextDocument creates one
+        block per line — required for _place_hearts to map block indices
+        to file lines.
+        """
         import html as _html
-        lines = []
-        for raw in text.split("\n"):
+        P = (f'<p style="font-family:Lato; font-size:8pt; '
+             f'white-space:pre; margin:0; padding-left:{HEART_COL_W}px;">')
+        blocks     = []
+        file_lines = set()
+        for idx, raw in enumerate(text.split("\n")):
+            raw = raw.replace("📄 ", "")
             escaped = _html.escape(raw)
             if raw.rstrip().endswith("/"):
-                lines.append(
-                    f'<span style="font-weight:700; color:#ffffff;">{escaped}</span>'
+                blocks.append(
+                    f'{P}<span style="font-weight:700; color:#ffffff;">{escaped}</span></p>'
                 )
             else:
-                lines.append(
-                    f'<span style="font-weight:400;">{escaped}</span>'
+                file_lines.add(idx)
+                blocks.append(
+                    f'{P}<span style="font-weight:400;">{escaped}</span></p>'
                 )
-        body = "<br>".join(lines)
-        return (
-            f'<pre style="font-family:Lato; font-size:8pt; '
-            f'white-space:pre-wrap; margin:0;">{body}</pre>'
-        )
+        return "\n".join(blocks), file_lines
 
     def _set_text(self, text: str) -> None:
         self.data.tree_text = text
         if self._editor:
-            self._editor.setHtml(self._tree_to_html(text))
+            html, file_lines = self._tree_to_html(text)
+            self._editor.setHtml(html)
             self._auto_size(text)
+            self._place_hearts(file_lines)
+
+    def _place_hearts(self, file_lines: set[int]) -> None:
+        """Position QGraphicsPixmapItem hearts next to each file line."""
+        # Remove old hearts
+        for h in self._hearts:
+            if h.scene():
+                h.scene().removeItem(h)
+        self._hearts.clear()
+
+        if not self._editor or not file_lines:
+            _log.debug("[hearts] early return — editor=%s  file_lines=%d",
+                       self._editor is not None, len(file_lines) if file_lines else 0)
+            return
+
+        # Lazy-load the full-res pixmap once — items use setScale() so Qt
+        # renders crisp at every zoom level instead of pre-rasterised blur.
+        if self._heart_pixmap is None:
+            self._heart_pixmap = QPixmap(self._FILE_ICON)
+            _log.info("[hearts] pixmap loaded — null=%s  size=%dx%d  path=%s",
+                      self._heart_pixmap.isNull(), self._heart_pixmap.width(),
+                      self._heart_pixmap.height(), self._FILE_ICON)
+
+        # ── Z-depth compliance ───────────────────────────────────────────
+        _log.info("=== TreeNode Z-depth hierarchy ===")
+        _log.info("  TreeNode self          z=%s", self.zValue())
+        _log.info("  Editor proxy           z=%s", self._editor.proxy.zValue())
+        if self._toolbar_proxy:
+            _log.info("  Toolbar proxy          z=%s", self._toolbar_proxy.zValue())
+        if self._name_editor:
+            _log.info("  Name-editor proxy      z=%s", self._name_editor.proxy.zValue())
+        _log.info("  Hearts target          z=5")
+        _log.info("  File line indices: %s", sorted(file_lines))
+
+        # Force document layout so block rects are valid
+        doc = self._editor.document()
+        doc.documentLayout().documentSize()
+
+        body  = self._body_rect()
+        _log.info("  Body rect: x=%.1f y=%.1f w=%.1f h=%.1f",
+                  body.x(), body.y(), body.width(), body.height())
+
+        block = doc.begin()
+        idx   = 0
+        while block.isValid():
+            if idx in file_lines:
+                rect = doc.documentLayout().blockBoundingRect(block)
+                x = body.x()
+                y = body.y() + rect.y()
+                heart = QGraphicsPixmapItem(self._heart_pixmap, self)
+                heart.setTransformationMode(Qt.SmoothTransformation)
+                scale = HEART_SIZE / self._heart_pixmap.width()
+                heart.setScale(scale)
+                heart.setPos(x - 4, y - 1)
+                heart.setZValue(5)
+                self._hearts.append(heart)
+                _log.debug("  Heart #%d  block=%d  doc_y=%.1f  node_pos=(%.1f, %.1f)  z=%s",
+                           len(self._hearts), idx, rect.y(), x, y - 1, heart.zValue())
+            block = block.next()
+            idx += 1
+
+        _log.info("  Total hearts placed: %d", len(self._hearts))
+        _log.info("=== end Z-depth hierarchy ===")
 
     def _auto_size(self, text: str) -> None:
-        """Resize the node to fit the tree text as rendered by the editor."""
+        """Resize the node to fit the full tree text — no scrollbar needed."""
         if not self._editor:
             return
 
-        doc = self._editor.document().clone()
+        doc = self._editor.document()
+        # Measure at unconstrained width first to get the ideal width
+        prev_tw = doc.textWidth()
         doc.setTextWidth(-1)
         ideal_w = doc.idealWidth()
+        # Re-layout at ideal width to get the true document height
         doc.setTextWidth(ideal_w)
         doc_h = doc.size().height()
+        # Restore previous text width so setRect re-layouts cleanly
+        doc.setTextWidth(prev_tw)
 
         chrome_x = PADDING * 2 + TOOLBAR_W + 12
-        chrome_y = self._BUTTON_ZONE_H + TITLE_GAP + PADDING * 2 + 8
+        chrome_y = self._BUTTON_ZONE_H + TITLE_GAP + PADDING * 2 + 22
 
         # Account for title width so long project names don't clip
         from PySide6.QtGui import QFont, QFontMetrics
@@ -602,6 +687,10 @@ class TreeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        for h in self._hearts:
+            if h.scene():
+                h.scene().removeItem(h)
+        self._hearts.clear()
         if self._name_editor:
             self._name_editor.teardown()
         if self._toolbar_proxy:
