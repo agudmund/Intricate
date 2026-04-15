@@ -202,6 +202,7 @@ class GitNode(BaseNode):
         self._scanning = False
         self._pending_repos = None          # written by worker thread
         self._loading_node = None           # VideoNode spawned during scan
+        self._pushing = False               # True while bulk push worker is running
         self._first_scan = False            # set True by Scene.add_git_node for sidebar spawns
 
         # Delivery timer — runs on main thread, checks for worker results
@@ -304,7 +305,8 @@ class GitNode(BaseNode):
         self._scanning = False
         self._first_scan = False
         self._delivery_timer.stop()
-        self._dismiss_loading_node()
+        if not self._pushing:
+            self._dismiss_loading_node()
         try:
             self._repos = repos
             self._auto_height()
@@ -459,7 +461,9 @@ class GitNode(BaseNode):
             msg = dlg.message().strip()
 
         self._loading_node = None   # clear any stale ref from initial scan
+        self._pushing = True
         self._spawn_loading_node()
+        self._poll_timer.stop()   # pause polling while push runs
         _log.info("[git] plushie spawned for bulk push")
         threading.Thread(
             target=self._push_worker,
@@ -492,9 +496,10 @@ class GitNode(BaseNode):
         return False
 
     def _push_worker(self, session_repos: list[str], unpushed_repos: list[str], msg: str) -> None:
-        """Run git add+commit+push for session repos and git push for unpushed repos."""
+        """Parallel push — each repo gets its own thread, fastest finishes first."""
         import subprocess as _sp
         from PySide6.QtCore import QTimer
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         desktop = Path.home() / "Desktop"
 
@@ -505,33 +510,48 @@ class GitNode(BaseNode):
                 _log.warning(f"[git] {cmd} failed in {Path(cwd).name}: {r.stderr.strip()}")
             return r
 
-        # Session repos: add, commit, push
-        for name in session_repos:
+        def _kick_refresh():
+            self._scanning = False
+            self._refresh()
+
+        def _push_session(name):
             cwd = str(desktop / name)
-            try:
-                _git(["git", "add", "-A"], cwd)
-                _git(["git", "commit", "-m", msg], cwd)
-                result = _git(["git", "push"], cwd)
-                if result.returncode == 0:
-                    _log.info(f"[git] pushed {name}")
-            except Exception:
-                _log.warning(f"[git] failed to push {name}", exc_info=True)
-        # Unpushed repos: just push
-        for name in unpushed_repos:
+            _git(["git", "add", "-A"], cwd)
+            _git(["git", "commit", "-m", msg], cwd)
+            result = _git(["git", "push"], cwd)
+            if result.returncode == 0:
+                _log.info(f"[git] pushed {name}")
+            return name
+
+        def _push_unpushed(name):
             cwd = str(desktop / name)
-            try:
-                result = _git(["git", "push"], cwd)
-                if result.returncode == 0:
-                    _log.info(f"[git] pushed unpushed {name}")
-            except Exception:
-                _log.warning(f"[git] failed to push {name}", exc_info=True)
+            result = _git(["git", "push"], cwd)
+            if result.returncode == 0:
+                _log.info(f"[git] pushed unpushed {name}")
+            return name
+
+        futures = []
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for name in session_repos:
+                futures.append(pool.submit(_push_session, name))
+            for name in unpushed_repos:
+                futures.append(pool.submit(_push_unpushed, name))
+
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    _log.warning(f"[git] parallel push failed: {e}", exc_info=True)
+                QTimer.singleShot(0, _kick_refresh)
 
         def _on_push_done():
+            self._pushing = False
             self._dismiss_loading_node()
             import random
             from utils.IconPicker import emojiIcons
             self.data.emoji = random.choice(emojiIcons)
             self.update()
+            self._poll_timer.start()   # resume polling
             self._refresh()
         QTimer.singleShot(0, _on_push_done)
 
