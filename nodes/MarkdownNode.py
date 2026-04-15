@@ -373,6 +373,7 @@ class MarkdownNode(BaseNode):
 
         _OFFSCREEN = QPointF(-999_999, -999_999)
         prev_node = self
+        source_hidden = not self.isVisible()
 
         # ── Parse into (title, body) pairs ──────────────────────────────
         sections: list[tuple[str | None, str]] = []
@@ -400,21 +401,28 @@ class MarkdownNode(BaseNode):
             return
 
         # ── Spawn nodes ─────────────────────────────────────────────────
+        first_node = True
         for title, body in sections:
 
             # AboutNode for the heading
             if title:
                 about = scene.add_about_node(pos=_OFFSCREEN, label=title)
                 about.data.title = title[:40]
-                chain_origin = self._wander_origin(prev_node)
-                pos = spiral_place(
-                    scene, about, origin=chain_origin,
-                    fallback=chain_origin,
-                )
+                if first_node and source_hidden:
+                    pos = spiral_place(scene, about)
+                    first_node = False
+                else:
+                    chain_origin = self._wander_origin(prev_node)
+                    pos = spiral_place(
+                        scene, about, origin=chain_origin,
+                        fallback=chain_origin,
+                    )
                 about.setPos(pos)
-                conn = Connection(prev_node, about)
-                scene.addItem(conn)
+                if not (first_node or (prev_node is self and source_hidden)):
+                    conn = Connection(prev_node, about)
+                    scene.addItem(conn)
                 prev_node = about
+                first_node = False
 
             # WarmNode for the body text
             if body:
@@ -428,15 +436,21 @@ class MarkdownNode(BaseNode):
                 if hasattr(warm, '_auto_fit_height'):
                     warm._auto_fit_height()
 
-                chain_origin = self._wander_origin(prev_node)
-                pos = spiral_place(
-                    scene, warm, origin=chain_origin,
-                    fallback=chain_origin,
-                )
+                if first_node and source_hidden:
+                    pos = spiral_place(scene, warm)
+                    first_node = False
+                else:
+                    chain_origin = self._wander_origin(prev_node)
+                    pos = spiral_place(
+                        scene, warm, origin=chain_origin,
+                        fallback=chain_origin,
+                    )
                 warm.setPos(pos)
-                conn = Connection(prev_node, warm)
-                scene.addItem(conn)
+                if not (prev_node is self and source_hidden):
+                    conn = Connection(prev_node, warm)
+                    scene.addItem(conn)
                 prev_node = warm
+                first_node = False
 
     @staticmethod
     def _wander_origin(prev_node) -> 'QPointF':

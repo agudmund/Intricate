@@ -1314,16 +1314,17 @@ class IntricateApp(QMainWindow):
         vp = self.view.viewport()
         return self.view.mapToScene(vp.width() // 2, vp.height() // 2)
 
-    def _spawn(self, add_fn, status_msg: str, **kwargs) -> None:
+    def _spawn(self, add_fn, status_msg: str, **kwargs):
         """Place a node at the viewport centre and update the status bar."""
         try:
-            add_fn(pos=self._viewport_center(), **kwargs)
+            node = add_fn(pos=self._viewport_center(), **kwargs)
         except Exception:
             logger.exception("Failed to spawn node via %s", add_fn.__name__)
-            return
+            return None
         from utils.audio import audio
         audio.play_chime()
         self._status(status_msg)
+        return node
 
     def _spawn_warm_node(self):        self._spawn(self.scene.add_warm_node,         "a warm thought arrives")
     def _spawn_about_node(self):       self._spawn(self.scene.add_about_node,        "a little note for later")
@@ -1549,8 +1550,27 @@ class IntricateApp(QMainWindow):
                     except Exception:
                         self._status(f"could not read {p.name}")
                         return
-                    self._spawn(self.scene.add_markdown_node,
-                                f"{p.stem} unfolds", label=text)
+                    # Scatter the doc directly — the MarkdownNode is the
+                    # parsing engine, self-destructs after splitting.
+                    from nodes.MarkdownNode import MarkdownNode
+                    from data.MarkdownNodeData import MarkdownNodeData
+                    from PySide6.QtCore import QPointF, QTimer
+                    from PySide6.QtWidgets import QGraphicsRectItem
+                    data = MarkdownNodeData(label=text)
+                    node = MarkdownNode(data)
+                    node.setPos(QPointF(-999_999, -999_999))
+                    node.setVisible(False)
+                    self.scene.addItem(node)
+                    node._split_into_nodes()
+                    # Self-destruct — sever interaction flags, then remove
+                    # on the next event loop tick (TreeNode zombie pattern).
+                    node.setSelected(False)
+                    node.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
+                    scene = self.scene
+                    QTimer.singleShot(0, lambda: scene.removeItem(node))
+                    from utils.audio import audio
+                    audio.play_chime()
+                    self._status(f"{p.stem} unfolds")
                 act.triggered.connect(_spawn_doc)
 
             # Top-level .md files (excluding dedicated nodes)
