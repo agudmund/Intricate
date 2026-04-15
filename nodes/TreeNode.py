@@ -208,6 +208,8 @@ class TreeNode(BaseNode):
     [node.tree] in settings.toml and applied at walk time on Path objects.
     """
 
+    _has_depth_toggle = True
+
     def __init__(self, data: TreeNodeData | None = None):
         if data is None:
             data = TreeNodeData()

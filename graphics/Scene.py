@@ -84,6 +84,23 @@ class IntricateScene(QGraphicsScene):
         self._back_z_top  = -10.0
         self._front_z_top =  10.0
 
+    def helpEvent(self, event) -> None:
+        """Route scene item tooltips through PrettyTooltip instead of native rendering."""
+        item = self.itemAt(event.scenePos(), self.views()[0].transform() if self.views() else __import__('PySide6.QtGui', fromlist=['QTransform']).QTransform())
+        if item:
+            tip = item.toolTip()
+            if tip:
+                from pretty_widgets.PrettyTooltip import PrettyTooltip
+                PrettyTooltip.instance().show_tip(tip, event.screenPos())
+                event.accept()
+                return
+        # Hide if hovering over empty space
+        from pretty_widgets.PrettyTooltip import PrettyTooltip
+        t = PrettyTooltip.instance()
+        if t.isVisible():
+            t.hide()
+        event.accept()
+
     def raise_node(self, node) -> None:
         """Bring node to the top of its z-tier (back or front)."""
         is_front = getattr(node.data, 'depth_front', False)
