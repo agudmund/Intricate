@@ -117,7 +117,11 @@ class IntricateApp(QMainWindow):
         # 6. Restore persisted geometry
         self._restore_geometry()
 
-        # 7. Load session for the initially selected project, then start autosave
+        # 7. Keyboard shortcuts
+        from PySide6.QtGui import QShortcut, QKeySequence
+        QShortcut(QKeySequence("Ctrl+A"), self, self._select_chain)
+
+        # 8. Load session for the initially selected project, then start autosave
         QTimer.singleShot(0, self._load_initial_session)
 
     def _setup_grid(self):
@@ -851,6 +855,29 @@ class IntricateApp(QMainWindow):
             node.data.caption or node.data.title,
             f"{px.width()} × {px.height()}",
         )
+
+    def _select_chain(self) -> None:
+        """Select all nodes connected to the current selection via wires."""
+        from nodes.BaseNode import BaseNode
+        seeds = [item for item in self.scene.selectedItems()
+                 if isinstance(item, BaseNode)]
+        if not seeds:
+            return
+        visited = set()
+        queue = list(seeds)
+        while queue:
+            node = queue.pop(0)
+            nid = id(node)
+            if nid in visited:
+                continue
+            visited.add(nid)
+            for conn in node.connections:
+                for neighbor in (conn.start_node, conn.end_node):
+                    if neighbor and neighbor is not node and id(neighbor) not in visited:
+                        queue.append(neighbor)
+        for node in self.scene.items():
+            if isinstance(node, BaseNode) and id(node) in visited:
+                node.setSelected(True)
 
     def _on_selection_changed(self) -> None:
         """Update the preview panel when selection changes — skipped while pinned."""
