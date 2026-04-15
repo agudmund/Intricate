@@ -22,7 +22,7 @@ class PerfNodeData(NodeData):
     node_type: str   = field(default="perf")
     title:     str   = field(default="Performance")
     width:     float = field(default_factory=lambda: Theme.perfNodeWidth)
-    height:    float = field(default_factory=lambda: Theme.perfNodeHeight + 40.0)
+    height:    float = field(default_factory=lambda: Theme.perfNodeHeight + 60.0)
 
     def to_dict(self) -> dict:
         return super().to_dict()
