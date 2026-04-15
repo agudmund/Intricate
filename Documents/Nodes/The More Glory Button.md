@@ -27,8 +27,8 @@ The emoji pool lives in `utils/IconPicker.py` — 28 emoji in total, curated for
 ### AboutNode — Custom Shuffle
 AboutNode hides the standard EmojiButton (`_show_emoji_btn = False`) and builds its own shuffle mechanism. The emoji lives in `_shuffle_emoji` on the instance, not in `data.emoji`. Double-clicking the top strip reshuffles it.
 
-### JoyStatsNode — No Emoji
-Pure read-only debug display. Hides the emoji button entirely.
+### JoyStatsNode — Standard Shuffle
+Live joy stats display with a standard More Glory shuffle. The node that tracks joy now has its own emoji.
 
 ### AudioNode — Mute Toggle
 Uses EmojiButton for a mute indicator: shows `🫢` when muted, `😊` when playing. This is a functional toggle, not a shuffle button.

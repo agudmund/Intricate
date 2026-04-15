@@ -167,7 +167,7 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 - **Type key:** `joy_stats` | **Icon:** `iconHealth` (pink fallback)
 - **Files:** `nodes/JoyStatsNode.py`, `data/NodeData.py` (generic base)
 - Live debug display for the joy tamagotchi system. Reads all joy state from main window every second, paints compact stats grid. Pure read-only.
-- `_has_depth_toggle = True`, `_show_emoji_btn = False`
+- `_has_depth_toggle = True`, `_show_emoji_btn = True`
 
 ---
 
