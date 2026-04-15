@@ -121,8 +121,15 @@ class _TreeWalker:
         if not self.show_hidden and name.startswith("."):
             return True
 
-        if entry.is_dir() and name in self.exclude_dirs:
-            return True
+        if entry.is_dir():
+            # Exact name match (e.g. "__pycache__")
+            if name in self.exclude_dirs:
+                return True
+            # Path-based match for nested excludes (e.g. "Documents/data")
+            rel_forward = rel_path.replace("\\", "/")
+            for exc in self.exclude_dirs:
+                if "/" in exc and rel_forward == exc:
+                    return True
 
         if entry.is_file():
             if entry.suffix.lower() in self.exclude_exts:
