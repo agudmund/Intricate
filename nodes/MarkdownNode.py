@@ -59,6 +59,18 @@ class MarkdownNode(BaseNode):
             self._delivery_timer.start()
 
     # ─────────────────────────────────────────────────────────────────────────
+    # BUTTONS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _build_buttons(self) -> None:
+        from nodes.NodeButton import NodeButton
+        super()._build_buttons()
+        spawn_pix = Theme.icon(Theme.iconSpawnNodesClean, fallback_color="#7ab88a")
+        btn = NodeButton(self, spawn_pix, self._split_into_nodes)
+        btn._sticker_shadow = True
+        self._buttons.append(btn)
+
+    # ─────────────────────────────────────────────────────────────────────────
     # BACKGROUND
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -325,6 +337,135 @@ class MarkdownNode(BaseNode):
             new_rect = QRectF(r.x(), r.y(), r.width(), needed)
             self.setRect(new_rect)
             self.data.height = needed
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SPLIT INTO CHAINED NODES
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _split_into_nodes(self, title_pattern: str = r'^#{1,6}\s+') -> None:
+        """Split content into chained AboutNodes (titles) and WarmNodes (body).
+
+        The *title_pattern* regex decides which lines are headings vs body
+        text.  Default matches markdown headings; callers can pass any
+        pattern to split on different delimiters.
+
+        Every spawned node is chained to the previous one with a Connection
+        wire, producing a linked reading sequence.
+        """
+        import re
+        from PySide6.QtCore import QPointF, QRectF
+
+        scene = self.scene()
+        if not scene:
+            return
+
+        text = self.data.label
+        if not text or not text.strip():
+            return
+
+        from nodes.WarmNode import WarmNode
+        from data.WarmNodeData import WarmNodeData
+        from graphics.Connection import Connection
+        from utils.placement import spiral_place
+
+        import math
+        import random
+
+        _OFFSCREEN = QPointF(-999_999, -999_999)
+        prev_node = self
+
+        # ── Parse into (title, body) pairs ──────────────────────────────
+        sections: list[tuple[str | None, str]] = []
+        current_title: str | None = None
+        body_lines: list[str] = []
+
+        for line in text.splitlines():
+            if re.match(title_pattern, line):
+                # Flush previous section
+                body = "\n".join(body_lines).strip()
+                if current_title is not None or body:
+                    sections.append((current_title, body))
+                # Start new section — strip the markdown markers for the label
+                current_title = re.sub(title_pattern, "", line).strip()
+                body_lines = []
+            else:
+                body_lines.append(line)
+
+        # Flush final section
+        body = "\n".join(body_lines).strip()
+        if current_title is not None or body:
+            sections.append((current_title, body))
+
+        if not sections:
+            return
+
+        # ── Spawn nodes ─────────────────────────────────────────────────
+        for title, body in sections:
+
+            # AboutNode for the heading
+            if title:
+                about = scene.add_about_node(pos=_OFFSCREEN, label=title)
+                about.data.title = title[:40]
+                chain_origin = self._wander_origin(prev_node)
+                pos = spiral_place(
+                    scene, about, origin=chain_origin,
+                    fallback=chain_origin,
+                )
+                about.setPos(pos)
+                conn = Connection(prev_node, about)
+                scene.addItem(conn)
+                prev_node = about
+
+            # WarmNode for the body text
+            if body:
+                wdata = WarmNodeData(body_text=body, title="")
+                warm = WarmNode(wdata)
+                warm.setPos(_OFFSCREEN)
+                scene.addItem(warm)
+                scene.raise_node(warm)
+
+                # Let WarmNode's own auto-fit handle sizing
+                if hasattr(warm, '_auto_fit_height'):
+                    warm._auto_fit_height()
+
+                chain_origin = self._wander_origin(prev_node)
+                pos = spiral_place(
+                    scene, warm, origin=chain_origin,
+                    fallback=chain_origin,
+                )
+                warm.setPos(pos)
+                conn = Connection(prev_node, warm)
+                scene.addItem(conn)
+                prev_node = warm
+
+    @staticmethod
+    def _wander_origin(prev_node) -> 'QPointF':
+        """Pick a random origin near *prev_node* — simulates the organic
+        scatter of someone dropping sticky notes across a desk with full
+        intentions of tidying up later.  Never does.  The mess is the art."""
+        import math
+        import random
+        from PySide6.QtCore import QPointF
+
+        pr = prev_node.rect()
+        cx = prev_node.pos().x() + pr.width()  / 2
+        cy = prev_node.pos().y() + pr.height() / 2
+
+        angle = random.uniform(0, 2 * math.pi)
+
+        # Occasionally fling one way out, mostly keep them in
+        # conversational range — like how real desk clutter forms
+        # clusters with a few outliers.
+        if random.random() < 0.15:
+            distance = random.uniform(500, 900)    # flung across the desk
+        else:
+            distance = random.gauss(260, 80)       # clustered nearby
+            distance = max(120, distance)           # never on top of each other
+
+        return QPointF(
+            cx + math.cos(angle) * distance,
+            cy + math.sin(angle) * distance,
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT
