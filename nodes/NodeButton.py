@@ -139,7 +139,13 @@ class NodeButton(QGraphicsObject):
         inset   = (BUTTON_SIZE - scaled) / 2.0
         draw_rect = QRectF(inset, EMOJI_OVERFLOW + inset, scaled, scaled)
 
-        pix = self._get_scaled(source, int(scaled))
+        # At zoom > 1.0, draw from full-res source for crisp rendering.
+        # At zoom <= 1.0, use cached display-size pixmap for performance.
+        if lod > 1.0:
+            pix = source
+            painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        else:
+            pix = self._get_scaled(source, int(scaled))
 
         # Tactile press — gentle offset toward bottom-right
         if self._sticker_shadow and self._sticker_pressed:
@@ -266,9 +272,17 @@ class EmojiButton(QGraphicsObject):
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
         if lod < LOD_THRESHOLD:
             return
-        self._rebuild_cache()
-        if self._cached_pixmap:
-            painter.drawPixmap(0, 0, self._cached_pixmap)
+        if lod > 1.0:
+            # Zoomed in — render text directly for crisp glyphs
+            from PySide6.QtGui import QFont
+            painter.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7)))
+            painter.setPen(QColor(Theme.nodeFontColor))
+            painter.drawText(self.boundingRect(), Qt.AlignCenter, self._get_emoji())
+        else:
+            # Zoomed out — use cached pixmap for performance
+            self._rebuild_cache()
+            if self._cached_pixmap:
+                painter.drawPixmap(0, 0, self._cached_pixmap)
 
     def mousePressEvent(self, event) -> None:
         if event.button() != Qt.LeftButton or self._set_emoji is None:
