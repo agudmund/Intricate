@@ -2,6 +2,30 @@
 
 Visual language and layout specification for settings categories in The Settlers, the companion configuration app for Intricate. This brief codifies the lookdev established in the "Intricate's Titlebar Locations" (dock_offsets) category and extended to the "About Node" category.
 
+## The Four-Column Row Grid
+
+Every row in every category — regardless of control type — must follow this layout:
+
+```
+labels (200px) | shorthands (36px) | content (stretch) | applicators (60px)
+```
+
+| Column | Width | Purpose |
+|--------|-------|---------|
+| **labels** | 200px fixed | Field name. Always a `pretty_label` at 12pt. |
+| **shorthands** | 36px fixed | Value readout (pink `#ffb6c1`) for sliders. **Empty placeholder** for chip and checkbox rows — the space is reserved even when unused. |
+| **content** | stretch (fills) | The interactive control: slider, chip container, checkbox indicator. |
+| **applicators** | 60px fixed | Action widget: apply button, add-input pill, or empty placeholder. Always the same width regardless of what's inside. |
+
+These values are defined as class constants on `MainWindow`:
+```python
+_COL_LABEL      = 200
+_COL_SHORTHAND  =  36
+_COL_APPLICATOR =  60
+```
+
+**Rule:** A row that lacks a particular column still reserves its width. Use `QSpacerItem(width, 1, QSizePolicy.Fixed, QSizePolicy.Minimum)` as the placeholder. Every row is the same effective width — the four columns are the visual skeleton of the category page.
+
 ## Page Structure
 
 Each category occupies a scrollable tab page built by `_ensure_tab()`.
@@ -20,9 +44,10 @@ The canonical control for integer attributes. One row per TOML key.
 
 | Widget | Type | Width | Details |
 |--------|------|-------|---------|
-| Label | `pretty_label` | 140px fixed | 12pt, display name derived from TOML key (`_` to space, title case) |
-| Value readout | `pretty_label` | 36px fixed | 12pt, right-aligned, `#ffb6c1` pink, transparent background, no border |
+| Label | `pretty_label` | `_COL_LABEL` (200px) | 12pt, display name derived from TOML key (`_` to space, title case) |
+| Value readout | `pretty_label` | `_COL_SHORTHAND` (36px) | 12pt, right-aligned, `#ffb6c1` pink, transparent background, no border |
 | Slider | `PrettySlider` | fills remaining | Horizontal, `slider_handle.png` at 24px, 24px fixed height |
+| Applicator | `QSpacerItem` or button | `_COL_APPLICATOR` (60px) | Empty spacer for plain sliders; apply button (`setFixedSize(60, 24)`) for dock offsets |
 | Hidden field | `QLineEdit` | hidden | Stores the string value for TOML sync via `_on_field_changed` |
 
 **Range:** Determined per category. Dock offsets use `(0, screen_height)`. About Node attributes use `(-50, 50)`. Future categories set their own range as appropriate.
