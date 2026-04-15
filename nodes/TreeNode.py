@@ -425,17 +425,38 @@ class TreeNode(BaseNode):
 
     def _make_walker(self) -> _TreeWalker:
         """Build a walker from current [node.tree] TOML settings."""
+        import ast
         import pretty_widgets.utils.settings as _s
         g = lambda *keys, default=None: _s.get_nested(*keys, default)
+
+        def _parse_list(val, default=()):
+            """Parse a string-encoded list from TOML, e.g. "['a', 'b']" → ['a', 'b']."""
+            if isinstance(val, list):
+                return val
+            if isinstance(val, str) and val.startswith("["):
+                try:
+                    result = ast.literal_eval(val)
+                    return list(result) if isinstance(result, (list, tuple)) else default
+                except Exception:
+                    pass
+            return default
+
+        def _parse_bool(val, default=False):
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                return val.strip().lower() in ("true", "1", "yes")
+            return default
+
         return _TreeWalker(
             root          = Path(self.data.project_path),
-            max_depth     = g("node", "tree", "max_depth",     default=None),
-            exclude_dirs  = g("node", "tree", "exclude_dirs",  default=[]),
-            exclude_exts  = g("node", "tree", "exclude_exts",  default=[]),
-            exclude_files = g("node", "tree", "exclude_files", default=[]),
-            show_hidden   = g("node", "tree", "show_hidden",   default=False),
-            use_gitignore = g("node", "tree", "use_gitignore", default=True),
-            use_emoji     = g("node", "tree", "use_emoji",     default=True),
+            max_depth     = int(g("node", "tree", "max_depth", default=6) or 6),
+            exclude_dirs  = _parse_list(g("node", "tree", "exclude_dirs",  default=[])),
+            exclude_exts  = _parse_list(g("node", "tree", "exclude_exts",  default=[])),
+            exclude_files = _parse_list(g("node", "tree", "exclude_files", default=[])),
+            show_hidden   = _parse_bool(g("node", "tree", "show_hidden",   default=False)),
+            use_gitignore = _parse_bool(g("node", "tree", "use_gitignore", default=True)),
+            use_emoji     = _parse_bool(g("node", "tree", "use_emoji",     default=True)),
         )
 
     def refresh(self) -> None:
