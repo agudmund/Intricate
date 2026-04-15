@@ -139,9 +139,9 @@ class NodeButton(QGraphicsObject):
         inset   = (BUTTON_SIZE - scaled) / 2.0
         draw_rect = QRectF(inset, EMOJI_OVERFLOW + inset, scaled, scaled)
 
-        # At zoom > 1.0, draw from full-res source for crisp rendering.
-        # At zoom <= 1.0, use cached display-size pixmap for performance.
-        if lod > 1.0:
+        # Above 0.5 zoom, draw from full-res source for crisp rendering.
+        # At 0.5 and below, use cached display-size pixmap for performance.
+        if lod > 0.5:
             pix = source
             painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
         else:
@@ -272,8 +272,8 @@ class EmojiButton(QGraphicsObject):
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
         if lod < LOD_THRESHOLD:
             return
-        if lod > 1.0:
-            # Zoomed in — render text directly for crisp glyphs
+        if lod > 0.5:
+            # Above 0.5 — render text directly for crisp glyphs
             from PySide6.QtGui import QFont
             painter.setFont(QFont(Theme.healthFontFamily, int(BUTTON_SIZE * 0.7)))
             painter.setPen(QColor(Theme.nodeFontColor))
