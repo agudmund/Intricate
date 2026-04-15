@@ -125,10 +125,11 @@ class _TreeWalker:
             # Exact name match (e.g. "__pycache__")
             if name in self.exclude_dirs:
                 return True
-            # Path-based match for nested excludes (e.g. "Documents/data")
+            # Path-based match for nested excludes (e.g. "Documents>data")
+            # Uses > as path separator to avoid TOML escape conflicts with / and \
             rel_forward = rel_path.replace("\\", "/")
             for exc in self.exclude_dirs:
-                if "/" in exc and rel_forward == exc:
+                if ">" in exc and rel_forward == exc.replace(">", "/"):
                     return True
 
         if entry.is_file():
