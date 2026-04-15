@@ -14,8 +14,8 @@ from data.NodeData import NodeData
 class MarkdownNodeData(NodeData):
     node_type:   str   = field(default="markdown")
     title:       str   = field(default="Markdown")
-    width:       float = field(default=400.0)
-    height:      float = field(default=320.0)
+    width:       float = field(default=720.0)
+    height:      float = field(default=400.0)
     label:       str   = field(default="")
     depth_front: bool  = field(default=False)
 
@@ -34,8 +34,8 @@ class MarkdownNodeData(NodeData):
             uuid          = data.get("uuid",          _uuid.uuid4().hex),
             x             = float(data.get("x",       0.0)),
             y             = float(data.get("y",       0.0)),
-            width         = float(data.get("width",   400.0)),
-            height        = float(data.get("height",  320.0)),
+            width         = float(data.get("width",   720.0)),
+            height        = float(data.get("height",  400.0)),
             ports_visible = data.get("ports_visible", False),
             shelf_visible = data.get("shelf_visible", True),
             label         = data.get("label",         ""),

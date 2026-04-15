@@ -46,6 +46,7 @@ class MarkdownNode(BaseNode):
         self._html_proxy: QGraphicsProxyWidget | None = None
         self._editor: QTextEdit | None = None
         self._pending_html: str | None = None
+        self._removed: bool = False
         self._build_html_viewer()
 
         # Render markdown on a worker thread — node appears instantly,
@@ -80,18 +81,13 @@ class MarkdownNode(BaseNode):
         te.setReadOnly(True)
         te.setFrameShape(QTextEdit.NoFrame)
         te.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        te.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         te.setStyleSheet(
             "QTextEdit { background: transparent; border: none;"
             "            selection-background-color: #264f78;"
             "            selection-color: #e6edf3; }"
-            "QScrollBar:vertical { border: none; background: transparent;"
-            "    width: 6px; }"
-            "QScrollBar::handle:vertical { background: #30363d;"
-            "    min-height: 20px; border-radius: 3px; }"
-            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical"
-            "    { height: 0px; }"
         )
-        te.document().setDocumentMargin(8)
+        te.document().setDocumentMargin(12)
 
         self._html_proxy = QGraphicsProxyWidget(self)
         self._html_proxy.setWidget(te)
@@ -291,19 +287,44 @@ class MarkdownNode(BaseNode):
     def _render_worker(self) -> None:
         """Background thread — convert markdown to HTML."""
         try:
-            self._pending_html = self._markdown_to_html(self.data.label)
+            html = self._markdown_to_html(self.data.label)
+            if not self._removed:
+                self._pending_html = html
         except Exception:
-            self._pending_html = "<p>Render failed</p>"
+            if not self._removed:
+                self._pending_html = "<p>Render failed</p>"
 
     def _check_render_delivery(self) -> None:
         """Main-thread timer that picks up the rendered HTML from the worker."""
-        if self._pending_html is None:
+        if self._removed or self._pending_html is None:
             return
         html = self._pending_html
         self._pending_html = None
         self._delivery_timer.stop()
         if self._editor:
             self._editor.setHtml(html)
+            self._auto_fit_height()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # AUTO-FIT
+    # ─────────────────────────────────────────────────────────────────────────
+
+    _BOTTOM_PAD = 40.0   # spacious bottom padding — visual "end of content" cue
+
+    def _auto_fit_height(self) -> None:
+        """Grow the node to fit the full rendered document — no scrolling."""
+        if not self._editor:
+            return
+        r = self.rect()
+        body_w = r.width() - _PAD * 2
+        self._editor.document().setTextWidth(body_w)
+        doc_h = self._editor.document().size().height()
+        needed = _BUTTON_ZONE_H + doc_h + self._BOTTOM_PAD
+        if abs(needed - r.height()) > 2.0:
+            self.prepareGeometryChange()
+            new_rect = QRectF(r.x(), r.y(), r.width(), needed)
+            self.setRect(new_rect)
+            self.data.height = needed
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT
@@ -322,15 +343,27 @@ class MarkdownNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        # Signal the worker thread to discard its result
+        self._removed = True
+
         self._delivery_timer.stop()
         try:
             self._delivery_timer.timeout.disconnect(self._check_render_delivery)
         except RuntimeError:
             pass
+
         if self._html_proxy:
+            w = self._html_proxy.widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
             self._html_proxy.setWidget(None)
+            scene = self.scene()
+            if scene:
+                scene.removeItem(self._html_proxy)
             self._html_proxy = None
         self._editor = None
+
         super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
