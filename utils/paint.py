@@ -91,7 +91,7 @@ def draw_header(
     line_h = kit.line_h
     painter.setFont(kit.f_header)
     painter.setPen(kit.c_header)
-    painter.drawText(int(x), int(y - 3), int(w), line_h + 4,
+    painter.drawText(int(x), int(y - 3), int(w), line_h + 10,
                      Qt.AlignLeft | Qt.AlignVCenter, text)
     y += line_h + 12
     painter.setPen(kit.div_pen)
