@@ -93,10 +93,10 @@ def draw_header(
     painter.setPen(kit.c_header)
     painter.drawText(int(x), int(y), int(w), line_h + 4,
                      Qt.AlignLeft | Qt.AlignVCenter, text)
-    y += line_h + 6
+    y += line_h + 12
     painter.setPen(kit.div_pen)
     painter.drawLine(int(x), int(y), int(x + w), int(y))
-    y += 8
+    y += 10
     return y
 
 
