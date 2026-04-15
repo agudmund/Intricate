@@ -51,6 +51,7 @@ icon = "iconCode"
 spawnable = true
 status = "compiling the vibes"
 notes = ""
+buttons = "Browse for a code file"
 
 [nodes.bloom]
 name = "The Bloom Node"
@@ -60,6 +61,7 @@ icon = "iconBloom"
 spawnable = true
 status = "particles are blooming"
 notes = ""
+buttons = "Bloom — scatter particles"
 
 [nodes.null]
 name = "The Null Node"
@@ -82,6 +84,7 @@ icon = "iconImage"
 spawnable = true
 status = "a picture is worth everything"
 notes = ""
+buttons = "Ask Claude what this is · Stamp metadata · Read PNG stamp · Toggle border · Convert to PNG"
 
 [nodes.video]
 name = "The Videos"
@@ -91,6 +94,7 @@ icon = "iconVideo"
 spawnable = true
 status = "lights, camera, action"
 notes = ""
+buttons = "Play/Pause · Mute · Loop toggle · Toggle border"
 
 [nodes.sequence]
 name = "The Sequences"
@@ -124,6 +128,7 @@ icon_fallback = "#9a8a7a"
 spawnable = true
 status = "Yummi >> Tummy >> voila!"
 notes = ""
+buttons = "Play/Pause · Mute · Loop toggle · Split at playhead"
 
 [nodes.merge]
 name = "The Merger"
@@ -134,6 +139,7 @@ icon_fallback = "#8a9a7a"
 spawnable = true
 status = "converging streams"
 notes = ""
+buttons = "Play/Pause · Combine sequential · Overlay mix"
 
 [nodes.audio_hold]
 name = "The Silence"
@@ -166,6 +172,7 @@ icon = "iconPalette"
 spawnable = true
 status = "mixing colors"
 notes = ""
+buttons = "Export the palette"
 
 [nodes.value]
 name = "The Oddly Important Value Node"
@@ -241,6 +248,7 @@ icon_fallback = "#8a9a8a"
 spawnable = true
 status = "Remember to say the product name!"
 notes = ""
+buttons = "Open GitHub Desktop · Push all repos"
 
 [nodes.tree]
 name = "The Stuff and Stuff"
@@ -251,6 +259,7 @@ icon_fallback = "#8888aa"
 spawnable = true
 status = "mapping the territory"
 notes = ""
+buttons = "Refresh tree · New folder"
 
 [nodes.session]
 name = "Total Recall"
@@ -261,6 +270,7 @@ icon_fallback = "#8a9aaa"
 spawnable = true
 status = "ready for a session file"
 notes = ""
+buttons = "Import session nodes onto canvas"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # INFO CATEGORY
@@ -315,6 +325,7 @@ icon_fallback = "#8a9aaa"
 spawnable = true
 status = "the vocabulary opens"
 notes = ""
+buttons = "Edit node_registry.toml"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CLAUDE CATEGORY
@@ -329,6 +340,7 @@ icon_fallback = "#7a9a7a"
 spawnable = true
 status = "claude has entered the chat"
 notes = ""
+buttons = "Toggle reply body"
 
 [nodes.claude_info]
 name = "The Curious Token Counter"

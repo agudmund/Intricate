@@ -74,23 +74,24 @@ class RegistryNode(MarkdownNode):
 
             lines.append(f"## {cat_name}")
             lines.append("")
-            lines.append("| Node | Status | Tooltip | Notes |")
-            lines.append("|------|--------|---------|-------|")
+            lines.append("| Node | Status | Tooltip | Buttons | Notes |")
+            lines.append("|------|--------|---------|---------|-------|")
 
             for key, entry in actions:
                 name = entry.get("name", key)
                 tooltip = entry.get("tooltip", "")
-                lines.append(f"| {name} | action | {tooltip} | |")
+                lines.append(f"| {name} | action | {tooltip} | | |")
 
             for key, entry in all_nodes:
                 name = entry.get("name", key)
                 status = entry.get("status", "")
                 tooltip = entry.get("tooltip", "")
+                buttons = entry.get("buttons", "")
                 notes = entry.get("notes", "")
                 spawnable = entry.get("spawnable", True)
                 if not spawnable:
                     notes = notes or "auto-spawned"
-                lines.append(f"| {name} | {status} | {tooltip} | {notes} |")
+                lines.append(f"| {name} | {status} | {tooltip} | {buttons} | {notes} |")
 
             lines.append("")
 
