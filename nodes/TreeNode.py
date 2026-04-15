@@ -308,6 +308,7 @@ class TreeNode(BaseNode):
 
         self._toolbar_proxy = QGraphicsProxyWidget(self)
         self._toolbar_proxy.setWidget(container)
+        self._toolbar_proxy.setToolTip("Plant a new folder in the project")
         self._toolbar_proxy.setGeometry(self._toolbar_rect())
         self._toolbar_proxy.show()
 
