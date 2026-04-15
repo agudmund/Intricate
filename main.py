@@ -138,6 +138,14 @@ def main():
         except Exception:
             pass
 
+    # Rotate stale crash.txt — keep it for 24 hours for forensics, then discard
+    _crash_file = _root / "logs" / "crash.txt"
+    if _crash_file.exists():
+        import time
+        age_hours = (time.time() - _crash_file.stat().st_mtime) / 3600
+        if age_hours > 24:
+            _crash_file.unlink(missing_ok=True)
+
     logger.log(TRACE, "[boot:2] QApplication created — Qt event loop ready")
 
     # Raise Qt's image allocation cap — the default 256 MB is hit by any modern
