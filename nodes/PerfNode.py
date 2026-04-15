@@ -227,6 +227,12 @@ class PerfNode(BaseNode):
         fps_color = c_calm if fps >= 50 else c_warn if fps >= 25 else c_high
         avg_color = c_calm if avg <= 20 else c_warn if avg <= 40 else c_high
 
+        # Current zoom level from the view
+        zoom = 0.0
+        scene = self.scene()
+        if scene and scene.views():
+            zoom = getattr(scene.views()[0], 'current_zoom', 0.0)
+
         rows: list[tuple[str, str, QColor]] = [
             ("FPS",          f"{fps:.1f}",           fps_color),
             ("Last",         f"{last:.1f} ms",       avg_color),
@@ -235,6 +241,7 @@ class PerfNode(BaseNode):
             ("Max",          f"{mx:.1f} ms",         c_warn if mx > 40 else c_text),
             ("Samples",      f"{samples}/{_WINDOW}", kit.c_label),
             ("Total paints", str(total),             kit.c_label),
+            ("Zoom",         f"{zoom:.2f}×",         c_text),
         ]
 
         y = draw_rows(painter, kit, x, y, w, rows)
