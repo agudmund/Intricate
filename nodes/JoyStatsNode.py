@@ -18,7 +18,7 @@ from pretty_widgets.graphics.Theme import Theme
 
 class JoyStatsNode(BaseNode):
     _has_depth_toggle = True
-    _show_emoji_btn   = False
+    _show_emoji_btn   = True
     """
     Live debug display for the joy tamagotchi system.
 
