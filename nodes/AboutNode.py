@@ -58,7 +58,6 @@ class AboutNode(BaseNode):
         self._apply_depth()
 
         self._editor: PrettyEdit | None = None
-        self._build_editor()
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS
@@ -129,6 +128,8 @@ class AboutNode(BaseNode):
         return QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
 
     def _start_edit(self) -> None:
+        if self._editor is None:
+            self._build_editor()
         # Flush the device-coordinate cache so the old painted title doesn't
         # bleed through behind the editor overlay.
         from PySide6.QtWidgets import QGraphicsItem
