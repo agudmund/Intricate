@@ -28,6 +28,7 @@ FADE_MS      = 800      # fade-out duration per particle
 
 # ── Burst timing ──────────────────────────────────────────────────────────
 BURST_BASE_MS = 2000    # burst window at the reference count (16000 particles)
+MAX_PARTICLES = 500_000  # hard cap — matches spin box ceiling
 
 # ── Icon cache (resolved once per app run) ────────────────────────────────
 _icon_base_cache: dict[str, QPixmap] = {}   # icon_name → MAX_SIZE base pixmap
@@ -143,6 +144,8 @@ def sprinkle(scene: QGraphicsScene, center: QPointF,
     # and logs on every cache miss. For the particle simulator every
     # microsecond counts, so we skip both the lookup and the log after the
     # first call by caching the scaled pixmaps at module level.
+    count = min(count, MAX_PARTICLES)
+
     key = icon_name or "heart.png"
     if key not in _icon_size_cache:
         raw = Theme.icon(key, fallback_color=Theme.primaryBorder)
@@ -355,6 +358,7 @@ def orbital_burst(scene: QGraphicsScene, center: QPointF,
                   speed: float = 0.7,
                   distance: float = ORBITAL_SCALE) -> None:
     """Spawn an orbital torus knot particle swarm at a scene position."""
+    count = min(count, MAX_PARTICLES)
     burst = _OrbitalBurst(scene, center, count, icon_name=icon_name,
                           lerp_rate=stiffness, speed=speed, scale=distance)
     _orbital_bursts.append(burst)

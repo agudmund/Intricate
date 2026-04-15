@@ -6,6 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QRectF
@@ -52,7 +53,7 @@ class BloomNode(BaseNode):
 
     Parameters:
         Algorithm   — Sunflower (golden-angle spiral) or Orbital (torus knot)
-        Count       — number of particles (uncapped)
+        Count       — number of particles (max 500k)
         Seed        — reproducible scatter randomisation
         Density     — Uniform / Center-heavy / Edge-heavy radial distribution
         Stiffness   — orbital convergence rate (lerp_rate, 0.01 = floaty, 1.0 = snappy)
@@ -82,7 +83,7 @@ class BloomNode(BaseNode):
 
         # ── Row 2: particle count ─────────────────────────────────────────
         self._count_spin = QSpinBox()
-        self._count_spin.setRange(100, 999999)
+        self._count_spin.setRange(100, 500000)
         self._count_spin.setSingleStep(500)
         self._count_spin.setValue(data.particle_count)
         self._count_spin.setSuffix("  particles")
@@ -262,8 +263,17 @@ class BloomNode(BaseNode):
                 return other.mapToScene(other.rect().center())
         return self.mapToScene(self.rect().center())
 
+    _COOLDOWN_S = 1.5   # minimum seconds between bursts
+    _last_fire: float = 0.0
+
     def _fire_scatter(self) -> None:
         """Trigger a particle scatter at the scatter origin."""
+        now = time.monotonic()
+        if now - self._last_fire < self._COOLDOWN_S:
+            _log.debug("[Bloom] throttled — cooldown active")
+            return
+        self._last_fire = now
+
         scene = self.scene()
         if not scene:
             return
@@ -343,6 +353,14 @@ class BloomNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
+        # Flush any living particles this node spawned — they live in
+        # module-level globals in Particles.py and would otherwise keep
+        # ticking against a scene that no longer expects them.
+        scene = self.scene()
+        if scene:
+            from graphics.Particles import flush_scene
+            flush_scene(scene)
+
         for signal, slot in [
             (self._combo.currentIndexChanged,        self._on_mode_changed),
             (self._count_spin.valueChanged,          self._on_count_changed),
