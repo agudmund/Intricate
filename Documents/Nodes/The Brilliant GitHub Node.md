@@ -11,7 +11,11 @@ The GitNode scans all Desktop folders for `.git` directories every 10 seconds an
 Four states, each with its own dot colour in the repo list:
 
 - **Blue dot** — Dirty. Uncommitted changes that are not session files.
-- **Green dot** — Session. Only session-related files have changed (auto-save artifacts). Safe to bulk-commit without review.
+- **Green dot** — Session. Only session-managed files have changed — safe to bulk-commit without review. This includes:
+  - Session save files (`.intricate`, backups, timestamped archives)
+  - Image node cache PNGs (`Documents/data/cache/`)
+  - Warm bridge temporaries (`.warm_bridge_*.json`)
+  - The `Documents/data/` tree (backup/, cache/)
 - **Amber dot** — Unpushed. Working tree is clean but local commits have not been pushed to the remote. Detected via `git rev-list --count @{u}..HEAD`.
 - **No dot** — Clean. Nothing to commit, nothing to push. Everything is in sync.
 
@@ -23,8 +27,9 @@ The push button (sticker-style arrow icon) collects session and unpushed repos i
 
 1. **Connectivity check** — pings `github.com:443` before anything else. If offline, spawns an AboutNode wired to the GitNode with a gentle reminder to turn the internet on, and sets the More Glory emoji to an unamused face.
 2. **Commit dialog** — if there are session repos, a frameless themed dialog asks for a commit message. Unpushed repos skip this step since they already have commits.
-3. **Worker thread** — session repos get `git add -A`, `git commit`, `git push`. Unpushed repos get just `git push`. All on a background thread so the UI stays responsive.
-4. **On completion** — the More Glory emoji shuffles to a random one (celebration), and the repo list refreshes to reflect the new state.
+3. **Parallel worker** — session repos get `git add -A`, `git commit`, `git push`. Unpushed repos get just `git push`. All repos push in parallel via `ThreadPoolExecutor(max_workers=8)`, fastest finishes first.
+4. **Live updates** — each completed push sets a `_push_dirty` flag. The delivery timer (250ms, main thread) picks this up and triggers a rescan — the green dot list updates in real time as each repo finishes, not all at once at the end.
+5. **On completion** — when the last future completes, a `_push_complete` flag fires the dismiss ceremony, shuffles the More Glory emoji to a random one (celebration), and restarts the poll timer.
 
 ## The Loading Ceremony
 
@@ -60,8 +65,10 @@ The More Glory button reflects the node's operational state:
 
 ## Technical Notes
 
-- Repo scanning runs on a daemon thread with results delivered via a 250ms poll timer on the main thread. The node appears immediately; the repo list populates asynchronously.
-- The `_is_session_path` filter identifies session-related files (`.intricate`, backup slots, warm bridge temporaries) so they can be auto-committed without cluttering the dirty list.
-- Unpushed detection uses `git rev-list --count @{u}..HEAD` which gracefully returns a non-zero exit code for repos without an upstream, falling through to clean status.
-- The VideoNode spawned during loading has its caption label suppressed (`_spawn_label = False`) and loops until dismissed. Cleanup follows BaseNode's deferred removal pattern via `itemChange` to avoid double `_prepare_for_removal` calls.
-- Push timeout is 60 seconds per repo. Failures are logged with stderr output for diagnostics.
+- **Scan delivery** — repo scanning runs on a daemon thread with results delivered via a 250ms poll timer on the main thread. The node appears immediately; the repo list populates asynchronously.
+- **Session path classification** — `_is_session_path()` identifies session-managed files (`.intricate`, backup slots, image cache PNGs, warm bridge temporaries, timestamped archives) so they classify as green dots rather than blue.
+- **Unpushed detection** — uses `git rev-list --count @{u}..HEAD` which gracefully returns a non-zero exit code for repos without an upstream, falling through to clean status.
+- **Cross-thread signaling** — the push worker communicates with the main thread via `_push_dirty` / `_push_complete` flags polled by the delivery timer. `QTimer.singleShot` from worker threads is unreliable in PySide6 and is not used.
+- **Loading plushie lifecycle** — the VideoNode spawned during loading has its caption label suppressed (`_spawn_label = False`) and loops until dismissed. On dismiss, the video player is stopped synchronously and media links severed (`setVideoOutput(None)`, `setAudioOutput(None)`) before the deferred `removeItem`. Full teardown fires via `itemChange` → `_prepare_for_removal`, guarded by `BaseNode._removal_done` to prevent double cleanup.
+- **Push timeout** — 60 seconds per repo. Failures are logged with stderr output for diagnostics.
+- **Parallel push** — `ThreadPoolExecutor(max_workers=8)` with `as_completed` — repos finish in order of speed, not submission order. Each completion triggers a rescan so the node visually reflects progress in real time.
