@@ -960,7 +960,11 @@ class IntricateApp(QMainWindow):
         """Update the preview panel when selection changes — skipped while pinned."""
         if self._preview_pinned:
             return
-        for item in self.scene.selectedItems():
+        try:
+            items = self.scene.selectedItems()
+        except RuntimeError:
+            return  # scene's C++ side torn down during mass-delete
+        for item in items:
             if isinstance(item, ImageNode) and item._pixmap and not item._pixmap.isNull():
                 self._show_node_preview(item)
                 return
