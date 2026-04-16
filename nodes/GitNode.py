@@ -266,6 +266,10 @@ class GitNode(BaseNode):
         # Strip all wires from the video node
         for conn in list(node.connections):
             conn._glide_timer.stop()
+            try:
+                conn._glide_timer.timeout.disconnect(conn._glide_tick)
+            except RuntimeError:
+                pass
             other = conn.end_node if conn.start_node is node else conn.start_node
             if other is not None and other is not node:
                 try:
@@ -278,17 +282,14 @@ class GitNode(BaseNode):
                 scene.removeItem(conn)
         node.connections.clear()
 
-        # Particle burst + deferred removal
+        # Particle burst + immediate removal
         # _prepare_for_removal is called automatically by BaseNode.itemChange
         # when removeItem sets the scene to None — do NOT call it manually.
         sprinkle(scene, center, count=8000)
-        node.setVisible(False)
-        def _remove(n=node, sc=scene):
-            try:
-                sc.removeItem(n)
-            except RuntimeError:
-                pass
-        QTimer.singleShot(0, _remove)
+        try:
+            scene.removeItem(node)
+        except RuntimeError:
+            pass
 
     def _scan_worker(self) -> None:
         try:
