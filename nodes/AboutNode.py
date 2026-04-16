@@ -119,6 +119,7 @@ class AboutNode(BaseNode):
             enter_commits=True,
         )
         self._editor.committed.connect(self._on_committed)
+        self._editor.document().contentsChanged.connect(self._auto_expand)
 
     def _edit_rect(self) -> QRectF:
         r = self.rect()
@@ -126,6 +127,34 @@ class AboutNode(BaseNode):
         padR = Theme.aboutTextPaddingRight
         top = self._anim_top_offset
         return QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
+
+    def _auto_expand(self) -> None:
+        """Grow (or shrink) the node live while the user types."""
+        if self._editor is None or not self._editor.proxy.isVisible():
+            return
+        doc  = self._editor.document()
+        padL = Theme.aboutTextPaddingLeft
+        padR = Theme.aboutTextPaddingRight
+        padT = Theme.aboutTextPaddingTop + Theme.aboutFontVerticalOffset
+        top  = self._anim_top_offset
+
+        # Let the document measure its natural (unwrapped) width so the node
+        # stretches horizontally as the user types rather than wrapping down.
+        doc.setTextWidth(-1)
+        doc_w = doc.idealWidth()
+        doc_h = doc.size().height()
+
+        new_w = max(self._min_width,  doc_w + padL + padR + 8)
+        new_h = max(self._min_height, doc_h + top  + padT + 6)
+
+        cur = self.rect()
+        if abs(new_w - cur.width()) < 1 and abs(new_h - cur.height()) < 1:
+            return  # nothing meaningful changed
+
+        self.prepareGeometryChange()
+        self.setRect(QRectF(cur.topLeft(), QSizeF(new_w, new_h)))
+        self._editor.position(self._edit_rect())
+        self.update()
 
     def _start_edit(self) -> None:
         if self._editor is None:
@@ -238,6 +267,10 @@ class AboutNode(BaseNode):
     def _prepare_for_removal(self) -> None:
         self._shelf_anim.stop()
         if self._editor:
+            try:
+                self._editor.document().contentsChanged.disconnect(self._auto_expand)
+            except (RuntimeError, TypeError):
+                pass
             self._editor.teardown()
         self._editor = None
         super()._prepare_for_removal()
