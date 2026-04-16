@@ -960,6 +960,7 @@ class IntricateScene(QGraphicsScene):
             elif isinstance(item, Connection):
                 try:
                     item._glide_timer.stop()
+                    item._glide_timer.timeout.disconnect(item._glide_tick)
                     item.start_node = None
                     item.end_node   = None
                 except Exception:
@@ -991,6 +992,7 @@ class IntricateScene(QGraphicsScene):
             if isinstance(item, Connection):
                 try:
                     item._glide_timer.stop()
+                    item._glide_timer.timeout.disconnect(item._glide_tick)
                     item.start_node = None
                     item.end_node   = None
                     self.removeItem(item)

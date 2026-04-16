@@ -374,10 +374,13 @@ class BloomNode(BaseNode):
                 signal.disconnect(slot)
             except RuntimeError:
                 pass
+        sc = self.scene()
         for proxy in (self._combo_proxy, self._count_proxy, self._seed_proxy,
                       self._density_proxy, self._stiffness_proxy,
                       self._speed_proxy, self._distance_proxy):
             if proxy:
+                if sc:
+                    sc.removeItem(proxy)
                 proxy.setWidget(None)
         self._combo_proxy = self._count_proxy = self._seed_proxy = None
         self._density_proxy = self._stiffness_proxy = None

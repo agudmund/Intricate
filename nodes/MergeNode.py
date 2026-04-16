@@ -638,6 +638,9 @@ class MergeNode(BaseNode):
             pass
 
         if self._list_proxy:
+            sc = self.scene()
+            if sc:
+                sc.removeItem(self._list_proxy)
             self._list_proxy.setWidget(None)
             self._list_proxy.hide()
             self._list_proxy = None

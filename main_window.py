@@ -1496,7 +1496,7 @@ class IntricateApp(QMainWindow):
         tip = action.toolTip()
         if not tip or tip == action.text():
             return
-        self._tooltip_timer = QTimer()
+        self._tooltip_timer = QTimer(self)
         self._tooltip_timer.setSingleShot(True)
         self._tooltip_timer.setInterval(1000)
         self._tooltip_timer.timeout.connect(partial(self._show_menu_tooltip, tip))
@@ -1510,6 +1510,10 @@ class IntricateApp(QMainWindow):
     def _cancel_menu_tooltip(self):
         if hasattr(self, '_tooltip_timer'):
             self._tooltip_timer.stop()
+            try:
+                self._tooltip_timer.timeout.disconnect()
+            except RuntimeError:
+                pass
         from pretty_widgets.PrettyTooltip import PrettyTooltip
         t = PrettyTooltip.instance()
         if t.isVisible():

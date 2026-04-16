@@ -1125,11 +1125,16 @@ class ClaudeNode(BaseNode):
             self._watcher = None
         # ── Proxy widgets — sever the QGraphicsProxyWidget → QWidget chain
         # so Qt doesn't chase stale widget pointers during scene cleanup.
+        sc = self.scene()
         if hasattr(self, '_input_proxy') and self._input_proxy:
+            if sc:
+                sc.removeItem(self._input_proxy)
             self._input_proxy.setWidget(None)   # detach Qt widget from proxy
             self._input_proxy.hide()
             self._input_proxy = None
         if hasattr(self, '_body_proxy') and self._body_proxy:
+            if sc:
+                sc.removeItem(self._body_proxy)
             self._body_proxy.setWidget(None)
             self._body_proxy.hide()
             self._body_proxy = None

@@ -290,6 +290,9 @@ class ValueNode(BaseNode):
             except RuntimeError:
                 pass
         if hasattr(self, '_slider_proxy') and self._slider_proxy:
+            sc = self.scene()
+            if sc:
+                sc.removeItem(self._slider_proxy)
             self._slider_proxy.setWidget(None)
             self._slider_proxy.hide()
             self._slider_proxy = None

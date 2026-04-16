@@ -463,7 +463,10 @@ class TextNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _prepare_for_removal(self) -> None:
-        if hasattr(self, '_html_proxy'):
+        if hasattr(self, '_html_proxy') and self._html_proxy:
+            sc = self.scene()
+            if sc:
+                sc.removeItem(self._html_proxy)
             self._html_proxy.setWidget(None)
             self._html_proxy = None
         elif self._editor and hasattr(self._editor, 'teardown'):

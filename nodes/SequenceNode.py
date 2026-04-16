@@ -282,6 +282,9 @@ class SequenceNode(BaseNode):
             except RuntimeError:
                 pass
         if self._slider_proxy:
+            sc = self.scene()
+            if sc:
+                sc.removeItem(self._slider_proxy)
             self._slider_proxy.setWidget(None)
             self._slider_proxy.hide()
             self._slider_proxy = None
