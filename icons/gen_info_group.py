@@ -48,12 +48,6 @@ out.save('icons/info_group.png')
 
 # Multi-resolution ICO
 sizes  = [16, 24, 32, 48, 64, 128, 256]
-frames = [out.resize((s, s), Image.LANCZOS) for s in sizes]
-frames[0].save(
-    'icons/info_group.ico',
-    format='ICO',
-    sizes=[(s, s) for s in sizes],
-    append_images=frames[1:]
-)
+out.save('icons/info_group.ico', format='ICO', sizes=[(s, s) for s in sizes])
 
 print("info_group.png + .ico written")

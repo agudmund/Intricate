@@ -118,11 +118,5 @@ dark_bg.save("icons/_verify_trimAudio_dark.png")
 
 # Multi-resolution ICO
 sizes = [16, 24, 32, 48, 64, 128, 256]
-frames = [out.resize((s, s), Image.LANCZOS) for s in sizes]
-frames[0].save(
-    "icons/trimAudio.ico",
-    format="ICO",
-    sizes=[(s, s) for s in sizes],
-    append_images=frames[1:],
-)
+out.save("icons/trimAudio.ico", format="ICO", sizes=[(s, s) for s in sizes])
 print(f"Extracted trim audio sticker {cw}x{ch_px} -> 1024x1024 png + ico")

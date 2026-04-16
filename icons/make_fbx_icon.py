@@ -57,11 +57,5 @@ out.save('fbx_node.png')
 
 # Multi-resolution ICO
 sizes  = [16, 24, 32, 48, 64, 128, 256]
-frames = [out.resize((s, s), Image.LANCZOS) for s in sizes]
-frames[-1].save(
-    'fbx_node.ico',
-    format='ICO',
-    sizes=[(s, s) for s in sizes],
-    append_images=frames[:-1],
-)
+out.save('fbx_node.ico', format='ICO', sizes=[(s, s) for s in sizes])
 print("Created fbx_node.png + fbx_node.ico")

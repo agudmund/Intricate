@@ -32,11 +32,5 @@ out = img.resize((1024, 1024), Image.LANCZOS)
 out.save('icons/tray_node.png')
 
 sizes  = [16, 24, 32, 48, 64, 128, 256]
-frames = [out.resize((s, s), Image.LANCZOS) for s in sizes]
-frames[0].save(
-    'icons/tray_node.ico',
-    format='ICO',
-    sizes=[(s, s) for s in sizes],
-    append_images=frames[1:]
-)
+out.save('icons/tray_node.ico', format='ICO', sizes=[(s, s) for s in sizes])
 print("Created icons/tray_node.png and icons/tray_node.ico")

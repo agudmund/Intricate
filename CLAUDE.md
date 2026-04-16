@@ -184,15 +184,9 @@ draw.ellipse([cx-800, cy-800, cx+800, cy+800], outline=C, width=52)
 out = img.resize((1024, 1024), Image.LANCZOS)
 out.save('icons/xxx_node.png')
 
-# Multi-resolution ICO (Qt picks the best layer automatically)
-sizes  = [16, 24, 32, 48, 64, 128, 256]
-frames = [out.resize((s, s), Image.LANCZOS) for s in sizes]
-frames[0].save(
-    'icons/xxx_node.ico',
-    format='ICO',
-    sizes=[(s, s) for s in sizes],
-    append_images=frames[1:]
-)
+# Multi-resolution ICO (Pillow downsamples internally)
+out.save('icons/xxx_node.ico', format='ICO',
+         sizes=[(s, s) for s in [16, 24, 32, 48, 64, 128, 256]])
 ```
 
 Then in `settings.toml`:

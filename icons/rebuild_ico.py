@@ -51,13 +51,7 @@ for name in ICONS:
         src = src.resize((512, 512), Image.LANCZOS)
 
     sizes = [16, 24, 32, 48, 64, 96, 128, 256]
-    frames = [src.resize((s, s), Image.LANCZOS) for s in sizes]
-    frames[0].save(
-        ico_path,
-        format="ICO",
-        sizes=[(s, s) for s in sizes],
-        append_images=frames[1:],
-    )
+    src.save(ico_path, format="ICO", sizes=[(s, s) for s in sizes])
     print(f"done  {name}")
 
 print("all done")

@@ -82,22 +82,13 @@ def process():
 
     # Multi-resolution ICO
     sizes = [16, 24, 32, 48, 64, 128, 256]
-    frames = [out.resize((s, s), Image.LANCZOS) for s in sizes]
     ico_path = os.path.join(OUT, "spawn_nodes.ico")
-    frames[0].save(
-        ico_path, format="ICO",
-        sizes=[(s, s) for s in sizes],
-        append_images=frames[1:],
-    )
+    out.save(ico_path, format="ICO", sizes=[(s, s) for s in sizes])
     print(f"done  {ico_path}")
 
     # Also save as the app icon (intricate.ico replacement)
-    app_ico = os.path.join(OUT, "intricate_new.ico")
-    frames[0].save(
-        app_ico, format="ICO",
-        sizes=[(s, s) for s in sizes],
-        append_images=frames[1:],
-    )
+    app_ico = os.path.join(OUT, "intricate.ico")
+    out.save(app_ico, format="ICO", sizes=[(s, s) for s in sizes])
     print(f"done  {app_ico}")
 
     # ── Clean variant — shadow + reddish-brown outline stripped ─────────────
