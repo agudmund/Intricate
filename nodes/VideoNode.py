@@ -666,7 +666,15 @@ class VideoNode(BaseNode):
             self._player.mediaStatusChanged.disconnect(self._on_media_status)
         except RuntimeError:
             pass  # already disconnected or C++ side gone
-        QTimer.singleShot(0, self._player.stop)
+        # Stop synchronously and sever the sink → player link before GC
+        # can collect them in the wrong order.  The deferred singleShot(0)
+        # left a window where the player delivered a frame to a dead sink.
+        self._player.stop()
+        self._player.setVideoOutput(None)
+        self._player.setAudioOutput(None)
+        self._player.deleteLater()
+        self._sink.deleteLater()
+        self._audio.deleteLater()
         self._frame_pixmap = None
         self._scaled_cache = None
         super()._prepare_for_removal()

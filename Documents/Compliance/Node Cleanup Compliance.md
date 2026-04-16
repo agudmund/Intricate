@@ -88,6 +88,27 @@ This is the same class of bug as the MarkdownNode fix (2026-04-15), but in the s
 
 **Verification:** Rapidly deleted WarmNodes and AboutNodes. All `_prepare_for_removal` traces complete cleanly, no `0xc0000005` in Event Viewer.
 
+### 2026-04-16 — VideoNode deferred stop + unparented media objects
+
+**Symptom:** `0xc0000005` in `Qt6Widgets.dll` two seconds after a VideoNode deletion completes cleanly. No Python traceback — pure C++ crash.
+
+**Root cause:** Two issues in `_prepare_for_removal()`:
+
+1. **Deferred player stop** — `QTimer.singleShot(0, self._player.stop)` scheduled the stop for the next event loop tick, *after* `super()._prepare_for_removal()` had already removed the node from the scene. The player could deliver one last frame to the video sink during that window.
+
+2. **Unparented media objects** — `QMediaPlayer`, `QAudioOutput`, and `QVideoSink` were created without a parent. Python GC could collect them in any order after the node was removed. If the sink was collected first while the player still held a C++ reference to it, frame delivery dereferenced a dead pointer.
+
+**Fix applied to `nodes/VideoNode.py`:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | `self._player.stop()` (synchronous) | Stop immediately, no deferred tick |
+| 2 | `self._player.setVideoOutput(None)` | Sever player → sink C++ link |
+| 3 | `self._player.setAudioOutput(None)` | Sever player → audio C++ link |
+| 4 | `.deleteLater()` on player, sink, audio | Schedule C++ deletion in correct order |
+
+**Verification:** Deleted VideoNodes while video was playing. No crash in Event Viewer.
+
 ---
 
 ## Post-Refactor Sanity Checklist
