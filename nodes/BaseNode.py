@@ -739,7 +739,16 @@ class BaseNode(QGraphicsRectItem):
 
     def _shake_detach(self) -> None:
         """Shake while connected → detach wires and bridge the gap.
-        Shake while unconnected → dissolve the node with a particle burst."""
+        Shake while unconnected → dissolve the node with a particle burst.
+        Multiple nodes selected → purge entire selection."""
+        scene = self.scene()
+        if scene:
+            selected = [item for item in scene.selectedItems()
+                        if isinstance(item, BaseNode) and item is not self]
+            if selected:
+                self._shake_delete_group(selected)
+                return
+
         if self.connections:
             self._shake_detach_wires()
         else:
@@ -800,6 +809,57 @@ class BaseNode(QGraphicsRectItem):
         else:
             sprinkle(scene, center, count=8000)
         self._pending_shake_delete = True
+
+    def _shake_delete_group(self, others: list['BaseNode']) -> None:
+        """Dissolve this node plus all other selected nodes.
+
+        The shaken node (self) is deferred to mouseRelease as usual.
+        The other selected nodes are removed directly via deferred
+        QTimer since they don't hold an active mouse grab.
+        """
+        global _shake_cooldown_until
+        scene = self.scene()
+        if not scene:
+            return
+
+        _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
+        from graphics.Particles import sprinkle, orbital_burst, shake_mode
+
+        # Particles on the shaken node
+        center = self.mapToScene(self.rect().center())
+        if shake_mode == "orbital":
+            orbital_burst(scene, center)
+        else:
+            sprinkle(scene, center, count=8000)
+
+        # Mark self for deferred delete (handled by mouseReleaseEvent)
+        self._pending_shake_delete = True
+
+        # Remove connections between deleted nodes and external nodes,
+        # then deferred-remove each selected node.
+        doomed = set(others) | {self}
+        for node in others:
+            # Remove wires that connect to nodes outside the doomed set
+            for conn in list(node.connections):
+                other_end = conn.end_node if conn.start_node is node else conn.start_node
+                if other_end not in doomed:
+                    if other_end is not None:
+                        try:    other_end.connections.remove(conn)
+                        except ValueError: pass
+                conn.start_node = None
+                conn.end_node   = None
+                if conn.scene():
+                    scene.removeItem(conn)
+            node.connections.clear()
+
+            node.setSelected(False)
+            node.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
+            def _deferred(n=node, sc=scene):
+                try:
+                    sc.removeItem(n)
+                except RuntimeError:
+                    pass
+            QTimer.singleShot(0, _deferred)
 
     def mouseReleaseEvent(self, event):
         self._is_resizing = False
