@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect, QSystemTrayIcon, QMenu
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect, QSystemTrayIcon, QMenu, QDialog
 from PySide6.QtGui import QIcon, QPixmap, QColor
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
@@ -75,6 +75,83 @@ class _ButtonBar(QWidget):
         if e.type() == e.Type.LayoutRequest:
             self._reposition()
         return super().event(e)
+
+
+class _NewSessionDialog(QDialog):
+    """Frameless new-session dialog matching the app's visual language."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedWidth(380)
+
+        # ── Outer container with background + border ─────────────────────
+        container = QWidget(self)
+        container.setStyleSheet(f"""
+            QWidget#newSessionContainer {{
+                background: {Theme.windowBg};
+                border: 1px solid {Theme.primaryBorder};
+                border-radius: 9px;
+            }}
+        """)
+        container.setObjectName("newSessionContainer")
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(container)
+
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # ── Label ────────────────────────────────────────────────────────
+        lbl = QLabel("Name your next masterpiece:")
+        lbl.setStyleSheet(f"""
+            color: {Theme.textPrimary};
+            font-family: '{Theme.healthFontFamily}';
+            font-size: {Theme.healthFontSizeLabel}pt;
+        """)
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+
+        # ── Text input ───────────────────────────────────────────────────
+        from pretty_widgets.PrettyMenu import StyledLineEdit
+        self._input = StyledLineEdit()
+        self._input.setPlaceholderText("Urzula\u2026")
+        self._input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {Theme.backDrop};
+                color: {Theme.textPrimary};
+                border: 1px solid {Theme.primaryBorder};
+                border-radius: 5px;
+                padding: 6px 10px;
+                font-family: '{Theme.healthFontFamily}';
+                font-size: {Theme.healthFontSizeLabel}pt;
+            }}
+        """)
+        self._input.returnPressed.connect(self.accept)
+        layout.addWidget(self._input)
+
+        # ── Buttons ──────────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+
+        cancel_btn = button("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        ok_btn = button("Create")
+        ok_btn.clicked.connect(self.accept)
+        btn_row.addWidget(ok_btn)
+
+        layout.addLayout(btn_row)
+
+        self._input.setFocus()
+
+    def name(self) -> str:
+        return self._input.text()
 
 
 class IntricateApp(QMainWindow):
@@ -2069,6 +2146,8 @@ class IntricateApp(QMainWindow):
         """Save the current canvas to the active project's session.json."""
         if getattr(self, '_autosave_blocked', False):
             return
+        if self.project_selector.currentText() == self._NEW_SESSION_SENTINEL:
+            return
         # Never overwrite a session with an empty scene — protects against
         # save-on-close after a failed load wiping valid session data.
         from nodes.BaseNode import BaseNode
@@ -2126,13 +2205,36 @@ class IntricateApp(QMainWindow):
 
     def _create_new_session(self) -> None:
         """Prompt for a name, create the folder, and switch to the new session."""
-        from PySide6.QtWidgets import QInputDialog
-
         prev = getattr(self, '_active_project', '')
-        name, ok = QInputDialog.getText(
-            self, "New Session", "Name your next masterpiece:"
-        )
-        name = name.strip() if ok else ""
+
+        # Lower the window so the dialog isn't hidden behind always-on-top
+        saved_flags = self.windowFlags()
+        self.setWindowFlags(saved_flags & ~Qt.WindowStaysOnTopHint)
+        self.show()
+
+        # Roll up curtains for the cinematic reveal
+        was_collapsed = False
+        try:
+            if hasattr(self, 'is_collapsed') and not self.is_collapsed:
+                self.toggle_curtains()
+                was_collapsed = True
+        except Exception:
+            pass
+
+        dlg = _NewSessionDialog(parent=None)
+        result = dlg.exec()
+
+        # Roll curtains back down and restore window flags
+        if was_collapsed:
+            try:
+                self.toggle_curtains()
+            except Exception:
+                pass
+        self.setWindowFlags(saved_flags)
+        self.show()
+        self.raise_()
+
+        name = dlg.name().strip() if result == QDialog.DialogCode.Accepted else ""
 
         if not name:
             # Cancelled or empty — restore previous selection
