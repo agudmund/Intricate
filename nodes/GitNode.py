@@ -363,6 +363,7 @@ class GitNode(BaseNode):
         self._first_scan = False
         if not self._pushing:
             self._delivery_timer.stop()
+            self._dismiss_loading_node()
         try:
             self._repos = repos
             self._auto_height()
