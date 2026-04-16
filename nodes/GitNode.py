@@ -314,8 +314,11 @@ class GitNode(BaseNode):
         self._pending_repos = None
         self._scanning = False
         self._first_scan = False
-        self._delivery_timer.stop()
+        # Only stop the delivery timer when we're NOT mid-push.
+        # During push, _kick_refresh spawns overlapping scans and the
+        # timer must keep running to pick up each one's results.
         if not self._pushing:
+            self._delivery_timer.stop()
             self._dismiss_loading_node()
         try:
             self._repos = repos
