@@ -122,6 +122,7 @@ class BaseNode(QGraphicsRectItem):
         self._shake_triggered: bool     = False
         self._shake_press_active: bool  = False
         self._pending_shake_delete: bool = False
+        self._removal_done: bool = False
 
         # ── Behaviour ─────────────────────────────────────────────────────────
         # disconnect_all() is called in _prepare_for_removal — not optional.
@@ -212,7 +213,7 @@ class BaseNode(QGraphicsRectItem):
 
     def itemChange(self, change, value):
         if (change == QGraphicsRectItem.GraphicsItemChange.ItemSceneChange
-                and value is None):
+                and value is None and not self._removal_done):
             logger.log(5, "[REMOVE] %s %s leaving scene — _prepare_for_removal starting",
                         self.data.node_type, self.data.uuid[:8])
             self._prepare_for_removal()
@@ -289,6 +290,9 @@ class BaseNode(QGraphicsRectItem):
         fires re-entrantly during teardown and will segfault if behaviour is gone.
         disconnect_all() severs the connections instead — that's sufficient.
         """
+        if self._removal_done:
+            return
+        self._removal_done = True
         tag = f"{self.data.node_type} {self.data.uuid[:8]}"
 
         # ── Phase 0: flush cached pixmap + sever Qt dispatch state ──────

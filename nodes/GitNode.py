@@ -22,7 +22,7 @@ import threading
 
 from PySide6.QtCore import Qt, QRectF, QPointF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
-from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGraphicsRectItem
 
 from nodes.BaseNode import BaseNode
 from data.GitNodeData import GitNodeData
@@ -282,14 +282,20 @@ class GitNode(BaseNode):
                 scene.removeItem(conn)
         node.connections.clear()
 
-        # Particle burst + immediate removal
-        # _prepare_for_removal is called automatically by BaseNode.itemChange
-        # when removeItem sets the scene to None — do NOT call it manually.
+        # Particle burst + safe deferred removal
+        # Call _prepare_for_removal explicitly to tear down the VideoNode's
+        # media objects before removal.  Then defer removeItem by one tick
+        # so Qt's scene internals aren't re-entered mid-event-processing.
         sprinkle(scene, center, count=8000)
-        try:
-            scene.removeItem(node)
-        except RuntimeError:
-            pass
+        node._prepare_for_removal()
+        node.setVisible(False)
+        node.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
+        def _remove(n=node, sc=scene):
+            try:
+                sc.removeItem(n)
+            except RuntimeError:
+                pass
+        QTimer.singleShot(0, _remove)
 
     def _scan_worker(self) -> None:
         try:
