@@ -31,8 +31,15 @@ class StickerButton(QPushButton):
 
     def __init__(self, pixmap: QPixmap, size: int, parent=None):
         super().__init__(parent)
-        self._pixmap = pixmap
         self._size = size
+        # Pre-scale to 2× button size for crisp rendering on high-DPI displays.
+        # A 1024px source scaled directly to 38px in drawPixmap loses detail;
+        # LANCZOS-quality downscale to 2× then letting Qt halve it with
+        # SmoothPixmapTransform gives much sharper results.
+        dpr = 2.0
+        px_size = int(size * dpr)
+        self._pixmap = pixmap.scaled(px_size, px_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._pixmap.setDevicePixelRatio(dpr)
         self.setFixedSize(size, size)
         self.setFlat(True)
         self.setFocusPolicy(Qt.NoFocus)
@@ -48,6 +55,7 @@ class StickerButton(QPushButton):
         sz = self._pixmap.size()
         # Start with the original pixmap (preserves alpha shape)
         shadow = QPixmap(sz)
+        shadow.setDevicePixelRatio(self._pixmap.devicePixelRatio())
         shadow.fill(QColor(0, 0, 0, 0))
 
         p = QPainter(shadow)
@@ -97,8 +105,7 @@ class StickerButton(QPushButton):
 
         if pressed:
             # Pressed — icon shifts outward into where the shadow was, no shadow
-            draw_rect = QRectF(shadow_x, shadow_y, sz, sz)
-            painter.drawPixmap(draw_rect.toRect(), self._pixmap)
+            painter.drawPixmap(QPointF(shadow_x, shadow_y), self._pixmap)
         else:
             # Normal — shadow as a dark silhouette on the outside edge.
             # Build the shadow pixmap once and cache it — uses the sticker's
@@ -107,12 +114,10 @@ class StickerButton(QPushButton):
             if not hasattr(self, '_shadow_pix') or self._shadow_pix is None:
                 self._shadow_pix = self._build_shadow_pixmap()
 
-            shadow_rect = QRectF(shadow_x, shadow_y, sz, sz)
             painter.setOpacity(SHADOW_OPACITY)
-            painter.drawPixmap(shadow_rect.toRect(), self._shadow_pix)
+            painter.drawPixmap(QPointF(shadow_x, shadow_y), self._shadow_pix)
 
             painter.setOpacity(1.0)
-            draw_rect = QRectF(0, 0, sz, sz)
-            painter.drawPixmap(draw_rect.toRect(), self._pixmap)
+            painter.drawPixmap(QPointF(0, 0), self._pixmap)
 
         painter.end()
