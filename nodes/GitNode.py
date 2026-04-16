@@ -543,6 +543,23 @@ class GitNode(BaseNode):
                 _log.info(f"[git] pushed unpushed {name}")
             return name
 
+        remaining = [len(session_repos) + len(unpushed_repos)]
+
+        def _on_future_done():
+            """Main-thread callback — fired once per completed future."""
+            self._scanning = False
+            self._refresh()
+            remaining[0] -= 1
+            if remaining[0] <= 0:
+                self._pushing = False
+                self._dismiss_loading_node()
+                import random
+                from utils.IconPicker import emojiIcons
+                self.data.emoji = random.choice(emojiIcons)
+                self.update()
+                self._poll_timer.start()
+                self._refresh()
+
         futures = []
         with ThreadPoolExecutor(max_workers=8) as pool:
             for name in session_repos:
@@ -555,18 +572,7 @@ class GitNode(BaseNode):
                     future.result()
                 except Exception as e:
                     _log.warning(f"[git] parallel push failed: {e}", exc_info=True)
-                QTimer.singleShot(0, _kick_refresh)
-
-        def _on_push_done():
-            self._pushing = False
-            self._dismiss_loading_node()
-            import random
-            from utils.IconPicker import emojiIcons
-            self.data.emoji = random.choice(emojiIcons)
-            self.update()
-            self._poll_timer.start()   # resume polling
-            self._refresh()
-        QTimer.singleShot(0, _on_push_done)
+                QTimer.singleShot(0, _on_future_done)
 
     def _bg_color(self) -> QColor:
         tint = getattr(self.data, 'node_tint', '')
