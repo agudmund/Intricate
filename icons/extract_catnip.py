@@ -5,18 +5,15 @@ The source PNG is already 1024x1024 with transparent background —
 use it directly without resizing to preserve full quality.
 
 Produces:
-  - catnip_sticker_clean_1024.png  (clean — for compositing / feed button)
-  - catnip_sticker_1024.png        (alias for legacy compat)
-  - catnip_feed.ico                (multi-resolution ICO)
+  - thingaling.png  (1024px — used by Theme for the feed button)
+  - thingaling.ico  (multi-resolution ICO)
 """
 from PIL import Image
 
 out = Image.open("Images/Stickers/Thingaling.png").convert("RGBA")
 print(f"Source: {out.size[0]}x{out.size[1]}")
 
-# ── Save variants ────────────────────────────────────────────────────
-out.save("icons/catnip_sticker_clean_1024.png")
-out.save("icons/catnip_sticker_1024.png")
+out.save("icons/thingaling.png")
 
 # ── Verify on dark background ────────────────────────────────────────
 dark_bg = Image.new("RGBA", (1024, 1024), (45, 52, 54, 255))
@@ -24,7 +21,7 @@ dark_bg.paste(out, (0, 0), out)
 dark_bg.save("icons/_verify_catnip_dark.png")
 
 # ── Multi-resolution ICO ─────────────────────────────────────────────
-out.save("icons/catnip_feed.ico", format="ICO",
+out.save("icons/thingaling.ico", format="ICO",
          sizes=[(s, s) for s in [16, 24, 32, 48, 64, 128, 256]])
 
-print("Done — catnip_sticker_clean_1024.png + 1024.png + feed.ico")
+print("Done — thingaling.png + thingaling.ico")
