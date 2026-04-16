@@ -109,26 +109,58 @@ This is the same class of bug as the MarkdownNode fix (2026-04-15), but in the s
 
 **Verification:** Deleted VideoNodes while video was playing. No crash in Event Viewer.
 
-### 2026-04-16 — GitNode loading node dismiss — deferred removal race + glide timer leak
+### 2026-04-16 — GitNode loading node dismiss (3-phase fix)
 
-**Symptom:** `0xc0000005` in `Qt6Widgets.dll` when GitNode's push operation completes and the progress bar VideoNode autodestruct fires. Python teardown completes cleanly — crash occurs in C++ paint loop ~2 seconds later.
+The GitNode's loading plushie (a VideoNode wired to the GitNode during push) went through three fix iterations in this session. Each solved a crash but revealed the next layer.
 
-**Root cause:** Two issues in `_dismiss_loading_node()`:
+**Phase 1 — Deferred removal race + glide timer leak**
 
-1. **Deferred removal** — `QTimer.singleShot(0, _remove)` hid the VideoNode with `setVisible(False)` but left it in the scene graph for one event-loop tick. The video player could deliver a final frame to the (now hidden but still scene-attached) sink during that window. Combined with the VideoNode's own deferred `singleShot(0, player.stop)`, this created a two-tick race where the player was still alive, the sink was still connected, but the node was mid-teardown.
+**Symptom:** `0xc0000005` in `Qt6Widgets.dll` when push completes and the plushie autodestruct fires.
 
-2. **Glide timer stop without disconnect** — wires attached to the loading node were stopped with `conn._glide_timer.stop()` but the `timeout` signal was never disconnected. Same class of bug as the Scene.py glide timer fix, but in a separate teardown path.
+**Root cause:** `QTimer.singleShot(0, _remove)` left the VideoNode in the scene between hide and removal — the player could deliver a frame to the dead sink. Glide timers on wires were stopped but not disconnected.
 
-**Fix applied to `nodes/GitNode.py` `_dismiss_loading_node()`:**
+**Fix:** Added `conn._glide_timer.timeout.disconnect()` on wires. Changed to immediate `scene.removeItem(node)`.
+
+**Phase 2 — Re-entrant scene modification**
+
+**Symptom:** Immediate `removeItem` during event processing caused `0xc0000005` — Qt's C++ internals weren't ready for re-entrant scene modification.
+
+**Root cause:** Calling `_prepare_for_removal()` explicitly before `removeItem()` detached child items (buttons, ports) that Qt's C++ `removeItem` still expected in its internal child list.
+
+**Fix:** Reverted to deferred `removeItem`, but stop the video player and sever media links synchronously beforehand. Let `_prepare_for_removal` fire naturally via `itemChange` during the deferred `removeItem`. Added `_removal_done` guard to `BaseNode` so `_prepare_for_removal` is idempotent.
+
+**Phase 3 — Cross-thread timer delivery + plushie never dismissed**
+
+**Symptom:** Green dots never updated during push, plushie danced forever. Creating a second GitNode showed correct status.
+
+**Root cause:** `QTimer.singleShot(0, callback)` from worker threads doesn't reliably queue into the main thread's event loop in PySide6. The per-future `_kick_refresh` and final `_on_push_done` callbacks were silently dropped.
+
+**Fix:** Replaced all cross-thread `QTimer.singleShot` calls with a flag-based pattern:
+- Worker thread sets `_push_dirty = True` per completed future, `_push_complete = True` when all done
+- `_delivery_timer` (250ms, main thread) polls these flags
+- `_push_dirty` triggers a rescan → green dots update in real time
+- `_push_complete` triggers dismiss + cleanup → plushie explodes
+
+**Final state of `_dismiss_loading_node()`:**
 
 | Step | What | Why |
 |------|------|-----|
-| 1 | `conn._glide_timer.timeout.disconnect(conn._glide_tick)` | Sever C++ signal reference on wire timers |
-| 2 | Replaced deferred `QTimer.singleShot(0, _remove)` with immediate `scene.removeItem(node)` | No window for frame delivery between hide and removal |
+| 1 | `conn._glide_timer.stop()` + `.disconnect()` | Sever wire timer signals |
+| 2 | Strip wires, null node refs, `removeItem(conn)` | Clean wire removal |
+| 3 | `node._player.stop()` + `setVideoOutput(None)` + `setAudioOutput(None)` | Stop frame delivery before deferred window |
+| 4 | `setVisible(False)` + zero flags | Node inert during deferred tick |
+| 5 | `QTimer.singleShot(0, removeItem)` | Deferred removal — `_prepare_for_removal` fires via `itemChange` |
 
-**Interaction with VideoNode fix:** The VideoNode's own `_prepare_for_removal` (fixed earlier this session) now stops the player synchronously and severs the sink/audio links. Combined with the immediate removal here, the entire dismiss-→-teardown-→-GC chain is now synchronous with no deferred ticks.
+**Final state of `_check_delivery()`:**
 
-**Verification:** Ran GitNode push with loading animation. Progress bar completed, particle burst fired, no crash.
+| Flag | Action |
+|------|--------|
+| `_push_dirty` | Spawn a rescan thread if not already scanning |
+| `_push_complete` | Set `_pushing = False`, dismiss plushie, restart poll timer, final rescan |
+| `_pending_repos` (non-push) | Stop delivery timer, dismiss plushie, update `_repos` + repaint |
+| `_pending_repos` (mid-push) | Keep delivery timer alive, update `_repos` + repaint |
+
+**Lesson learned:** Never use `QTimer.singleShot` to cross thread boundaries in PySide6. Use flags polled by a main-thread timer, or proper `QMetaObject.invokeMethod` with `Qt.QueuedConnection`.
 
 ### 2026-04-16 — Codebase-wide proxy + timer audit
 
@@ -173,3 +205,9 @@ When adding a new node type or auditing an existing one, walk through this check
 - [ ] Does the node spawn background threads? → add a cancellation flag, set it before any Qt teardown
 - [ ] Does the node connect to any signals not covered by `BaseNode`? → disconnect in `_prepare_for_removal()`
 - [ ] Does `_prepare_for_removal()` call `super()` as its **last** line? → must always be last
+- [ ] Does the node programmatically remove other nodes? → never call `_prepare_for_removal()` explicitly; only neutralize dangerous C++ objects (stop players, sever media links), then defer `removeItem` and let `itemChange` handle teardown
+- [ ] Does the node use cross-thread callbacks? → never use `QTimer.singleShot` from worker threads; use flags polled by a main-thread timer instead
+
+## Guard: `_removal_done`
+
+`BaseNode._removal_done` (added 2026-04-16) prevents `_prepare_for_removal()` from running twice. It is set to `True` at the top of `_prepare_for_removal()` and checked in `itemChange` before calling it. This makes teardown idempotent — safe for paths where a node is neutralized before the deferred `removeItem` fires.
