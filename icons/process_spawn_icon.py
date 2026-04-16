@@ -86,10 +86,8 @@ def process():
     out.save(ico_path, format="ICO", sizes=[(s, s) for s in sizes])
     print(f"done  {ico_path}")
 
-    # Also save as the app icon (intricate.ico replacement)
-    app_ico = os.path.join(OUT, "intricate.ico")
-    out.save(app_ico, format="ICO", sizes=[(s, s) for s in sizes])
-    print(f"done  {app_ico}")
+    # NOTE: intricate.ico is now built from the official sticker source
+    # via extract_intricate_icon.py — do not overwrite it here.
 
     # ── Clean variant — shadow + reddish-brown outline stripped ─────────────
     # Start from the original (pre-shadow-reduction) for a clean pass
