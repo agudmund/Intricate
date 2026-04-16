@@ -222,6 +222,8 @@ class GitNode(BaseNode):
         self._pending_repos = None          # written by worker thread
         self._loading_node = None           # VideoNode spawned during scan
         self._pushing = False               # True while bulk push worker is running
+        self._push_dirty = False            # set by worker thread when a repo finishes
+        self._push_complete = False         # set by worker thread when all futures done
         self._first_scan = False            # set True by Scene.add_git_node for sidebar spawns
 
         # Delivery timer — runs on main thread, checks for worker results
@@ -326,19 +328,41 @@ class GitNode(BaseNode):
             self._pending_repos = []
 
     def _check_delivery(self) -> None:
-        """Main-thread timer that picks up results from the worker."""
+        """Main-thread timer that picks up scan results and push-worker signals.
+
+        During push, the worker sets _push_dirty each time a repo finishes.
+        We trigger a rescan when dirty, and handle push completion when
+        _push_complete is set — all on the main thread, no cross-thread timers.
+        """
+        # ── Push-worker signals (thread-safe flags → main-thread actions) ──
+        if getattr(self, '_push_dirty', False):
+            self._push_dirty = False
+            if not self._scanning:
+                self._scanning = True
+                threading.Thread(target=self._scan_worker, daemon=True).start()
+
+        if getattr(self, '_push_complete', False):
+            self._push_complete = False
+            self._pushing = False
+            self._dismiss_loading_node()
+            import random
+            from utils.IconPicker import emojiIcons
+            self.data.emoji = random.choice(emojiIcons)
+            self._poll_timer.start()
+            # One final rescan to capture the last push results
+            if not self._scanning:
+                self._scanning = True
+                threading.Thread(target=self._scan_worker, daemon=True).start()
+
+        # ── Scan result delivery ────────────────────────────────────────────
         if self._pending_repos is None:
             return
         repos = self._pending_repos
         self._pending_repos = None
         self._scanning = False
         self._first_scan = False
-        # Only stop the delivery timer when we're NOT mid-push.
-        # During push, _kick_refresh spawns overlapping scans and the
-        # timer must keep running to pick up each one's results.
         if not self._pushing:
             self._delivery_timer.stop()
-            self._dismiss_loading_node()
         try:
             self._repos = repos
             self._auto_height()
@@ -494,8 +518,11 @@ class GitNode(BaseNode):
 
         self._loading_node = None   # clear any stale ref from initial scan
         self._pushing = True
+        self._push_dirty = False
+        self._push_complete = False
         self._spawn_loading_node()
         self._poll_timer.stop()   # pause polling while push runs
+        self._delivery_timer.start()  # keep delivery timer alive for push signals
         _log.info("[git] plushie spawned for bulk push")
         threading.Thread(
             target=self._push_worker,
@@ -528,9 +555,14 @@ class GitNode(BaseNode):
         return False
 
     def _push_worker(self, session_repos: list[str], unpushed_repos: list[str], msg: str) -> None:
-        """Parallel push — each repo gets its own thread, fastest finishes first."""
+        """Parallel push — each repo gets its own thread, fastest finishes first.
+
+        Cross-thread communication uses _push_dirty flag instead of
+        QTimer.singleShot (which doesn't reliably cross thread boundaries
+        in PySide6).  The delivery timer already ticks every 250ms on the
+        main thread — it picks up the flag and triggers a rescan.
+        """
         import subprocess as _sp
-        from PySide6.QtCore import QTimer
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         desktop = Path.home() / "Desktop"
@@ -541,10 +573,6 @@ class GitNode(BaseNode):
             if r.returncode != 0:
                 _log.warning(f"[git] {cmd} failed in {Path(cwd).name}: {r.stderr.strip()}")
             return r
-
-        def _kick_refresh():
-            self._scanning = False
-            self._refresh()
 
         def _push_session(name):
             cwd = str(desktop / name)
@@ -562,23 +590,7 @@ class GitNode(BaseNode):
                 _log.info(f"[git] pushed unpushed {name}")
             return name
 
-        remaining = [len(session_repos) + len(unpushed_repos)]
-
-        def _on_future_done():
-            """Main-thread callback — fired once per completed future."""
-            self._scanning = False
-            self._refresh()
-            remaining[0] -= 1
-            if remaining[0] <= 0:
-                self._pushing = False
-                self._dismiss_loading_node()
-                import random
-                from utils.IconPicker import emojiIcons
-                self.data.emoji = random.choice(emojiIcons)
-                self.update()
-                self._poll_timer.start()
-                self._refresh()
-
+        remaining = len(session_repos) + len(unpushed_repos)
         futures = []
         with ThreadPoolExecutor(max_workers=8) as pool:
             for name in session_repos:
@@ -591,7 +603,12 @@ class GitNode(BaseNode):
                     future.result()
                 except Exception as e:
                     _log.warning(f"[git] parallel push failed: {e}", exc_info=True)
-                QTimer.singleShot(0, _on_future_done)
+                remaining -= 1
+                # Signal the main-thread delivery timer to rescan
+                self._push_dirty = True
+
+        # All futures done — signal completion for the delivery timer
+        self._push_complete = True
 
     def _bg_color(self) -> QColor:
         tint = getattr(self.data, 'node_tint', '')
