@@ -109,6 +109,46 @@ This is the same class of bug as the MarkdownNode fix (2026-04-15), but in the s
 
 **Verification:** Deleted VideoNodes while video was playing. No crash in Event Viewer.
 
+### 2026-04-16 — GitNode loading node dismiss — deferred removal race + glide timer leak
+
+**Symptom:** `0xc0000005` in `Qt6Widgets.dll` when GitNode's push operation completes and the progress bar VideoNode autodestruct fires. Python teardown completes cleanly — crash occurs in C++ paint loop ~2 seconds later.
+
+**Root cause:** Two issues in `_dismiss_loading_node()`:
+
+1. **Deferred removal** — `QTimer.singleShot(0, _remove)` hid the VideoNode with `setVisible(False)` but left it in the scene graph for one event-loop tick. The video player could deliver a final frame to the (now hidden but still scene-attached) sink during that window. Combined with the VideoNode's own deferred `singleShot(0, player.stop)`, this created a two-tick race where the player was still alive, the sink was still connected, but the node was mid-teardown.
+
+2. **Glide timer stop without disconnect** — wires attached to the loading node were stopped with `conn._glide_timer.stop()` but the `timeout` signal was never disconnected. Same class of bug as the Scene.py glide timer fix, but in a separate teardown path.
+
+**Fix applied to `nodes/GitNode.py` `_dismiss_loading_node()`:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | `conn._glide_timer.timeout.disconnect(conn._glide_tick)` | Sever C++ signal reference on wire timers |
+| 2 | Replaced deferred `QTimer.singleShot(0, _remove)` with immediate `scene.removeItem(node)` | No window for frame delivery between hide and removal |
+
+**Interaction with VideoNode fix:** The VideoNode's own `_prepare_for_removal` (fixed earlier this session) now stops the player synchronously and severs the sink/audio links. Combined with the immediate removal here, the entire dismiss-→-teardown-→-GC chain is now synchronous with no deferred ticks.
+
+**Verification:** Ran GitNode push with loading animation. Progress bar completed, particle burst fired, no crash.
+
+### 2026-04-16 — Codebase-wide proxy + timer audit
+
+**Scope:** Full audit of all 41 node files, `main_window.py`, `graphics/Scene.py`, `graphics/Connection.py`, `widgets/`, `utils/`, and the Pretty Widgets package.
+
+**Fixes applied in bulk commit `a113410`:**
+
+| File | Issue | Fix |
+|------|-------|-----|
+| BloomNode.py | `proxy.setWidget(None)` without `scene.removeItem(proxy)` | Added `scene.removeItem()` before detach |
+| ClaudeNode.py | Same — two proxies (`_input_proxy`, `_body_proxy`) | Added `scene.removeItem()` for both |
+| MergeNode.py | Same — `_list_proxy` | Added `scene.removeItem()` |
+| PaletteNode.py | Same — `_title_proxy`, `_palette_proxy` | Added `scene.removeItem()` for both |
+| SequenceNode.py | Same — `_slider_proxy` | Added `scene.removeItem()` |
+| TextNode.py | Same — `_html_proxy` | Added `scene.removeItem()` |
+| TreeNode.py | Same — `_toolbar_proxy` | Added `scene.removeItem()` |
+| ValueNode.py | Same — `_slider_proxy` | Added `scene.removeItem()` |
+| Scene.py (×2 paths) | `_glide_timer.stop()` without `.disconnect()` | Added `timeout.disconnect(_glide_tick)` |
+| main_window.py | `_tooltip_timer = QTimer()` without parent | Changed to `QTimer(self)` + disconnect on cancel |
+
 ---
 
 ## Post-Refactor Sanity Checklist
