@@ -43,14 +43,33 @@ _SESSION_FILENAMES = {
     # Legacy .json names — still classify as session-only until fully migrated
     "session.json", "session_previous.json", "session_archive.json",
 }
-_SESSION_DIRS      = {"backup", "Documents", "data"}
+_SESSION_DIRS      = {"backup", "Documents", "data", "cache"}
 
 
 def _is_session_path(raw: str) -> bool:
-    """Check if a porcelain path is session-related (files or directories)."""
+    """Check if a porcelain path is session-related (files or directories).
+
+    Matches:
+      - Session save files (session.intricate, backups)
+      - The Documents/data/ tree (backup/, cache/)
+      - Image node cache PNGs (Documents/data/cache/*.png)
+      - Warm bridge files (.warm_bridge_*.json)
+      - Timestamped session backups (session_archive_*.intricate)
+    """
     p = raw.strip().strip('"').rstrip("/")
     name = Path(p).name
-    return name in _SESSION_FILENAMES or name in _SESSION_DIRS
+    if name in _SESSION_FILENAMES or name in _SESSION_DIRS:
+        return True
+    # Image cache PNGs inside Documents/data/cache/
+    if "Documents/data/cache/" in p or "Documents\\data\\cache\\" in p:
+        return True
+    # Warm bridge temp files
+    if name.startswith(".warm_bridge_") and name.endswith(".json"):
+        return True
+    # Timestamped session backups (e.g. session_archive_20260416_065232.intricate)
+    if name.startswith("session_archive_") and name.endswith(SESSION_EXT):
+        return True
+    return False
 
 
 # Status: "clean" = no changes, "session" = only session files, "dirty" = real changes
