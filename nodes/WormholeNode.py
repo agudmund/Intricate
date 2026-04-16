@@ -702,12 +702,80 @@ class WormholeNode(BaseNode):
         out = gzip.compress(xml.encode("utf-8"), compresslevel=6)
         return out
 
+    def _inject_into_existing(self, paths: list[str], project_path: Path) -> bytes:
+        """
+        Open an existing .prproj, append new media objects, register in the bin,
+        update NextID, recompress.
+
+        Does NOT inject a sequence — the file already has one from Premiere.
+        The bin's <Items> block is extended by appending new <Item> entries just
+        before the closing </Items> tag.  Item indentation follows whatever the
+        file already uses (detected from the first existing <Item> line).
+        """
+        import re
+
+        with gzip.open(str(project_path), "rb") as f:
+            xml = f.read().decode("utf-8")
+
+        # ── NextID ────────────────────────────────────────────────────────────
+        m = re.search(r"<NextID>(\d+)</NextID>", xml)
+        if not m:
+            raise ValueError("Could not find <NextID> in project file")
+        next_id = int(m.group(1))
+
+        # ── Build media objects ───────────────────────────────────────────────
+        new_blocks, updated_id, clip_item_uids = self._build_xml_blocks(paths, next_id)
+
+        # ── Update NextID ─────────────────────────────────────────────────────
+        xml = xml.replace(
+            f"<NextID>{next_id}</NextID>",
+            f"<NextID>{updated_id}</NextID>"
+        )
+
+        # ── Detect bin item indentation from existing <Item> lines ────────────
+        first_item = re.search(r"(\t+)<Item Index=", xml)
+        item_indent = first_item.group(1) if first_item else "\t\t\t\t"
+
+        # ── Count existing items to get the next Index value ──────────────────
+        existing_count = len(re.findall(r'<Item Index="\d+"', xml))
+
+        new_item_lines = "\n".join(
+            f'{item_indent}<Item Index="{existing_count + i}" ObjectURef="{uid}"/>'
+            for i, uid in enumerate(clip_item_uids)
+        )
+
+        # ── Detect </Items> closing indentation ───────────────────────────────
+        close_match = re.search(r"(\t+)</Items>", xml)
+        close_indent = close_match.group(1) if close_match else "\t\t\t"
+
+        close_pattern = f"{close_indent}</Items>"
+        xml = xml.replace(
+            close_pattern,
+            f"{new_item_lines}\n{close_pattern}",
+            1   # only the first (RootProjectItem) </Items>
+        )
+
+        # ── Inject media objects before </PremiereData> ───────────────────────
+        if "</PremiereData>" not in xml:
+            raise ValueError("Could not find </PremiereData> in project file")
+        xml = xml.replace("</PremiereData>", new_blocks + "\n</PremiereData>", 1)
+
+        return gzip.compress(xml.encode("utf-8"), compresslevel=6)
+
     # ─────────────────────────────────────────────────────────────────────────
     # EXPORT ACTION
     # ─────────────────────────────────────────────────────────────────────────
 
     def _export_prproj(self) -> None:
-        """Export button handler — collect paths, inject into skeleton, write file."""
+        """
+        Export button handler.
+
+        Strategy:
+          • If {session_root}/Adobe/{name}.prproj already exists (e.g. Premiere saved
+            it), open and inject new media into it — preserving all existing content.
+          • If it doesn't exist, build from the blank skeleton (creates the file
+            from scratch with a default sequence).
+        """
         paths = self._collect_source_paths()
 
         if not paths:
@@ -718,16 +786,22 @@ class WormholeNode(BaseNode):
         out_path = self._output_path(session_name, session_root)
 
         try:
-            prproj_bytes = self._inject_into_skeleton(paths, session_name)
+            if out_path.exists():
+                prproj_bytes = self._inject_into_existing(paths, out_path)
+                mode = "injected into"
+            else:
+                prproj_bytes = self._inject_into_skeleton(paths, session_name)
+                mode = "created"
+
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(prproj_bytes)
             n = len(paths)
-            status = f"Written \u2192 ...{out_path.parent.name}/{out_path.name}  ({n} file{'s' if n != 1 else ''})"
+            status = f"{mode.capitalize()} \u2192 ...{out_path.parent.name}/{out_path.name}  ({n} file{'s' if n != 1 else ''})"
             self._last_export_dir     = out_path.parent
             self.data.last_export_dir = str(out_path.parent)
             self._set_status(status, ok=True)
             self._show_window_status(status, out_path.parent)
-            logger.info(f"[WORMHOLE] exported {n} files to {out_path}")
+            logger.info(f"[WORMHOLE] {mode} {n} files → {out_path}")
         except Exception as exc:
             self._set_status(f"Export failed: {exc}", ok=False)
             logger.error(f"[WORMHOLE] export failed: {exc}")
