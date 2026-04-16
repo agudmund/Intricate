@@ -282,12 +282,15 @@ class GitNode(BaseNode):
                 scene.removeItem(conn)
         node.connections.clear()
 
-        # Particle burst + safe deferred removal
-        # Call _prepare_for_removal explicitly to tear down the VideoNode's
-        # media objects before removal.  Then defer removeItem by one tick
-        # so Qt's scene internals aren't re-entered mid-event-processing.
+        # Particle burst + deferred removal
+        # Stop the video player and sever its media links NOW so no frames
+        # are delivered during the deferred-removal window.  Full teardown
+        # happens via itemChange → _prepare_for_removal when removeItem fires.
         sprinkle(scene, center, count=8000)
-        node._prepare_for_removal()
+        if hasattr(node, '_player'):
+            node._player.stop()
+            node._player.setVideoOutput(None)
+            node._player.setAudioOutput(None)
         node.setVisible(False)
         node.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
         def _remove(n=node, sc=scene):
