@@ -1046,7 +1046,8 @@ class IntricateApp(QMainWindow):
         _fog_init = int(_s.get_nested("intricate", "canvas", "fog_alpha", 180))
         self.fog_slider = pretty_slider(
             Qt.Vertical,
-            use_scroll_icon=True,
+            handle_icon="slider_handle_vertical.png",
+            handle_size=28,
             range=(0, 255),
             value=_fog_init,
             invertedAppearance=False,
@@ -1858,9 +1859,11 @@ class IntricateApp(QMainWindow):
         self._zoom_slider = pretty_slider(
             Qt.Horizontal,
             use_scroll_icon=True,
+            handle_size=28,
             range=(10, 500),
             value=100,
             fixedWidth=250,
+            fixedHeight=32,
             singleStep=5,
             pageStep=25,
             valueChanged=self._on_zoom_slider,

@@ -51,6 +51,7 @@ class ValueNode(BaseNode):
         # ── Slider ────────────────────────────────────────────────────────────
         self._slider = pretty_slider(
             orientation=Qt.Orientation.Horizontal,
+            handle_size=28,
         )
         self._slider.setRange(0, max(len(self._frames) - 1, 0))
         self._slider.valueChanged.connect(self._seek)
