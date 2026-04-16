@@ -94,16 +94,15 @@ class CushionsNode(BaseNode):
         self._buttons.append(NodeButton(self, export_pix, self._export))
 
     def _export(self) -> None:
-        """Split paragraphs into chained WarmNodes using spiral placement.
+        """Split paragraphs into chained WarmNodes with organic scatter.
 
         Each paragraph becomes its own WarmNode, wired in sequence.
-        Placement spirals outward from the camera centre (like ClaudeNode
-        responses) so nodes fan out organically rather than lining up.
+        Placement wanders from the previous node (Gaussian cluster with
+        occasional fling) then uses spiral_place for collision avoidance —
+        same algorithm as the Info/MarkdownNode scatter.
         """
-        import math
-        import random
         import re
-        from PySide6.QtCore import QPointF
+        from PySide6.QtCore import QPointF, QRectF
 
         scene = self.scene()
         if not scene:
@@ -114,32 +113,25 @@ class CushionsNode(BaseNode):
         if not paragraphs:
             return
 
-        from nodes.BaseNode import BaseNode as _BaseNode
         from graphics.Connection import Connection
+        from utils.placement import spiral_place
 
-        PADDING         = 28
-        PROBES_PER_RING = 16
-        _OFFSCREEN      = QPointF(-999_999, -999_999)
+        PADDING    = 28
+        _OFFSCREEN = QPointF(-999_999, -999_999)
 
         prev_node = self
 
         for paragraph in paragraphs:
-            # Build WarmNode with pre-filled data so the editor picks up
-            # the text during construction and sizes correctly.
             from nodes.WarmNode import WarmNode
             from data.WarmNodeData import WarmNodeData
 
-            wdata = WarmNodeData(
-                body_text=paragraph,
-                title="",
-            )
+            wdata = WarmNodeData(body_text=paragraph, title="")
             node = WarmNode(wdata)
             node.setPos(_OFFSCREEN)
             scene.addItem(node)
             scene.raise_node(node)
 
-            # Let the editor lay out, then measure the document height
-            # and resize the node to fit all text without clipping.
+            # Let the editor lay out, then resize to fit all text.
             if node._editor:
                 doc = node._editor.document()
                 doc.setTextWidth(node.rect().width() - PADDING * 2)
@@ -150,58 +142,40 @@ class CushionsNode(BaseNode):
                     node.setRect(QRectF(r.x(), r.y(), r.width(), needed))
                     node.data.height = needed
 
-            nr = node.rect()
-            nw, nh = nr.width(), nr.height()
-
-            def _clear(p):
-                candidate = QRectF(p.x() - PADDING, p.y() - PADDING,
-                                   nw + PADDING * 2, nh + PADDING * 2)
-                for item in scene.items(candidate):
-                    if item is node:
-                        continue
-                    if isinstance(item, _BaseNode):
-                        return False
-                return True
-
-            # Determine spiral origin: camera centre if a view exists,
-            # otherwise fall back to offset from the previous node.
-            views = scene.views()
-            if views:
-                view   = views[0]
-                vr     = view.mapToScene(view.viewport().rect()).boundingRect()
-                origin = vr.center()
-                max_radius = int(max(vr.width(), vr.height()) * 2.5)
-            else:
-                origin = prev_node.pos() + QPointF(prev_node.rect().width() + 60, 0)
-                max_radius = 4000
-
-            step = max(1, int(max(nw, nh)) // 2)
-
-            pos   = origin
-            found = _clear(origin)
-            if not found:
-                for radius in range(step, max_radius, step):
-                    base = random.uniform(0, 2 * math.pi)
-                    for k in range(PROBES_PER_RING):
-                        angle = base + k * (2 * math.pi / PROBES_PER_RING)
-                        candidate = QPointF(
-                            origin.x() + math.cos(angle) * radius,
-                            origin.y() + math.sin(angle) * radius,
-                        )
-                        if _clear(candidate):
-                            pos   = candidate
-                            found = True
-                            break
-                    if found:
-                        break
-
-            if not found:
-                pos = prev_node.pos() + QPointF(prev_node.rect().width() + 40, 0)
-
+            chain_origin = self._wander_origin(prev_node)
+            pos = spiral_place(
+                scene, node, origin=chain_origin,
+                fallback=chain_origin, padding=PADDING,
+            )
             node.setPos(pos)
+
             conn = Connection(prev_node, node)
             scene.addItem(conn)
             prev_node = node
+
+    @staticmethod
+    def _wander_origin(prev_node) -> 'QPointF':
+        """Pick a random origin near *prev_node* — organic desk-scatter."""
+        import math
+        import random
+        from PySide6.QtCore import QPointF
+
+        pr = prev_node.rect()
+        cx = prev_node.pos().x() + pr.width()  / 2
+        cy = prev_node.pos().y() + pr.height() / 2
+
+        angle = random.uniform(0, 2 * math.pi)
+
+        if random.random() < 0.15:
+            distance = random.uniform(500, 900)
+        else:
+            distance = random.gauss(260, 80)
+            distance = max(120, distance)
+
+        return QPointF(
+            cx + math.cos(angle) * distance,
+            cy + math.sin(angle) * distance,
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT
