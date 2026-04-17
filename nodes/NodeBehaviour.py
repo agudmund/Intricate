@@ -72,8 +72,12 @@ class NodeBehaviour:
         self.pulse_anim.setEndValue(PULSE_SCALE)
         self.pulse_anim.setEasingCurve(QEasingCurve.InOutSine)
 
-        # valueChanged drives the scale — connected now, disconnected on removal
-        self.pulse_anim.valueChanged.connect(self._node.setScale)
+        # valueChanged drives the scale — connected now, disconnected on removal.
+        # Routed through _on_pulse_value so we can early-return during a bulk
+        # remove burst (scene._bulk_removing > 0). setScale() invalidates the
+        # peer's paint region; skipping it during the burst removes one more
+        # vector into the peer-paint-during-burst crash class.
+        self.pulse_anim.valueChanged.connect(self._on_pulse_value)
 
         # finished drives the reverse — one connection, lives for the node's lifetime
         self.pulse_anim.finished.connect(self._on_pulse_finished)
@@ -134,6 +138,17 @@ class NodeBehaviour:
         self._current_bg = color
         if self._node is None:
             return
+        # Peer quiescence: during a bulk-remove burst the surrounding
+        # event loop is draining scheduled removeItem calls. A setBrush()
+        # here would schedule a repaint that can land after a peer's
+        # C++ side has been freed. Skip the mutation — the final target
+        # colour will still be correct; we just drop interim frames.
+        try:
+            sc = self._node.scene()
+            if sc is not None and getattr(sc, '_bulk_removing', 0) > 0:
+                return
+        except RuntimeError:
+            return
         try:
             self._node.setBrush(QBrush(color))
         except RuntimeError:
@@ -165,6 +180,19 @@ class NodeBehaviour:
         target = self._bg_selected() if is_selected else self._bg_normal()
         self._animate_bg_to(target, 180)
 
+    def _on_pulse_value(self, value: float) -> None:
+        """Apply the pulse's interpolated scale to the node, unless the scene
+        is mid bulk-remove — in which case skip the paint-invalidating mutation."""
+        if self._node is None:
+            return
+        try:
+            sc = self._node.scene()
+            if sc is not None and getattr(sc, '_bulk_removing', 0) > 0:
+                return
+            self._node.setScale(value)
+        except RuntimeError:
+            pass
+
     def _on_pulse_finished(self):
         """When the forward breath completes, exhale back to rest."""
         if self.pulse_anim.direction() == QVariantAnimation.Forward:
@@ -189,7 +217,7 @@ class NodeBehaviour:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             try:
-                self.pulse_anim.valueChanged.disconnect(self._node.setScale)
+                self.pulse_anim.valueChanged.disconnect(self._on_pulse_value)
             except RuntimeError:
                 pass
             try:

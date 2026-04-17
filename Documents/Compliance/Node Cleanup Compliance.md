@@ -162,6 +162,69 @@ The GitNode's loading plushie (a VideoNode wired to the GitNode during push) wen
 
 **Lesson learned:** Never use `QTimer.singleShot` to cross thread boundaries in PySide6. Use flags polled by a main-thread timer, or proper `QMetaObject.invokeMethod` with `Qt.QueuedConnection`.
 
+### 2026-04-17 — Peer-paint-during-burst class of crash
+
+**Symptom:** `0xc0000005` access violation in `Qt6Widgets.dll` ~5 seconds after the last `_prepare_for_removal complete` log line. The log terminates mid-sequence during a bulk housekeeping pass (163 nodes removed in 21 s on a 1200+ node session with dozens of nodes running shake/pulse animations concurrently). Python teardown phases all ran cleanly — no traceback. Faulting module is `Qt6Widgets.dll`, not `Qt6Gui.dll`, placing the fault in the embedded-widget / proxy / paint pipeline rather than the scene graph core.
+
+**Root cause — new angle.** Every per-node-type `_prepare_for_removal()` is already compliant (prior fixes dated 2026-04-15 / 2026-04-16). The fault is not in any individual node's teardown. It is **cross-node**: during the destruction burst, surviving peers' per-frame mutators keep firing into the event loop —
+
+| Surviving-peer signal | Target | Effect |
+|-----------------------|--------|--------|
+| `NodeBehaviour.bg_anim.valueChanged` | `setBrush()` | Invalidates paint region on peer |
+| `NodeBehaviour.pulse_anim.valueChanged` | `setScale()` | Invalidates paint region on peer |
+| `Connection._glide_timer` (16 ms) | `_build_bezier()` + `update()` | Repaints the wire |
+
+These tick while some sibling node's `deleteLater()` is still draining. When a wire paint or peer repaint resolves, it dereferences `Connection.start_node` / `end_node` — a Python reference whose underlying C++ `QGraphicsItem` has already been destroyed. `Qt6Widgets.dll` reads freed memory → access violation.
+
+The removal path itself is intentionally fast (it sometimes outruns the Qt event loop) and must stay fast. The fix is to quieten the peers for the duration of the burst, not to slow the destruction.
+
+**Fix applied (three parts):**
+
+**1. Scene-level quiescence counter** (`nodes/BaseNode.py::_shake_delete_group`).
+A counter on the scene (`scene._bulk_removing`) is raised before the deferred-removal loop and lowered two event-loop ticks after the last `QTimer.singleShot(0, removeItem)` — the double-defer guarantees that any repaint scheduled *by* those removals still sees the flag raised. A counter (not a boolean) composes safely across overlapping bursts.
+
+**2. `Connection` endpoint validity guards** (`graphics/Connection.py`).
+`_endpoint_alive(node)` uses `shiboken6.isValid()` + `node.scene() is not None` to confirm a peer is safe to paint against. Guards added in two hot paths:
+- `Connection.paint()` — early-return if either endpoint is not alive.
+- `Connection._glide_tick()` — early-return if either endpoint is not alive; also early-return if `scene._bulk_removing > 0`. Dead endpoints cause the timer to stop itself.
+
+**3. `NodeBehaviour._on_bg_changed` peer quiescence** (`nodes/NodeBehaviour.py`).
+Early-return if the node's scene has `_bulk_removing > 0`. The final target colour still resolves correctly once the burst ends — only interim frames are dropped.
+
+| Concern | Resolution |
+|---------|------------|
+| Removal speed | Unchanged. The single-delete path never raises the counter; only `_shake_delete_group` does. |
+| Live UI freezes | None. Peers resume painting on the next event-loop tick after the final release. |
+| Missed final-state paint | None. Every peer still receives a paint event after the flag is lowered; the motion engine settles to its real target on the next `_glide_tick`. |
+
+**Lesson learned.** Per-node teardown compliance is necessary but not sufficient. Bulk-delete bursts need **scene-wide quiescence** for any per-frame mutator that could schedule a paint touching a peer endpoint. The `_bulk_removing` counter pattern is reusable anywhere a burst of `scene.removeItem()` calls can interleave with signal-driven repaints.
+
+**Verification to perform:** repeat the 2026-04-17 test — open a 1200+ node session, trigger housekeeping with dozens of nodes shaking, confirm no `0xc0000005` in Event Viewer.
+
+### 2026-04-17 — Second-pass audit: peer-paint-during-burst sweep
+
+After the primary fix landed, a codebase-wide second pass was done to find **secondary and tertiary instances of the same pattern** — any per-frame mutator that could schedule a peer repaint during a bulk removal, or any paint routine that dereferences a `QGraphicsItem` it does not own.
+
+**Tier 1 fixes applied (same root cause, different site):**
+
+| File:line | Issue | Fix |
+|-----------|-------|-----|
+| `graphics/Scene.py::_clear_all` | Session reload / scene reset is a bulk-removal burst identical in shape to `_shake_delete_group`, but with no quiescence counter raised around it. A concurrent pulse/bg/glide tick could crash it the same way. | Raise `self._bulk_removing` at the top of `_clear_all`, release via double-deferred `QTimer.singleShot(0, ...)` after the final `removeItem`. |
+| `nodes/NodeBehaviour.py::pulse_anim.valueChanged` | Directly wired to `self._node.setScale` (C++ slot). `setScale()` invalidates the peer's paint region every pulse frame — another vector that could land a paint mid-burst. | Route through new `_on_pulse_value` method that early-returns if `node.scene()._bulk_removing > 0`. Disconnect path updated to match. |
+
+**Tier 2 findings (latent, lower priority — not fixed in this pass):**
+
+- `nodes/NodeButton.py` `_reset_timer` (line 64–67) — survives if `detach()` isn't called. Defensive `_bulk_removing` check inside `_reset()` would harden it. Low risk today because `detach()` is reliably called from `_detach_buttons()` in `_prepare_for_removal`.
+- `main_window.py` `_joy_timer`, `_happy_timer`, `_glow_timer` — UI-only, don't touch the scene graph. Not a crash risk for the current pattern; noted for future shutdown-ordering work.
+
+**Tier 3 (already safe — confirmed, no change):**
+
+- `graphics/Particles.py` `_tick_timer` — `_FadingParticle._update()` already catches `RuntimeError` on dead scene/item access and self-kills. Uses `flush_scene` before any bulk removal. This is the reference implementation for other per-frame mutators.
+- `nodes/Port.py` — no timers, no animations.
+- `nodes/NodeButton.py::EmojiButton` — no timer or signal into the node graph.
+
+**Pattern takeaway for future node types:** any new per-frame mutator (timer or animation valueChanged) whose slot schedules a paint must route through a gate that checks `node.scene()._bulk_removing`. Direct C++ slot connections (like `anim.valueChanged.connect(node.setScale)`) cannot be gated — they must go through a Python wrapper. The checklist above was updated to make this a required audit item.
+
 ### 2026-04-16 — Codebase-wide proxy + timer audit
 
 **Scope:** Full audit of all 41 node files, `main_window.py`, `graphics/Scene.py`, `graphics/Connection.py`, `widgets/`, `utils/`, and the Pretty Widgets package.
@@ -207,6 +270,8 @@ When adding a new node type or auditing an existing one, walk through this check
 - [ ] Does `_prepare_for_removal()` call `super()` as its **last** line? → must always be last
 - [ ] Does the node programmatically remove other nodes? → never call `_prepare_for_removal()` explicitly; only neutralize dangerous C++ objects (stop players, sever media links), then defer `removeItem` and let `itemChange` handle teardown
 - [ ] Does the node use cross-thread callbacks? → never use `QTimer.singleShot` from worker threads; use flags polled by a main-thread timer instead
+- [ ] Does the node own any per-frame mutator that schedules a paint on a **peer** (not just itself)? → early-return when `node.scene()._bulk_removing > 0`. Scene-level quiescence is the bulk-delete safety net.
+- [ ] Does any paint/glide routine dereference a `QGraphicsItem` it does not own (e.g. a wire reading its endpoint node)? → guard with `shiboken6.isValid(x)` + `x.scene() is not None` before every dereference inside paint / timer ticks.
 
 ## Guard: `_removal_done`
 

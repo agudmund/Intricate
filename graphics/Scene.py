@@ -1005,6 +1005,15 @@ class IntricateScene(QGraphicsScene):
         from graphics.Connection import Connection
         from graphics.Particles import flush_scene
 
+        # Peer-paint-during-burst guard: same counter pattern as
+        # BaseNode._shake_delete_group. Raise before any removal work so
+        # surviving timers/animations skip their per-frame mutators while
+        # the scene drains. Released two event-loop ticks after the final
+        # removeItem so any repaint scheduled by these removals also sees
+        # the flag raised. See Documents/Compliance/Node Cleanup Compliance.md
+        # 2026-04-17 entry for the rationale.
+        self._bulk_removing = getattr(self, '_bulk_removing', 0) + 1
+
         # Kill any living particles FIRST — they hold scene refs and will
         # dereference stale C++ pointers if the 16 ms tick fires mid-teardown.
         flush_scene(self)
@@ -1047,6 +1056,15 @@ class IntricateScene(QGraphicsScene):
         # Reset z-counters so restored nodes start from a clean slate
         self._back_z_top  = -10.0
         self._front_z_top =  10.0
+
+        # Release the quiescence counter after two event-loop ticks so any
+        # repaint scheduled by the tail end of removeItem calls still sees
+        # the flag raised and bails out harmlessly.
+        def _release_bulk(sc=self):
+            sc._bulk_removing = max(0, getattr(sc, '_bulk_removing', 1) - 1)
+        def _defer_release(sc=self):
+            QTimer.singleShot(0, _release_bulk)
+        QTimer.singleShot(0, _defer_release)
 
     def restore_last_deleted(self) -> bool:
         """Recreate the most recently shake-deleted node. Returns True on success."""

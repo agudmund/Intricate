@@ -9,8 +9,24 @@
 from PySide6.QtWidgets import QGraphicsPathItem
 from PySide6.QtGui import QPainterPath, QPen, QColor, QPainter
 from PySide6.QtCore import Qt, QPointF, QTimer
+from shiboken6 import isValid as _shibokenIsValid
 
 from utils.MotionCurves import GlideEngine
+
+
+def _endpoint_alive(node) -> bool:
+    """An endpoint is safe to paint/glide against only while its C++ side
+    is still valid AND it is still attached to a scene. After removeItem()
+    or deleteLater() the Python ref can linger while the widget pointer
+    is already freed — dereferencing it segfaults Qt6Widgets.dll."""
+    if node is None:
+        return False
+    try:
+        if not _shibokenIsValid(node):
+            return False
+        return node.scene() is not None
+    except RuntimeError:
+        return False
 
 
 class Connection(QGraphicsPathItem):
@@ -215,6 +231,20 @@ class Connection(QGraphicsPathItem):
         if self.start_node is None:
             self._glide_timer.stop()
             return
+        # Peer-paint-during-burst guard: if the scene is mid bulk removal,
+        # or either endpoint's C++ side is gone, park this tick. update()
+        # here would invalidate a region whose widget may already be freed.
+        sc = self.scene()
+        if sc is not None and getattr(sc, '_bulk_removing', 0) > 0:
+            return
+        if not _endpoint_alive(self.start_node):
+            self._glide_timer.stop()
+            self.start_node = None
+            return
+        if self.end_node is not None and not _endpoint_alive(self.end_node):
+            self._glide_timer.stop()
+            self.end_node = None
+            return
 
         e = self._engine
         settled = e.tick()
@@ -241,6 +271,13 @@ class Connection(QGraphicsPathItem):
 
     def paint(self, painter, option, widget):
         if self.start_node is None or not self.path():
+            return
+        # Endpoint validity: a peer may have been torn down earlier this tick
+        # while this wire is still scheduled to paint. Dereferencing a freed
+        # C++ QGraphicsItem from the paint loop is the 0xc0000005 crash path.
+        if not _endpoint_alive(self.start_node):
+            return
+        if self.end_node is not None and not _endpoint_alive(self.end_node):
             return
 
         painter.setRenderHint(QPainter.Antialiasing)

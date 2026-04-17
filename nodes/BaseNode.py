@@ -838,6 +838,14 @@ class BaseNode(QGraphicsRectItem):
         # Remove connections between deleted nodes and external nodes,
         # then deferred-remove each selected node.
         doomed = set(others) | {self}
+        # Peer-paint-during-burst guard: raise a scene-level counter that
+        # tells surviving peers (glide ticks, bg animations, etc.) to skip
+        # their per-frame repaint work while the removal queue drains.
+        # Counter, not flag, so nested/overlapping bursts compose safely.
+        # The release is deferred twice: once behind the last removeItem
+        # tick, then once more so any repaint scheduled by those removes
+        # also sees the quiet flag before it is lowered.
+        scene._bulk_removing = getattr(scene, '_bulk_removing', 0) + 1
         for node in others:
             # Remove wires that connect to nodes outside the doomed set
             for conn in list(node.connections):
@@ -860,6 +868,12 @@ class BaseNode(QGraphicsRectItem):
                 except RuntimeError:
                     pass
             QTimer.singleShot(0, _deferred)
+
+        def _release_bulk(sc=scene):
+            sc._bulk_removing = max(0, getattr(sc, '_bulk_removing', 1) - 1)
+        def _defer_release(sc=scene):
+            QTimer.singleShot(0, _release_bulk)
+        QTimer.singleShot(0, _defer_release)
 
     def mouseReleaseEvent(self, event):
         self._is_resizing = False
