@@ -6,6 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import json
 from abc import abstractmethod
 from PySide6.QtCore import QObject, Signal, QUrl, QTimer
 from PySide6.QtWebSockets import QWebSocket
@@ -21,6 +22,10 @@ STATUS_CONNECTING   = "connecting"
 STATUS_CONNECTED    = "connected"
 STATUS_ERROR        = "error"
 
+# Protocol version — bumped when the HELLO / READY JSON shape changes.
+# Echoed in every HELLO so the CEP side can log drift between node and panel.
+PROTOCOL_VERSION = 1
+
 
 class PacketTransport(QObject):
     """Abstract wire between Intricate and Premiere's CEP receiver.
@@ -30,12 +35,20 @@ class PacketTransport(QObject):
     nodes talk to this abstraction and never care which transport is live.
 
     Signals:
-        status_changed(str)   — one of STATUS_* constants
-        message_received(str) — raw text frame from the receiver
+        status_changed(str)       — one of STATUS_* constants
+        message_received(str)     — raw text frame, still fired for every frame
+                                    so any legacy TXT-echo receiver keeps working
+        handshake_ready(dict)     — parsed READY payload from the CEP side
+                                    (project / sequence / clip census)
+        handshake_error(str, dict) — (reason, details_dict) from an ERROR frame
+        pong_received(dict)       — parsed PONG payload from a heartbeat
     """
 
-    status_changed   = Signal(str)
-    message_received = Signal(str)
+    status_changed    = Signal(str)
+    message_received  = Signal(str)
+    handshake_ready   = Signal(dict)
+    handshake_error   = Signal(str, dict)
+    pong_received     = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -84,7 +97,8 @@ class PacketTransport(QObject):
           be integer-parseable. Receivers split on ``|`` and pull them
           from the end by position.
         - ``Val`` is everything between ``Prop`` and ``Track`` — so it
-          may safely contain literal ``|`` characters without escaping.
+          may safely contain literal ``|`` characters without escaping,
+          including embedded JSON payloads (used by HELLO / READY / PONG).
           The receiver rejoins the middle slice with ``|``.
         - ``Prop`` is the first field and should not contain ``|``.
 
@@ -93,6 +107,82 @@ class PacketTransport(QObject):
         parse unambiguously.
         """
         return self.send_raw(f"{prop}|{val}|{track}|{clip}")
+
+    # ── Handshake + heartbeat helpers ────────────────────────────────────────
+
+    def send_hello(self, expected_project: str, expected_sequence: str,
+                   track: int = 0, clip: int = 0,
+                   client_id: str = "", intricate_version: str = "") -> bool:
+        """Send a HELLO handshake packet.
+
+        The Val slot carries a JSON blob of Intricate-side expectations.
+        CEP calls ``handshakeReport`` in ``script.jsx`` and replies with
+        either a READY frame (full census) or an ERROR frame (reason +
+        details). Both replies are routed through the specialized signals
+        (``handshake_ready`` / ``handshake_error``) by ``_route_frame``.
+        """
+        payload = {
+            "expectedProject":  expected_project or "",
+            "expectedSequence": expected_sequence or "",
+            "protocolVersion":  PROTOCOL_VERSION,
+            "clientId":         client_id,
+            "intricateVersion": intricate_version,
+        }
+        return self.send_packet("HELLO", json.dumps(payload, separators=(",", ":")),
+                                track, clip)
+
+    def send_ping(self) -> bool:
+        """Send a heartbeat ping. CEP replies PONG with a cheap liveness census."""
+        return self.send_packet("PING", "", 0, 0)
+
+    # ── Frame routing — subclasses call this on every received line ──────────
+
+    def _route_frame(self, line: str) -> None:
+        """Classify an incoming frame and emit the right specialized signal.
+
+        ``message_received`` is still emitted for every frame so the
+        simple TXT-echo readout on the node keeps working. Handshake
+        and heartbeat frames additionally fire the structured signals.
+        """
+        self.message_received.emit(line)
+
+        parts = line.split("|")
+        if len(parts) < 4:
+            return  # malformed; leave it for the raw-text receiver
+        # Validate the trailing Track/Clip positions per the parse contract
+        # — even though this router doesn't use them, we honour the format.
+        try:
+            int(parts[-1])
+            int(parts[-2])
+        except ValueError:
+            return
+        prop = parts[0]
+        val  = "|".join(parts[1:-2])
+
+        if prop == "READY":
+            data = self._parse_json_val(val)
+            if data is not None:
+                self.handshake_ready.emit(data)
+        elif prop == "ERROR":
+            data = self._parse_json_val(val) or {}
+            reason = data.get("reason", "unknown") if isinstance(data, dict) else "unknown"
+            details = data.get("details", {}) if isinstance(data, dict) else {}
+            self.handshake_error.emit(reason, details if isinstance(details, dict) else {})
+        elif prop == "PONG":
+            data = self._parse_json_val(val) or {}
+            if isinstance(data, dict):
+                self.pong_received.emit(data)
+
+    @staticmethod
+    def _parse_json_val(val: str):
+        """Parse the Val slot as JSON; log and return None on failure."""
+        if not val:
+            return None
+        try:
+            return json.loads(val)
+        except (ValueError, TypeError) as e:
+            logger.warning("failed to parse JSON val (%s): %.80s", e, val)
+            return None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -152,7 +242,9 @@ class WebSocketTransport(PacketTransport):
             return False
         try:
             self._ws.sendTextMessage(line)
-            logger.debug("ws ← %s", line)
+            # Don't log heartbeat sends at debug — they'd flood the log.
+            if not line.startswith("PING|"):
+                logger.debug("ws ← %s", line)
             return True
         except Exception as e:
             logger.warning("ws send failed: %s", e)
@@ -187,8 +279,10 @@ class WebSocketTransport(PacketTransport):
         # which is the desired behaviour when Premiere's panel is starting up.
 
     def _on_text(self, text: str) -> None:
-        logger.debug("ws → %s", text)
-        self.message_received.emit(text)
+        # Skip the heartbeat-pong log noise; everything else goes through.
+        if not text.startswith("PONG|"):
+            logger.debug("ws → %s", text)
+        self._route_frame(text)
 
     # ── Teardown — called by the owning node before removal ──────────────────
 

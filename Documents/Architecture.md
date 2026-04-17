@@ -68,7 +68,9 @@ pretty_widgets/
 | `graphics/Connection.py` | 314 | Bezier wire rendering and animation |
 | `nodes/WarmNode.py` | 397 | Main content node — text bridge to Notepad++ Duplex+ Turbo |
 
-### Node Types (18 total)
+### Node Types
+
+Canonical catalogue with per-node detail lives in `Documents/Node Type Schema.md` (34 node types across 8 sidebar categories). Abbreviated roll call for structural orientation:
 
 | Node | Purpose |
 |------|---------|
@@ -92,6 +94,7 @@ pretty_widgets/
 | StickerNode | Chromeless alpha-PNG pinned on canvas |
 | InfoNode | Information display |
 | ClaudeInfoNode | Claude-specific info panel |
+| **PremiereBridgeNode** | **Live wire to Adobe Premiere Pro 2026 via CEP WebSocket — handshake + heartbeat + packet injection. See `Documents/Nodes/The Premiere Bridge Node.md`.** |
 
 ### Design Patterns
 
@@ -106,6 +109,10 @@ pretty_widgets/
 ### Text Bridge (WarmNode ↔ Notepad)
 
 WarmNode writes a `.warm_bridge_{uuid}.json` to `Documents/data/`. Notepad opens with `--bridge <path>`. Both sides use QFileSystemWatcher + debounce timers. `writer` field prevents echo loops. Bridge file deleted on close or node removal.
+
+### Premiere Bridge (PremiereBridgeNode ↔ CEP Panel)
+
+PremiereBridgeNode owns a `WebSocketTransport` in `utils/premiere_transport.py` targeting `ws://127.0.0.1:9914`. A CEP extension at `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\` (self-signed, CEP 12 mandatory) runs a Node.js `ws` server inside Premiere Pro 2026 and dispatches to ExtendScript via `csInterface.evalScript`. Frames are `Prop|Val|Track|Clip` — `HELLO`/`READY`/`ERROR` handshake, `PING`/`PONG` heartbeat at 5s, three-strikes silent-wire detection. On mismatch the node spawns a chained AboutNode (same passive-messaging pattern as GitNode's offline guard). Full writeup at `Documents/Nodes/The Premiere Bridge Node.md`; phase history at `Documents/Claude Plans/Premiere Bridge Phase 1.md`.
 
 ## Notepad++ Duplex+ Turbo (4,200 lines)
 

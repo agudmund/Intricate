@@ -1,6 +1,6 @@
 # Intricate Node Type Schema
 
-> **33 node types** across 8 sidebar categories.
+> **34 node types** across 8 sidebar categories.
 > Every node exists because it earned its place through daily use.
 > This document is the living reference — update it when nodes are added, renamed, or reorganised.
 
@@ -17,7 +17,7 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 | 3 | Audio | `iconAudioGroup` | Sound, Merger, Silence |
 | 4 | Visual | `iconVisualGroup` | Bezier, Palette, Value, Sticker |
 | 5 | Health | `iconHealthGroup` | Health, Perf, Log, Joy Inspector |
-| 6 | Tools | `iconToolsGroup` | Restore, Snip, Git, Tree, Session |
+| 6 | Tools | `iconToolsGroup` | Restore, Snip, Git, Tree, Session, Premiere Bridge |
 | 7 | Info | `iconInfoGroup` | Intricate, Readme, Architecture, Node Schema, Registry |
 | 8 | Claude | `iconClaude` | Claude, Census, Response (auto-spawned) |
 
@@ -197,6 +197,12 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 - Utility for inspecting and importing external session files. Drop session file to see summary (node count, type breakdown, connections). Import button spawns all nodes and connections at SessionNode position.
 - `_has_depth_toggle = True`
 
+### The Premiere Bridge Node
+- **Type key:** `premiere_bridge` | **Icon:** `iconPremiereBridge`
+- **Files:** `nodes/PremiereBridgeNode.py`, `data/PremiereBridgeNodeData.py`, `utils/premiere_transport.py`
+- Live wire to Adobe Premiere Pro 2026 via CEP extension. Owns a `WebSocketTransport` targeting `ws://127.0.0.1:9914` where a Node.js server inside Premiere's CEP panel listens. Frames travel as `Prop|Val|Track|Clip`. Handshake on connect (`HELLO` → `READY|ERROR`), 5s heartbeat (`PING` → `PONG`), three-strikes silent-wire detection. On `ERROR` or silent wire, spawns a chained AboutNode carrying a poetic reason line plus structural details (expected/actual, available sequences). Permissive by default; flip to strict mode by populating `expected_project` / `expected_sequence`. Full canonical writeup at `Documents/Nodes/The Premiere Bridge Node.md`.
+- `_has_depth_toggle = True`
+
 ---
 
 ## Info Category
@@ -260,9 +266,9 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 
 | Metric | Count |
 |--------|-------|
-| Total node types | 33 |
-| User-spawnable from sidebar | 32 |
+| Total node types | 34 |
+| User-spawnable from sidebar | 33 |
 | Programmatically-spawned only | 1 (ClaudeResponseNode) |
-| With depth toggle | 27 |
+| With depth toggle | 28 |
 | Without depth toggle | 6 (Bezier, Palette, Value, Sticker, plus 2 non-node actions) |
 | Sidebar categories | 8 |
