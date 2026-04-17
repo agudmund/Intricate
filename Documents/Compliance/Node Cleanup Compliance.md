@@ -212,10 +212,12 @@ After the primary fix landed, a codebase-wide second pass was done to find **sec
 | `graphics/Scene.py::_clear_all` | Session reload / scene reset is a bulk-removal burst identical in shape to `_shake_delete_group`, but with no quiescence counter raised around it. A concurrent pulse/bg/glide tick could crash it the same way. | Raise `self._bulk_removing` at the top of `_clear_all`, release via double-deferred `QTimer.singleShot(0, ...)` after the final `removeItem`. |
 | `nodes/NodeBehaviour.py::pulse_anim.valueChanged` | Directly wired to `self._node.setScale` (C++ slot). `setScale()` invalidates the peer's paint region every pulse frame — another vector that could land a paint mid-burst. | Route through new `_on_pulse_value` method that early-returns if `node.scene()._bulk_removing > 0`. Disconnect path updated to match. |
 
-**Tier 2 findings (latent, lower priority — not fixed in this pass):**
+**Tier 2 fixes applied (2026-04-17, follow-up pass):**
 
-- `nodes/NodeButton.py` `_reset_timer` (line 64–67) — survives if `detach()` isn't called. Defensive `_bulk_removing` check inside `_reset()` would harden it. Low risk today because `detach()` is reliably called from `_detach_buttons()` in `_prepare_for_removal`.
-- `main_window.py` `_joy_timer`, `_happy_timer`, `_glow_timer` — UI-only, don't touch the scene graph. Not a crash risk for the current pattern; noted for future shutdown-ordering work.
+| File:line | Issue | Fix |
+|-----------|-------|-----|
+| `nodes/NodeButton.py::_reset` | `_reset_timer` survives if `detach()` isn't called (e.g. exception earlier in `_prepare_for_removal`). A late tick could `self.update()` on a dead peer. | Early-return if `scene()` is None or `scene._bulk_removing > 0`. Trivial cost in common path. |
+| `main_window.py::closeEvent` (opacity-zero branch) | `_joy_timer`, `_happy_timer`, `_glow_timer` are parented to the window but could fire between `event.accept()` and C++ destruction, touching half-torn UI state. | Explicit stop + disconnect loop for all three in the final close branch before `event.accept()`. Each is guarded with `hasattr` so conditionally-created timers (like `_glow_timer`) don't NPE.
 
 **Tier 3 (already safe — confirmed, no change):**
 

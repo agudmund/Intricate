@@ -1,2 +1,8 @@
 notes.txt
 Documents/data/cache/
+
+# Claude Code harness — per-machine permission allowlist, not project state
+.claude/settings.local.json
+
+# WarmNode → Majestic bridge transit files (ephemeral, per-session)
+Documents/data/.warm_bridge_*.json

@@ -2689,6 +2689,28 @@ class IntricateApp(QMainWindow):
         It should be a joyful moment because now we can look forward to seeing each other later.
         """
         if self.windowOpacity() <= 0.0:
+            # Defensive: stop + disconnect long-running UI timers before the
+            # C++ window tears down. These are parented to self (so Qt would
+            # collect them eventually), but any tick that fires between
+            # event.accept() and final destruction could touch half-torn state.
+            # Part of the Node Cleanup Compliance 2026-04-17 Tier 2 sweep.
+            for _name, _slot in (
+                ('_joy_timer',   getattr(self, '_deplete_joy',       None)),
+                ('_happy_timer', getattr(self, '_tick_happy',        None)),
+                ('_glow_timer',  getattr(self, '_tick_hunger_glow',  None)),
+            ):
+                _t = getattr(self, _name, None)
+                if _t is None:
+                    continue
+                try:
+                    _t.stop()
+                except RuntimeError:
+                    pass
+                if _slot is not None:
+                    try:
+                        _t.timeout.disconnect(_slot)
+                    except RuntimeError:
+                        pass
             try:
                 import threading
                 threading.Thread(target=self._cleanup_pycache, daemon=True).start()

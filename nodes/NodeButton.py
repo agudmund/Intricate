@@ -199,8 +199,22 @@ class NodeButton(QGraphicsObject):
         super().mouseReleaseEvent(event)
 
     def _reset(self) -> None:
-        """Return to normal state — called by timer or after execution."""
+        """Return to normal state — called by timer or after execution.
+
+        Defensive: if the parent node's teardown bailed out before detach()
+        was called (exception in _prepare_for_removal) the timer can still
+        fire. Bail out if our C++ side is gone or the scene is mid bulk
+        removal — both are peer-paint-during-burst vectors (see Documents/
+        Compliance/Node Cleanup Compliance.md 2026-04-17)."""
         self._reset_timer.stop()
+        try:
+            sc = self.scene()
+        except RuntimeError:
+            return
+        if sc is None:
+            return
+        if getattr(sc, '_bulk_removing', 0) > 0:
+            return
         self._in_confirm = False
         self.update()
 
