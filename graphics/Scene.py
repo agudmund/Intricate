@@ -757,6 +757,7 @@ class IntricateScene(QGraphicsScene):
             "nodes":       nodes,
             "connections": connections,
             "viewport":    viewport or {},
+            "ui_migrations": getattr(self, "_ui_migrations", []),
         })
 
         # Garbage-collect orphaned image cache files
@@ -792,6 +793,27 @@ class IntricateScene(QGraphicsScene):
 
         # Store session description for round-trip persistence
         self._session_description = payload.get("description", "")
+
+        # ── UI migrations ─────────────────────────────────────────────────────
+        # One-shot in-place fixes to node dicts before from_dict() sees them.
+        # Each migration ID, once applied, is stamped in the session so it
+        # doesn't run a second time and overwrite user choices made after the
+        # migration landed.
+        ui_migrations = list(payload.get("ui_migrations", []))
+        if "image_border_default_on_v1" not in ui_migrations:
+            # Default flipped from False to True on 2026-04-17. Sessions saved
+            # before that date carry show_border=False everywhere — the old
+            # default, not an explicit user choice. Flip them once so the
+            # ivory border shows up without per-node manual toggling.
+            touched = 0
+            for nd in payload.get("nodes", []):
+                if nd.get("node_type") == "image" and not nd.get("show_border", False):
+                    nd["show_border"] = True
+                    touched += 1
+            ui_migrations.append("image_border_default_on_v1")
+            if touched:
+                logger.info("[migration] image_border_default_on_v1 — flipped %d node(s)", touched)
+        self._ui_migrations = ui_migrations
 
         # Suspend BSP indexing during bulk restore — rebuild once at the end.
         # At 1200 nodes this turns O(n²) index rebuilds into a single O(n) pass.
