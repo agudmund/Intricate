@@ -760,12 +760,15 @@ class IntricateScene(QGraphicsScene):
             "ui_migrations": getattr(self, "_ui_migrations", []),
         })
 
-        # Garbage-collect orphaned image cache files
+        # Garbage-collect orphaned media cache files. Shared cache dir covers
+        # both image and video nodes — any node that persists a cache_key
+        # contributes its key to the live set.
         try:
-            from utils.image_cache import gc_cache
+            from utils.media_cache import gc_cache
+            _CACHED_TYPES = {"image", "video"}
             live_keys = {
                 n.get("cache_key", "") for n in nodes
-                if n.get("node_type") == "image" and n.get("cache_key")
+                if n.get("node_type") in _CACHED_TYPES and n.get("cache_key")
             }
             gc_cache(live_keys)
         except Exception:

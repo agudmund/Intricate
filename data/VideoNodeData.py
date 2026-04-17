@@ -28,8 +28,11 @@ class VideoNodeData(NodeData):
     width:     float = field(default=360.0)
     height:    float = field(default=280.0)
 
-    source_path: str   = field(default="")     # Absolute path to source video file
-    caption:     str   = field(default="")      # Editable label shown on the node
+    source_path:  str   = field(default="")     # Absolute path to source video file — provenance anchor
+    cache_key:    str   = field(default="")     # Dotted key into media cache: "<sha256>.<ext>". Once bound, permanent.
+    source_size:  int   = field(default=0)      # Cheap drift fingerprint — source file size in bytes at cache time
+    source_mtime: float = field(default=0.0)    # Cheap drift fingerprint — source mtime at cache time
+    caption:      str   = field(default="")     # Editable label shown on the node
     volume:      int   = field(default=50)      # 0–100, persisted
     playback_pos: int  = field(default=0)       # Milliseconds into the video at save time
     looping:      bool = field(default=False)   # Whether playback loops
@@ -40,6 +43,9 @@ class VideoNodeData(NodeData):
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["source_path"]   = self.source_path
+        data["cache_key"]     = self.cache_key
+        data["source_size"]   = self.source_size
+        data["source_mtime"]  = self.source_mtime
         data["caption"]       = self.caption
         data["volume"]        = self.volume
         data["playback_pos"]  = self.playback_pos
@@ -62,6 +68,9 @@ class VideoNodeData(NodeData):
             height        = float(data.get("height",  280.0)),
             ports_visible = data.get("ports_visible", False),
             source_path   = data.get("source_path",   ""),
+            cache_key     = data.get("cache_key",     ""),
+            source_size   = int(data.get("source_size",   0)),
+            source_mtime  = float(data.get("source_mtime", 0.0)),
             caption       = data.get("caption",       ""),
             volume        = data.get("volume",        50),
             playback_pos  = data.get("playback_pos",  0),

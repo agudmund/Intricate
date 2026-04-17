@@ -473,22 +473,24 @@ class IntricateApp(QMainWindow):
             act.setToolTip("Release directory locks so folders can be deleted in Explorer")
             act.triggered.connect(self._unlock_folders)
         menu.addSeparator()
-        refresh = menu.addAction("Refresh Image Cache")
-        refresh.setToolTip("Purge the project's image cache and re-generate from sources")
-        refresh.triggered.connect(self._refresh_image_cache)
+        refresh = menu.addAction("Refresh Media Cache")
+        refresh.setToolTip("Purge the project's media cache and re-ingest from sources (images + videos)")
+        refresh.triggered.connect(self._refresh_media_cache)
         menu.exec(global_pos)
 
-    def _refresh_image_cache(self) -> None:
-        """Purge the project image cache and regenerate entries from live ImageNodes.
+    def _refresh_media_cache(self) -> None:
+        """Purge the project media cache and re-ingest from every live media node.
 
-        Nodes with a valid source_path reload from disk (re-reading raw bytes
-        so all embedded metadata — EXIF, XMP, ICC, tEXt stamps — is preserved).
-        Nodes without a source re-cache their in-memory pixmap.
-        Drift (pre-refresh cache_key disagreeing with source hash) is counted
-        and logged per-file so the user can see which sources changed.
+        Unified over images and videos. Nodes with a valid source_path re-read
+        the source; nodes without fall back to whatever in-memory form they hold.
+        Drift (pre-refresh cache_key disagreeing with live source hash) is counted
+        per-type so the user sees which sources changed.
         """
         from nodes.ImageNode import ImageNode
-        from utils.image_cache import cache_dir, cache_pixmap, hash_file, key_hash
+        from nodes.VideoNode import VideoNode
+        from utils.media_cache import (
+            cache_dir, cache_pixmap, cache_source_file, hash_file, key_hash,
+        )
 
         from send2trash import send2trash
         removed = 0
@@ -501,9 +503,8 @@ class IntricateApp(QMainWindow):
             except OSError:
                 pass
 
-        regenerated = 0
-        reloaded = 0
-        drifted = 0
+        # ── Images ─────────────────────────────────────────────────────────
+        img_regen = img_reload = img_drift = 0
         for item in list(self.scene.items()):
             if not isinstance(item, ImageNode):
                 continue
@@ -513,23 +514,50 @@ class IntricateApp(QMainWindow):
                 if item.data.cache_key:
                     src_hash = hash_file(sp)
                     if src_hash and src_hash != key_hash(item.data.cache_key):
-                        drifted += 1
-                        logger.info("[cache] drift — %s source no longer matches prior cache", sp.name)
+                        img_drift += 1
+                        logger.info("[cache] image drift — %s", sp.name)
                 item.data.cache_key = ""
                 item.load_from_path(src)
-                reloaded += 1
+                img_reload += 1
             elif item._pixmap and not item._pixmap.isNull():
                 item.data.cache_key = cache_pixmap(item._pixmap)
-                regenerated += 1
+                img_regen += 1
 
+        # ── Videos ─────────────────────────────────────────────────────────
+        vid_reload = vid_drift = 0
+        for item in list(self.scene.items()):
+            if not isinstance(item, VideoNode):
+                continue
+            src = item.data.source_path
+            if src and Path(src).exists():
+                sp = Path(src)
+                if item.data.cache_key:
+                    src_hash = hash_file(sp)
+                    if src_hash and src_hash != key_hash(item.data.cache_key):
+                        vid_drift += 1
+                        logger.info("[cache] video drift — %s", sp.name)
+                # Re-ingest synchronously here (we're inside an explicit user
+                # refresh — worth the wait to know it landed).
+                new_key = cache_source_file(sp)
+                if new_key:
+                    item.data.cache_key = new_key
+                    try:
+                        st = sp.stat()
+                        item.data.source_size  = st.st_size
+                        item.data.source_mtime = st.st_mtime
+                    except OSError:
+                        pass
+                vid_reload += 1
+
+        total = img_reload + img_regen + vid_reload
+        drift_total = img_drift + vid_drift
         logger.info(
-            "[cache] refresh — purged %d, reloaded %d from source, re-cached %d in-memory, %d drifted",
-            removed, reloaded, regenerated, drifted,
+            "[cache] refresh — purged %d; images: %d reloaded, %d re-cached, %d drifted; videos: %d reloaded, %d drifted",
+            removed, img_reload, img_regen, img_drift, vid_reload, vid_drift,
         )
-        total = reloaded + regenerated
-        msg = f"Image cache refreshed — {total} image(s)"
-        if drifted:
-            msg += f" ({drifted} had drifted)"
+        msg = f"Media cache refreshed — {total} item(s)"
+        if drift_total:
+            msg += f" ({drift_total} had drifted)"
         self.show_info(msg)
 
     def _unlock_folders(self) -> None:
@@ -2242,7 +2270,7 @@ class IntricateApp(QMainWindow):
         if project_dir.exists() and not (project_dir / ".git").exists():
             self._git_init_project(project_dir, project_dir.name)
         try:
-            from utils.image_cache import set_cache_root
+            from utils.media_cache import set_cache_root
             set_cache_root(path.parent)
         except Exception:
             pass  # Cache setup failure is non-fatal

@@ -10,7 +10,7 @@ It is not a cat photo widget. It is a cat photo widget backed by infrastructure 
 |---|---|
 | `nodes/ImageNode.py` | The node — paint, buttons, loading, stamping, Vision integration |
 | `data/ImageNodeData.py` | Pure Python dataclass — `cache_key`, `source_path`, `caption`, flags |
-| `utils/image_cache.py` | SHA-256 content-addressed byte-preserving cache |
+| `utils/media_cache.py` | SHA-256 content-addressed byte-preserving cache (shared with VideoNode) |
 | `utils/vision.py` | VisionWorker — async Claude API call for image identification |
 | `utils/HappyTimes.py` | PNG tEXt stamp read/write helpers |
 
@@ -35,7 +35,7 @@ Both write to `_pending_pixmap` / `_pending_cache_key`. A main-thread `QTimer` a
 
 ### The Cache — Byte-Preserving, Content-Addressed
 
-The v0.2 cache (`utils/image_cache.py`) stores source file bytes verbatim:
+The v0.2 cache (`utils/media_cache.py`) stores source file bytes verbatim:
 
 ```
 cache_dir/

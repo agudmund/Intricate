@@ -6,6 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import math
 from pathlib import Path
 
 from PySide6.QtWidgets import QFileDialog
@@ -79,10 +80,15 @@ class VideoNode(BaseNode):
         self._aspect_fitted = False  # True once we've auto-sized to the video's aspect ratio
 
         # ── Current frame pixmap ──────────────────────────────────────────────
+        # Frame pixmap is sized at ingest to match the current view LOD so we
+        # never upscale a proxy-sized bitmap at extreme zoom (pixelation) nor
+        # keep a full source-resolution frame per video (memory blow-up when
+        # hundreds of clips play simultaneously in an animatic view).
         self._frame_pixmap: QPixmap | None = None
         self._scaled_cache: QPixmap | None = None
         self._scaled_cache_size: tuple[int, int] | None = None
         self._frame_pending: bool = False          # throttle: skip if paint hasn't caught up
+        self._last_lod: float = 1.0                # quantized LOD the current frame was sized for
 
         # ── Media player ──────────────────────────────────────────────────────
         self._player = QMediaPlayer()
@@ -117,11 +123,24 @@ class VideoNode(BaseNode):
         for btn in self._buttons:
             btn.hide()
 
+        # Background cache/drift delivery flags — polled by main-thread timer.
+        # Same pattern as ImageNode's _pending_pixmap / _pending_cache_key.
+        self._pending_cache_key: str | None = None
+        self._pending_drift:     str | None = None
+        self._pending_size:      int  | None = None
+        self._pending_mtime:     float | None = None
+        self._cache_poll = QTimer()
+        self._cache_poll.setInterval(100)
+        self._cache_poll.timeout.connect(self._check_cache_delivery)
+        self._cache_poll.start()
+
         # ── Restore from session ──────────────────────────────────────────────
-        if data.source_path:
-            p = Path(data.source_path)
-            if p.exists():
-                self._set_source(p, restore_pos=data.playback_pos)
+        # Permanence contract: the graph remembers every video it has ever
+        # been given. Prefer the live source (drift-checked in background);
+        # fall back to the cached copy if the source has moved, been lost,
+        # or is mid-network-mount. A drift AboutNode is spawned on mismatch —
+        # we surface the signal, never auto-heal.
+        self._restore_from_session()
 
     # ─────────────────────────────────────────────────────────────────────────
     # CAPTION → ABOUT NODE
@@ -183,7 +202,14 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def load_from_path(self, path: str | Path) -> None:
-        """Load a video from a file path. Public — called by file browser and View.dropEvent."""
+        """Load a video from a file path. Public — called by file browser and View.dropEvent.
+
+        Playback starts immediately from the source path so the user never waits
+        on the cache. A background worker hashes + copies the source bytes
+        into the media cache and stamps data.cache_key on completion. From
+        that moment on the graph knows about the video and can restore it
+        even if the source file later moves or disappears.
+        """
         path = Path(path)
         if not path.exists():
             return
@@ -192,6 +218,8 @@ class VideoNode(BaseNode):
             self.data.caption = path.stem
             self._spawn_caption_node(path.stem)
         logger.info(f"video loaded: {path.name}")
+        # Fire-and-forget cache ingestion. See _check_cache_delivery for pickup.
+        self._start_cache_ingest(path)
 
     def _set_source(self, path: Path, restore_pos: int = 0) -> None:
         self.data.source_path = str(path.resolve())
@@ -201,6 +229,123 @@ class VideoNode(BaseNode):
             self._restore_pos = restore_pos
         else:
             self._restore_pos = 0
+
+    def _restore_from_session(self) -> None:
+        """Session restore with permanence contract.
+
+        Preference order:
+            1. Source file on disk exists → play from source, drift-check async
+            2. Cache key resolves         → play from cache, flag source missing
+            3. Neither                    → placeholder, node remains empty
+        """
+        from utils.media_cache import cached_path
+
+        src_path = Path(self.data.source_path) if self.data.source_path else None
+        cache_path = cached_path(self.data.cache_key) if self.data.cache_key else None
+
+        if src_path and src_path.exists():
+            self._set_source(src_path, restore_pos=self.data.playback_pos)
+            if self.data.cache_key:
+                # Drift check is deferred to a background worker — cheap
+                # fingerprint (size + mtime) first, full rehash only on mismatch.
+                self._start_drift_check(src_path)
+            else:
+                # Pre-cache session: ingest now so future restores are safe.
+                self._start_cache_ingest(src_path)
+            return
+
+        if cache_path is not None:
+            self._set_source(cache_path, restore_pos=self.data.playback_pos)
+            # Flag that the live source is gone — the graph self-served from cache.
+            missing = self.data.source_path or "(unknown)"
+            self._pending_drift = f"source missing — playing from cache\n{Path(missing).name}"
+            return
+
+        # Nothing to load — empty placeholder node.
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CACHE — background ingestion and drift detection
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _start_cache_ingest(self, src_path: Path) -> None:
+        """Hash + copy the source into the media cache on a daemon thread.
+        Delivers cache_key / size / mtime via _pending_* fields. Safe to call
+        multiple times — cache_source_file short-circuits if the hash exists."""
+        import threading
+        def _worker(node=self, path=src_path):
+            try:
+                from utils.media_cache import cache_source_file
+                key = cache_source_file(path)
+                if not key:
+                    return
+                try:
+                    st = path.stat()
+                    size, mtime = st.st_size, st.st_mtime
+                except OSError:
+                    size, mtime = 0, 0.0
+                # Write pending fields last — delivery timer treats the key
+                # as the "ready" signal.
+                node._pending_size  = size
+                node._pending_mtime = mtime
+                node._pending_cache_key = key
+            except Exception as e:
+                logger.warning(f"[video cache] ingest failed for {path.name}: {e}")
+        threading.Thread(target=_worker, daemon=True, name="video-cache-ingest").start()
+
+    def _start_drift_check(self, src_path: Path) -> None:
+        """Cheap fingerprint (size + mtime) against the stored values. Only
+        if either has changed do we spend a full re-hash to confirm a real
+        content change. Surface the signal via _pending_drift; never auto-heal."""
+        import threading
+        def _worker(node=self, path=src_path):
+            try:
+                try:
+                    st = path.stat()
+                except OSError:
+                    return
+                if (st.st_size == node.data.source_size
+                        and abs(st.st_mtime - node.data.source_mtime) < 1.0):
+                    return   # clean — no change since last bind
+                # Fingerprint mismatch — spend the full hash to confirm drift.
+                from utils.media_cache import hash_file, key_hash
+                live_hash = hash_file(path)
+                if live_hash is None:
+                    return
+                if live_hash != key_hash(node.data.cache_key):
+                    node._pending_drift = (
+                        "source drifted — cache no longer matches\n"
+                        f"{path.name}"
+                    )
+            except Exception as e:
+                logger.warning(f"[video cache] drift check failed for {path.name}: {e}")
+        threading.Thread(target=_worker, daemon=True, name="video-cache-drift").start()
+
+    def _check_cache_delivery(self) -> None:
+        """Main-thread pickup of background cache / drift workers."""
+        try:
+            if self._destroyed:
+                return
+        except RuntimeError:
+            return
+
+        key = self._pending_cache_key
+        if key:
+            self.data.cache_key = key
+            if self._pending_size  is not None:
+                self.data.source_size  = self._pending_size
+            if self._pending_mtime is not None:
+                self.data.source_mtime = self._pending_mtime
+            self._pending_cache_key = None
+            self._pending_size  = None
+            self._pending_mtime = None
+
+        drift_msg = self._pending_drift
+        if drift_msg:
+            self._pending_drift = None
+            try:
+                self._spawn_caption_node(drift_msg)
+            except Exception:
+                pass
 
     def _on_media_status(self, status) -> None:
         try:
@@ -222,12 +367,35 @@ class VideoNode(BaseNode):
                 else:
                     self._was_playing_before_cull = True
 
-    def _on_frame(self, frame: QVideoFrame) -> None:
-        """Convert each video frame to a proxy-sized QPixmap for painting.
+    def _current_view_lod(self) -> float:
+        """Return the current view's zoom factor (quantized to 0.5 steps).
 
-        We scale down immediately so only a thumbnail-sized pixmap lives in
-        memory — never the full decoded frame.  If the previous frame hasn't
-        been painted yet we drop this one entirely (frame-skip).
+        Ingest-time LOD lookup — paint sees it through the painter's world
+        transform, but _on_frame has no painter so we read it from the view.
+        One-view assumption matches the app today; falls back to 1.0 if the
+        scene has not yet attached a view (early session restore)."""
+        try:
+            sc = self.scene()
+            views = sc.views() if sc else []
+            if not views:
+                return 1.0
+            raw = max(1.0, abs(views[0].transform().m11()))
+        except RuntimeError:
+            return 1.0
+        return max(1.0, math.ceil(raw * 2.0) / 2.0)
+
+    def _on_frame(self, frame: QVideoFrame) -> None:
+        """Convert each video frame to a LOD-sized QPixmap for painting.
+
+        The incoming frame is scaled at ingest to (video_rect × current LOD),
+        capped at source resolution. This keeps memory proportional to the
+        on-screen size per node — hundreds of tiny clips in an animatic view
+        cost little; one zoomed-in clip gets up to source-res for that one
+        alone. When zoom changes, playing videos pick up the new LOD on the
+        next arrival (16–33ms); paused videos are re-emitted from paint().
+
+        Frame-skip: if the previous frame hasn't been painted yet we drop
+        this one entirely (_frame_pending throttle).
         """
         try:
             if self._destroyed or self._frame_pending:
@@ -256,16 +424,19 @@ class VideoNode(BaseNode):
                 self.setRect(QRectF(r.x(), r.y(), ideal_node_w, r.height()))
                 self.data.width = ideal_node_w
 
-        # Scale to display size right away — never keep the full-res decode
+        # Size the frame pixmap to (video_rect × LOD), capped at source
         try:
             vr = self._video_rect()
         except RuntimeError:
             return
-        tw, th = max(1, int(vr.width())), max(1, int(vr.height()))
+        lod = self._current_view_lod()
+        tw = max(1, min(img.width(),  int(vr.width()  * lod) + 1))
+        th = max(1, min(img.height(), int(vr.height() * lod) + 1))
         small = img.scaled(tw, th, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self._frame_pixmap = QPixmap.fromImage(small)
         self._scaled_cache = None       # invalidate
         self._frame_pending = True
+        self._last_lod = lod
         self.update()
 
     def _on_duration_changed(self, duration: int) -> None:
@@ -475,6 +646,23 @@ class VideoNode(BaseNode):
 
         self._frame_pending = False          # allow next frame to be accepted
 
+        # ── Paused-video LOD refresh ─────────────────────────────────────────
+        # Playing videos pick up zoom changes automatically on the next frame
+        # (16-33ms). Paused videos must be asked — re-emit the current frame
+        # via a zero-distance setPosition so _on_frame fires with the new LOD.
+        # Guarded on a meaningful LOD delta so ordinary panning/hover doesn't
+        # thrash the decoder.
+        try:
+            raw_lod = max(1.0, abs(painter.worldTransform().m11()))
+            cur_lod = max(1.0, math.ceil(raw_lod * 2.0) / 2.0)
+            if (cur_lod != self._last_lod
+                    and self._frame_pixmap is not None
+                    and self._player.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
+                self._last_lod = cur_lod   # latch immediately so we don't re-fire
+                QTimer.singleShot(0, lambda: self._player.setPosition(self._player.position()))
+        except RuntimeError:
+            pass
+
         if self._frame_pixmap and not self._frame_pixmap.isNull():
             # ── Clip to rounded rect ─────────────────────────────────────────
             clip_radius = max(CLIP_RADIUS_MIN, self.round_radius - VIDEO_PADDING)
@@ -483,8 +671,11 @@ class VideoNode(BaseNode):
             painter.setClipPath(clip_path)
 
             # ── Scale + centre ───────────────────────────────────────────────
-            # _frame_pixmap is already proxy-sized from _on_frame; only
-            # re-scale if the node was resized since the last decode.
+            # _frame_pixmap is already LOD-sized from _on_frame; scaled_cache
+            # just aspect-fits it to vr for draw. Enable SmoothPixmapTransform
+            # so any residual painter-side upsample (between zoom steps) is
+            # bilinear, not nearest-neighbour.
+            painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
             vr_size = (int(vr.width()), int(vr.height()))
             if self._scaled_cache is None or self._scaled_cache_size != vr_size:
                 self._scaled_cache = self._frame_pixmap.scaled(
@@ -651,6 +842,20 @@ class VideoNode(BaseNode):
 
     def _prepare_for_removal(self) -> None:
         self._destroyed = True
+        # Stop cache-delivery timer and sever pending fields. Background
+        # ingest/drift workers check _destroyed before writing, but the
+        # timer callback itself must be muted before Qt tears us down.
+        if hasattr(self, '_cache_poll') and self._cache_poll is not None:
+            self._cache_poll.stop()
+            try:
+                self._cache_poll.timeout.disconnect(self._check_cache_delivery)
+            except RuntimeError:
+                pass
+            self._cache_poll = None
+        self._pending_cache_key = None
+        self._pending_drift     = None
+        self._pending_size      = None
+        self._pending_mtime     = None
         if self._volume_anim:
             try:
                 self._volume_anim.finished.disconnect(self._pause_after_fade)

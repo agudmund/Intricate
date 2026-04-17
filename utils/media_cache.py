@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - utils/image_cache.py proprietary image cache
--SHA-256 addressed cache preserving original file format and metadata for enjoying
+-Intricate nodal playground - utils/media_cache.py proprietary media cache
+-SHA-256 addressed byte-preserving cache shared by image and video nodes for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -83,6 +83,42 @@ def cache_source_bytes(raw: bytes, ext: str) -> str:
     return key
 
 
+def cache_source_file(src_path: Path) -> str:
+    """Stream-hash and copy a source file into the cache. Returns '<sha256>.<ext>'.
+
+    For large files (video) where reading the whole source into memory is wasteful.
+    Hashes and writes in 1 MiB chunks in a single pass. If the hash already exists
+    in the cache, skips the copy. Empty or missing source returns empty string.
+    """
+    if not src_path or not src_path.exists():
+        return ""
+    ext = src_path.suffix.lstrip(".").lower() or "bin"
+
+    # First pass: streaming SHA. We accept one extra read over the source so
+    # the common "already cached" case costs hash-only, no second copy.
+    h = hashlib.sha256()
+    try:
+        with open(src_path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    except OSError:
+        return ""
+    key = f"{h.hexdigest()}.{ext}"
+    dst = cache_dir() / key
+    if dst.exists():
+        return key
+
+    # Second pass: stream-copy. shutil.copyfile is the fastest portable
+    # copy on Windows (uses CopyFileEx under the hood in newer Pythons).
+    import shutil
+    try:
+        shutil.copyfile(src_path, dst)
+        logger.debug(f"[cache] wrote {key[:12]}… .{ext} ({src_path.stat().st_size:,} bytes, stream)")
+    except OSError:
+        return ""
+    return key
+
+
 def cache_pixmap(pixmap: QPixmap) -> str:
     """Fallback for pasted or generated images with no source file on disk.
     PNG-encodes the pixmap and caches it. Returns '<sha256>.png' key.
@@ -103,6 +139,15 @@ def load_cached(key: str) -> QPixmap | None:
     if img.isNull():
         return None
     return QPixmap.fromImage(img)
+
+
+def cached_path(key: str) -> Path | None:
+    """Return the absolute Path to the cached file for a key, or None if missing.
+
+    Used by QMediaPlayer and any other consumer that loads media by filesystem
+    path rather than in-memory bytes. Accepts both dotted and legacy bare keys.
+    """
+    return _resolve_cache_path(key)
 
 
 def cached_bytes(key: str) -> bytes | None:
