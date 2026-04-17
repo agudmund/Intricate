@@ -614,8 +614,12 @@ class IntricateApp(QMainWindow):
             self.original_height = self.height()
             end_rect = QRect(start_rect.x(), start_rect.y(),
                              start_rect.width(), Theme.handleHeightTop)
-            # ③ Delay-hide so the bottom toolbar is visible during the roll start
-            QTimer.singleShot(200, self._sidebar_splitter.hide)
+            # ③ Delay-hide so the bottom toolbar stays visible for the first
+            # 2/3 of the roll — gives the window "visual weight", like the
+            # thickness is physically pulling up rather than just shrinking.
+            # Scales with timing so the ratio holds at any slider value.
+            hide_delay = max(1, int(Theme.windowRollTimingUp * 2 / 3))
+            QTimer.singleShot(hide_delay, self._sidebar_splitter.hide)
             if self.scene:
                 self.scene.pause_all_videos()
             self._last_docked_exe = ""
