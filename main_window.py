@@ -1574,9 +1574,10 @@ class IntricateApp(QMainWindow):
             "wormhole":      self._spawn_wormhole_node,
         }
         self._action_dispatch = {
-            "restore":      self._restore_deleted,
-            "snip":         self._start_wire_snip,
-            "launch_claude": self._launch_claude_app,
+            "restore":           self._restore_deleted,
+            "snip":              self._start_wire_snip,
+            "launch_claude":     self._launch_claude_app,
+            "launch_claude_code": self._launch_claude_code,
         }
 
     def _show_category_menu(self, category: str, btn: QPushButton) -> None:
@@ -1743,16 +1744,57 @@ class IntricateApp(QMainWindow):
             user32.ShowWindow(found, 3)  # SW_MAXIMIZE
             user32.SetForegroundWindow(found)
         else:
-            import os, subprocess
-            local = os.path.expandvars(r"%LOCALAPPDATA%\AnthropicClaude\claude.exe")
+            # Claude ships as an MSIX package on Windows — versioned install path
+            # under Program Files\WindowsApps is unreadable and changes on every
+            # update.  Launch by AppUserModelID instead; this is the stable handle.
+            import subprocess, os
+            AUMID = r"Claude_pzs8sxrjxfjjc!Claude"
             try:
-                subprocess.Popen([local])
-            except FileNotFoundError:
+                subprocess.Popen(["explorer.exe", f"shell:AppsFolder\\{AUMID}"])
+            except Exception:
                 try:
-                    os.startfile("claude://")
+                    os.startfile("claude://")          # last-resort URL protocol
                 except Exception:
                     return
             self._poll_maximize_window("Claude", user32)
+
+    def _launch_claude_code(self) -> None:
+        """Resume the Intricate Claude Code session in the MSIX desktop app.
+
+        Uses the `claude://` URL protocol directly — specifically the
+        Resume deep-link, which was reverse-engineered from the MSIX
+        app's bundled URL router:
+
+            case Iu.Resume:
+              const s = searchParams.get("session");
+              ra.importCliSession(s).then(o =>
+                  dispatcher.dispatchNavigate(ra.getSessionRoute(o)));
+
+        Handing a Claude Code session UUID to that handler makes the
+        app import the CLI session and navigate to its session route,
+        which for a Code session is the Code tab.  Net effect:
+
+          - No subprocess, no PowerShell, no stdin hijack
+          - No stale AnthropicClaude path (MSIX-style versioned install)
+          - No visible terminal, no manual /desktop typing
+          - Handoff is a single OS-level URL dispatch
+
+        Pairs symmetrically with _launch_claude_app: both resolve to
+        the same single-instance MSIX window, in different tab modes.
+        Clicking either while the other is active swaps the mode in
+        place — a free Chat/Code toggle between the two sidebar entries.
+        """
+        import os, ctypes
+        CONV_UUID = "365b40dd-0a0a-422a-9550-a7867716dc81"
+        try:
+            os.startfile(f"claude://resume/?session={CONV_UUID}")
+        except OSError:
+            return  # claude:// protocol handler not registered
+
+        # MSIX app typically focuses itself on deep-link receipt, but belt
+        # and braces: poll+maximize the window like Launch Claude does.
+        user32 = ctypes.windll.user32
+        self._poll_maximize_window("Claude", user32)
 
     def _poll_maximize_window(self, title_substring: str, user32) -> None:
         """Poll for a window matching *title_substring* to appear, then maximize it."""

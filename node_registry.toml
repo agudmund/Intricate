@@ -391,6 +391,13 @@ category = "claude"
 icon = "iconClaude"
 icon_fallback = "#7a9a7a"
 
+[actions.launch_claude_code]
+name = "Resume Claude Code"
+tooltip = "Resume this project's Claude Code session in the terminal"
+category = "claude"
+icon = "iconClaudeCode"
+icon_fallback = "#7a9a7a"
+
 [actions.snip]
 name = "There Comes A Time In Everyone's Life..."
 tooltip = "Remove an explicit wire connection"

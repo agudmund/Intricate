@@ -129,4 +129,27 @@ draw.ellipse(
 _save(img, 'vision_eye')
 
 
+# ── 5. Claude Code — tent (upper) + terminal prompt `>_` (lower) ─────────────
+#    A right-pointing chevron followed by a cursor underscore — universally
+#    understood as a CLI / terminal prompt.  Signals "Claude in the shell".
+img, draw = _base()
+_tent(draw, cy - 130, scale=0.75, stroke=36)
+
+# `>` chevron — two lines meeting at a right-pointing apex
+chev_x   = cx - 200        # left edge of chevron pair
+apex_x   = cx + 20         # tip of the chevron
+chev_y   = cy + 230        # vertical centre
+arm_half = 145             # half-height of each arm
+draw.line([(chev_x, chev_y - arm_half), (apex_x, chev_y)], fill=C, width=46)
+draw.line([(chev_x, chev_y + arm_half), (apex_x, chev_y)], fill=C, width=46)
+
+# `_` cursor — short horizontal bar just after the chevron
+cur_x0 = apex_x + 60
+cur_x1 = cur_x0 + 170
+cur_y  = chev_y + arm_half - 10    # sits at the baseline of the chevron
+draw.line([(cur_x0, cur_y), (cur_x1, cur_y)], fill=C, width=46)
+
+_save(img, 'claude_code')
+
+
 print('all done')
