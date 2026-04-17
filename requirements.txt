@@ -1,4 +1,22 @@
-PySide6
-send2trash
-markdown
-Pygments
+# Intricate — runtime and tooling dependencies
+# "it works for me / it works for you / done" — no version pins;
+# Python is the floor, pip resolves the rest.
+
+# ── Runtime: GUI ──────────────────────────────────────────────────────────
+PySide6                 # Qt bindings — everything graphical
+pretty_widgets          # Shared widget package (PrettyButton, PrettyLabel, …)
+intricate_log           # Rust-backed lock-free ring-buffer logger (.pyd)
+
+# ── Runtime: features ────────────────────────────────────────────────────
+Pillow                  # Image loading / processing (ImageNode, icons, vision)
+markdown                # MarkdownNode / TextNode rendering
+Pygments                # Syntax highlighting inside markdown
+send2trash              # Safe file deletion (session archive rotation)
+comtypes                # Windows spellchecker COM bridge (utils/spellchecker.py)
+
+# ── Dev / tooling: icon generation pipeline (icons/*.py) ─────────────────
+numpy                   # Colour-distance masking, array ops for icon extraction
+scipy                   # Connected-component labelling for sticker cleanup
+
+# ── Dev / tooling: packaging ─────────────────────────────────────────────
+PyInstaller             # build.py — produces the frozen Windows binary

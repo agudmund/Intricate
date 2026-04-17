@@ -1038,7 +1038,7 @@ class IntricateApp(QMainWindow):
         _cat_btn(Theme.iconHealthGroup,  "Health", self._show_health_menu)
         _cat_btn(Theme.iconToolsGroup,   "Tools",  self._show_tools_menu)
         _cat_btn(Theme.iconInfoGroup,    "Info",   self._show_info_menu)
-        _cat_btn(Theme.iconClaude,       "Claude", self._show_claude_menu)
+        _cat_btn(Theme.iconAnthropic,    "Claude", self._show_claude_menu)
 
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
         layout.addStretch()
