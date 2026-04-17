@@ -620,17 +620,6 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
-    def add_wormhole_node(self, pos: QPointF | None = None):
-        """Add a WormholeNode for exporting connected media to Premiere Pro."""
-        from nodes.WormholeNode import WormholeNode
-        from data.WormholeNodeData import WormholeNodeData
-        node = WormholeNode(WormholeNodeData())
-        if pos is not None:
-            node.setPos(pos)
-        self.addItem(node)
-        self.raise_node(node)
-        return node
-
     def add_premiere_bridge_node(self, pos: QPointF | None = None):
         """Add a PremiereBridgeNode — live wire to Premiere's CEP panel."""
         from nodes.PremiereBridgeNode import PremiereBridgeNode
@@ -1212,11 +1201,6 @@ class IntricateScene(QGraphicsScene):
         elif node_type == "joy_stats":
             from nodes.JoyStatsNode import JoyStatsNode
             node = JoyStatsNode.from_dict(d)
-
-        elif node_type == "wormhole":
-            from nodes.WormholeNode import WormholeNode
-            from data.WormholeNodeData import WormholeNodeData
-            node = WormholeNode(WormholeNodeData.from_dict(d))
 
         elif node_type == "premiere_bridge":
             from nodes.PremiereBridgeNode import PremiereBridgeNode

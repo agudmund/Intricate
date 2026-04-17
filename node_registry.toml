@@ -272,17 +272,6 @@ status = "ready for a session file"
 notes = ""
 buttons = "Import session nodes onto canvas"
 
-[nodes.wormhole]
-name = "The Wormhole"
-tooltip = "Wire up ImageNodes or VideoNodes — click Export to send them to Premiere Pro as a .prproj"
-category = "tools"
-icon = "iconWormhole"
-icon_fallback = "#8b5cf6"
-spawnable = true
-status = "ready to open the portal"
-notes = ""
-buttons = "Export .prproj"
-
 [nodes.premiere_bridge]
 name = "The Premiere Bridge"
 tooltip = "Live wire to Premiere's CEP panel — press 👋 to ping across the bridge"
