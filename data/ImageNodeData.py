@@ -33,7 +33,7 @@ class ImageNodeData(NodeData):
     cache_key:   str  = field(default="")    # SHA-256 hash key into Documents/data/cache/
     caption:     str  = field(default="")    # Editable label shown on the node
     source_path: str  = field(default="")    # Absolute path to the source file on disk (provenance)
-    show_border:   bool = field(default=False) # Ivory border overlay on the image
+    show_border:   bool = field(default=True)  # Ivory border overlay on the image
     depth_front:   bool = field(default=False)
     shelf_visible: bool = field(default=False) # Button shelf starts collapsed
 
@@ -66,7 +66,7 @@ class ImageNodeData(NodeData):
             cache_key     = data.get("cache_key",   ""),
             caption       = data.get("caption",     ""),
             source_path   = data.get("source_path", ""),
-            show_border   = data.get("show_border", False),
+            show_border   = data.get("show_border", True),
             depth_front   = data.get("depth_front", False),
             shelf_visible = data.get("shelf_visible", False),
         )
