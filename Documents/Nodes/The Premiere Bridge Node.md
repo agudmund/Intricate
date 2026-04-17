@@ -95,6 +95,14 @@ Premiere Pro 2026 / CEP 12 hardened its extension loader: `PlayerDebugMode=1` in
 
 **Critical:** keep the `.p12`, the `.zxp`, and `ZXPSignCmd.exe` itself **outside** the `extensions/` folder, otherwise CEP will hash them as part of the extension and reject the signature. The current dev-machine tooling lives at `%APPDATA%\Adobe\CEP\_intricate_signing\`.
 
+**Day-to-day:** after any edit to the CEP-side files (`index.html`, `script.jsx`, `manifest.xml`, etc.) the signature is invalidated — Premiere will refuse to re-open the panel. Run `resign.ps1` in the signing folder to clear stale `META-INF`, re-sign, extract the fresh `.zxp` back over the extension dir, and verify in one pass:
+
+```
+powershell -ExecutionPolicy Bypass -File %APPDATA%\Adobe\CEP\_intricate_signing\resign.ps1
+```
+
+Then close and re-open the Intricate Bridge panel from `Window → Extensions` — Premiere picks up the new code without a full app restart, and Intricate's WebSocket transport reconnects within 2.5s. The script is self-contained: it manually iterates the zip entries (PS5 / .NET Framework 4.x lacks the `ExtractToDirectory` overwrite overload) and uses `--` ASCII separators throughout (PS5 reads UTF-8 without BOM as CP-1252, so em-dashes corrupt).
+
 ## First Light
 
 Working end-to-end on **Friday 2026-04-17, 06:54 Reykjavik**. The CEP panel log at that moment:
@@ -126,14 +134,14 @@ Phase 2+ will likely add handshake state cache, last-known FPS, and expected pro
 
 ## Known Leaks
 
-- **The toast trailing** — `routePacket` in `index.html` rejoins everything after `parts[0]` with `|`, so the toast reads `Hello 👋|0|0` instead of just `Hello 👋`. The rejoin is defensive against payloads containing pipes, but noisy for simple `TXT`. Two-line fix deferred to Phase 2.
+- ~~**The toast trailing** — `routePacket` in `index.html` rejoins everything after `parts[0]` with `|`, so the toast reads `Hello 👋|0|0` instead of just `Hello 👋`.~~ **Resolved in Phase 2a.** `parsePacket()` now pulls `Track`/`Clip` from the end by position and rejoins the middle slice as `Val`, so `TXT|Hello 👋|0|0` surfaces as `Hello 👋` in the toast while still tolerating literal pipes inside the payload. The router also distinguishes ACK (known prop) from NACK (malformed or unknown prop) in its reply.
 - **No heartbeat** — if Premiere crashes or the panel is closed mid-session, Intricate's status dot will stay pink until the next packet attempt discovers the wire is dead. Fine for Phase 1, formalized in Phase 2's handshake step.
 
 ## Phase 2 Trajectory
 
 Ordered by dependency:
 
-1. **Packet cleanup in `routePacket`** — fix the `|0|0` trailing bleed on `TXT`.
+1. ~~**Packet cleanup in `routePacket`**~~ — **done in Phase 2a.** `parsePacket()` split out; `Val` pulled from the middle slice; ACK vs NACK distinction wired. `resign.ps1` helper now lives at `%APPDATA%\Adobe\CEP\_intricate_signing\` so future CEP edits are a one-command resign.
 2. **Handshake + heartbeat** — on `connected`, Intricate sends `HELLO|<expectedProject>|<expectedSequence>`; CEP calls `validateAndGetFPS` (already stubbed in `script.jsx`) and returns `READY|<fps>|<project>|<sequence>` or `ERROR|<reason>`. 5-second heartbeat pings detect silent disconnects.
 3. **Keyframe injection — Motion / Opacity** — CEP reads `Scale|120|0|0` → `seq.videoTracks[track].clips[clip].components[1].properties["Scale"].setValueAtKey(...)`. The first real payload; the moment the bridge stops being a ping and starts being useful.
 4. **Serial transport swap (Phase 2b)** — `SerialTransport(PacketTransport)` using `QtSerialPort` against a `com0com` virtual pair. Zero node-side changes if the abstraction is sound. Aligns with Adobe's paid-SDK security posture for IP compliance.
@@ -160,4 +168,4 @@ Ordered by dependency:
 | `icons/make_premiere_bridge_icon.py` | Pillow recipe that generated the icon |
 | `Documents/Claude Plans/Premiere Bridge Phase 1.md` | The session plan + first-light addendum |
 | `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\` | CEP receiver (outside repo) |
-| `%APPDATA%\Adobe\CEP\_intricate_signing\` | ZXPSignCmd + self-signed cert (outside repo) |
+| `%APPDATA%\Adobe\CEP\_intricate_signing\` | ZXPSignCmd + self-signed cert + `resign.ps1` (outside repo) |

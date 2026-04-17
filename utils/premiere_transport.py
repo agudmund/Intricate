@@ -77,6 +77,20 @@ class PacketTransport(QObject):
         Packet format:  ``Prop|Val|Track|Clip``
         Phase 1 ping:   ``TXT|Hello 👋|0|0``
         Phase 2 scale:  ``Scale|120|0|0``
+
+        Parse contract (honoured by every receiver in the family):
+
+        - ``Track`` and ``Clip`` are always the LAST two fields and must
+          be integer-parseable. Receivers split on ``|`` and pull them
+          from the end by position.
+        - ``Val`` is everything between ``Prop`` and ``Track`` — so it
+          may safely contain literal ``|`` characters without escaping.
+          The receiver rejoins the middle slice with ``|``.
+        - ``Prop`` is the first field and should not contain ``|``.
+
+        This contract means ``Scale|120|0|0``, ``TXT|Hello|world|0|0``
+        (val = "Hello|world"), and ``LUT|/path/to/file.cube|0|0`` all
+        parse unambiguously.
         """
         return self.send_raw(f"{prop}|{val}|{track}|{clip}")
 
