@@ -427,6 +427,11 @@ class IntricateView(QGraphicsView):
             focal point walks across the canvas — the MarkdownNode pattern.
             Without this, all drops fan out in concentric probe rings from
             one fixed centre and look suspiciously uniform.
+
+            Satellite nodes already connected at scatter time (e.g. the
+            caption AboutNode that ImageNode.load_from_path spawns during
+            the node factory call) get dragged along by the same delta so
+            they don't orphan at the original drop point.
             """
             nonlocal prev_node
             if node is None:
@@ -436,8 +441,20 @@ class IntricateView(QGraphicsView):
                     origin = drop_scene_pos
                 else:
                     origin = wander_origin(prev_node)
-                pos = spiral_place(self.scene(), node, origin=origin, fallback=origin)
-                node.setPos(pos)
+                old_pos = node.pos()
+                new_pos = spiral_place(self.scene(), node, origin=origin, fallback=origin)
+                delta = new_pos - old_pos
+                node.setPos(new_pos)
+                # Bring along auto-spawned satellites. At this moment the node
+                # has only just been created, so anything connected to it must
+                # be a satellite the factory spawned — no user wiring yet.
+                for conn in list(getattr(node, 'connections', [])):
+                    try:
+                        other = conn.end_node if conn.start_node is node else conn.start_node
+                    except RuntimeError:
+                        continue
+                    if other is not None and other is not node:
+                        other.setPos(other.pos() + delta)
                 prev_node = node
             except Exception:
                 pass
