@@ -7,6 +7,7 @@
 """
 
 import base64
+import math
 import threading
 from pathlib import Path
 
@@ -63,7 +64,7 @@ class ImageNode(BaseNode):
 
         self._pixmap: QPixmap | None = None   # Full-resolution source pixmap
         self._scaled_cache: QPixmap | None = None          # Cached scaled pixmap
-        self._scaled_cache_size: tuple[int, int] | None = None  # (w, h) key
+        self._scaled_cache_size: tuple[int, int] | None = None  # (target_w, target_h) key in device pixels
 
         # ── Async image loading state ─────────────────────────────────────────
         self._pending_pixmap: QPixmap | None = None
@@ -231,11 +232,7 @@ class ImageNode(BaseNode):
         img = reader.read()
         if img.isNull():
             return None
-        pixmap = QPixmap.fromImage(img)
-        _MAX = 2048
-        if pixmap.width() > _MAX or pixmap.height() > _MAX:
-            pixmap = pixmap.scaled(_MAX, _MAX, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        return pixmap
+        return QPixmap.fromImage(img)
 
     @staticmethod
     def _decode_b64(b64_str: str) -> QPixmap | None:
@@ -546,19 +543,41 @@ class ImageNode(BaseNode):
             painter.setClipPath(clip_path)
 
             # ── Scale pixmap to fit, preserving aspect ratio ──────────────────
-            ir_size = (int(ir.width()), int(ir.height()))
-            if self._scaled_cache is None or self._scaled_cache_size != ir_size:
+            # Key the scaled cache on image_rect × view LOD so zooming the canvas
+            # regenerates the bitmap at screen-pixel resolution instead of
+            # upscaling a node-sized cache. Capped at the source pixmap size —
+            # no point scaling beyond the pixels we have.
+            raw_lod = max(1.0, abs(painter.worldTransform().m11()))
+            # Quantize to 0.5 steps so continuous zooming doesn't rescale the
+            # full-res pixmap on every frame — only at meaningful detail jumps.
+            lod = max(1.0, math.ceil(raw_lod * 2.0) / 2.0)
+            target_w = min(self._pixmap.width(),  int(ir.width()  * lod) + 1)
+            target_h = min(self._pixmap.height(), int(ir.height() * lod) + 1)
+            target_size = (target_w, target_h)
+            if self._scaled_cache is None or self._scaled_cache_size != target_size:
                 self._scaled_cache = self._pixmap.scaled(
-                    ir.width(),
-                    ir.height(),
+                    target_w,
+                    target_h,
                     Qt.KeepAspectRatio,
                     Qt.SmoothTransformation,
                 )
-                self._scaled_cache_size = ir_size
+                self._scaled_cache_size = target_size
             scaled = self._scaled_cache
-            draw_x = ir.x() + (ir.width()  - scaled.width())  / 2.0
-            draw_y = ir.y() + (ir.height() - scaled.height()) / 2.0
-            painter.drawPixmap(QPointF(draw_x, draw_y), scaled)
+            # Aspect-fit the scaled pixmap into image_rect in scene coordinates.
+            # At high zoom the scaled cache clamps at source resolution; painter
+            # will upsample from there, but the drawn rect must still fill ir.
+            sw, sh = scaled.width(), scaled.height()
+            aspect = sw / sh if sh else 1.0
+            if ir.width() / ir.height() > aspect:
+                draw_h = ir.height()
+                draw_w = draw_h * aspect
+            else:
+                draw_w = ir.width()
+                draw_h = draw_w / aspect
+            draw_x = ir.x() + (ir.width()  - draw_w) / 2.0
+            draw_y = ir.y() + (ir.height() - draw_h) / 2.0
+            painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+            painter.drawPixmap(QRectF(draw_x, draw_y, draw_w, draw_h), scaled, QRectF(scaled.rect()))
 
             painter.setClipping(False)
 

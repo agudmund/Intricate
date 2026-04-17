@@ -472,7 +472,50 @@ class IntricateApp(QMainWindow):
             act = menu.addAction("Unlock Folders")
             act.setToolTip("Release directory locks so folders can be deleted in Explorer")
             act.triggered.connect(self._unlock_folders)
+        menu.addSeparator()
+        refresh = menu.addAction("Refresh Image Cache")
+        refresh.setToolTip("Purge the project's image cache and re-generate from sources")
+        refresh.triggered.connect(self._refresh_image_cache)
         menu.exec(global_pos)
+
+    def _refresh_image_cache(self) -> None:
+        """Purge the project image cache and regenerate entries from live ImageNodes.
+
+        Nodes with a valid source_path reload from disk (picking up any changes
+        to the scaling pipeline). Nodes without a source re-cache their current
+        in-memory pixmap so nothing gets lost.
+        """
+        from nodes.ImageNode import ImageNode
+        from utils.image_cache import cache_dir, cache_pixmap
+
+        from send2trash import send2trash
+        removed = 0
+        for f in cache_dir().glob("*.png"):
+            try:
+                send2trash(str(f))
+                removed += 1
+            except OSError:
+                pass
+
+        regenerated = 0
+        reloaded = 0
+        for item in list(self.scene.items()):
+            if not isinstance(item, ImageNode):
+                continue
+            src = item.data.source_path
+            if src and Path(src).exists():
+                item.data.cache_key = ""
+                item.load_from_path(src)
+                reloaded += 1
+            elif item._pixmap and not item._pixmap.isNull():
+                item.data.cache_key = cache_pixmap(item._pixmap)
+                regenerated += 1
+
+        logger.info(
+            "[cache] refresh — purged %d, reloaded %d from source, re-cached %d in-memory",
+            removed, reloaded, regenerated,
+        )
+        self.show_info(f"Image cache refreshed — {reloaded + regenerated} image(s)")
 
     def _unlock_folders(self) -> None:
         """Release all directory locks so folders can be deleted in Explorer.
