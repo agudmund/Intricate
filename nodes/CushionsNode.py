@@ -155,27 +155,10 @@ class CushionsNode(BaseNode):
 
     @staticmethod
     def _wander_origin(prev_node) -> 'QPointF':
-        """Pick a random origin near *prev_node* — organic desk-scatter."""
-        import math
-        import random
-        from PySide6.QtCore import QPointF
-
-        pr = prev_node.rect()
-        cx = prev_node.pos().x() + pr.width()  / 2
-        cy = prev_node.pos().y() + pr.height() / 2
-
-        angle = random.uniform(0, 2 * math.pi)
-
-        if random.random() < 0.15:
-            distance = random.uniform(500, 900)
-        else:
-            distance = random.gauss(260, 80)
-            distance = max(120, distance)
-
-        return QPointF(
-            cx + math.cos(angle) * distance,
-            cy + math.sin(angle) * distance,
-        )
+        """Thin alias for utils.placement.wander_origin — kept as a hook
+        so subclasses can override the distribution if ever needed."""
+        from utils.placement import wander_origin
+        return wander_origin(prev_node)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT

@@ -415,15 +415,30 @@ class IntricateView(QGraphicsView):
         # Map drop viewport position → scene coordinates (QPointF all the way)
         drop_scene_pos = self.mapToScene(event.position().toPoint())
 
-        from utils.placement import spiral_place
+        from utils.placement import spiral_place, wander_origin
+
+        prev_node = None
 
         def _scatter(node):
-            """Ease a freshly-added node off the drop point via spiral probe."""
+            """Ease a freshly-added node via spiral probe.
+
+            First node anchors at the drop point; every subsequent node
+            anchors at a wander_origin based on the previous node so the
+            focal point walks across the canvas — the MarkdownNode pattern.
+            Without this, all drops fan out in concentric probe rings from
+            one fixed centre and look suspiciously uniform.
+            """
+            nonlocal prev_node
             if node is None:
                 return
             try:
-                pos = spiral_place(self.scene(), node, origin=drop_scene_pos)
+                if prev_node is None:
+                    origin = drop_scene_pos
+                else:
+                    origin = wander_origin(prev_node)
+                pos = spiral_place(self.scene(), node, origin=origin, fallback=origin)
                 node.setPos(pos)
+                prev_node = node
             except Exception:
                 pass
 

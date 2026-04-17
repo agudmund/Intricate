@@ -97,3 +97,34 @@ def spiral_place(scene, node, origin: QPointF | None = None,
                 return candidate
 
     return fallback
+
+
+def wander_origin(prev_node) -> QPointF:
+    """Pick a random anchor point near *prev_node* for the next scatter probe.
+
+    Simulates the organic scatter of sticky notes dropped across a desk —
+    mostly clustered within conversational range, occasionally flung further
+    out. Callers feed the result to spiral_place() as the *origin* for the
+    next node, so the focal point walks across the canvas with every spawn
+    instead of fanning out from one fixed centre.
+
+    Tuning mirrors the original MarkdownNode behaviour:
+        85 % chance of gaussian cluster at ~260 px (min 120 px)
+        15 % chance of an outlier fling at 500–900 px
+    """
+    pr = prev_node.rect()
+    cx = prev_node.pos().x() + pr.width()  / 2.0
+    cy = prev_node.pos().y() + pr.height() / 2.0
+
+    angle = random.uniform(0, 2 * math.pi)
+
+    if random.random() < 0.15:
+        distance = random.uniform(500, 900)
+    else:
+        distance = random.gauss(260, 80)
+        distance = max(120, distance)
+
+    return QPointF(
+        cx + math.cos(angle) * distance,
+        cy + math.sin(angle) * distance,
+    )

@@ -454,32 +454,12 @@ class MarkdownNode(BaseNode):
 
     @staticmethod
     def _wander_origin(prev_node) -> 'QPointF':
-        """Pick a random origin near *prev_node* — simulates the organic
-        scatter of someone dropping sticky notes across a desk with full
-        intentions of tidying up later.  Never does.  The mess is the art."""
-        import math
-        import random
-        from PySide6.QtCore import QPointF
-
-        pr = prev_node.rect()
-        cx = prev_node.pos().x() + pr.width()  / 2
-        cy = prev_node.pos().y() + pr.height() / 2
-
-        angle = random.uniform(0, 2 * math.pi)
-
-        # Occasionally fling one way out, mostly keep them in
-        # conversational range — like how real desk clutter forms
-        # clusters with a few outliers.
-        if random.random() < 0.15:
-            distance = random.uniform(500, 900)    # flung across the desk
-        else:
-            distance = random.gauss(260, 80)       # clustered nearby
-            distance = max(120, distance)           # never on top of each other
-
-        return QPointF(
-            cx + math.cos(angle) * distance,
-            cy + math.sin(angle) * distance,
-        )
+        """Pick a random origin near *prev_node* — sticky-note desk scatter.
+        Thin alias for utils.placement.wander_origin kept so subclasses can
+        override if they ever need a different distribution.
+        """
+        from utils.placement import wander_origin
+        return wander_origin(prev_node)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT
