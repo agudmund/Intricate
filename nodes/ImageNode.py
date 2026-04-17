@@ -244,18 +244,6 @@ class ImageNode(BaseNode):
         return None if img.isNull() else img
 
     @staticmethod
-    def _read_and_scale(path: Path) -> QPixmap | None:
-        """Read an image file honouring EXIF orientation. Thread-safe — no widget interaction."""
-        try:
-            raw = Path(path).read_bytes()
-        except OSError:
-            return None
-        img = ImageNode._decode_with_orientation(raw)
-        if img is None:
-            return None
-        return QPixmap.fromImage(img)
-
-    @staticmethod
     def _decode_b64(b64_str: str) -> QPixmap | None:
         """Decode a base64 PNG string to a QPixmap. Thread-safe."""
         try:
@@ -316,15 +304,8 @@ class ImageNode(BaseNode):
                 if pixmap and not pixmap.isNull():
                     cache_key = cache_pixmap(pixmap)
 
-        except Exception:
-            # Cache subsystem failure — try raw fallbacks
-            try:
-                if self.data.source_path and Path(self.data.source_path).exists():
-                    pixmap = self._read_and_scale(Path(self.data.source_path))
-                elif self.data.image_b64:
-                    pixmap = self._decode_b64(self.data.image_b64)
-            except Exception:
-                pass
+        except Exception as exc:
+            logger.warning(f"[load] worker failed for {self.data.uuid[:8]}: {exc}")
 
         # Atomic writes under GIL — main thread timer picks these up
         self._pending_pixmap = pixmap
@@ -547,11 +528,27 @@ class ImageNode(BaseNode):
             self._spawn_caption_node(f"failed — wrote '{caption}' but read back '{verify}'")
 
     def _trigger_vision(self) -> None:
-        """Send this node's image to a ClaudeNode's vision API."""
-        if not self.data.image_b64:
-            # File-backed restore: encode on demand now that the render context is live.
-            self._encode_to_b64()
-        if not self.data.image_b64:
+        """Send this node's image to a ClaudeNode's vision API.
+
+        Prefers base64 of the cached source bytes — same bytes that are on disk,
+        preserving EXIF, XMP, ICC and any tEXt stamps so the Vision model sees
+        the exact file. Falls back to encoding the in-memory pixmap for nodes
+        with no cache entry (legacy or just-pasted).
+        """
+        payload = ""
+        if self.data.cache_key:
+            try:
+                from utils.image_cache import cached_bytes
+                raw = cached_bytes(self.data.cache_key)
+                if raw:
+                    payload = base64.b64encode(raw).decode("utf-8")
+            except Exception:
+                pass
+        if not payload:
+            if not self.data.image_b64:
+                self._encode_to_b64()
+            payload = self.data.image_b64
+        if not payload:
             return
         from nodes.ClaudeNode import ClaudeNode
         # Prefer a wired ClaudeNode — respects the user's explicit connection
@@ -561,14 +558,14 @@ class ImageNode(BaseNode):
             except RuntimeError:
                 continue
             if isinstance(other, ClaudeNode):
-                other.process_vision(self.data.image_b64, self.data.caption)
+                other.process_vision(payload, self.data.caption)
                 return
         # Fall back to any ClaudeNode in the scene
         scene = self.scene()
         if scene:
             claude = next((n for n in scene.items() if isinstance(n, ClaudeNode)), None)
             if claude:
-                claude.process_vision(self.data.image_b64, self.data.caption)
+                claude.process_vision(payload, self.data.caption)
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION
