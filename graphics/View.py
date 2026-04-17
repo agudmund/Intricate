@@ -44,7 +44,6 @@ class IntricateView(QGraphicsView):
 
     ZOOM_MIN = 0.1
     ZOOM_MAX = 5.0
-    DROP_STAGGER = 20.0     # QPointF offset between multiple dropped files
 
     def __init__(self, scene: QGraphicsScene, parent=None):
         super().__init__(scene, parent)
@@ -400,10 +399,11 @@ class IntricateView(QGraphicsView):
 
     def dropEvent(self, event) -> None:
         """
-        Map the drop position to scene coordinates and create ImageNodes.
+        Map the drop position to scene coordinates and create nodes.
 
-        Multiple files are staggered by DROP_STAGGER so they don't pile up.
-        Non-image files in a multi-file drop are silently skipped.
+        Multiple files are scattered via spiral_place so they land in
+        collision-free spots around the drop point instead of piling up.
+        Unsupported files in a multi-file drop are silently skipped.
         """
         if event.mimeData().hasFormat("application/x-intricate-palette-color"):
             super().dropEvent(event)
@@ -415,7 +415,18 @@ class IntricateView(QGraphicsView):
         # Map drop viewport position → scene coordinates (QPointF all the way)
         drop_scene_pos = self.mapToScene(event.position().toPoint())
 
-        offset = QPointF(0.0, 0.0)
+        from utils.placement import spiral_place
+
+        def _scatter(node):
+            """Ease a freshly-added node off the drop point via spiral probe."""
+            if node is None:
+                return
+            try:
+                pos = spiral_place(self.scene(), node, origin=drop_scene_pos)
+                node.setPos(pos)
+            except Exception:
+                pass
+
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             ext  = Path(path).suffix.lower()
@@ -423,50 +434,32 @@ class IntricateView(QGraphicsView):
             if not scene:
                 continue
             if ext in _AUDIO_EXTENSIONS and hasattr(scene, 'add_audio_node'):
-                node = scene.add_audio_node(pos=drop_scene_pos + offset)
+                node = scene.add_audio_node(pos=drop_scene_pos)
                 node.load_from_path(path)
-                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+                _scatter(node)
             elif ext in _VIDEO_EXTENSIONS and hasattr(scene, 'add_video_node'):
-                scene.add_video_node(
-                    pos  = drop_scene_pos + offset,
-                    path = path
-                )
-                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+                node = scene.add_video_node(pos=drop_scene_pos, path=path)
+                _scatter(node)
             elif ext in _IMAGE_EXTENSIONS and hasattr(scene, 'add_image_node'):
-                scene.add_image_node(
-                    pos  = drop_scene_pos + offset,
-                    path = path
-                )
-                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+                node = scene.add_image_node(pos=drop_scene_pos, path=path)
+                _scatter(node)
             elif ext in _SESSION_EXTENSIONS and hasattr(scene, 'add_session_node'):
-                scene.add_session_node(
-                    pos         = drop_scene_pos + offset,
-                    source_path = path
-                )
-                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+                node = scene.add_session_node(pos=drop_scene_pos, source_path=path)
+                _scatter(node)
             elif ext == ".qss" and hasattr(scene, 'add_palette_node'):
                 colors = self._parse_qss_colors(path)
                 if colors:
-                    scene.add_palette_node(
-                        pos    = drop_scene_pos + offset,
-                        colors = colors,
-                    )
-                    offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+                    node = scene.add_palette_node(pos=drop_scene_pos, colors=colors)
+                    _scatter(node)
             elif ext in _CODE_EXTENSIONS and hasattr(scene, 'add_code_node'):
                 # .py files with hex colors → palette node + code node
                 if ext == ".py" and hasattr(scene, 'add_palette_node'):
                     colors = self._parse_qss_colors(path)
                     if colors:
-                        scene.add_palette_node(
-                            pos    = drop_scene_pos + offset,
-                            colors = colors,
-                        )
-                        offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
-                scene.add_code_node(
-                    pos  = drop_scene_pos + offset,
-                    path = path
-                )
-                offset += QPointF(self.DROP_STAGGER, self.DROP_STAGGER)
+                        pnode = scene.add_palette_node(pos=drop_scene_pos, colors=colors)
+                        _scatter(pnode)
+                node = scene.add_code_node(pos=drop_scene_pos, path=path)
+                _scatter(node)
 
         event.acceptProposedAction()
 
