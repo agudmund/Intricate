@@ -69,6 +69,7 @@ class ImageNode(BaseNode):
         # ── Async image loading state ─────────────────────────────────────────
         self._pending_pixmap: QPixmap | None = None
         self._pending_cache_key: str | None = None   # "" = done with no key
+        self._pending_drift: str | None = None        # drift-warning message or None
         self._loading: bool = False
 
         self._image_delivery_timer = QTimer()
@@ -147,15 +148,22 @@ class ImageNode(BaseNode):
         self.update()
 
         def _worker(p=path):
-            pixmap = self._read_and_scale(p)
+            pixmap = None
             cache_key = ""
-            if pixmap and not pixmap.isNull():
+            try:
+                raw = p.read_bytes()
+            except OSError:
+                raw = b""
+            if raw:
                 try:
-                    from utils.image_cache import cache_pixmap
-                    cache_key = cache_pixmap(pixmap)
+                    from utils.image_cache import cache_source_bytes
+                    cache_key = cache_source_bytes(raw, p.suffix)
                 except Exception:
                     pass
-                logger.info(f"image loaded: {p.name} ({pixmap.width()}x{pixmap.height()}px)")
+                img = self._decode_with_orientation(raw)
+                if img is not None and not img.isNull():
+                    pixmap = QPixmap.fromImage(img)
+                    logger.info(f"image loaded: {p.name} ({pixmap.width()}x{pixmap.height()}px)")
             self._pending_pixmap = pixmap
             self._pending_cache_key = cache_key
 
@@ -225,12 +233,25 @@ class ImageNode(BaseNode):
     # ── Async image loading ─────────────────────────────────────────────────
 
     @staticmethod
-    def _read_and_scale(path: Path) -> QPixmap | None:
-        """Read an image file and scale to 2048px max. Thread-safe — no widget interaction."""
-        reader = QImageReader(str(path))
+    def _decode_with_orientation(raw: bytes) -> QImage | None:
+        """Decode raw image bytes, honouring EXIF orientation. Thread-safe."""
+        buf = QBuffer()
+        buf.setData(QByteArray(raw))
+        buf.open(QIODevice.ReadOnly)
+        reader = QImageReader(buf)
         reader.setAutoTransform(True)
         img = reader.read()
-        if img.isNull():
+        return None if img.isNull() else img
+
+    @staticmethod
+    def _read_and_scale(path: Path) -> QPixmap | None:
+        """Read an image file honouring EXIF orientation. Thread-safe — no widget interaction."""
+        try:
+            raw = Path(path).read_bytes()
+        except OSError:
+            return None
+        img = ImageNode._decode_with_orientation(raw)
+        if img is None:
             return None
         return QPixmap.fromImage(img)
 
@@ -251,21 +272,43 @@ class ImageNode(BaseNode):
         pixmap = None
         cache_key = ""
         try:
-            from utils.image_cache import load_cached, cache_pixmap
+            from utils.image_cache import (
+                load_cached, cache_source_bytes, cache_pixmap,
+                hash_file, key_hash,
+            )
 
             # Path 1: cached
             if self.data.cache_key:
                 pixmap = load_cached(self.data.cache_key)
                 if pixmap is not None:
                     cache_key = self.data.cache_key
+                    # Passive drift check — if source still exists on disk,
+                    # hash it and compare against the cache_key's hash portion.
+                    # Mismatch means the source was edited outside Intricate
+                    # (Photoshop, Adobe stamp, tool re-save). Flag, don't auto-fix.
+                    if self.data.source_path:
+                        sp = Path(self.data.source_path)
+                        if sp.exists():
+                            src_hash = hash_file(sp)
+                            if src_hash and src_hash != key_hash(cache_key):
+                                self._pending_drift = (
+                                    f"source drifted — cache no longer matches\n"
+                                    f"{sp.name}"
+                                )
 
-            # Path 2: source file → load + generate cache
+            # Path 2: source file → cache raw bytes + decode for display
             if pixmap is None and self.data.source_path:
                 p = Path(self.data.source_path)
                 if p.exists():
-                    pixmap = self._read_and_scale(p)
-                    if pixmap and not pixmap.isNull():
-                        cache_key = cache_pixmap(pixmap)
+                    try:
+                        raw = p.read_bytes()
+                    except OSError:
+                        raw = b""
+                    if raw:
+                        cache_key = cache_source_bytes(raw, p.suffix)
+                        img = self._decode_with_orientation(raw)
+                        if img is not None and not img.isNull():
+                            pixmap = QPixmap.fromImage(img)
 
             # Path 3: legacy base64
             if pixmap is None and self.data.image_b64:
@@ -305,6 +348,12 @@ class ImageNode(BaseNode):
             self._scaled_cache = None
         if cache_key:
             self.data.cache_key = cache_key
+
+        drift = self._pending_drift
+        self._pending_drift = None
+        if drift:
+            self._spawn_caption_node(drift)
+            logger.info(f"[drift] {self.data.uuid[:8]} — {drift.splitlines()[0]}")
 
         self.update()
 
@@ -481,6 +530,18 @@ class ImageNode(BaseNode):
         from utils.HappyTimes import read_png_vision_stamp
         verify = read_png_vision_stamp(p)
         if verify == caption:
+            # Re-cache: the source bytes changed (new tEXt chunk), so the old
+            # cache_key now points at a stale copy. Read fresh bytes, re-hash,
+            # re-cache, and update the node's cache_key so cache mirrors source.
+            try:
+                from utils.image_cache import cache_source_bytes
+                raw = p.read_bytes()
+                new_key = cache_source_bytes(raw, p.suffix)
+                if new_key:
+                    self.data.cache_key = new_key
+                    logger.debug(f"[stamp] re-cached {p.name} → {new_key[:12]}…")
+            except Exception as exc:
+                logger.warning(f"[stamp] re-cache failed: {exc}")
             self._spawn_caption_node(caption)
         else:
             self._spawn_caption_node(f"failed — wrote '{caption}' but read back '{verify}'")
@@ -628,6 +689,7 @@ class ImageNode(BaseNode):
             pass
         self._pending_pixmap = None
         self._pending_cache_key = None
+        self._pending_drift = None
         self._loading = False
         # Sever VisionWorker signals FIRST — if the worker finishes after
         # removal it would call _spawn_caption_node on a dead node, creating

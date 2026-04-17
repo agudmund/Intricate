@@ -481,16 +481,20 @@ class IntricateApp(QMainWindow):
     def _refresh_image_cache(self) -> None:
         """Purge the project image cache and regenerate entries from live ImageNodes.
 
-        Nodes with a valid source_path reload from disk (picking up any changes
-        to the scaling pipeline). Nodes without a source re-cache their current
-        in-memory pixmap so nothing gets lost.
+        Nodes with a valid source_path reload from disk (re-reading raw bytes
+        so all embedded metadata — EXIF, XMP, ICC, tEXt stamps — is preserved).
+        Nodes without a source re-cache their in-memory pixmap.
+        Drift (pre-refresh cache_key disagreeing with source hash) is counted
+        and logged per-file so the user can see which sources changed.
         """
         from nodes.ImageNode import ImageNode
-        from utils.image_cache import cache_dir, cache_pixmap
+        from utils.image_cache import cache_dir, cache_pixmap, hash_file, key_hash
 
         from send2trash import send2trash
         removed = 0
-        for f in cache_dir().glob("*.png"):
+        for f in cache_dir().iterdir():
+            if not f.is_file():
+                continue
             try:
                 send2trash(str(f))
                 removed += 1
@@ -499,11 +503,18 @@ class IntricateApp(QMainWindow):
 
         regenerated = 0
         reloaded = 0
+        drifted = 0
         for item in list(self.scene.items()):
             if not isinstance(item, ImageNode):
                 continue
             src = item.data.source_path
             if src and Path(src).exists():
+                sp = Path(src)
+                if item.data.cache_key:
+                    src_hash = hash_file(sp)
+                    if src_hash and src_hash != key_hash(item.data.cache_key):
+                        drifted += 1
+                        logger.info("[cache] drift — %s source no longer matches prior cache", sp.name)
                 item.data.cache_key = ""
                 item.load_from_path(src)
                 reloaded += 1
@@ -512,10 +523,14 @@ class IntricateApp(QMainWindow):
                 regenerated += 1
 
         logger.info(
-            "[cache] refresh — purged %d, reloaded %d from source, re-cached %d in-memory",
-            removed, reloaded, regenerated,
+            "[cache] refresh — purged %d, reloaded %d from source, re-cached %d in-memory, %d drifted",
+            removed, reloaded, regenerated, drifted,
         )
-        self.show_info(f"Image cache refreshed — {reloaded + regenerated} image(s)")
+        total = reloaded + regenerated
+        msg = f"Image cache refreshed — {total} image(s)"
+        if drifted:
+            msg += f" ({drifted} had drifted)"
+        self.show_info(msg)
 
     def _unlock_folders(self) -> None:
         """Release all directory locks so folders can be deleted in Explorer.
