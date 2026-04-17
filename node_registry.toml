@@ -283,6 +283,17 @@ status = "ready to open the portal"
 notes = ""
 buttons = "Export .prproj"
 
+[nodes.premiere_bridge]
+name = "The Premiere Bridge"
+tooltip = "Live wire to Premiere's CEP panel — press 👋 to ping across the bridge"
+category = "tools"
+icon = "iconPremiereBridge"
+icon_fallback = "#d87a9e"
+spawnable = true
+status = "opening the wire"
+notes = ""
+buttons = "Ping 👋"
+
 # ═══════════════════════════════════════════════════════════════════════════
 # INFO CATEGORY
 # ═══════════════════════════════════════════════════════════════════════════

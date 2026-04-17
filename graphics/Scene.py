@@ -631,6 +631,17 @@ class IntricateScene(QGraphicsScene):
         self.raise_node(node)
         return node
 
+    def add_premiere_bridge_node(self, pos: QPointF | None = None):
+        """Add a PremiereBridgeNode — live wire to Premiere's CEP panel."""
+        from nodes.PremiereBridgeNode import PremiereBridgeNode
+        from data.PremiereBridgeNodeData import PremiereBridgeNodeData
+        node = PremiereBridgeNode(PremiereBridgeNodeData())
+        if pos is not None:
+            node.setPos(pos)
+        self.addItem(node)
+        self.raise_node(node)
+        return node
+
     # ─────────────────────────────────────────────────────────────────────────
     # PROJECT IMAGE SYNC
     # ─────────────────────────────────────────────────────────────────────────
@@ -1206,6 +1217,11 @@ class IntricateScene(QGraphicsScene):
             from nodes.WormholeNode import WormholeNode
             from data.WormholeNodeData import WormholeNodeData
             node = WormholeNode(WormholeNodeData.from_dict(d))
+
+        elif node_type == "premiere_bridge":
+            from nodes.PremiereBridgeNode import PremiereBridgeNode
+            from data.PremiereBridgeNodeData import PremiereBridgeNodeData
+            node = PremiereBridgeNode(PremiereBridgeNodeData.from_dict(d))
 
         if node is not None:
             node.setPos(QPointF(d.get("x", 0.0), d.get("y", 0.0)))

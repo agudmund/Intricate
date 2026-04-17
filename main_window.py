@@ -1474,6 +1474,7 @@ class IntricateApp(QMainWindow):
     def _spawn_fbx_node(self):         self._spawn(self.scene.add_fbx_node,          "vertices from thin air")
     def _spawn_palette_node(self):     self._spawn(self.scene.add_palette_node,      "mixing colors")
     def _spawn_wormhole_node(self):   self._spawn(self.scene.add_wormhole_node,     "ready to open the portal")
+    def _spawn_premiere_bridge_node(self): self._spawn(self.scene.add_premiere_bridge_node, "bridge opening to Premiere")
 
     def _restore_deleted(self) -> None:
         if self.scene.restore_last_deleted():
@@ -1572,6 +1573,7 @@ class IntricateApp(QMainWindow):
             "claude":        self._spawn_claude_node,
             "claude_info":   self._spawn_claude_info_node,
             "wormhole":      self._spawn_wormhole_node,
+            "premiere_bridge": self._spawn_premiere_bridge_node,
         }
         self._action_dispatch = {
             "restore":           self._restore_deleted,
