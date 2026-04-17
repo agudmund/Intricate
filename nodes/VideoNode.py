@@ -639,6 +639,20 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
+        """
+        LOD-aware content tier — ingest-time sizing, not paint-time.
+
+        Unlike ImageNode (static source, resized per paint), video frames
+        are ephemeral: each one is already sized to screen-pixel resolution
+        by _on_frame using the current view LOD, capped at source res.
+        Paint therefore only aspect-fits and draws — no heavy rescale.
+
+        Paused videos are the one case the ingest path cannot cover on its
+        own: no new frame arrives to pick up a zoom change. So a detected
+        LOD delta past a quantized 0.5 step fires a setPosition nudge to
+        re-emit the current frame at the new size. Playing videos catch
+        up naturally on the next decoded frame.
+        """
         painter.save()
 
         vr = self._video_rect()

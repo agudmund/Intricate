@@ -75,12 +75,15 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 - **Type key:** `image` | **Icon:** `iconImage`
 - **Files:** `nodes/ImageNode.py`, `data/ImageNodeData.py`
 - Renders image thumbnail on canvas with editable caption. Auto-spawns an AboutNode wired as caption. Double-click image area to browse. Supports base64 and file paths. Vision rename and stamp buttons on button strip.
+- Backed by the shared byte-preserving media cache (`utils/media_cache.py`) — content-addressed, EXIF/XMP/ICC/tEXt preserved, passive drift detection on restore. See `Documents/Nodes/The Image Node.md`.
 - `_has_depth_toggle = True`
 
 ### The Videos
 - **Type key:** `video` | **Icon:** `iconVideo`
 - **Files:** `nodes/VideoNode.py`, `data/VideoNodeData.py`
 - Full video playback inside node body via QMediaPlayer. Progress bar scrub, volume slider, mute and loop toggles. Double-click to load. Supports .mp4, .avi, .mov, .mkv, .webm and more.
+- **LOD-adaptive rendering** — each incoming frame sized at ingest to `video_rect × view zoom`, capped at source resolution. Memory proportional to on-screen size, so hundreds of tiny clips in an animatic view stay light while zooming into one gets crisp up to source res. Paused videos re-emit on LOD change via `setPosition()` nudge.
+- **Byte-preserving media cache** (shared with ImageNode). Data fields: `source_path`, `cache_key` (dotted `<sha256>.<ext>`), `source_size` + `source_mtime` as cheap drift fingerprints. Three-tier restore: source → cache → placeholder. Drift detection uses stat first, full rehash only on mismatch, surfaces as AboutNode sticky note — never auto-heals. See `Documents/Nodes/The Video Node.md`.
 - `_has_depth_toggle = True`
 
 ### The Sequences

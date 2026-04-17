@@ -586,8 +586,14 @@ class ImageNode(BaseNode):
 
     def paint_content(self, painter: QPainter) -> None:
         """
-        Paint the image thumbnail inside the node shell.
-        Called by BaseNode.paint after the shell (background + border) is drawn.
+        LOD-aware content tier.
+
+        Shell (background + border) has already been drawn by BaseNode.paint;
+        this handoff fills the interior with a screen-pixel-resolution bitmap,
+        regenerating the scaled cache only when the view's zoom crosses a
+        quantized 0.5 step. Capped at source resolution — we never invent
+        pixels the decode did not provide; beyond that cap the painter's
+        SmoothPixmapTransform handles the residual upscale without blocking.
         """
         painter.save()
 
