@@ -658,6 +658,14 @@ class MarkdownNode(BaseNode):
                                 wdata = WarmNodeData(body_text=cleaned_body, title=extracted_title)
                             else:
                                 wdata = WarmNodeData(body_text=para_stripped, title="")
+                        # Strip remaining inline bold markers from body
+                        # and title.  Leading-bold extraction consumes the
+                        # opening pair; mid-sentence emphasis markers
+                        # inside the body still render literally without
+                        # this.  Mirrors the strip already in _prettify_label
+                        # for AboutNode labels.
+                        wdata.body_text = wdata.body_text.replace("**", "")
+                        wdata.title     = wdata.title.replace("**", "")
                         node = WarmNode(wdata)
                         node.setPos(_OFFSCREEN)
                         scene.addItem(node)
