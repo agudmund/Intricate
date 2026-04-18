@@ -120,11 +120,15 @@ _LEADING_BOLD_RE = _re.compile(
 def _extract_leading_bold(body: str) -> tuple[str | None, str]:
     """If *body* has a leading ``**bold**`` phrase (optionally preceded
     by a list marker, optionally followed by a separator), return
-    ``(title, rest)``.  Otherwise ``(None, body)``."""
+    ``(title, rest)``.  Otherwise ``(None, body)``.
+
+    Trailing colons on the extracted title are stripped — titles don't
+    carry label-punctuation, so ``**Symptom:**`` becomes title
+    ``Symptom`` rather than ``Symptom:``."""
     m = _LEADING_BOLD_RE.match(body)
     if not m:
         return None, body
-    title = m.group(1).strip()
+    title = m.group(1).strip().rstrip(':').strip()
     rest  = m.group(2).strip()
     return title, rest
 

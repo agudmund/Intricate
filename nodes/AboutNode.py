@@ -242,11 +242,20 @@ class AboutNode(BaseNode):
                 # Escape HTML metacharacters first, then re-introduce
                 # bold as <b> tags.  Preserves literal `<`, `>`, `&` in
                 # compliance-doc content (hex values, generics, etc.).
+                # Trailing-colon rule: `**Symptom:**` becomes
+                # `<b>Symptom</b>:` rather than `<b>Symptom:</b>` —
+                # the colon still does its label-separator work without
+                # being part of the bold emphasis, which reads awkward
+                # on a compressed AboutNode.
                 import html as _html
                 import re as _re_md
                 escaped = _html.escape(label)
-                as_html = _re_md.sub(r'\*\*([^*]+?)\*\*',
-                                     r'<b>\1</b>', escaped)
+                def _bold_sub(m):
+                    inner = m.group(1)
+                    if inner.endswith(':'):
+                        return f"<b>{inner[:-1]}</b>:"
+                    return f"<b>{inner}</b>"
+                as_html = _re_md.sub(r'\*\*([^*]+?)\*\*', _bold_sub, escaped)
                 doc.setHtml(as_html)
             else:
                 doc.setPlainText(label)
