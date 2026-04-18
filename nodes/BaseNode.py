@@ -844,6 +844,24 @@ class BaseNode(QGraphicsRectItem):
 
         def _release_bulk(sc=scene):
             sc._bulk_removing = max(0, getattr(sc, '_bulk_removing', 1) - 1)
+            # Defensive net: once the outermost bulk burst has settled,
+            # force a full viewport repaint to catch any paint residue
+            # the per-node invalidates may have missed under heavy load.
+            # Observed 2026-04-18: after N cycles of spawn-many →
+            # shake-delete-all, one node's border chrome occasionally
+            # stayed on the viewport buffer even though the node had
+            # been removed from the scene and its rect invalidated.
+            # Qt's paint scheduler can run mid-batch when hundreds of
+            # removeItems fire in one tick and coalesce the invalidates
+            # imperfectly.  The nuclear repaint here is a single paint,
+            # after the burst, so marginal cost is negligible — and
+            # every bulk-delete ends with a clean visual slate.
+            if sc._bulk_removing == 0:
+                try:
+                    for _view in sc.views():
+                        _view.viewport().update()
+                except RuntimeError:
+                    pass
         def _defer_release(sc=scene):
             QTimer.singleShot(0, _release_bulk)
         QTimer.singleShot(0, _defer_release)

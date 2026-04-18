@@ -1121,9 +1121,19 @@ class IntricateScene(QGraphicsScene):
 
         # Release the quiescence counter after two event-loop ticks so any
         # repaint scheduled by the tail end of removeItem calls still sees
-        # the flag raised and bails out harmlessly.
+        # the flag raised and bails out harmlessly.  Mirrors BaseNode
+        # _shake_delete_group's viewport-update fallback for the same
+        # reason: under hundreds-of-removeItem bursts the paint scheduler
+        # occasionally leaves residue, and a single forced repaint at
+        # the outermost release guarantees a clean visual slate.
         def _release_bulk(sc=self):
             sc._bulk_removing = max(0, getattr(sc, '_bulk_removing', 1) - 1)
+            if sc._bulk_removing == 0:
+                try:
+                    for _view in sc.views():
+                        _view.viewport().update()
+                except RuntimeError:
+                    pass
         def _defer_release(sc=self):
             QTimer.singleShot(0, _release_bulk)
         QTimer.singleShot(0, _defer_release)
