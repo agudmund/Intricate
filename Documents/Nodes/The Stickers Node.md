@@ -53,6 +53,24 @@ A pinned sticker stays fixed to a point in the **viewport**, not the scene. Pan 
 
 Drag the bottom-right corner to resize the sticker. The pixmap inside is aspect-fit into the new rect — `QPainter` centres the scaled image, with whatever transparent margin falls around it. The rect grows or shrinks; the image stays proportional.
 
+### Media Cache Integration
+
+Stickers ride the same content-addressed media cache as ImageNode and VideoNode — full retention, full dedup, full drift detection. The framework itself is documented separately in `Documents/Design/Media Cache.md`; what follows is the sticker-specific view of it.
+
+**Load hierarchy on construction:**
+
+1. **`cache_key` present** → `load_cached(cache_key)` pulls the pixmap from the content-addressed cache. If `source_path` also exists and resolves on disk, a fingerprint (size + mtime) check runs synchronously. On fingerprint mismatch, a streaming SHA-256 verifies whether the source has actually drifted; a real hash mismatch queues an AboutNode next to the sticker with `source drifted — cache no longer matches`.
+2. **`source_path` only** → the raw bytes get read once, cached via `cache_source_bytes(raw, ext)`, and decoded for display in the same pass. The returned key, plus fingerprint (`source_size`, `source_mtime`), goes into the dataclass so the next restore takes the fast cache-first path.
+3. **`image_b64` only** → legacy pre-cache session. The base64 is decoded for display as-is; on next save the pixmap is migrated into the cache via `to_dict` → `cache_pixmap`, and the b64 field stops being written.
+
+**Save path:** `to_dict` ensures a `cache_key` exists before serializing. If the sticker was pasted or generated (no source file, no cache entry), `cache_pixmap(self._pixmap)` PNG-encodes the pixmap into the cache and stamps the returned key. `image_b64` is only written as a legacy tail when there is *neither* a cache_key nor a source_path — practically never for new stickers.
+
+**GC participation:** `graphics/Scene.py`'s `gc_cache` sweep at session save time whitelists `_CACHED_TYPES = {"image", "video", "sticker"}`. Every live sticker's cache_key contributes to `live_keys`; any cache file not referenced by any live node is removed. Delete a sticker, save the session — its cached bytes are reclaimed on that same save, unless another node (or another sticker) still refers to the same hash.
+
+**Dedup is free:** ten copies of the same sticker PNG on canvas share one file in the cache. Drag the same PNG into a sticker and an image node and they share one cached file too. The sticker class of node-type does not have a privileged dedup namespace — it deduplicates against the entire media cache, across every node type.
+
+**Drift example.** A sticker is created pointing at `~/Downloads/cat.png`. The session is saved. The user later re-exports `cat.png` from Photoshop with a new tEXt chunk embedded. On the next session load, the sticker's `cache_key` still resolves against the old pre-export bytes, but the source fingerprint now differs. A streaming SHA confirms the content has genuinely changed. An AboutNode appears next to the sticker: *sticker source drifted — cache no longer matches*. The user decides — refresh the cache from the sidebar menu to pull in the new version, or leave the sticker pinned to the original bytes.
+
 ### Paint Pipeline
 
 `paint()`:
@@ -85,10 +103,12 @@ Inherited from BaseNode's shake-detect logic. Shake a sticker hard and it dissol
 
 `StickerNodeData` extends `NodeData` with:
 
-- `image_b64: str` — base64-encoded PNG fallback for sessions where the original source path no longer resolves. Written on `to_dict` only when `source_path` is empty.
-- `source_path: str` — absolute path to the source PNG on disk. Primary load route.
-- `pinned: bool` — current pin state
-- `pin_vp_x: float`, `pin_vp_y: float` — viewport coordinates for the pin anchor
+- `cache_key: str` — SHA-256 key into the shared media cache (`<sha256>.<ext>`). Primary persistence channel.
+- `source_path: str` — absolute path to the source PNG on disk. Provenance anchor; drives the drift check on restore.
+- `source_size: int`, `source_mtime: float` — cheap drift fingerprint recorded at last cache write. A clean fingerprint skips the streaming SHA on restore.
+- `image_b64: str` — legacy base64-encoded PNG. Always written empty for new stickers; retained in `from_dict` so pre-cache sessions still load.
+- `pinned: bool` — current pin state.
+- `pin_vp_x: float`, `pin_vp_y: float` — viewport coordinates for the pin anchor.
 
 Default size: 200 × 200, auto-fit to the image on first load (see `_fit_to_image`).
 

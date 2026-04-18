@@ -789,11 +789,12 @@ class IntricateScene(QGraphicsScene):
         })
 
         # Garbage-collect orphaned media cache files. Shared cache dir covers
-        # both image and video nodes — any node that persists a cache_key
-        # contributes its key to the live set.
+        # image, video, AND sticker nodes — any node that persists a
+        # cache_key contributes its key to the live set so its cached
+        # bytes survive the sweep.
         try:
             from utils.media_cache import gc_cache
-            _CACHED_TYPES = {"image", "video"}
+            _CACHED_TYPES = {"image", "video", "sticker"}
             live_keys = {
                 n.get("cache_key", "") for n in nodes
                 if n.get("node_type") in _CACHED_TYPES and n.get("cache_key")

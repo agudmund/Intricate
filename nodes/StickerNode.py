@@ -112,8 +112,16 @@ class StickerNode(QGraphicsRectItem):
         self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
         self.setZValue(max(data.z_value, self._Z_FLOOR))
 
-        # Load image from source path or serialized b64 blob
-        if data.source_path:
+        # Load image with cache-first hierarchy:
+        #   1. cache_key → load from the content-addressed cache, run drift
+        #      check against source_path if present
+        #   2. source_path → cache the raw bytes, then load from the cached
+        #      file (so a second run with no cache_key upgrades the state)
+        #   3. image_b64 → legacy pre-cache session, migrate into the cache
+        #      on next save via _encode_b64 → cache_pixmap
+        if data.cache_key:
+            self._load_from_cache_with_drift_check()
+        elif data.source_path:
             self._load_from_path(data.source_path)
         elif data.image_b64:
             self._load_from_b64(data.image_b64)
@@ -138,18 +146,109 @@ class StickerNode(QGraphicsRectItem):
     def setZValue(self, z: float) -> None:
         super().setZValue(max(z, self._Z_FLOOR))
 
-    # ── Image loading ────────────────────────────────────────────────────────
+    # ── Image loading (cache-integrated) ────────────────────────────────────
 
     def _load_from_path(self, path: str) -> None:
+        """Load from disk AND cache the raw bytes in a single read.
+        Updates cache_key, source_path, source_size, source_mtime so the
+        next session restore takes the fast cache-first path.
+        The cached file is the same bytes as the source — format and
+        metadata (EXIF, XMP, ICC, tEXt stamps) are preserved verbatim."""
+        from utils.media_cache import cache_source_bytes
         p = Path(path)
-        if p.exists():
-            self._pixmap = QPixmap(str(p))
-            self.data.source_path = str(p)
-            if not self._pixmap.isNull():
-                self._fit_to_image()
+        if not p.exists():
+            return
+        try:
+            raw = p.read_bytes()
+        except OSError:
+            return
+        if not raw:
+            return
+        try:
+            self.data.cache_key = cache_source_bytes(raw, p.suffix)
+        except Exception:
+            pass
+        img = QImage()
+        img.loadFromData(raw)
+        if not img.isNull():
+            self._pixmap = QPixmap.fromImage(img)
+            self.data.source_path = str(p.resolve())
+            try:
+                st = p.stat()
+                self.data.source_size  = st.st_size
+                self.data.source_mtime = st.st_mtime
+            except OSError:
+                pass
+            self._fit_to_image()
         self.update()
 
+    def _load_from_cache_with_drift_check(self) -> None:
+        """Primary load path — pull the pixmap from the content-addressed
+        cache, then verify the source file on disk hasn't drifted away
+        from the cached bytes.  Fingerprint (size + mtime) short-circuits
+        the full SHA when nothing's moved; a hash mismatch queues an
+        AboutNode warning next to the sticker.  Policy is flag-don't-
+        auto-fix — the user decides whether the drift is a drift."""
+        from utils.media_cache import load_cached, hash_file, key_hash
+        pixmap = load_cached(self.data.cache_key)
+        if pixmap is None or pixmap.isNull():
+            # Cache miss — fall back to source, which also re-caches.
+            if self.data.source_path:
+                self._load_from_path(self.data.source_path)
+            return
+        self._pixmap = pixmap
+        self._fit_to_image()
+        self.update()
+
+        if not self.data.source_path:
+            return
+        sp = Path(self.data.source_path)
+        if not sp.exists():
+            return
+        try:
+            st = sp.stat()
+            cur_size, cur_mtime = st.st_size, st.st_mtime
+        except OSError:
+            cur_size, cur_mtime = 0, 0.0
+        fingerprint_clean = (
+            cur_size == self.data.source_size
+            and abs(cur_mtime - self.data.source_mtime) < 1.0
+            and self.data.source_size != 0
+        )
+        if fingerprint_clean:
+            return
+        src_hash = hash_file(sp)
+        if src_hash and src_hash != key_hash(self.data.cache_key):
+            self._queue_drift_notification(sp.name)
+        # Record the fingerprint we just observed so the next restore sees
+        # a clean match and stays silent — we've already surfaced this state.
+        self.data.source_size  = cur_size
+        self.data.source_mtime = cur_mtime
+
+    def _queue_drift_notification(self, filename: str) -> None:
+        """Spawn an AboutNode near the sticker announcing the drift.
+        Deferred so the scene is fully constructed before we add items."""
+        msg = f"sticker source drifted — cache no longer matches\n{filename}"
+        def _spawn():
+            scene = self.scene()
+            if not scene or not hasattr(scene, 'add_about_node'):
+                return
+            pos = self.mapToScene(self.rect().topRight()) + QPointF(40, -10)
+            try:
+                scene.add_about_node(pos=pos, message=msg)
+            except TypeError:
+                # Older add_about_node signatures may not accept `message`;
+                # fall back to the safer no-message call and swallow the miss.
+                try:
+                    scene.add_about_node(pos=pos)
+                except Exception:
+                    pass
+        QTimer.singleShot(250, _spawn)
+
     def _load_from_b64(self, b64: str) -> None:
+        """Legacy path — base64-encoded PNG from a pre-cache session.
+        On next save the pixmap will be migrated into the cache via
+        `to_dict` → `cache_pixmap`, and the b64 field stops being written."""
         raw = base64.b64decode(b64)
         img = QImage()
         img.loadFromData(raw)
@@ -502,7 +601,23 @@ class StickerNode(QGraphicsRectItem):
 
     def to_dict(self) -> dict:
         self.sync_data()
-        if not self.data.source_path and self._pixmap:
+        # Cache-first persistence: if the pixmap has no cache_key yet,
+        # push it into the cache now so the session JSON only carries the
+        # hash key, not a base64 blob.  Covers pasted/generated stickers
+        # that never had a source file on disk.
+        if self._pixmap and not self.data.cache_key:
+            from utils.media_cache import cache_pixmap
+            try:
+                self.data.cache_key = cache_pixmap(self._pixmap)
+            except Exception:
+                pass
+        # True legacy tail: only fall back to b64 if we have neither a
+        # cache_key nor a source_path.  In practice this branch should
+        # never fire for new stickers — it exists purely to keep
+        # pre-cache sessions survivable.
+        if (not self.data.source_path
+                and not self.data.cache_key
+                and self._pixmap):
             self.data.image_b64 = self._encode_b64()
         return self.data.to_dict()
 
