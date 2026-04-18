@@ -127,7 +127,9 @@ def _get_sessions_dir() -> Path:
     if hasattr(sys, '_MEIPASS'):
         base_path = Path(sys.executable).parent
     else:
-        base_path = Path(__file__).resolve().parent.parent
+        # This file lives at utils/persistence/session.py — repo root
+        # is three parents up (2026-04-18 utils regrouping).
+        base_path = Path(__file__).resolve().parent.parent.parent
 
     return base_path / "sessions"
 

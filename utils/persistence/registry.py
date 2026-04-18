@@ -20,12 +20,16 @@ _log = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _registry_path() -> Path:
-    """Resolve node_registry.toml — next to main.py or frozen exe."""
+    """Resolve node_registry.toml — next to main.py or frozen exe.
+    This file lives at utils/persistence/registry.py so repo root is
+    three parents up.  Before the 2026-04-18 utils regrouping it was
+    two — if anything else in utils/persistence/ reaches for repo root,
+    mirror this path walk."""
     import sys as _sys
     if getattr(_sys, 'frozen', False):
         base = Path(_sys._MEIPASS)
     else:
-        base = Path(__file__).resolve().parent.parent
+        base = Path(__file__).resolve().parent.parent.parent
     return base / "node_registry.toml"
 
 

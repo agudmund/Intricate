@@ -39,7 +39,9 @@ def cache_dir() -> Path:
     if _cache_root is not None:
         _cache_root.mkdir(parents=True, exist_ok=True)
         return _cache_root
-    d = Path(__file__).resolve().parent.parent / "Documents" / "data" / "cache"
+    # This file lives at utils/persistence/media_cache.py — repo root is
+    # three parents up (2026-04-18 utils regrouping).
+    d = Path(__file__).resolve().parent.parent.parent / "Documents" / "data" / "cache"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
