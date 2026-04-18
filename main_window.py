@@ -312,10 +312,17 @@ class IntricateApp(QMainWindow):
         # not visible (curtains rolled up, or splitter dragged to fully hide),
         # messages route here instead — with full personality preserved.
         # Idle state is blank opacity-zero; only lit during a whispered message.
+        # Titlebar InfoBar font scales with the titlebar height so the two
+        # stay visually proportional no matter what the user sets
+        # handle_height_top to in settings.toml.  Reference: 9px font at
+        # 25px handle — the ratio that felt right on 2026-04-18.  Floor at
+        # 6px so the text stays legible if someone shrinks the handle.
+        _INFO_FONT_RATIO = 9 / 25
+        _info_font_px = max(6, round(Theme.handleHeightTop * _INFO_FONT_RATIO))
         self.info_label_top = pretty_label("", alignment=Qt.AlignCenter)
         self.info_label_top.setStyleSheet(
             f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
-            f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: 9px;"
+            f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: {_info_font_px}px;"
         )
         self.info_label_top.setParent(self.top_toolbar)
         self._info_opacity_top = QGraphicsOpacityEffect()
