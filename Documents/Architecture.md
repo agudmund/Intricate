@@ -1,7 +1,11 @@
 # Architecture Map
 
 > Forensic reference for any AI or human orienting themselves in this codebase.
-> Provide this document first — it saves everyone from re-reading 30k+ lines.
+> Provide this document first — it saves everyone from re-reading the source tree.
+>
+> **Last refreshed: 2026-04-18.** For what's changed since, see `Documents/Changelog.md` — append-only log of paradigm-level shifts dated to the day they landed. If this doc and the Changelog disagree, the Changelog is newer.
+>
+> Living stats (line counts, folder geometry, exact file sizes) deliberately omitted — they drift every day and belong in their own place. This doc carries structure and intent only.
 
 ## What This Is
 
@@ -9,15 +13,13 @@
 
 **Current version:** 0.5.0 — "The Other Era"
 
-**Total codebase:** ~36,500 lines across 3 repos.
-
 ## The Family
 
-| Repo | Purpose | Lines | Entry Point |
-|------|---------|-------|-------------|
-| [Intricate](https://github.com/agudmund/Intricate) | Node-based visual canvas | ~28,000 | `main.py` |
-| [Notepad++ Duplex+ Turbo](https://github.com/agudmund/Notepad-Duplex-Turbo) | Creative writing editor | ~5,000 | `main.py` |
-| [Pretty Widgets](https://github.com/agudmund/Pretty-Widgets) | Shared package (widgets + Theme + settings + logger) | ~3,500 | pip package |
+| Repo | Purpose | Entry Point |
+|------|---------|-------------|
+| [Intricate](https://github.com/agudmund/Intricate) | Node-based visual canvas | `main.py` |
+| [Notepad++ Duplex+ Turbo](https://github.com/agudmund/Notepad-Duplex-Turbo) | Creative writing editor | `main.py` |
+| [Pretty Widgets](https://github.com/agudmund/Pretty-Widgets) | Shared package (widgets + Theme + settings + logger) | pip package |
 
 ## Shared Infrastructure (pretty-widgets)
 
@@ -51,66 +53,33 @@ pretty_widgets/
 | `SingleSharedBraincell_ChatHistory` | Chat log output directory |
 | `_runtime/` | Shared frozen runtime (PySide6 + all deps, 96MB, built once) |
 
-## Intricate Architecture (~28,000 lines)
-
-### Folder Layout
-
-```
-Intricate/
-├── main.py / main_window.py          — entry + QMainWindow shell
-├── data/                             — pure-Python NodeData dataclasses (no Qt)
-├── nodes/                            — node types + shared node infrastructure
-│   ├── BaseNode.py                   — base class for most node types
-│   ├── StickerNode.py                — first-class chromeless root (not a BaseNode)
-│   ├── NodeBehaviour.py              — hover pulse + bg glow animations
-│   ├── NodeButton.py                 — button strip on node tops
-│   ├── Port.py                       — connection ports
-│   ├── _shake_detect.py              — shared shake-to-delete helper
-│   ├── _demolition.py                — declarative teardown crew (2026-04-18)
-│   └── <30+ node type files>
-├── graphics/                         — canvas primitives only
-│   ├── Scene.py                      — IntricateScene, canvas + factory + session
-│   ├── View.py                       — IntricateView, pan/zoom, viewTransformed signal
-│   ├── Connection.py                 — bezier wires, glide engine
-│   └── Particles.py                  — shake-delete particle system
-├── utils/                            — support code, grouped by concern
-│   ├── persistence/                  — session, media_cache, registry, HappyTimes
-│   ├── motion/                       — MotionCurves, OrbitalMotion, hover_glow
-│   ├── pickers/                      — ColorPicker, IconPicker, PhrasePicker
-│   └── <other utility files at root>
-├── icons/                            — .ico + .png assets + Pillow generator scripts
-├── Images/                           — stickers and reference images
-├── Documents/                        — Architecture, Compliance, Design, Nodes, Plans
-└── logs/                             — runtime log rotation
-```
-
-**Gone as of 2026-04-18:** `widgets/` (absorbed into pretty_widgets years ago; last local file moved to utils). `dialogs/` (never existed in the current codebase).
+## Intricate Architecture
 
 ### Three Strict Layers
 
-**`data/`** — Pure Python dataclasses. No Qt. Each node type has a `NodeData` subclass with `to_dict()`/`from_dict()`. 36 data classes.
+**`data/`** — Pure Python dataclasses. No Qt. Each node type has a `NodeData` subclass with `to_dict()`/`from_dict()`.
 
-**`nodes/` + `graphics/`** — Qt rendering. `BaseNode(QGraphicsRectItem)` is the 1,155-line base for most node types. `StickerNode` is a sibling root (not a BaseNode subclass) — first-class chromeless alpha-PNG overlay. Subclasses override `paint_content(painter)` only. `IntricateScene` manages the canvas. `IntricateView` handles pan/zoom/drag-drop and emits `viewTransformed` on every transform mutation. `Connection` draws bezier wires with a self-quiescent glide engine. `graphics/Particles.py` drives the particle system behind shake-delete.
+**`nodes/` + `graphics/`** — Qt rendering. `BaseNode(QGraphicsRectItem)` is the base for most node types. `StickerNode` is a sibling root (not a BaseNode subclass) — first-class chromeless alpha-PNG overlay. Subclasses override `paint_content(painter)` only. `IntricateScene` manages the canvas. `IntricateView` handles pan/zoom/drag-drop and emits `viewTransformed` on every transform mutation. `Connection` draws bezier wires with a self-quiescent glide engine. `graphics/Particles.py` drives the particle system behind shake-delete. Shared node infrastructure lives in underscore-prefixed modules (`nodes/_shake_detect.py`, `nodes/_demolition.py`) to distinguish them from node-type files.
 
-**`main.py` + `main_window.py`** — Application shell. Frameless QMainWindow with sidebar, canvas, toolbar. 2,960 lines in main_window.py.
+**`main.py` + `main_window.py`** — Application shell. Frameless QMainWindow with sidebar, canvas, toolbar.
 
-### Key Files
+### Key Load-Bearing Modules
 
-| File | Lines | Role |
-|------|-------|------|
-| `main_window.py` | 2,960 | QMainWindow — sidebar, toolbar, node spawn, curtains, joy bucket, split-surface InfoBar, the Meov |
-| `graphics/Scene.py` | 1,334 | Canvas — node factory, session save/load, drag-drop, `_clear_all` quiescence, altitude-aware media culling |
-| `nodes/BaseNode.py` | 1,155 | Base class — chrome, ports, resize, shelf animation, depth toggle, shake detection, bulk-remove quiescence (delegates teardown to the demolition crew) |
-| `nodes/ClaudeNode.py` | 1,150 | Claude CLI integration — JSONL watcher, streaming response |
-| `nodes/VideoNode.py` | 925 | Video playback with LOD-adaptive ingest, shared media cache, tiny-render pause at aerial zoom |
-| `nodes/WarmNode.py` | 704 | Main content node — plain-text storage, bidirectional bridge to Notepad |
-| `nodes/MergeNode.py` | 648 | DAW merge node — stages audio/hold nodes, emits ffmpeg concat |
-| `graphics/View.py` | 554 | Pan/zoom, cursor-anchored zoom, fog layer, `viewTransformed` signal |
-| `graphics/Particles.py` | 410 | Particle engine — shake-delete bursts, orbital modes, self-healing tick |
-| `graphics/Connection.py` | 351 | Bezier wire rendering, glide animation (self-quiescent), endpoint-liveness guards |
-| `nodes/_demolition.py` | 347 | Declarative teardown crew — manifest-based per-node cleanup |
-| `utils/persistence/media_cache.py` | 209 | Byte-preserving SHA-256 media cache, shared by Image / Video / Sticker |
-| `nodes/_shake_detect.py` | 99 | Shared shake-gesture detector used by BaseNode + StickerNode |
+| Module | Role |
+|--------|------|
+| `main_window.py` | QMainWindow — sidebar, toolbar, node spawn, curtains, joy bucket, split-surface InfoBar, the Meov |
+| `graphics/Scene.py` | Canvas — node factory, session save/load, drag-drop, `_clear_all` quiescence, altitude-aware media culling |
+| `nodes/BaseNode.py` | Base class — chrome, ports, resize, shelf animation, depth toggle, shake detection, bulk-remove quiescence (delegates teardown to the demolition crew) |
+| `nodes/ClaudeNode.py` | Claude CLI integration — JSONL watcher, streaming response |
+| `nodes/VideoNode.py` | Video playback with LOD-adaptive ingest, shared media cache, tiny-render pause at aerial zoom |
+| `nodes/WarmNode.py` | Main content node — plain-text storage, bidirectional bridge to Notepad |
+| `nodes/MergeNode.py` | DAW merge node — stages audio/hold nodes, emits ffmpeg concat |
+| `graphics/View.py` | Pan/zoom, cursor-anchored zoom, fog layer, `viewTransformed` signal |
+| `graphics/Particles.py` | Particle engine — shake-delete bursts, orbital modes, self-healing tick |
+| `graphics/Connection.py` | Bezier wire rendering, glide animation (self-quiescent), endpoint-liveness guards |
+| `nodes/_demolition.py` | Declarative teardown crew — manifest-based per-node cleanup |
+| `utils/persistence/media_cache.py` | Byte-preserving SHA-256 media cache, shared by Image / Video / Sticker |
+| `nodes/_shake_detect.py` | Shared shake-gesture detector used by BaseNode + StickerNode |
 
 ### Node Types
 
@@ -183,17 +152,17 @@ Framework-level designs that outgrew node-specific docs live in `Documents/Desig
 
 Per-node implementation writeups live in `Documents/Nodes/`. Compliance logs (crash classes, fixes, audits) live in `Documents/Compliance/Node Cleanup Compliance.md`.
 
-## Notepad++ Duplex+ Turbo (~5,000 lines)
+## Notepad++ Duplex+ Turbo
 
 Frameless, always-on-top creative writing editor. Main class: `Eddie(QMainWindow)`.
 
-| File | Lines | Role |
-|------|-------|------|
-| `main_window.py` | ~2,600 | Eddie — editor, chat, preview, toolbar, curtains |
-| `main.py` | ~200 | Bootstrap, `--bridge` arg parsing |
-| `utils/chat.py` | ~1,000 | Claude chat worker + history persistence |
-| `utils/vision.py` | ~450 | Image-to-text Vision API + DropImageTextEdit |
-| `utils/spellchecker.py` | ~550 | Debounced spell highlighting via Windows COM |
+| Module | Role |
+|--------|------|
+| `main_window.py` | Eddie — editor, chat, preview, toolbar, curtains |
+| `main.py` | Bootstrap, `--bridge` arg parsing |
+| `utils/chat.py` | Claude chat worker + history persistence |
+| `utils/vision.py` | Image-to-text Vision API + DropImageTextEdit |
+| `utils/spellchecker.py` | Debounced spell highlighting via Windows COM |
 
 Features: title field, body editor with spell check, Chat tab (Claude haiku), Preview tab (typewriter rendering), Polaroid PNG export, WPM tracking.
 
