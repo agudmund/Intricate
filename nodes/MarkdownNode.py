@@ -678,6 +678,15 @@ class MarkdownNode(BaseNode):
                         node.setPos(_OFFSCREEN)
                         scene.addItem(node)
                         scene.raise_node(node)
+                        # Title-width fit first — if the extracted title
+                        # is wider than the default node width, expand
+                        # so the title doesn't get clipped.  Must happen
+                        # before the height-fit because body wrapping
+                        # depends on the current width.  Narrow titles
+                        # don't trigger expansion; wider-than-default
+                        # titles widen the node just enough to hold them.
+                        if hasattr(node, '_auto_fit_title_width'):
+                            node._auto_fit_title_width()
                         # Snug-fit to content.  These nodes have never been
                         # manually resized, so the height should match the
                         # body text exactly (plus chrome + padding), not

@@ -656,6 +656,32 @@ class WarmNode(BaseNode):
     # GEOMETRY
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _auto_fit_title_width(self) -> None:
+        """Grow the node's width if the current title would overflow.
+        Never shrinks — preserves user corner-drag resizes and default
+        widths that already fit.  Measured with the same font /
+        style / size the BaseNode title-paint uses, so the layout
+        calculation matches what will render.
+
+        Body text wrapping is unaffected — the whole point is to
+        accommodate a long title without forcing the body columns to
+        widen.  If the node is already wider than the title needs,
+        nothing changes."""
+        if not self.data.title:
+            return
+        from PySide6.QtGui import QFont, QFontMetrics
+        r = self.rect()
+        font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        font.setStyleName(self._TITLE_STYLE)
+        fm = QFontMetrics(font)
+        title_w = fm.horizontalAdvance(self.data.title)
+        pad = Theme.nodeTextPaddingLeft
+        needed = title_w + pad * 2 + 8   # 8 px trailing buffer
+        if needed > r.width():
+            self.prepareGeometryChange()
+            self.setRect(QRectF(r.x(), r.y(), needed, r.height()))
+            self.data.width = needed
+
     def _auto_fit_height(self, shrink: bool = False) -> None:
         """Resize the node to fit the current text content.
 
