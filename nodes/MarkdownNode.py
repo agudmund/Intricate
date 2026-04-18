@@ -105,6 +105,11 @@ def _prettify_label(text: str) -> str:
     # change; the text's own colon / em-dash / cadence carries the
     # emphasis on a compressed AboutNode.
     text = text.replace("**", "")
+    # Strip inline-code backticks.  In markdown they render as a code
+    # tint on identifiers and function names; on a plain-text reader
+    # they're visual clutter.  The identifier itself still reads
+    # correctly without them.
+    text = text.replace("`", "")
     # Strip a trailing colon — on an AboutNode that colon dangles
     # because the node is already the "label" visually; mid-string
     # colons (like "5:3 ratio" or "12:30") aren't affected.
@@ -621,6 +626,13 @@ class MarkdownNode(BaseNode):
                     # don't earn a node in the reading chain.
                     if _is_structural_only(para_stripped):
                         continue
+                    # Strip inline-code backticks — markdown's code tint
+                    # doesn't help on a plain-text reader, and the
+                    # wrapped identifiers still read cleanly without them.
+                    # Done before any transform so the stripped version
+                    # flows through callout classification, table detect,
+                    # bold extraction, and plain body uniformly.
+                    para_stripped = para_stripped.replace("`", "")
                     is_callout = len(para_stripped) <= _CALLOUT_MAX_CHARS
 
                     if is_callout:
