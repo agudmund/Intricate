@@ -197,6 +197,10 @@ class StickerNode(QGraphicsRectItem):
         event.accept()
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.RightButton:
+            self._show_context_menu(event)
+            event.accept()
+            return
         if event.button() == Qt.LeftButton:
             # Corner resize-grip hit test
             rect = self.rect()
@@ -217,6 +221,25 @@ class StickerNode(QGraphicsRectItem):
             # Arm the shake detector for the duration of this drag.
             self._shake.press()
         super().mousePressEvent(event)
+
+    def _show_context_menu(self, event) -> None:
+        """Right-click menu. Pin toggle is the primary action — discoverable,
+        checkable, matches the Intricate voice (PrettyMenu chrome)."""
+        from pretty_widgets.PrettyMenu import menu as pretty_menu
+        ctx = pretty_menu()
+        pin_action = ctx.addAction("Pin to Viewport")
+        pin_action.setCheckable(True)
+        pin_action.setChecked(self.data.pinned)
+        pin_action.triggered.connect(self._toggle_pin)
+        # Map the scene-space event position to the screen for the menu.
+        view = self._get_view()
+        if view:
+            screen_pos = view.mapToGlobal(
+                view.mapFromScene(event.scenePos())
+            )
+        else:
+            screen_pos = event.screenPos()
+        ctx.exec(screen_pos)
 
     def mouseMoveEvent(self, event):
         if self._is_resizing:

@@ -96,6 +96,16 @@ status = "lights, camera, action"
 notes = ""
 buttons = "Play/Pause · Mute · Loop toggle · Toggle border"
 
+[nodes.sticker]
+name = "Stickers"
+tooltip = "Drop a sticker onto the canvas — alpha-channel click-through, pin to viewport for overlays"
+category = "images"
+icon = "iconSticker"
+icon_fallback = "#c9b8a7"
+spawnable = true
+status = "sticker time"
+notes = ""
+
 [nodes.sequence]
 name = "The Sequences"
 tooltip = "Image sequence scrubber — drag through a folder of frames"
@@ -181,16 +191,6 @@ category = "visual"
 icon = "iconValue"
 spawnable = true
 status = "dialing in the value"
-notes = ""
-
-[nodes.sticker]
-name = "Snickers Stickers!"
-tooltip = "Drop a sticker onto the canvas — pure decoration, zero function, maximum joy"
-category = "visual"
-icon = "iconSticker"
-icon_fallback = "#c9b8a7"
-spawnable = true
-status = "sticker time"
 notes = ""
 
 # ═══════════════════════════════════════════════════════════════════════════
