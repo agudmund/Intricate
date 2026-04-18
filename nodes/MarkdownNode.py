@@ -29,6 +29,30 @@ _BG_COLOR      = "#0d1117"   # GitHub dark theme background
 # between a margin note and a body paragraph.  Tune at will.
 _CALLOUT_MAX_CHARS = 140
 
+# Characters that, on their own, indicate markdown structure rather than
+# content — horizontal rules (`---`, `***`, `___`), setext-style heading
+# underlines (`===`), table separators, and decorative dividers like
+# `--- --- ---`.  A paragraph consisting only of these (after ignoring
+# whitespace) is source scaffolding, not something the reader needs a
+# node for.  Skipped at spawn time — the content stays in the markdown
+# file, just doesn't clutter the chain.
+_STRUCTURAL_CHARS = set("-=*_ \t")
+
+
+def _is_structural_only(text: str) -> bool:
+    """True when *text* is purely markdown structure (horizontal rule,
+    separator, empty).  Requires at least three non-whitespace structural
+    characters so single-dash or asterisk content doesn't get swallowed."""
+    s = text.strip()
+    if not s:
+        return True
+    if not all(c in _STRUCTURAL_CHARS for c in s):
+        return False
+    # Count actual rule characters (drop whitespace) — needs >=3 to be
+    # a horizontal rule rather than a stray hyphen.
+    dense = "".join(c for c in s if c not in " \t")
+    return len(dense) >= 3
+
 
 class MarkdownNode(BaseNode):
     """
@@ -444,6 +468,11 @@ class MarkdownNode(BaseNode):
                 paragraphs = [p for p in body.split("\n\n") if p.strip()]
                 for para in paragraphs:
                     para_stripped = para.strip()
+                    # Skip horizontal rules and other pure-structure
+                    # paragraphs — they belong in the source markdown but
+                    # don't earn a node in the reading chain.
+                    if _is_structural_only(para_stripped):
+                        continue
                     is_callout = len(para_stripped) <= _CALLOUT_MAX_CHARS
 
                     if is_callout:
