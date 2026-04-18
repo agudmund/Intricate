@@ -134,13 +134,17 @@ def _extract_leading_bold(body: str) -> tuple[str | None, str]:
     by a list marker, optionally followed by a separator), return
     ``(title, rest)``.  Otherwise ``(None, body)``.
 
-    Trailing colons on the extracted title are stripped — titles don't
-    carry label-punctuation, so ``**Symptom:**`` becomes title
-    ``Symptom`` rather than ``Symptom:``."""
+    Trailing ``:`` and ``.`` on the extracted title are stripped — the
+    WarmNode title font already cues the end-of-phrase visually, so the
+    punctuation is redundant.  ``**Symptom:**`` becomes title
+    ``Symptom``; ``**Fix log.**`` becomes ``Fix log``; an ellipsis or
+    colon-period combination like ``title:.`` reduces all the way to
+    ``title``.  Exclamation and question marks are preserved — they
+    carry meaning the font can't replicate (``Eureka!``, ``What now?``)."""
     m = _LEADING_BOLD_RE.match(body)
     if not m:
         return None, body
-    title = m.group(1).strip().rstrip(':').strip()
+    title = m.group(1).strip().rstrip('.:').strip()
     rest  = m.group(2).strip()
     return title, rest
 
