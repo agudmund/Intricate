@@ -170,10 +170,20 @@ class StickerNode(BaseNode):
 
     def _on_viewport_changed(self, _value=None) -> None:
         """Scrollbar moved — reposition sticker to maintain viewport-relative pos."""
+        # Peer-paint / signal-destructor race guard.  A scrollbar tick firing
+        # into a sticker mid-teardown tripped 0xc0000409 (Qt fastfail) on
+        # 2026-04-18.  Bail if the sticker is dying or a bulk removal is underway.
+        import shiboken6
+        if not shiboken6.isValid(self):
+            return
+        scene = self.scene()
+        if scene is None or getattr(scene, '_bulk_removing', 0) > 0:
+            return
+        if getattr(self, '_removal_done', False):
+            return
         view = self._get_view()
         if not view:
             return
-        from PySide6.QtCore import QPointF
         scene_pos = view.mapToScene(int(self.data.pin_vp_x), int(self.data.pin_vp_y))
         self.setPos(scene_pos)
 
@@ -248,6 +258,13 @@ class StickerNode(BaseNode):
         super().setRect(rect)
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
+
+    def _quiet_for_shake(self) -> None:
+        """Synchronously silence scrollbar-driven repositioning before the
+        deferred-removeItem window opens.  Without this, a scrollbar tick
+        landing between shake-start and removeItem can collide with the
+        destructor and fastfail the process (0xc0000409, 2026-04-18)."""
+        self._disconnect_viewport_tracking()
 
     def _prepare_for_removal(self) -> None:
         self._disconnect_viewport_tracking()

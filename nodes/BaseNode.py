@@ -789,6 +789,14 @@ class BaseNode(QGraphicsRectItem):
                 scene.addItem(new_conn)
                 new_conn.update_path()
 
+    def _quiet_for_shake(self) -> None:
+        """Hook for subclasses to synchronously disconnect per-frame signals
+        (scrollbars, cross-node callbacks) before the deferred-removeItem
+        window opens.  Base: no-op.  StickerNode overrides to disconnect
+        viewport tracking; add similar overrides in any node type that
+        wires peer-level signals outside the standard NodeBehaviour set."""
+        return
+
     def _shake_delete(self) -> None:
         """Dissolve this node with a particle burst. Deferred to mouseRelease
         so the mouse grab releases cleanly before the scene removes the item."""
@@ -799,6 +807,13 @@ class BaseNode(QGraphicsRectItem):
         # Snapshot the node data before deletion so the sidebar can restore it.
         try:
             scene._last_deleted = self.to_dict()
+        except Exception:
+            pass
+        # Synchronous pre-shake quieting.  Signals left live between here
+        # and the deferred removeItem have tripped 0xc0000409 fastfails
+        # in the past (see Node Cleanup Compliance 2026-04-18).
+        try:
+            self._quiet_for_shake()
         except Exception:
             pass
         _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
@@ -834,6 +849,10 @@ class BaseNode(QGraphicsRectItem):
 
         # Mark self for deferred delete (handled by mouseReleaseEvent)
         self._pending_shake_delete = True
+        try:
+            self._quiet_for_shake()
+        except Exception:
+            pass
 
         # Remove connections between deleted nodes and external nodes,
         # then deferred-remove each selected node.
@@ -847,6 +866,10 @@ class BaseNode(QGraphicsRectItem):
         # also sees the quiet flag before it is lowered.
         scene._bulk_removing = getattr(scene, '_bulk_removing', 0) + 1
         for node in others:
+            try:
+                node._quiet_for_shake()
+            except Exception:
+                pass
             # Remove wires that connect to nodes outside the doomed set
             for conn in list(node.connections):
                 other_end = conn.end_node if conn.start_node is node else conn.start_node
@@ -862,11 +885,24 @@ class BaseNode(QGraphicsRectItem):
 
             node.setSelected(False)
             node.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
-            def _deferred(n=node, sc=scene):
+            # Capture the scene-space rect NOW — after removeItem the node
+            # can't map to scene, and without the invalidate the viewport
+            # keeps a ghost pixel band for several seconds while the
+            # particle burst chews through paint events.
+            try:
+                ghost_rect = node.mapRectToScene(node.boundingRect())
+            except RuntimeError:
+                ghost_rect = None
+            def _deferred(n=node, sc=scene, r=ghost_rect):
                 try:
                     sc.removeItem(n)
                 except RuntimeError:
                     pass
+                if r is not None:
+                    try:
+                        sc.invalidate(r)
+                    except RuntimeError:
+                        pass
             QTimer.singleShot(0, _deferred)
 
         def _release_bulk(sc=scene):
@@ -902,7 +938,15 @@ class BaseNode(QGraphicsRectItem):
             if scene:
                 self.setSelected(False)
                 self.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
-                def _deferred_remove(node=self, sc=scene):
+                # Capture the ghost rect before removal so we can force a
+                # repaint of that region; otherwise an 8000-particle burst
+                # saturates the event loop and the deleted node lingers
+                # visibly for several seconds (2026-04-18 GitNode ghost).
+                try:
+                    ghost_rect = self.mapRectToScene(self.boundingRect())
+                except RuntimeError:
+                    ghost_rect = None
+                def _deferred_remove(node=self, sc=scene, r=ghost_rect):
                     try:
                         if sc.mouseGrabberItem() is node:
                             node.ungrabMouse()
@@ -912,6 +956,11 @@ class BaseNode(QGraphicsRectItem):
                         sc.removeItem(node)
                     except RuntimeError:
                         pass
+                    if r is not None:
+                        try:
+                            sc.invalidate(r)
+                        except RuntimeError:
+                            pass
                 QTimer.singleShot(0, _deferred_remove)
 
 

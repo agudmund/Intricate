@@ -234,6 +234,46 @@ The button-driven `_split_into_nodes` call on a live MarkdownNode is unaffected 
 
 Both are bounded cases of the same underlying principle: *any deferred-removal pattern must close all inflight-signal windows before the deferral, not during it.*
 
+### 2026-04-18 — StickerNode scrollbar signal-destructor race + GitNode ghost
+
+**Symptom A (crash):** `0xc0000409` (STATUS_STACK_BUFFER_OVERRUN, Qt fastfail) in `ucrtbase.dll` while shake-deleting a pinned StickerNode. Log shows StickerNode `_prepare_for_removal` logged phases 1–5 at 12:12:52, but the `_prepare_for_removal complete` line never fired — the process died between phase 5 and the tail return. Same fastfail family as the 2026-04-18 MarkdownNode fix, but triggered through a different per-frame signal.
+
+**Symptom B (ghost):** Shortly before the crash, a shake-deleted GitNode stayed rendered on the canvas for ~5 seconds after `_prepare_for_removal complete` logged cleanly, then vanished. No Python error, no Event Viewer entry — a pure repaint lag.
+
+**Root cause A — StickerNode scrollbar signals.** `StickerNode._activate_pin()` connects to both `view.horizontalScrollBar().valueChanged` and `verticalScrollBar().valueChanged`, routing scroll events into `_on_viewport_changed` → `self.setPos()`. These are per-frame signals owned by the view, not the node, so `NodeBehaviour.disconnect_all()` does not touch them. Disconnect happens inside `_prepare_for_removal`, which runs *during* `removeItem` — not before it. If a scrollbar tick fires in the window between `_shake_delete` setting `_pending_shake_delete = True` and the deferred `removeItem` firing, the signal emission collides with the forming destruction path → fastfail. StickerNode had never been listed in this compliance log — first audit.
+
+**Root cause B — deferred-remove starvation.** `QTimer.singleShot(0, removeItem)` fires on the next event-loop tick. An 8000-particle `sprinkle()` burst saturates paint events, delaying that tick by seconds on a busy canvas. Meanwhile, the scene's painted buffer still shows the node (its `QGraphicsItem` is still in the scene graph until `removeItem` fires), producing the "visible but unclickable" ghost. `setFlags(0)` zeros interaction but does nothing for rendering.
+
+**Fix A+B applied (three parts):**
+
+**1. Synchronous shake-time quieting** (`nodes/BaseNode.py`).
+New hook `BaseNode._quiet_for_shake()` — no-op on base, overridden per node type. Called from both `_shake_delete` (on self) and `_shake_delete_group` (on self and every doomed other) *before* any deferred `removeItem` is scheduled. Pairs with the MarkdownNode zombie-path pattern but generalised so any node type with peer-level signals can opt in without caller-side coupling.
+
+**2. StickerNode override** (`nodes/StickerNode.py`).
+- `_quiet_for_shake()` synchronously calls `_disconnect_viewport_tracking()` — severs both scrollbar signals before the deferred window opens.
+- `_on_viewport_changed()` gains three guards: `shiboken6.isValid(self)`, `scene._bulk_removing > 0` early-return, and `self._removal_done` early-return. Any scrollbar tick that slips through the disconnect still can't mutate a dying node.
+
+**3. Scene-rect invalidation on deferred remove** (`nodes/BaseNode.py`).
+Both the single-node `_deferred_remove` (in `mouseReleaseEvent`) and the group `_deferred` callback capture `node.mapRectToScene(node.boundingRect())` *before* deferring, then call `scene.invalidate(rect)` after `removeItem()`. The invalidate is cheap and forces the viewport to repaint the ghost region on the next paint pass, eliminating the multi-second linger even under heavy particle load.
+
+| Concern | Resolution |
+|---------|------------|
+| Removal speed | Unchanged. Quieting is a local disconnect, invalidate is a rect push. |
+| Live UI freezes | None. Invalidate is async — Qt batches it with the next paint. |
+| Missed final-state paint | None. The invalidate triggers one guaranteed repaint of the ghost region. |
+| Unpinned StickerNodes | `_disconnect_viewport_tracking` early-returns if `_pin_connected` is False, so the hook is free for the common case. |
+
+**Pattern takeaway.** Adds a fourth class to the ledger:
+
+- **Peer-paint-during-burst** (`0xc0000005`, Qt6Widgets.dll) → scene-wide `_bulk_removing` counter + endpoint guards.
+- **Signal-destructor race** (`c0000409`, Qt6Core.dll / ucrtbase.dll) → quiet signals synchronously before the deferred window.
+- **Cross-thread QTimer.singleShot drops** → main-thread flag polling.
+- **Deferred-remove starvation ghost** (no crash, visible residue) → capture scene rect before deferral, `scene.invalidate()` inside the deferred callback.
+
+**Checklist addition:** any node type that connects to **view-level** or **scene-level** signals (scrollbars, `scene.changed`, etc., as opposed to node-local timers/animations) must override `_quiet_for_shake()` to disconnect them synchronously. Relying on `_prepare_for_removal` alone is insufficient — that hook runs inside `removeItem`, not before it.
+
+**Verification to perform:** pin a StickerNode, shake-delete it while scrolling the canvas. Confirm no fastfail in Event Viewer, no ghost on the viewport, `_prepare_for_removal complete` appears in the log.
+
 ### 2026-04-17 — Second-pass audit: peer-paint-during-burst sweep
 
 After the primary fix landed, a codebase-wide second pass was done to find **secondary and tertiary instances of the same pattern** — any per-frame mutator that could schedule a peer repaint during a bulk removal, or any paint routine that dereferences a `QGraphicsItem` it does not own.
