@@ -361,6 +361,10 @@ class IntricateView(QGraphicsView):
         if event.button() == Qt.RightButton and self._alt_zooming:
             self._alt_zooming = False
             self.setCursor(Qt.ArrowCursor)
+            # Alt-drag zoom ended — re-evaluate viewport culling + tiny-render
+            # pause so videos that were scaled down to imperceptible on-screen
+            # size during the drag settle into the pause state.
+            self._notify_viewport_changed()
             event.accept()
             return
         if event.button() == Qt.MiddleButton:
