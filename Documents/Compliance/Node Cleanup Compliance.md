@@ -201,6 +201,39 @@ Early-return if the node's scene has `_bulk_removing > 0`. The final target colo
 
 **Verification to perform:** repeat the 2026-04-17 test — open a 1200+ node session, trigger housekeeping with dozens of nodes shaking, confirm no `0xc0000005` in Event Viewer.
 
+### 2026-04-18 — c0000409 in Qt6Core.dll: zombie-MarkdownNode signal-destructor race
+
+**Symptom:** `c0000409` (`STATUS_STACK_BUFFER_OVERRUN`, Qt's `__fastfail` for invariant violations) in `Qt6Core.dll`, not `Qt6Widgets.dll`. Caught via Windows Event Viewer at 2026-04-18 03:07:36, roughly 1 second after the last logged icon-load. The Python log had nothing — the crash was at the C++ Core layer before anything could be written.
+
+**Discovered because:** the newly-added Memory submenu (see `Documents/Nodes/...`) lets the user click through ~40 entries rapidly. Each click spawns a MarkdownNode under the "zombie" pattern (split content into readable cells, defer `removeItem` to next event-loop tick). Rapid usage exposed a latent race the single-click cadence rarely tripped.
+
+**Root cause — new class of crash.** Different layer and different mechanism from the 2026-04-17 peer-paint-during-burst class:
+
+- `Qt6Core.dll` (not Widgets) points to QObject / signal-slot / QTimer machinery, not paint.
+- `c0000409` fastfail fires when Qt's C++ destructor begins `disconnect()`'ing signals *while an emission is still in flight targeting the same object.*
+- MarkdownNode has live QObject machinery — a 100 ms `_delivery_timer` firing into `_check_render_delivery`, plus a background render thread — that keeps running between the synchronous `_split_into_nodes()` and the deferred `scene.removeItem(node)`.
+- When the 100ms timer fires into the soon-to-die node at the same event-loop tick the deferred `removeItem` dispatches, the QObject destructor and the signal emission collide → fastfail.
+
+**Why per-node `_prepare_for_removal` doesn't prevent this.** `_prepare_for_removal` is correct and cleans up properly — but it only runs *during* `removeItem`, not before it. The race lives in the **window between split-returning and removeItem-dispatching**, during which `_prepare_for_removal` hasn't run yet.
+
+**Fix applied (synchronous machinery-quietening, scene-graph-preserving):**
+
+This is the same pattern GitNode Phase 3 (2026-04-16) landed on: neutralise dangerous QObject-level machinery *synchronously* before the deferred window, but leave scene-graph children (proxy, buttons, ports) intact so Qt's own `removeItem` can tear them down cleanly.
+
+| File:line | Change |
+|-----------|--------|
+| `nodes/MarkdownNode.py` | Added new method `_quiet_background_machinery()` — stops `_delivery_timer`, disconnects its `timeout` signal, and sets `_removed = True` to signal the worker thread to bail. Does not touch `_html_proxy`, `_editor`, or buttons. |
+| `main_window.py::_spawn_doc` (Info sidebar zombie path) | Calls `node._quiet_background_machinery()` after `_split_into_nodes()` and before the deferred `removeItem`. The full `_prepare_for_removal` still fires naturally via `itemChange` when `removeItem` reaches the node, and its idempotent handling of already-stopped timers means no double-disconnect issues. |
+
+The button-driven `_split_into_nodes` call on a live MarkdownNode is unaffected — only the zombie-spawn caller in the Info sidebar quiets the machinery, because only that caller disposes the node afterward.
+
+**Pattern takeaway — pairs with the peer-paint fix.** The two 2026-04 crash classes live at different Qt layers and need different fix shapes:
+
+- **Peer-paint-during-burst** (`0xc0000005` in Qt6Widgets.dll) — a paint event on a freed widget during bulk removal. Fix: scene-wide `_bulk_removing` quiescence counter + endpoint-validity guards on cross-node references.
+- **Signal-destructor race** (`c0000409` in Qt6Core.dll) — a signal emission in flight when a QObject destructor calls `disconnect()`. Fix: quiet the signal/timer machinery synchronously before any deferred removeItem window.
+
+Both are bounded cases of the same underlying principle: *any deferred-removal pattern must close all inflight-signal windows before the deferral, not during it.*
+
 ### 2026-04-17 — Second-pass audit: peer-paint-during-burst sweep
 
 After the primary fix landed, a codebase-wide second pass was done to find **secondary and tertiary instances of the same pattern** — any per-frame mutator that could schedule a peer repaint during a bulk removal, or any paint routine that dereferences a `QGraphicsItem` it does not own.

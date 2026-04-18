@@ -94,22 +94,28 @@ class CushionsNode(BaseNode):
         self._buttons.append(NodeButton(self, export_pix, self._export))
 
     def _export(self) -> None:
-        """Split paragraphs into chained WarmNodes with organic scatter.
+        """Split into chained WarmNodes with organic scatter.
 
-        Each paragraph becomes its own WarmNode, wired in sequence.
-        Placement wanders from the previous node (Gaussian cluster with
-        occasional fling) then uses spiral_place for collision avoidance —
-        same algorithm as the Info/MarkdownNode scatter.
+        Paragraphs are the preferred breakpoint, but content without paragraph
+        breaks cascades through finer boundaries (lines → sentences → words)
+        via ``utils.text_chunker.chunk_text`` — so a single-paragraph multi-
+        megabyte blob splits into many manageable nodes instead of one
+        skyscraper that crashes Qt on render (the 2026-04-18 lesson).
+        Placement uses the same wander_origin + spiral_place scatter as the
+        Info/MarkdownNode pipeline.
         """
-        import re
         from PySide6.QtCore import QPointF, QRectF
+        from utils.text_chunker import chunk_text
+        from nodes.WarmNode import WARM_SPLIT_THRESHOLD
 
         scene = self.scene()
         if not scene:
             return
 
         text = self.data.label if self._editor is None else self._editor.toPlainText()
-        paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+        if not text or not text.strip():
+            return
+        paragraphs = chunk_text(text, max_chars=WARM_SPLIT_THRESHOLD)
         if not paragraphs:
             return
 

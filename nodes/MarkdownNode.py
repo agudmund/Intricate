@@ -477,6 +477,32 @@ class MarkdownNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _quiet_background_machinery(self) -> None:
+        """Stop signal/timer machinery synchronously, without touching
+        scene-graph children (proxy, buttons, ports).
+
+        Used by the Info sidebar's zombie-spawn pattern: after
+        `_split_into_nodes` has emitted the readable cells, the source
+        MarkdownNode is slated for removal on the next event-loop tick.
+        During the window between the synchronous split returning and
+        the deferred `removeItem` firing, the 100 ms delivery timer can
+        emit `_check_render_delivery` — which races Qt's C++ destructor
+        as it begins disconnecting signals during removeItem, and trips
+        the `c0000409` fastfail invariant in Qt6Core.dll.
+
+        Calling this method synchronously after the split closes the
+        race: timer stopped, signals severed, worker flagged to bail.
+        The scene-graph layer (proxy, children) is deliberately left
+        intact so Qt's own removeItem can tear it down cleanly; the
+        full cleanup then runs via `_prepare_for_removal` as usual."""
+        self._removed = True
+        if hasattr(self, '_delivery_timer') and self._delivery_timer is not None:
+            self._delivery_timer.stop()
+            try:
+                self._delivery_timer.timeout.disconnect(self._check_render_delivery)
+            except RuntimeError:
+                pass
+
     def _prepare_for_removal(self) -> None:
         # Signal the worker thread to discard its result
         self._removed = True

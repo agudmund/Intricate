@@ -42,7 +42,12 @@ class IntricateView(QGraphicsView):
         Multiple files dropped together are staggered so they don't overlap.
     """
 
-    ZOOM_MIN = 0.1
+    # Zoom-out floor extended 3× (0.1 → 0.03) on 2026-04-18 to accommodate
+    # large auto-split chains from WarmNode paste-splits — once a 5 MB paste
+    # becomes 100+ chained nodes, the old 10% floor stopped being enough to
+    # see the whole shape at once. The 0.03 value aligns exactly with slider
+    # integer 3 so the slider's bottom position is reachable in one drag.
+    ZOOM_MIN = 0.03
     ZOOM_MAX = 5.0
 
     def __init__(self, scene: QGraphicsScene, parent=None):

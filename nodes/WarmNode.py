@@ -30,8 +30,49 @@ TITLE_HEIGHT    = 22.0      # Title band below emoji row
 PADDING         = 10.0      # General internal padding
 BODY_TOP        = PADDING + EMOJI_SIZE + 16.0   # Body text starts below title + breathing room
 
+# Oversized-paste threshold. A single paste whose total would push the node
+# past this size triggers an automatic chain-split into multiple WarmNodes.
+# 50 KB is generous for prose (a long chapter is ~30–50 KB) and comfortably
+# below the sizes where Qt's text layout costs real frames — the 5.8 MB
+# skyscraper that caused the 2026-04-18 crash would split into ~120 nodes
+# instead of one proxy Qt can't render.
+WARM_SPLIT_THRESHOLD = 50_000
+
 # Bridge file lives alongside session data
 _BRIDGE_DIR = Path(__file__).resolve().parent.parent / "Documents" / "data"
+
+
+class _SmartPrettyEdit(PrettyEdit):
+    """PrettyEdit subclass that intercepts oversized pastes before they land
+    in the document.
+
+    On a paste that would push the document past the owning WarmNode's
+    split threshold, the paste is diverted to the node's chain-split
+    routine instead of being inserted. This prevents Qt from attempting
+    to render multi-megabyte text in a single QTextEdit proxy — the
+    exact condition that crashes Qt6Core.dll during scene load. Small
+    pastes pass through unchanged.
+    """
+
+    def __init__(self, *args, threshold: int = 0, on_oversized_paste=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._split_threshold = threshold
+        self._on_oversized_paste = on_oversized_paste
+
+    def insertFromMimeData(self, mime) -> None:
+        text = mime.text() or mime.html() or ''
+        if (text and self._on_oversized_paste is not None
+                and self._split_threshold > 0):
+            existing = self.toPlainText()
+            if len(existing) + len(text) > self._split_threshold:
+                # Defer so the paste action's own event processing completes
+                # before the scene starts growing — keeps Qt's state machine
+                # out of our way while we spawn nodes.
+                from PySide6.QtCore import QTimer as _QTimer
+                cb = self._on_oversized_paste
+                _QTimer.singleShot(0, lambda e=existing, t=text: cb(e, t))
+                return
+        super().insertFromMimeData(mime)
 
 
 class WarmNode(BaseNode):
@@ -100,14 +141,20 @@ class WarmNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_body_editor(self) -> None:
-        """Build the PrettyEdit proxy, always visible — it IS the content."""
-        self._editor = PrettyEdit(
+        """Build the PrettyEdit proxy, always visible — it IS the content.
+
+        Uses the smart-paste variant so a paste that would push the body
+        past WARM_SPLIT_THRESHOLD auto-splits into a chain of sibling
+        WarmNodes instead of trying to render a single huge document."""
+        self._editor = _SmartPrettyEdit(
             self,
             font_family=Theme.healthFontFamily,
             font_size=9,
             font_color=Theme.textPrimary,
             always_visible=True,
             normalize_layout=False,
+            threshold=WARM_SPLIT_THRESHOLD,
+            on_oversized_paste=self._split_oversized_paste,
         )
         # Give emoji glyphs 3px extra descent room without affecting text layout.
         # CSS padding-bottom on the body element adds space below each line's
@@ -135,6 +182,86 @@ class WarmNode(BaseNode):
             # Propagate inline edits to bridge if active
             if self._bridge_path and os.path.exists(self._bridge_path):
                 self._bridge_write_debounce.start()
+
+    def _split_oversized_paste(self, existing: str, new_text: str) -> None:
+        """Called by _SmartPrettyEdit when a paste would push this node past
+        WARM_SPLIT_THRESHOLD. Chunks the combined content gently (paragraphs
+        first, then smaller boundaries), keeps the first chunk in this node,
+        and spawns additional WarmNodes for the rest — chained with
+        Connection wires so the original reading order is preserved
+        spatially. Same placement machinery CushionsNode._export uses.
+
+        Catches the pathology at paste time rather than letting Qt try to
+        render a multi-megabyte document in a single proxy (the 2026-04-18
+        crash class). Whispers the split count via InfoBar so the action
+        isn't invisible — the user sees a chain of new nodes appear.
+        """
+        from utils.text_chunker import chunk_text
+        from graphics.Connection import Connection
+        from utils.placement import spiral_place, wander_origin
+
+        full_content = (existing + new_text) if existing else new_text
+        chunks = chunk_text(full_content, max_chars=WARM_SPLIT_THRESHOLD)
+        if not chunks:
+            return
+
+        # First chunk stays here. blockSignals keeps this from retriggering
+        # _on_text_changed mid-sync, which would write partial state to data.
+        first_chunk = chunks[0]
+        self._editor.blockSignals(True)
+        self._editor.setPlainText(first_chunk)
+        self._editor.blockSignals(False)
+        self.data.body_text = first_chunk
+        self._auto_fit_height()
+
+        scene = self.scene()
+        if not scene or len(chunks) == 1:
+            return
+
+        _OFFSCREEN = QPointF(-999_999, -999_999)
+        _PADDING   = 28
+        prev_node  = self
+
+        for chunk in chunks[1:]:
+            wdata = WarmNodeData(body_text=chunk, title="")
+            node  = WarmNode(wdata)
+            node.setPos(_OFFSCREEN)
+            scene.addItem(node)
+            scene.raise_node(node)
+            # Auto-fit height from the document's layout
+            if node._editor:
+                doc = node._editor.document()
+                doc.setTextWidth(node.rect().width() - _PADDING * 2)
+                doc_h = doc.size().height()
+                needed = 90.0 + doc_h + _PADDING
+                if needed > node.rect().height():
+                    r = node.rect()
+                    node.setRect(QRectF(r.x(), r.y(), r.width(), needed))
+                    node.data.height = needed
+            chain_origin = wander_origin(prev_node)
+            pos = spiral_place(
+                scene, node, origin=chain_origin,
+                fallback=chain_origin, padding=_PADDING,
+            )
+            node.setPos(pos)
+            conn = Connection(prev_node, node)
+            scene.addItem(conn)
+            prev_node = node
+
+        # Whisper so the user knows the split happened. Reach through the
+        # scene's views to find the main window; the info channel is the
+        # right voice for a systemic "I handled this, here's what happened"
+        # note (see project_three_notification_channels memory).
+        try:
+            views = scene.views() if scene else []
+            if views:
+                window = views[0].window()
+                if hasattr(window, 'show_info'):
+                    window.show_info(f"big paste split into {len(chunks)} nodes")
+        except Exception:
+            pass
+        _log.info("[warm split] %s — paste split into %d chunks (total %d chars)",
+                  self.data.uuid[:8], len(chunks), len(full_content))
 
     def _editor_context_menu(self, event) -> None:
         """Standard context menu with 'Open in Notepad' prepended."""

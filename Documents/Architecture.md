@@ -1,19 +1,19 @@
 # Architecture Map
 
 > Forensic reference for any AI or human orienting themselves in this codebase.
-> Provide this document first — it saves everyone from re-reading 17k lines.
+> Provide this document first — it saves everyone from re-reading 20k+ lines.
 
 ## What This Is
 
 **Intricate** is a frameless, always-on-top node-based visual canvas built with PySide6. Part of the **Single Shared Braincell** app family — a suite of apps that share live configuration, a widget package, a theme system, and a shared frozen runtime.
 
-**Total codebase:** ~24,000 lines across 3 repos.
+**Total codebase:** ~28,000 lines across 3 repos.
 
 ## The Family
 
 | Repo | Purpose | Lines | Entry Point |
 |------|---------|-------|-------------|
-| [Intricate](https://github.com/agudmund/Intricate) | Node-based visual canvas | ~17,000 | `main.py` |
+| [Intricate](https://github.com/agudmund/Intricate) | Node-based visual canvas | ~20,500 | `main.py` |
 | [Notepad++ Duplex+ Turbo](https://github.com/agudmund/Notepad-Duplex-Turbo) | Creative writing editor | ~4,200 | `main.py` |
 | [Pretty Widgets](https://github.com/agudmund/Pretty-Widgets) | Shared package (widgets + Theme + settings + logger) | ~2,800 | pip package |
 
@@ -46,31 +46,35 @@ pretty_widgets/
 | `SingleSharedBraincell_ChatHistory` | Chat log output directory |
 | `_runtime/` | Shared frozen runtime (PySide6 + all deps, 96MB, built once) |
 
-## Intricate Architecture (17,000 lines)
+## Intricate Architecture (~20,500 lines)
 
 ### Three Strict Layers
 
-**`data/`** — Pure Python dataclasses. No Qt. Each node type has a `NodeData` subclass with `to_dict()`/`from_dict()`. 21 data classes.
+**`data/`** — Pure Python dataclasses. No Qt. Each node type has a `NodeData` subclass with `to_dict()`/`from_dict()`. 35 data classes.
 
-**`nodes/` + `graphics/`** — Qt rendering. `BaseNode(QGraphicsRectItem)` is the 966-line base class. Subclasses override `paint_content(painter)` only. `IntricateScene` manages the canvas. `IntricateView` handles pan/zoom/drag-drop. `Connection` draws bezier wires.
+**`nodes/` + `graphics/`** — Qt rendering. `BaseNode(QGraphicsRectItem)` is the 1,139-line base class. Subclasses override `paint_content(painter)` only. `IntricateScene` manages the canvas. `IntricateView` handles pan/zoom/drag-drop. `Connection` draws bezier wires. `graphics/Particles.py` drives the particle system behind shake-delete (originally ours, benchmarked against Vellum).
 
-**`main.py` + `main_window.py`** — Application shell. Frameless QMainWindow with sidebar, canvas, toolbar. 1,871 lines in main_window.py.
+**`main.py` + `main_window.py`** — Application shell. Frameless QMainWindow with sidebar, canvas, toolbar. 2,885 lines in main_window.py.
 
 ### Key Files
 
 | File | Lines | Role |
 |------|-------|------|
-| `main_window.py` | 1,871 | QMainWindow — sidebar, toolbar, node spawn, curtains, joy bucket |
-| `nodes/BaseNode.py` | 966 | Base class — chrome, ports, resize, shelf animation, depth toggle |
-| `nodes/ClaudeNode.py` | 1,156 | Claude CLI integration — JSONL watcher, streaming response |
-| `graphics/Scene.py` | 827 | Canvas — node factory, session save/load, drag-drop |
-| `graphics/View.py` | 431 | Pan/zoom, cursor-anchored zoom, fog layer |
-| `graphics/Connection.py` | 314 | Bezier wire rendering and animation |
-| `nodes/WarmNode.py` | 397 | Main content node — text bridge to Notepad++ Duplex+ Turbo |
+| `main_window.py` | 2,885 | QMainWindow — sidebar, toolbar, node spawn, curtains, joy bucket, split-surface InfoBar, the Meov |
+| `nodes/BaseNode.py` | 1,139 | Base class — chrome, ports, resize, shelf animation, depth toggle, shake-delete, bulk-remove quiescence |
+| `nodes/ClaudeNode.py` | 1,168 | Claude CLI integration — JSONL watcher, streaming response |
+| `graphics/Scene.py` | 1,265 | Canvas — node factory, session save/load, drag-drop, `_clear_all` quiescence |
+| `graphics/View.py` | 520 | Pan/zoom, cursor-anchored zoom, fog layer |
+| `graphics/Connection.py` | 351 | Bezier wire rendering, glide animation, endpoint-liveness guards |
+| `graphics/Particles.py` | 410 | Particle engine — shake-delete bursts, orbital modes, self-healing tick |
+| `nodes/WarmNode.py` | 555 | Main content node — text bridge to Notepad++ Duplex+ Turbo |
+| `nodes/VideoNode.py` | 918 | Video playback with LOD-adaptive ingest and shared media cache |
+| `nodes/MergeNode.py` | 659 | DAW merge node — stages audio/hold nodes, emits ffmpeg concat |
+| `utils/media_cache.py` | 207 | Byte-preserving SHA-256 media cache, shared across ImageNode + VideoNode |
 
 ### Node Types
 
-Canonical catalogue with per-node detail lives in `Documents/Node Type Schema.md` (34 node types across 8 sidebar categories). Abbreviated roll call for structural orientation:
+Canonical catalogue with per-node detail lives in `Documents/Node Type Schema.md` (35 node types across 8 sidebar categories). Abbreviated roll call for structural orientation:
 
 | Node | Purpose |
 |------|---------|
@@ -78,9 +82,12 @@ Canonical catalogue with per-node detail lives in `Documents/Node Type Schema.md
 | AboutNode | Sticky note for labelling groups, depth toggle |
 | ClaudeNode | Claude CLI chat — spawns ClaudeResponseNodes |
 | ClaudeResponseNode | Multiline sticky capturing a full Claude reply |
-| ImageNode | Drag-and-drop images with editable caption |
-| VideoNode | Video playback with frame scrubbing |
-| AudioNode | Audio playback controls |
+| ImageNode | Drag-and-drop images, editable caption, LOD-aware paint, byte-preserving media cache |
+| VideoNode | Video playback, LOD-adaptive frame ingest, three-tier restore from source/cache/placeholder, paused-refresh via `setPosition` nudge |
+| AudioNode | Audio playback controls; viewport-cull with 1 s crossfade drives the spatial DAW |
+| MergeNode | DAW merge — wired audio/hold nodes compose an ffmpeg concat pipeline |
+| AudioHoldNode | Scrubbable silence placeholder — `anullsrc` in MergeNode's output |
+| BloomNode | Particle-aim node, targets a NullNode anchor |
 | TextNode | Always-editable multiline text |
 | BezierNode | Interactive bezier curve with draggable handles |
 | HealthNode | Live system monitor — GC census, OS click tracking |
@@ -105,6 +112,11 @@ Canonical catalogue with per-node detail lives in `Documents/Node Type Schema.md
 - **NodeBehaviour as detached personality.** Hover pulse animations via signal connections. Must `disconnect_all()` before removal.
 - **Deferred imports in `graphics/`.** Scene imports nodes inside factory methods. View imports Theme at bottom. Prevents circular imports — intentional, not an oversight.
 - **Absolute-positioned toolbar.** Title at `Theme.toolbarTitleX`, curtains at `Theme.toolbarCurtainsX`, exit/max/tray flush right.
+- **Byte-preserving media cache.** `utils/media_cache.py` is a SHA-256 content-addressed cache shared by ImageNode and VideoNode. Keys are `<hash>.<ext>` (format preserved). Cheap fingerprint (size + mtime) on restore, full rehash only on mismatch — surfaces drift via AboutNode, never auto-heals. See `Documents/Nodes/The Image Node.md` and `The Video Node.md`.
+- **Three notification channels, deliberately distinct.** AboutNode (spatial, silent, margin notes), ClaudeResponseNode (peripheral, ambient, agent status), InfoBar (attention-catching with typewriter + fade + sparkle, system events). Do not unify — the distinctness is the feature. Whole app operates at "whisper volume."
+- **Split-surface InfoBar.** One logical channel, two stages: the bottom-bar strip and a titlebar mirror. `main_window._active_info_surface()` picks the stage at show-time based on curtains state + splitter position; the full typewriter + fade personality travels with the routing.
+- **Bulk-remove quiescence.** `scene._bulk_removing` is a counter that peer timers/animations check before scheduling per-frame repaints during a destruction burst. Raised in `BaseNode._shake_delete_group` and `Scene._clear_all`; released two event-loop ticks after the final `removeItem`. `Connection.paint` and `_glide_tick` additionally guard endpoint liveness via `shiboken6.isValid` + `scene() is not None`. Fix for the 2026-04-17 `0xc0000005` peer-paint-during-burst crash class; see `Documents/Compliance/Node Cleanup Compliance.md`.
+- **Spatial DAW — emergent, not coded.** Viewport-cull (in `Scene.update_video_visibility`) + 1-second audio crossfade (tuned to the user's hand-motion rhythm) make AudioNodes behave as a performable spatial mixer when arranged by distance and navigated by pan/zoom. Do not alter the 1-second fade constant without explicit conversation.
 
 ### Text Bridge (WarmNode ↔ Notepad)
 
@@ -154,6 +166,9 @@ App.exe (5MB) → _internal/ (junction) → _runtime/ (96MB, shared)
 
 ## Linguistic Conventions
 
-- Use **vaporize** instead of the literal `/close` trigger word in conversation
-- The app title is a poetry reference: *"Our love, as Intricate as the patterns we impose"*
-- Eddie's README manifesto: *"The last of the Notepads wanted to become all that it could become so it drew itself into existence"*
+- Use **vaporize** instead of the literal `/close` trigger word in conversation.
+- The app title is a poetry reference: *"Our love, as Intricate as the patterns we impose"*.
+- Eddie's README manifesto: *"The last of the Notepads wanted to become all that it could become so it drew itself into existence"* — canonical instance of the project's **"The Last Of" header voice** (see `Documents/Compliance/Python Header Compliance Guide.md`; Line 2 of every Python file carries this voice: triumphant-emergent, detached contextual awareness, goo-ball-rising).
+- Every Python file's header Line 2 terminates with **"For enjoying"** — the project's permanent EULA clause. Don't remove.
+- `Connection.py`'s Line 2 must always contain **"and they learnt to whisper to each other"** — origin phrase from a post-it note that seeded the entire wire-connection concept.
+- Project was originally called **Nodal**; the header subtitle "nodal playground" is pre-rename legacy. Current Line 1 format: `-Intricate - [filename] [utility]`.

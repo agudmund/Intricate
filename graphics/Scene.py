@@ -751,6 +751,31 @@ class IntricateScene(QGraphicsScene):
         # Preserve existing description if one was loaded with this session
         description = getattr(self, '_session_description', "")
 
+        # ── Growth-anomaly scan ───────────────────────────────────────────
+        # A single-field size check before write. If any node's string field
+        # has quietly grown past a reasonable threshold (10 KB), log it once
+        # per session so the next 49 KB body_text doesn't sneak in silently
+        # over weeks of work. Warning only, never truncates — the rule is
+        # surface-don't-auto-heal (see project_drift_accountability memory).
+        # Discovered 2026-04-18 after a 47.8 KB ClaudeNode body_text caused
+        # a session-load crash in Dawn of a new Era.
+        _FIELD_WARN = 10_000
+        seen = getattr(self, '_oversized_field_seen', set())
+        for n in nodes:
+            uuid = n.get('uuid', '?')[:8]
+            ntype = n.get('node_type', '?')
+            for fname, fval in n.items():
+                if isinstance(fval, str) and len(fval) >= _FIELD_WARN:
+                    key = (uuid, fname)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    logger.info(
+                        "[session size] %s %s.%s = %d chars — wait a minute, perhaps reconsider",
+                        ntype, uuid, fname, len(fval),
+                    )
+        self._oversized_field_seen = seen
+
         SessionManager.save_session(str(path), {
             "version":     SessionManager.VERSION,
             "description": description,

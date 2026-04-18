@@ -1815,6 +1815,26 @@ class IntricateApp(QMainWindow):
         if docs_dir.is_dir():
             fallback_pix = Theme.icon(Theme.iconSession, fallback_color="#8a9aaa")
 
+            def _transform_memory_index(raw: str) -> str:
+                """MEMORY.md uses a bulleted-index format (`- [Name](file) — description`)
+                rather than the H2+body shape the rest of the Documents tree uses.
+                The MarkdownNode splitter only knows about markdown headings, so
+                we rewrite each bullet line into `## Name` + description to feed
+                the splitter its native food. Non-bullet lines pass through untouched.
+                Dashes are permissive — em, en, and hyphen all accepted."""
+                import re
+                bullet = re.compile(r'^-\s+\[([^\]]+)\]\([^)]+\)\s*[—–\-]\s*(.+)$')
+                out = []
+                for line in raw.splitlines():
+                    m = bullet.match(line)
+                    if m:
+                        out.append(f"## {m.group(1).strip()}")
+                        out.append(m.group(2).strip())
+                        out.append("")
+                    else:
+                        out.append(line)
+                return "\n".join(out)
+
             def _make_doc_action(target_menu, md_path):
                 act = target_menu.addAction(QIcon(fallback_pix), md_path.stem)
                 def _spawn_doc(_, p=md_path):
@@ -1823,6 +1843,11 @@ class IntricateApp(QMainWindow):
                     except Exception:
                         self._status(f"could not read {p.name}")
                         return
+                    # Memory index: rewrite bullets into H2+body so each entry
+                    # becomes its own focal chunk on the canvas, matching how
+                    # the other Docs .md files split by heading.
+                    if p.name == "MEMORY.md":
+                        text = _transform_memory_index(text)
                     # Scatter the doc directly — the MarkdownNode is the
                     # parsing engine, self-destructs after splitting.
                     from nodes.MarkdownNode import MarkdownNode
@@ -1837,6 +1862,12 @@ class IntricateApp(QMainWindow):
                     node._split_into_nodes()
                     # Self-destruct — sever interaction flags, then remove
                     # on the next event loop tick (TreeNode zombie pattern).
+                    # Quiet the QObject layer synchronously first: the 100ms
+                    # delivery timer would otherwise race Qt's C++ destructor
+                    # during the deferred removeItem and trip a c0000409
+                    # fastfail in Qt6Core.dll. See 2026-04-18 entry in
+                    # Documents/Compliance/Node Cleanup Compliance.md.
+                    node._quiet_background_machinery()
                     node.setSelected(False)
                     node.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
                     scene = self.scene
@@ -1874,6 +1905,37 @@ class IntricateApp(QMainWindow):
                         for md_path in sub_mds:
                             _make_doc_action(submenu, md_path)
                         menu.addMenu(submenu).setText(subdir.name)
+
+            # Memory folder — Claude Code's per-session AI state, exposed as
+            # a second scan root so the same MarkdownNode proofreading pipeline
+            # serves out-of-repo memory files too. Silently absent when Claude
+            # Code isn't installed on this machine or the encoded folder name
+            # doesn't match (encoding mirrors Claude Code's own mapping:
+            # drive-letter colon and path separators replaced with dashes).
+            project_root = Path(__file__).resolve().parent
+            cwd_encoded = (
+                str(project_root).replace(":", "-").replace("\\", "-").replace("/", "-")
+            )
+            memory_dir = Path.home() / ".claude" / "projects" / cwd_encoded / "memory"
+            if memory_dir.is_dir():
+                # MEMORY.md is the index of everything else — pin it first
+                # so the table of contents reads before its entries. Windows
+                # Path sort is case-insensitive by default, which otherwise
+                # buries it mid-list around the other m-prefixed names.
+                memory_mds = sorted(
+                    (p for p in memory_dir.iterdir()
+                     if p.is_file() and p.suffix.lower() == ".md"),
+                    key=lambda p: (p.name != "MEMORY.md", p.name.lower()),
+                )
+                if memory_mds:
+                    menu.addSeparator()
+                    mem_submenu = self._styled_menu()
+                    for i, md_path in enumerate(memory_mds):
+                        _make_doc_action(mem_submenu, md_path)
+                        # Separator after the index, before the entries
+                        if i == 0 and md_path.name == "MEMORY.md" and len(memory_mds) > 1:
+                            mem_submenu.addSeparator()
+                    menu.addMenu(mem_submenu).setText("Memory")
 
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
     def _show_claude_menu(self, btn):  self._show_category_menu("claude", btn)
@@ -2069,7 +2131,7 @@ class IntricateApp(QMainWindow):
             Qt.Horizontal,
             use_scroll_icon=True,
             handle_size=28,
-            range=(10, 500),
+            range=(3, 500),
             value=100,
             fixedWidth=250,
             fixedHeight=32,
@@ -2303,7 +2365,7 @@ class IntricateApp(QMainWindow):
         """Called after wheel-zoom to keep the slider in sync with the view."""
         value = int(round(self.view.current_zoom * 100))
         self._zoom_slider.blockSignals(True)
-        self._zoom_slider.setValue(max(10, min(500, value)))
+        self._zoom_slider.setValue(max(3, min(500, value)))
         self._zoom_slider.blockSignals(False)
 
     def _open_settings_dialog(self):
