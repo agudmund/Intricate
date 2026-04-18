@@ -22,6 +22,13 @@ _BUTTON_ZONE_H = 40.0
 _PAD           = 8.0
 _BG_COLOR      = "#0d1117"   # GitHub dark theme background
 
+# Splitter threshold for the chain walk: paragraphs at or below this length
+# spawn as AboutNode callouts (the green pills); longer paragraphs become
+# WarmNodes (the dark substance panels).  ~140 chars lands roughly at
+# "one declarative sentence" vs "actual prose block" — the natural break
+# between a margin note and a body paragraph.  Tune at will.
+_CALLOUT_MAX_CHARS = 140
+
 
 class MarkdownNode(BaseNode):
     """
@@ -425,18 +432,22 @@ class MarkdownNode(BaseNode):
                 first_node = False
 
             # Body — split into paragraphs.  Each paragraph spawns its own
-            # node: multi-line paragraphs become WarmNodes, single-line
-            # paragraphs become AboutNode callouts.  Gives the chain a
-            # per-statement reading rhythm instead of one wall of text per
-            # section (2026-04-18 browsability refinement).
+            # node, classified by LENGTH: paragraphs at or under
+            # _CALLOUT_MAX_CHARS become AboutNode callouts (the green pills);
+            # longer paragraphs become WarmNodes (the dark substance panels).
+            # Length reads the actual distinction between "one-statement
+            # callout" and "multi-sentence prose" more reliably than newline
+            # count — markdown sources in the wild often write long single-
+            # line paragraphs that should still render as substance
+            # (2026-04-18 browsability refinement).
             if body:
                 paragraphs = [p for p in body.split("\n\n") if p.strip()]
                 for para in paragraphs:
                     para_stripped = para.strip()
-                    is_single_line = "\n" not in para_stripped
+                    is_callout = len(para_stripped) <= _CALLOUT_MAX_CHARS
 
-                    if is_single_line:
-                        # Single-line paragraph — AboutNode callout
+                    if is_callout:
+                        # Short paragraph — AboutNode callout
                         node = scene.add_about_node(pos=_OFFSCREEN, label=para_stripped)
                         node.data.title = para_stripped[:40]
                     else:
