@@ -105,6 +105,12 @@ def _prettify_label(text: str) -> str:
     # change; the text's own colon / em-dash / cadence carries the
     # emphasis on a compressed AboutNode.
     text = text.replace("**", "")
+    # Strip a trailing colon — on an AboutNode that colon dangles
+    # because the node is already the "label" visually; mid-string
+    # colons (like "5:3 ratio" or "12:30") aren't affected.
+    text = text.rstrip()
+    if text.endswith(':'):
+        text = text[:-1].rstrip()
     return text
 
 
