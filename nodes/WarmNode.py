@@ -42,6 +42,21 @@ WARM_SPLIT_THRESHOLD = 50_000
 _BRIDGE_DIR = Path(__file__).resolve().parent.parent / "Documents" / "data"
 
 
+def _html_to_plain(body: str) -> str:
+    """Strip HTML to plain text via a scratch QTextDocument.
+    Handles the legacy `toHtml()` save format used before 2026-04-18,
+    and any session that still carries web-paste-styled body_text.
+    Plain strings pass through unchanged."""
+    if not body:
+        return ""
+    if not body.lstrip().startswith(("<", "<!DOCTYPE")):
+        return body
+    from PySide6.QtGui import QTextDocument as _QTextDocument
+    doc = _QTextDocument()
+    doc.setHtml(body)
+    return doc.toPlainText()
+
+
 class _SmartPrettyEdit(PrettyEdit):
     """PrettyEdit subclass that intercepts oversized pastes before they land
     in the document.
@@ -162,10 +177,12 @@ class WarmNode(BaseNode):
         self._editor.document().setDefaultStyleSheet(
             "body { padding-bottom: 3px; }"
         )
-        if self.data.body_text.lstrip().startswith(("<", "<!DOCTYPE")):
-            self._editor.setHtml(self.data.body_text)
-        else:
-            self._editor.setPlainText(self.data.body_text)
+        # Always display as plain text — web-paste HTML with per-char span
+        # formatting made paint cost scale with run count and loaded the
+        # whole canvas (2026-04-18 lag investigation).  Legacy sessions
+        # with HTML body round-trip through a scratch document to strip
+        # the tags cleanly; the user's ambient node styling takes over.
+        self._editor.setPlainText(_html_to_plain(self.data.body_text))
         self._editor.textChanged.connect(self._on_text_changed)
 
         # Extend the standard right-click menu with "Open in Notepad"
@@ -176,9 +193,12 @@ class WarmNode(BaseNode):
         self._auto_fit_height()
 
     def _on_text_changed(self) -> None:
-        """Sync text to data on every keystroke — no explicit commit needed."""
+        """Sync text to data on every keystroke — no explicit commit needed.
+        Saved as plain text — `insertFromMimeData` in StyledTextEdit now
+        strips HTML on paste, so the editor never holds rich formatting
+        to preserve, and the save path can stay simple."""
         if self._editor:
-            self.data.body_text = self._editor.toHtml()
+            self.data.body_text = self._editor.toPlainText()
             # Propagate inline edits to bridge if active
             if self._bridge_path and os.path.exists(self._bridge_path):
                 self._bridge_write_debounce.start()
@@ -378,10 +398,10 @@ class WarmNode(BaseNode):
             self.data.body_text = new_body
             if self._editor:
                 self._editor.blockSignals(True)
-                if new_body.lstrip().startswith(("<", "<!DOCTYPE")):
-                    self._editor.setHtml(new_body)
-                else:
-                    self._editor.setPlainText(new_body)
+                # Bridge writes are plain text; legacy HTML payloads (old
+                # pre-2026-04-18 sessions) still round-trip to plain via
+                # the same helper used on construction.
+                self._editor.setPlainText(_html_to_plain(new_body))
                 self._editor.blockSignals(False)
 
         # Apply title changes
