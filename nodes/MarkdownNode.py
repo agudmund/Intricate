@@ -457,8 +457,12 @@ class MarkdownNode(BaseNode):
                         node.setPos(_OFFSCREEN)
                         scene.addItem(node)
                         scene.raise_node(node)
+                        # Snug-fit to content.  These nodes have never been
+                        # manually resized, so the height should match the
+                        # body text exactly (plus chrome + padding), not
+                        # carry the default's empty bottom space.
                         if hasattr(node, '_auto_fit_height'):
-                            node._auto_fit_height()
+                            node._auto_fit_height(shrink=True)
 
                     if first_node and source_hidden:
                         pos = spiral_place(scene, node)

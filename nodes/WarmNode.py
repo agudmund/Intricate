@@ -656,8 +656,23 @@ class WarmNode(BaseNode):
     # GEOMETRY
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _auto_fit_height(self) -> None:
-        """Resize the node to fit the current text content."""
+    def _auto_fit_height(self, shrink: bool = False) -> None:
+        """Resize the node to fit the current text content.
+
+        shrink=False (default): grow-only.  Expands the node when text
+        overflows the current height; never reduces below the current
+        setting.  Preserves any manual corner-drag resize the user has
+        applied, and preserves a user's custom height across session
+        reloads.
+
+        shrink=True: snug-to-content.  Both grows and shrinks so the
+        node exactly matches its body text (plus the button zone,
+        padding, and min-height floor).  Used by the markdown-split
+        spawner — freshly-spawned chain nodes pack tightly against
+        their content instead of carrying the default empty space at
+        the bottom.  Those nodes have never been resized manually, so
+        shrinking is safe.
+        """
         if not self._editor:
             return
         r = self.rect()
@@ -667,11 +682,21 @@ class WarmNode(BaseNode):
         doc_h = self._editor.document().size().height()
         # Total: body top offset + document height + padding + a small buffer
         needed = BODY_TOP + doc_h + PADDING + 16.0
-        if needed > r.height():
+        target = max(needed, self._min_height)
+
+        if shrink:
+            # Snug to content — both grow and shrink, clamped at min_height
+            changed = abs(target - r.height()) > 0.5
+        else:
+            # Grow only — never override a user-set height with something smaller
+            changed = needed > r.height()
+            target  = needed  # grow-only path doesn't clamp; existing behaviour
+
+        if changed:
             self.prepareGeometryChange()
-            new_rect = QRectF(r.x(), r.y(), r.width(), needed)
+            new_rect = QRectF(r.x(), r.y(), r.width(), target)
             self.setRect(new_rect)
-            self.data.height = needed
+            self.data.height = target
 
     def setRect(self, rect: QRectF) -> None:
         super().setRect(rect)
