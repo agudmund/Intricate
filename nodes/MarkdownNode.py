@@ -55,9 +55,10 @@ def _is_structural_only(text: str) -> bool:
     return len(dense) >= 3
 
 
-# ISO dates like 2026-04-15 are perfect for source files (sortable,
-# greppable, unambiguous) but read awkwardly on an AboutNode.  Rewrite
-# to "April 15th 2026" for display — same information, better cadence.
+# Label display transformations.  Source markdown uses conventions that
+# read well in files (ISO dates, em-dash separators) but sound stilted
+# when squeezed onto a small AboutNode.  These helpers rewrite only
+# what's displayed — the markdown file stays untouched.
 import re as _re
 _ISO_DATE_RE = _re.compile(r'\b(\d{4})-(\d{2})-(\d{2})\b')
 
@@ -74,16 +75,28 @@ def _ordinal(n: int) -> str:
     return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
 
 
-def _prettify_dates(text: str) -> str:
-    """Replace ISO-8601 dates with 'Month Ordinal Year' in *text*.
-    Only touches the dates — surrounding prose is preserved unchanged.
-    Invalid date components (month > 12, day > 31) pass through as-is."""
-    def _repl(m):
+def _prettify_label(text: str) -> str:
+    """Rewrite source conventions that read awkwardly on a compressed
+    AboutNode label:
+
+    - ISO dates (``2026-04-15``) → ``April 15th 2026``
+    - em-dash separators (``A — B``) → colons (``A: B``)
+
+    Surrounding prose is preserved verbatim.  Invalid dates
+    (month > 12, day > 31) pass through unchanged.  Em-dashes without
+    surrounding spaces (compound words like ``word—word``) are untouched
+    — only the separator use converts."""
+    def _date_repl(m):
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if not (1 <= mo <= 12 and 1 <= d <= 31):
             return m.group(0)
         return f"{_MONTH_NAMES[mo - 1]} {_ordinal(d)} {y}"
-    return _ISO_DATE_RE.sub(_repl, text)
+    text = _ISO_DATE_RE.sub(_date_repl, text)
+    # Em-dash with surrounding spaces → colon + space.  Catches the
+    # "date — label" / "term — definition" pattern without touching
+    # compound-word em-dashes (which have no surrounding spaces).
+    text = text.replace(" — ", ": ")
+    return text
 
 
 class MarkdownNode(BaseNode):
@@ -469,7 +482,7 @@ class MarkdownNode(BaseNode):
 
             # AboutNode for the heading
             if title:
-                pretty_title = _prettify_dates(title)
+                pretty_title = _prettify_label(title)
                 about = scene.add_about_node(pos=_OFFSCREEN, label=pretty_title)
                 about.data.title = pretty_title[:40]
                 if first_node and source_hidden:
@@ -510,7 +523,7 @@ class MarkdownNode(BaseNode):
 
                     if is_callout:
                         # Short paragraph — AboutNode callout
-                        pretty = _prettify_dates(para_stripped)
+                        pretty = _prettify_label(para_stripped)
                         node = scene.add_about_node(pos=_OFFSCREEN, label=pretty)
                         node.data.title = pretty[:40]
                     else:
