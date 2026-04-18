@@ -352,43 +352,44 @@ class BloomNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    _demolition_proxies = [
+        '_combo_proxy', '_count_proxy', '_seed_proxy',
+        '_density_proxy', '_stiffness_proxy',
+        '_speed_proxy', '_distance_proxy',
+    ]
+
+    def _demolition_pre(self) -> None:
         # Flush any living particles this node spawned — they live in
-        # module-level globals in Particles.py and would otherwise keep
-        # ticking against a scene that no longer expects them.
+        # Particles.py module-level globals and would keep ticking
+        # against a scene that no longer expects them.
         scene = self.scene()
         if scene:
             from graphics.Particles import flush_scene
             flush_scene(scene)
-
+        # Disconnect the seven inner-widget signals before the proxies
+        # come down.  The widgets themselves are nulled by the crew when
+        # it tears down the proxies.
         for signal, slot in [
-            (self._combo.currentIndexChanged,        self._on_mode_changed),
-            (self._count_spin.valueChanged,          self._on_count_changed),
-            (self._seed_spin.valueChanged,           self._on_seed_changed),
-            (self._density_combo.currentIndexChanged, self._on_density_changed),
-            (self._stiffness_slider.valueChanged,    self._on_stiffness_changed),
-            (self._speed_slider.valueChanged,        self._on_speed_changed),
-            (self._distance_slider.valueChanged,     self._on_distance_changed),
+            (getattr(self._combo, 'currentIndexChanged', None),           self._on_mode_changed),
+            (getattr(self._count_spin, 'valueChanged', None),             self._on_count_changed),
+            (getattr(self._seed_spin, 'valueChanged', None),              self._on_seed_changed),
+            (getattr(self._density_combo, 'currentIndexChanged', None),   self._on_density_changed),
+            (getattr(self._stiffness_slider, 'valueChanged', None),       self._on_stiffness_changed),
+            (getattr(self._speed_slider, 'valueChanged', None),           self._on_speed_changed),
+            (getattr(self._distance_slider, 'valueChanged', None),        self._on_distance_changed),
         ]:
-            try:
-                signal.disconnect(slot)
-            except RuntimeError:
-                pass
-        sc = self.scene()
-        for proxy in (self._combo_proxy, self._count_proxy, self._seed_proxy,
-                      self._density_proxy, self._stiffness_proxy,
-                      self._speed_proxy, self._distance_proxy):
-            if proxy:
-                if sc:
-                    sc.removeItem(proxy)
-                proxy.setWidget(None)
-        self._combo_proxy = self._count_proxy = self._seed_proxy = None
-        self._density_proxy = self._stiffness_proxy = None
-        self._speed_proxy = self._distance_proxy = None
+            if signal is None:
+                continue
+            try: signal.disconnect(slot)
+            except (RuntimeError, TypeError): pass
+
+    def _demolition_post(self) -> None:
+        # Null the Python refs after the crew has torn down the proxies
+        # and their inner widgets.  Belt-and-braces — GC would get them
+        # eventually, but explicit is clearer.
         self._combo = self._count_spin = self._seed_spin = None
         self._density_combo = self._stiffness_slider = None
         self._speed_slider = self._distance_slider = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

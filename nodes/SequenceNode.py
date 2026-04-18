@@ -275,23 +275,23 @@ class SequenceNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    _demolition_proxies = ['_slider_proxy']
+
+    def _demolition_pre(self) -> None:
+        # Disconnect the slider's valueChanged — the slider is the
+        # inner widget of _slider_proxy and the crew tears it down via
+        # setParent(None) + deleteLater() during the proxy walk, but
+        # valueChanged must go first.
         if self._slider:
             try:
                 self._slider.valueChanged.disconnect(self._on_slider_changed)
-            except RuntimeError:
+            except (RuntimeError, TypeError):
                 pass
-        if self._slider_proxy:
-            sc = self.scene()
-            if sc:
-                sc.removeItem(self._slider_proxy)
-            self._slider_proxy.setWidget(None)
-            self._slider_proxy.hide()
-            self._slider_proxy = None
+
+    def _demolition_post(self) -> None:
         self._slider = None
         self._pixmap = None
         self._frames.clear()
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

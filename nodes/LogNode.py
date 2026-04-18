@@ -172,20 +172,18 @@ class LogNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        self._poll_timer.stop()
-        try:
-            self._poll_timer.timeout.disconnect(self._refresh)
-        except RuntimeError:
-            pass
+    _demolition_timers = [('_poll_timer', '_refresh')]
+
+    def _demolition_pre(self) -> None:
+        # _watcher is a QFileSystemWatcher owned by the node — peer signal,
+        # disconnect inline.
         try:
             self._watcher.fileChanged.disconnect(self._on_file_changed)
-        except RuntimeError:
+        except (RuntimeError, TypeError, AttributeError):
             pass
         if self._editor:
             self._editor.teardown()
         self._editor = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION — content is always live, only geometry is saved

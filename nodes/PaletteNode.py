@@ -508,72 +508,14 @@ class PaletteNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        """Teardown order follows the PrettyEdit recipe (compliance doc
-        2026-04-16): setWidget(None) → widget.setParent(None) +
-        deleteLater() → scene.removeItem(proxy) → proxy = None.
+    # Proxy teardown (including scene-rect invalidate for stylesheet-
+    # backed inner widgets) is handled by the crew from these decls.
+    _demolition_proxies = ['_title_proxy', '_palette_proxy']
 
-        Plus an explicit scene.invalidate() of each proxy's former
-        geometry.  A deeply nested widget tree (grid of swatch widgets
-        with stylesheet backing stores) can leave rasterised pixels on
-        the viewport buffer for one or more frames after the proxy
-        leaves the scene.  Shake-delete on top of that shows visible
-        rendering artefacts — the extra invalidates force the viewport
-        to repaint those regions cleanly.
-        """
-        sc = self.scene()
-
-        # Snapshot proxy scene-rects NOW so we can invalidate them after
-        # teardown.  Cheap; the proxies are still live at this point.
-        title_rect = None
-        palette_rect = None
-        if hasattr(self, '_title_proxy') and self._title_proxy:
-            try:
-                title_rect = self._title_proxy.sceneBoundingRect()
-            except RuntimeError:
-                pass
-        if self._palette_proxy:
-            try:
-                palette_rect = self._palette_proxy.sceneBoundingRect()
-            except RuntimeError:
-                pass
-
-        # Title editor proxy (only live while the title is being edited)
-        if hasattr(self, '_title_proxy') and self._title_proxy:
-            title_widget = self._title_proxy.widget()
-            self._title_proxy.setWidget(None)
-            if title_widget is not None:
-                title_widget.setParent(None)
-                title_widget.deleteLater()
-            if sc:
-                sc.removeItem(self._title_proxy)
-            self._title_proxy = None
-
-        # Palette body proxy
-        if self._palette_proxy:
-            self._palette_proxy.setWidget(None)
-            if sc:
-                sc.removeItem(self._palette_proxy)
-            self._palette_proxy = None
-        if self._palette:
-            self._palette.setParent(None)
-            self._palette.deleteLater()
+    def _demolition_post(self) -> None:
+        # _palette was the inner widget of _palette_proxy — the crew
+        # tore it down via setParent(None) + deleteLater(). Null ref.
         self._palette = None
-
-        # Nudge the scene to repaint the regions the proxies occupied.
-        # Defensive over multiple rects: super()'s phase 0 invalidate of
-        # boundingRect already covers most of it, but stylesheet-backed
-        # QWidget paint caches sometimes need the proxy's own rect
-        # explicitly marked dirty.
-        if sc:
-            if title_rect is not None:
-                try: sc.invalidate(title_rect)
-                except RuntimeError: pass
-            if palette_rect is not None:
-                try: sc.invalidate(palette_rect)
-                except RuntimeError: pass
-
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

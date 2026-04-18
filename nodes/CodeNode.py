@@ -343,12 +343,11 @@ class CodeNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    def _demolition_pre(self) -> None:
         self._highlighter = None
         if self._editor:
             self._editor.teardown()
         self._editor = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

@@ -283,23 +283,20 @@ class ValueNode(BaseNode):
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    _demolition_proxies = ['_slider_proxy']
+
+    def _demolition_pre(self) -> None:
+        # Disconnect valueChanged before the proxy teardown (the slider
+        # is the proxy's inner widget and the crew tears it down with
+        # setParent(None) + deleteLater() during the proxy walk).
         if self._slider:
             try:
                 self._slider.valueChanged.disconnect(self._seek)
-            except RuntimeError:
+            except (RuntimeError, TypeError):
                 pass
-        if hasattr(self, '_slider_proxy') and self._slider_proxy:
-            sc = self.scene()
-            if sc:
-                sc.removeItem(self._slider_proxy)
-            self._slider_proxy.setWidget(None)
-            self._slider_proxy.hide()
-            self._slider_proxy = None
-        if self._slider:
-            self._slider.deleteLater()
+
+    def _demolition_post(self) -> None:
         self._slider = None
-        super()._prepare_for_removal()
 
     # ── Serialization ─────────────────────────────────────────────────────────
 

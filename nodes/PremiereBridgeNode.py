@@ -523,33 +523,27 @@ class PremiereBridgeNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        # Stop the heartbeat timer and sever its signal so the node can GC.
-        try:
-            self._heartbeat_timer.stop()
-            self._heartbeat_timer.timeout.disconnect(self._tick_heartbeat)
-        except (RuntimeError, TypeError):
-            pass
+    _demolition_timers = [('_heartbeat_timer', '_tick_heartbeat')]
 
-        # Sever every transport signal BEFORE base-class teardown — the
-        # Qt C++ side keeps references alive even after stop(), so we have
-        # to explicitly disconnect each slot.
+    def _demolition_pre(self) -> None:
+        # Transport signals target bespoke slot methods on self, so
+        # declare them inline rather than via the workers manifest
+        # (which uses disconnect() without slot specificity).
         for sig, slot in (
-            (self._transport.status_changed,   self._on_status_changed),
-            (self._transport.message_received, self._on_message_received),
-            (self._transport.handshake_ready,  self._on_handshake_ready),
-            (self._transport.handshake_error,  self._on_handshake_error),
-            (self._transport.pong_received,    self._on_pong_received),
+            (getattr(self._transport, 'status_changed', None),   self._on_status_changed),
+            (getattr(self._transport, 'message_received', None), self._on_message_received),
+            (getattr(self._transport, 'handshake_ready', None),  self._on_handshake_ready),
+            (getattr(self._transport, 'handshake_error', None),  self._on_handshake_error),
+            (getattr(self._transport, 'pong_received', None),    self._on_pong_received),
         ):
-            try:
-                sig.disconnect(slot)
-            except (RuntimeError, TypeError):
-                pass
+            if sig is None:
+                continue
+            try: sig.disconnect(slot)
+            except (RuntimeError, TypeError): pass
         try:
             self._transport.disconnect_all()
         except Exception:
             pass
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

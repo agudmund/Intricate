@@ -593,24 +593,26 @@ class AudioNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        if self._vol_anim:
-            try:
-                self._vol_anim.finished.disconnect()
-            except RuntimeError:
-                pass
-            self._vol_anim.stop()
-            self._vol_anim = None
-        self._audio.setVolume(0.0)
-        try:
-            self._player.durationChanged.disconnect(self._on_duration)
-            self._player.positionChanged.disconnect(self._on_position)
-            self._player.mediaStatusChanged.disconnect(self._on_media_status)
-        except RuntimeError:
-            pass
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, self._player.stop)
-        super()._prepare_for_removal()
+    # Volume anim + player signals are declared; the bespoke pause-after-
+    # fade shape of the original teardown (setVolume(0) + deferred stop)
+    # stays in the pre-hook because ordering matters.
+    _demolition_animations = [('_vol_anim', ['finished'])]
+    _demolition_workers = [
+        ('_player', ['durationChanged', 'positionChanged', 'mediaStatusChanged']),
+    ]
+
+    def _demolition_pre(self) -> None:
+        # Fade volume to zero first; the actual stop is deferred one
+        # event-loop tick so the audio sink drains cleanly.  Crew walks
+        # the animation manifest right after this, so the vol_anim is
+        # stopped and disconnected before the deferred stop fires.
+        if self._audio is not None:
+            try: self._audio.setVolume(0.0)
+            except RuntimeError: pass
+        if self._player is not None:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, self._player.stop)
+        self._vol_anim = None
 
     def to_dict(self) -> dict:
         self.data.playback_pos = self._position_ms

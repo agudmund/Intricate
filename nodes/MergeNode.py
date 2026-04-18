@@ -621,30 +621,19 @@ class MergeNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        # Disconnect from ALL queued AudioNode players, not just the current one
+    _demolition_timers = [('_refresh_timer', '_sync_list')]
+    _demolition_proxies = ['_list_proxy']
+
+    def _demolition_pre(self) -> None:
+        # Queued AudioNode peers: disconnect mediaStatusChanged on each
+        # (can't manifest-declare because the set is dynamic).
         for node in self._play_queue:
             if hasattr(node, '_player'):
                 try:
                     node._player.mediaStatusChanged.disconnect(self._on_media_status_changed)
-                except RuntimeError:
+                except (RuntimeError, TypeError):
                     pass
         self._stop_sequence()
-
-        self._refresh_timer.stop()
-        try:
-            self._refresh_timer.timeout.disconnect(self._sync_list)
-        except RuntimeError:
-            pass
-
-        if self._list_proxy:
-            sc = self.scene()
-            if sc:
-                sc.removeItem(self._list_proxy)
-            self._list_proxy.setWidget(None)
-            self._list_proxy.hide()
-            self._list_proxy = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

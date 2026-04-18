@@ -210,14 +210,10 @@ class HealthNode(BaseNode):
 
         return super().itemChange(change, value)
 
-    def _prepare_for_removal(self) -> None:
-        self._poll_timer.stop()
-        try:
-            self._poll_timer.timeout.disconnect(self._poll_gc)
-        except RuntimeError:
-            pass
+    _demolition_timers = [('_poll_timer', '_poll_gc')]
+
+    def _demolition_pre(self) -> None:
         self._uninstall_monitor()
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT

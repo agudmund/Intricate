@@ -124,14 +124,13 @@ class RegistryNode(MarkdownNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    def _demolition_pre(self) -> None:
         from utils import registry
         if registry.watcher:
             try:
                 registry.watcher.changed.disconnect(self._on_registry_changed)
-            except RuntimeError:
+            except (RuntimeError, TypeError):
                 pass
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

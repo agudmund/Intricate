@@ -272,94 +272,33 @@ class BaseNode(QGraphicsRectItem):
                 except Exception:
                     pass
 
+    # ── Demolition manifest ──────────────────────────────────────────────
+    # Universal items every BaseNode carries: the shelf animation that
+    # drives button-strip expand/collapse, and the throttle timer that
+    # batches connection repaints after ItemPositionChange bursts.
+    # Subclasses extend these with their own declarations.
+    _demolition_animations = [
+        ('_shelf_anim', ['valueChanged', 'finished']),
+    ]
+    _demolition_timers = [
+        ('_update_throttle_timer', '_flush_connection_update'),
+    ]
+
     def _prepare_for_removal(self):
         """
-        Graceful exit — called when this node is leaving its scene.
+        Graceful exit — called when the node is leaving its scene.
 
-        Order matters:
-            1. Heal wires — bridge sources to targets before severing anything
-            2. Disconnect Qt signals (behaviour) — before any Qt object is invalid
-            3. Sever wire connections — while scene APIs are still valid
-            4. Clear connection list — last, after all severing is done
-
-        Do NOT set self.behaviour = None here. The finished signal on pulse_anim
-        fires re-entrantly during teardown and will segfault if behaviour is gone.
-        disconnect_all() severs the connections instead — that's sufficient.
+        Delegates to the demolition crew in `nodes/_demolition.py`.  The
+        crew handles the standard 5-phase sequence (flush / heal /
+        detach / behaviour / sever), walks the node's declarative
+        manifest (proxies, timers, animations, threads, media, workers),
+        and invokes optional `_demolition_pre` / `_demolition_post`
+        hooks for bespoke work.  A node's entire teardown logic can now
+        live in class-level manifest attributes — no override needed
+        unless the node has truly bespoke ordering requirements.
         """
-        if self._removal_done:
-            return
-        self._removal_done = True
-        tag = f"{self.data.node_type} {self.data.uuid[:8]}"
-
-        # ── Phase 0: flush cached pixmap + sever Qt dispatch state ──────
-        # Disable DeviceCoordinateCache and invalidate the scene region so
-        # no ghost pixels linger after removeItem().
-        from PySide6.QtWidgets import QGraphicsItem
-        self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
-        if self.scene():
-            self.scene().invalidate(self.mapRectToScene(self.boundingRect()))
-        # Clear selection and disable interaction flags BEFORE any other
-        # teardown.  Without this, Qt's internal dispatch table can still
-        # route mouse events to the dead item after removeItem(), causing
-        # subsequent clicks to silently fail on other nodes.
-        self.setSelected(False)
-        self.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
-
-        logger.log(5, "[REMOVE] %s  phase 1: heal connections (%d wires)",
-                    tag, len(self.connections))
-        self._heal_connections()
-        logger.log(5, "[REMOVE] %s  phase 2: detach buttons + ports", tag)
-        self._detach_buttons()
-        self._detach_ports()
-
-        # ── Shelf animation — disconnect signals that hold self alive ────
-        if hasattr(self, '_shelf_anim'):
-            self._shelf_anim.stop()
-            try:
-                self._shelf_anim.valueChanged.disconnect(self._on_shelf_tick)
-            except RuntimeError:
-                pass
-            try:
-                self._shelf_anim.finished.disconnect(self._on_shelf_done)
-            except RuntimeError:
-                pass
-
-        # ── Throttle timer — disconnect before nulling ───────────────────
-        if self._update_throttle_timer:
-            self._update_throttle_timer.stop()
-            try:
-                self._update_throttle_timer.timeout.disconnect(self._flush_connection_update)
-            except RuntimeError:
-                pass
-            self._update_throttle_timer = None
-
-        logger.log(5, "[REMOVE] %s  phase 3: disconnect behaviour", tag)
-        if hasattr(self, 'behaviour') and self.behaviour:
-            self.behaviour.disconnect_all()
-
-        logger.log(5, "[REMOVE] %s  phase 4: sever %d wire connections", tag, len(self.connections))
-        for conn in list(self.connections):
-            # Stop the glide animation and disconnect its signal
-            if hasattr(conn, '_glide_timer'):
-                conn._glide_timer.stop()
-                try:
-                    conn._glide_timer.timeout.disconnect(conn._glide_tick)
-                except RuntimeError:
-                    pass
-            # Remove from the other endpoint's connection list so it doesn't
-            # hold a stale reference after this node is gone
-            other = conn.end_node if conn.start_node is self else conn.start_node
-            if other is not None and other is not self and hasattr(other, 'connections'):
-                try:
-                    other.connections.remove(conn)
-                except ValueError:
-                    pass
-            if conn.scene():
-                conn.scene().removeItem(conn)
-            conn.start_node = None
-            conn.end_node   = None
-        self.connections.clear()
-        logger.log(5, "[REMOVE] %s  phase 5: connections cleared — base teardown done", tag)
+        from nodes._demolition import demolish
+        demolish(self)
 
     def _flush_connection_update(self):
         """Flush batched connection redraws after the throttle period."""

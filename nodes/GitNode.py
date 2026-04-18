@@ -721,19 +721,18 @@ class GitNode(BaseNode):
 
         painter.restore()
 
-    def _prepare_for_removal(self) -> None:
+    _demolition_timers = [
+        ('_poll_timer',     '_refresh'),
+        ('_delivery_timer', '_check_delivery'),
+    ]
+
+    def _demolition_pre(self) -> None:
+        # Loading plushie is a child VideoNode wired to this GitNode
+        # during push — must come down synchronously before the crew
+        # starts tearing down its own signal surface, because the plushie
+        # dismiss has its own orchestrated ordering (stop player, sever
+        # media links, clear wires).
         self._dismiss_loading_node()
-        self._poll_timer.stop()
-        try:
-            self._poll_timer.timeout.disconnect(self._refresh)
-        except RuntimeError:
-            pass
-        self._delivery_timer.stop()
-        try:
-            self._delivery_timer.timeout.disconnect(self._check_delivery)
-        except RuntimeError:
-            pass
-        super()._prepare_for_removal()
 
     def to_dict(self) -> dict:
         return self.data.to_dict()

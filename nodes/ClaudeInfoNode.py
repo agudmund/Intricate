@@ -247,13 +247,7 @@ class ClaudeInfoNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        self._poll_timer.stop()
-        try:
-            self._poll_timer.timeout.disconnect(self._kick_scan)
-        except RuntimeError:
-            pass
-        super()._prepare_for_removal()
+    _demolition_timers = [('_poll_timer', '_kick_scan')]
 
     def itemChange(self, change, value):
         if change == self.GraphicsItemChange.ItemSceneChange and value is None:

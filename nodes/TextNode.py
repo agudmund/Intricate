@@ -463,17 +463,19 @@ class TextNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        if hasattr(self, '_html_proxy') and self._html_proxy:
-            sc = self.scene()
-            if sc:
-                sc.removeItem(self._html_proxy)
-            self._html_proxy.setWidget(None)
-            self._html_proxy = None
-        elif self._editor and hasattr(self._editor, 'teardown'):
-            self._editor.teardown()
+    # TextNode has two render modes — HTML (proxied) and plain (PrettyEdit
+    # editor).  Declaring _html_proxy is safe whether or not it exists;
+    # the crew skips missing attrs.  The editor-teardown path lives in
+    # _demolition_pre for the plain-mode case.
+    _demolition_proxies = ['_html_proxy']
+
+    def _demolition_pre(self) -> None:
+        # HTML mode: crew handles the proxy.  Plain mode: tear down the
+        # PrettyEdit editor here so its own proxy teardown runs.
+        if not (hasattr(self, '_html_proxy') and self._html_proxy):
+            if self._editor and hasattr(self._editor, 'teardown'):
+                self._editor.teardown()
         self._editor = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

@@ -565,11 +565,12 @@ class StickerNode(QGraphicsRectItem):
     def itemChange(self, change, value):
         if (change == QGraphicsRectItem.GraphicsItemChange.ItemSceneChange
                 and value is None and not self._removal_done):
-            logger.log(5, "[REMOVE] sticker %s leaving scene — _prepare_for_removal starting",
-                        self.data.uuid[:8])
-            self._prepare_for_removal()
-            logger.log(5, "[REMOVE] sticker %s _prepare_for_removal complete",
-                        self.data.uuid[:8])
+            # StickerNode is its own root (not a BaseNode subclass), but
+            # it still hands off to the same demolition crew.  The crew
+            # tolerates missing connections / behaviour / buttons / ports
+            # and just runs the parts of the standard sequence that apply.
+            from nodes._demolition import demolish
+            demolish(self)
         return super().itemChange(change, value)
 
     def _quiet_for_shake(self) -> None:
@@ -580,20 +581,9 @@ class StickerNode(QGraphicsRectItem):
         2026-04-18)."""
         self._disconnect_viewport_tracking()
 
-    def _prepare_for_removal(self) -> None:
-        """Idempotent teardown hook.  Same contract as BaseNode's version
-        but without the connection / ports / behaviour plumbing."""
-        if self._removal_done:
-            return
-        self._removal_done = True
-        # Invalidate the scene region so ghost pixels clear promptly after
-        # removeItem (matches the BaseNode phase 0 pattern).
-        scene = self.scene()
-        if scene:
-            try:
-                scene.invalidate(self.mapRectToScene(self.boundingRect()))
-            except RuntimeError:
-                pass
+    def _demolition_pre(self) -> None:
+        """Sever viewport tracking signals and release the pixmap
+        buffer before the crew runs its standard sequence."""
         self._disconnect_viewport_tracking()
         self._pixmap = None
 

@@ -264,8 +264,11 @@ class AboutNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        self._shelf_anim.stop()
+    def _demolition_pre(self) -> None:
+        # Editor owns a QTextDocument whose contentsChanged signal we
+        # wired into _auto_expand — sever it before teardown or a late
+        # edit event will hit a dead slot.  teardown() handles the
+        # proxy-widget cleanup inside PrettyEdit itself.
         if self._editor:
             try:
                 self._editor.document().contentsChanged.disconnect(self._auto_expand)
@@ -273,7 +276,6 @@ class AboutNode(BaseNode):
                 pass
             self._editor.teardown()
         self._editor = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

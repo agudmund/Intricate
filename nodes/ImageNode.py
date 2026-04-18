@@ -727,41 +727,25 @@ class ImageNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        """Clean up ImageNode-specific resources before scene departure."""
-        logger.log(5, "[REMOVE] image %s — disconnecting VisionWorker", self.data.uuid[:8])
-        # Stop the async image delivery timer — a late-finishing daemon thread
-        # may still write to _pending_pixmap but nobody reads it after this.
-        self._image_delivery_timer.stop()
-        try:
-            self._image_delivery_timer.timeout.disconnect(self._check_image_delivery)
-        except RuntimeError:
-            pass
+    _demolition_timers = [('_image_delivery_timer', '_check_image_delivery')]
+    _demolition_workers = [('_vision_worker', ['finished', 'failed'])]
+
+    def _demolition_pre(self) -> None:
+        # Null the pending-delivery fields BEFORE the crew stops the
+        # timer — ordering here keeps a late-finishing daemon thread
+        # from writing into state we're about to drop.
         self._pending_pixmap = None
         self._pending_cache_key = None
         self._pending_drift = None
         self._pending_size  = None
         self._pending_mtime = None
         self._loading = False
-        # Sever VisionWorker signals FIRST — if the worker finishes after
-        # removal it would call _spawn_caption_node on a dead node, creating
-        # a Connection to a stale C++ pointer and hard-crashing Qt.
-        worker = getattr(self, '_vision_worker', None)
-        if worker is not None:
-            logger.log(5, "[REMOVE] image %s — VisionWorker was active, severing signals",
-                        self.data.uuid[:8])
-            try:
-                worker.finished.disconnect(self._on_vision_result)
-            except (RuntimeError, TypeError):
-                pass
-            try:
-                worker.failed.disconnect(self._on_vision_failed)
-            except (RuntimeError, TypeError):
-                pass
-            self._vision_worker = None
+
+    def _demolition_post(self) -> None:
+        # Crew has severed VisionWorker signals; null the worker ref.
+        self._vision_worker = None
         self._pixmap = None
         self._scaled_cache = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

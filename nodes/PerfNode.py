@@ -186,14 +186,10 @@ class PerfNode(BaseNode):
 
         return super().itemChange(change, value)
 
-    def _prepare_for_removal(self) -> None:
-        self._poll_timer.stop()
-        try:
-            self._poll_timer.timeout.disconnect(self._refresh)
-        except RuntimeError:
-            pass
+    _demolition_timers = [('_poll_timer', '_refresh')]
+
+    def _demolition_pre(self) -> None:
         self._uninstall_filter()
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT

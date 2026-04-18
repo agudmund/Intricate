@@ -68,11 +68,9 @@ class NullNode(BaseNode):
         )
         painter.restore()
 
-    def _prepare_for_removal(self) -> None:
-        """No custom teardown — NullNode holds no timers, proxies, or signals
-        beyond what BaseNode provides. Override kept explicit as a placeholder
-        anchor for future iterations (e.g. when the sticker migration lands)."""
-        super()._prepare_for_removal()
+    # NullNode has no timers, proxies, or signals of its own — no manifest
+    # declarations needed, no _prepare_for_removal override.  The crew
+    # handles the standard BaseNode teardown via inheritance.
 
     def to_dict(self) -> dict:
         self.sync_data()

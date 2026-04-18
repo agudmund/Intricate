@@ -503,29 +503,17 @@ class MarkdownNode(BaseNode):
             except RuntimeError:
                 pass
 
-    def _prepare_for_removal(self) -> None:
-        # Signal the worker thread to discard its result
-        self._removed = True
+    # Crew sets _removed = True FIRST so the background HTML-render
+    # thread bails before any Qt teardown writes into dead state.
+    _demolition_thread_flag = '_removed'
+    _demolition_timers = [('_delivery_timer', '_check_render_delivery')]
+    _demolition_proxies = ['_html_proxy']
 
-        self._delivery_timer.stop()
-        try:
-            self._delivery_timer.timeout.disconnect(self._check_render_delivery)
-        except RuntimeError:
-            pass
-
-        if self._html_proxy:
-            w = self._html_proxy.widget()
-            if w:
-                w.setParent(None)
-                w.deleteLater()
-            self._html_proxy.setWidget(None)
-            scene = self.scene()
-            if scene:
-                scene.removeItem(self._html_proxy)
-            self._html_proxy = None
+    def _demolition_post(self) -> None:
+        # _editor was the QTextBrowser inside _html_proxy; crew handled
+        # its setParent(None) + deleteLater() via the proxy walk.  Null
+        # the Python ref to match.
         self._editor = None
-
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

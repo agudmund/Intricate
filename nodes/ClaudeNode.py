@@ -1093,61 +1093,42 @@ class ClaudeNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    _demolition_timers = [
+        ('_reply_done_timer', '_on_reply_done'),
+        ('_jsonl_debounce',   '_process_jsonl_change'),
+        ('_stream_timer',     '_flush_stream_title'),
+    ]
+    _demolition_proxies = ['_input_proxy', '_body_proxy']
+
+    def _demolition_pre(self) -> None:
+        # Sever the settings watcher's peer signal — it lives outside the
+        # node's Qt object tree, so the crew has no way to know about it.
         if settings.watcher:
             try:
                 settings.watcher.changed.disconnect(self._on_theme_reload)
-            except RuntimeError:
+            except (RuntimeError, TypeError):
                 pass
-
-        # ── Timers — stop + disconnect signals that pin self ─────────────
-        self._reply_done_timer.stop()
-        try:
-            self._reply_done_timer.timeout.disconnect(self._on_reply_done)
-        except RuntimeError:
-            pass
-
-        self._jsonl_debounce.stop()
-        try:
-            self._jsonl_debounce.timeout.disconnect(self._process_jsonl_change)
-        except RuntimeError:
-            pass
-
-        if hasattr(self, '_stream_timer') and self._stream_timer:
-            self._stream_timer.stop()
-            try:
-                self._stream_timer.timeout.disconnect(self._flush_stream_title)
-            except RuntimeError:
-                pass
-
+        # Tear down the QFileSystemWatcher for the JSONL stream.  It's a
+        # standalone QObject the node owns, not a proxied widget — crew
+        # doesn't manage it, but its cleanup shape is stable.
         if self._watcher:
-            self._watcher.fileChanged.disconnect()
+            try: self._watcher.fileChanged.disconnect()
+            except (RuntimeError, TypeError): pass
             self._watcher.deleteLater()
             self._watcher = None
-        # ── Proxy widgets — sever the QGraphicsProxyWidget → QWidget chain
-        # so Qt doesn't chase stale widget pointers during scene cleanup.
-        sc = self.scene()
-        if hasattr(self, '_input_proxy') and self._input_proxy:
-            if sc:
-                sc.removeItem(self._input_proxy)
-            self._input_proxy.setWidget(None)   # detach Qt widget from proxy
-            self._input_proxy.hide()
-            self._input_proxy = None
-        if hasattr(self, '_body_proxy') and self._body_proxy:
-            if sc:
-                sc.removeItem(self._body_proxy)
-            self._body_proxy.setWidget(None)
-            self._body_proxy.hide()
-            self._body_proxy = None
-        if self._body:
-            self._body.deleteLater()
+
+    def _demolition_post(self) -> None:
+        # The crew tore down _input_proxy and _body_proxy (including
+        # their inner widgets via setParent(None) + deleteLater()).
+        # These refs are already stale Python-side after the crew's walk;
+        # null them + the input_frame helper that lived alongside.
         if hasattr(self, '_input_frame') and self._input_frame:
-            self._input_frame.deleteLater()
-        self._body  = None
+            try: self._input_frame.deleteLater()
+            except (RuntimeError, AttributeError): pass
+        self._body = None
         self._input = None
         self._input_frame = None
-        self._last_response_node = None   # sever chain reference
-        super()._prepare_for_removal()
+        self._last_response_node = None   # sever response-chain reference
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

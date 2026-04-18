@@ -854,49 +854,56 @@ class VideoNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
-        self._destroyed = True
-        # Stop cache-delivery timer and sever pending fields. Background
-        # ingest/drift workers check _destroyed before writing, but the
-        # timer callback itself must be muted before Qt tears us down.
-        if hasattr(self, '_cache_poll') and self._cache_poll is not None:
-            self._cache_poll.stop()
-            try:
-                self._cache_poll.timeout.disconnect(self._check_cache_delivery)
-            except RuntimeError:
-                pass
-            self._cache_poll = None
+    # Crew sets _destroyed FIRST so background ingest/drift workers
+    # bail before any Qt teardown writes to dead state.
+    _demolition_thread_flag = '_destroyed'
+    _demolition_timers = [('_cache_poll', '_check_cache_delivery')]
+    _demolition_animations = [('_volume_anim', ['finished'])]
+    # Media-player linkage is bespoke (we also need to null the sink
+    # and audio deleteLater), so we don't use _demolition_media_players
+    # directly — keep the sequence in _demolition_pre for clarity.
+
+    def _demolition_pre(self) -> None:
+        # Null pending fields — the background thread has already bailed
+        # via the _destroyed flag that the crew set; anything still
+        # in-flight is safe to drop.
         self._pending_cache_key = None
         self._pending_drift     = None
         self._pending_size      = None
         self._pending_mtime     = None
-        if self._volume_anim:
-            try:
-                self._volume_anim.finished.disconnect(self._pause_after_fade)
-            except RuntimeError:
-                pass
-            self._volume_anim.stop()
-            self._volume_anim = None
-        self._audio.setVolume(0.0)
-        try:
-            self._sink.videoFrameChanged.disconnect(self._on_frame)
-            self._player.durationChanged.disconnect(self._on_duration_changed)
-            self._player.positionChanged.disconnect(self._on_position_changed)
-            self._player.mediaStatusChanged.disconnect(self._on_media_status)
-        except RuntimeError:
-            pass  # already disconnected or C++ side gone
-        # Stop synchronously and sever the sink → player link before GC
-        # can collect them in the wrong order.  The deferred singleShot(0)
-        # left a window where the player delivered a frame to a dead sink.
-        self._player.stop()
-        self._player.setVideoOutput(None)
-        self._player.setAudioOutput(None)
-        self._player.deleteLater()
-        self._sink.deleteLater()
-        self._audio.deleteLater()
+        # Fade volume to zero before the player stop so the audio sink
+        # drains cleanly.
+        if self._audio is not None:
+            try: self._audio.setVolume(0.0)
+            except RuntimeError: pass
+        # Sever the player → sink → audio chain synchronously; the
+        # deferred singleShot(0) used to leave a window where the
+        # player delivered a frame to a dead sink.
+        try: self._sink.videoFrameChanged.disconnect(self._on_frame)
+        except (RuntimeError, TypeError): pass
+        try: self._player.durationChanged.disconnect(self._on_duration_changed)
+        except (RuntimeError, TypeError): pass
+        try: self._player.positionChanged.disconnect(self._on_position_changed)
+        except (RuntimeError, TypeError): pass
+        try: self._player.mediaStatusChanged.disconnect(self._on_media_status)
+        except (RuntimeError, TypeError): pass
+        try: self._player.stop()
+        except (RuntimeError, AttributeError): pass
+        try: self._player.setVideoOutput(None)
+        except (RuntimeError, AttributeError): pass
+        try: self._player.setAudioOutput(None)
+        except (RuntimeError, AttributeError): pass
+        try: self._player.deleteLater()
+        except (RuntimeError, AttributeError): pass
+        try: self._sink.deleteLater()
+        except (RuntimeError, AttributeError): pass
+        try: self._audio.deleteLater()
+        except (RuntimeError, AttributeError): pass
+        self._volume_anim = None
+
+    def _demolition_post(self) -> None:
         self._frame_pixmap = None
         self._scaled_cache = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

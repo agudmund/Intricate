@@ -707,25 +707,22 @@ class TreeNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    _demolition_proxies = ['_toolbar_proxy']
+
+    def _demolition_pre(self) -> None:
+        # Hearts are QGraphicsItem children spawned on file operations —
+        # remove each from the scene before the node goes.  Editor and
+        # name-editor are PrettyEdit widgets with their own teardowns.
         for h in self._hearts:
             if h.scene():
                 h.scene().removeItem(h)
         self._hearts.clear()
         if self._name_editor:
             self._name_editor.teardown()
-        if self._toolbar_proxy:
-            sc = self.scene()
-            if sc:
-                sc.removeItem(self._toolbar_proxy)
-            self._toolbar_proxy.setWidget(None)
-            self._toolbar_proxy.hide()
-            self._toolbar_proxy = None
         if self._editor:
             self._editor.teardown()
         self._editor = None
         self._name_editor = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

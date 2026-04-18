@@ -662,12 +662,14 @@ class WarmNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    def _demolition_pre(self) -> None:
+        # WarmNode → Majestic bridge owns a file watcher + daemon worker;
+        # _teardown_bridge handles both.  PrettyEdit teardown severs the
+        # editor's own proxy widget internally.
         self._teardown_bridge()
         if self._editor:
             self._editor.teardown()
         self._editor = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

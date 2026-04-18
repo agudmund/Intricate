@@ -248,10 +248,9 @@ class BezierNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _prepare_for_removal(self) -> None:
+    def _demolition_pre(self) -> None:
         self._handle1 = None
         self._handle2 = None
-        super()._prepare_for_removal()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION

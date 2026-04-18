@@ -234,6 +234,55 @@ The button-driven `_split_into_nodes` call on a live MarkdownNode is unaffected 
 
 Both are bounded cases of the same underlying principle: *any deferred-removal pattern must close all inflight-signal windows before the deferral, not during it.*
 
+### 2026-04-18 — Demolition crew extraction (architectural refactor)
+
+**Context.** By this date the node teardown procedure had evolved into an official five-phase procedure documented above with detailed ordering rules, recurring recipes (proxy-widget teardown, timer stop+disconnect, thread bail, media-player sever), and an ever-expanding list of class-of-crash lessons. Every node carried the procedure in its own `_prepare_for_removal` override — and every new node had to re-learn the same recipes. Construction workers were carrying dynamite in their toolboxes.
+
+**Refactor — Carpenters leave labels; demolition crew reads them.**
+
+The teardown procedure is now a dedicated `nodes/_demolition.py` module — a standalone crew that arrives when a node leaves the scene, reads the node's declarative manifest of what to come down, runs the canonical sequence, and leaves. Nodes declare what they own; the crew handles the choreography.
+
+**Declarative manifest (class attributes, all optional):**
+
+| Attribute | Shape | Purpose |
+|-----------|-------|---------|
+| `_demolition_proxies` | `list[str]` — attr names | QGraphicsProxyWidget teardown (setWidget(None) → inner setParent(None)+deleteLater() → removeItem → null, plus scene-rect invalidate) |
+| `_demolition_timers` | `list[(attr, slot_name)]` | QTimer.stop() + timeout.disconnect(slot) |
+| `_demolition_animations` | `list[(attr, [signal_names])]` | QVariantAnimation.stop() + disconnect of each named signal |
+| `_demolition_thread_flag` | `str` — attr name | Set attribute to `True` FIRST so background worker bails before any Qt teardown |
+| `_demolition_media_players` | `list[str]` | QMediaPlayer.stop() + setVideoOutput(None) + setAudioOutput(None) + deleteLater() |
+| `_demolition_workers` | `list[(attr, [signal_names])]` | Disconnect each named signal on a worker object |
+
+**Optional hooks for bespoke work:**
+
+- `_demolition_pre(self)` — runs FIRST, before the crew's standard sequence. For work that needs synchronous ordering before any other teardown (e.g. GitNode dismissing its loading plushie, VideoNode's deferred media chain, StickerNode's viewport tracking).
+- `_demolition_post(self)` — runs LAST, after the standard sequence. Rarely needed.
+
+**Manifest inheritance.** The crew's `_manifest(node, attr_name)` walks the full MRO and appends entries in declaration order, deduping on attr name. BaseNode declares universal items (`_shelf_anim`, `_update_throttle_timer`) once; every subclass inherits them automatically and adds its own on top. No node has to remember the universal set.
+
+**Entry points.**
+
+- BaseNode subclasses: `BaseNode._prepare_for_removal()` is now a one-line wrapper — `demolish(self)`. The existing Qt contract (called from `itemChange` on `ItemSceneChange`) is unchanged.
+- Non-BaseNode roots (StickerNode): `itemChange` calls `demolish(self)` directly. The crew tolerates missing attributes (`connections`, `behaviour`, `_buttons`, `input_ports`, `output_ports`) and flows through the parts of the standard sequence that apply.
+
+**Files touched:** 1 new (`nodes/_demolition.py`), 29 migrated (every node with a prior `_prepare_for_removal` override). Net: ~400 lines of boilerplate replaced with ~30 lines of declaration.
+
+**Verification.** Every node type instantiated + torn down cleanly in the end-to-end smoke test. AST parse-check of all node files passes. No behavioural change intended — the crew's standard sequence preserves the phase-by-phase ordering and every previously-documented crash-class fix (the 2026-04-16 proxy audit, the 2026-04-17 peer-paint sweep, the 2026-04-18 StickerNode root-split, the 2026-04-18 PaletteNode rasterisation fix) is now baked into the crew's default procedure rather than repeated per node.
+
+**Retrospective on the ordering story.**
+
+The audit pass that preceded the refactor catalogued every node's `_prepare_for_removal`. The pattern had stabilised years ago: bespoke cleanup first, `super()` last. The crew's split between `_demolition_pre` and `_demolition_post` codifies this: the pre-hook is the "bespoke first" story, the standard sequence is the `super()` story, the post-hook is for the rare trailing work. No node needed a contortion to migrate — the shapes all slotted into the two hooks or the manifest categories cleanly.
+
+The one category that genuinely stays per-node-inline is **peer signals targeted at bespoke slot methods** (PremiereBridgeNode's five transport signals, MergeNode's dynamic per-audio-node mediaStatusChanged, ClaudeNode's settings.watcher). These targets are bound to slot methods on self; the generic `disconnect()` on a worker in the manifest wouldn't discriminate. These each stay in `_demolition_pre` as inline disconnects. That's honest complexity, not boilerplate.
+
+**Adding a new node type — the onboarding story.**
+
+Before: "override `_prepare_for_removal`, copy from a reference implementation, audit against this compliance document, manually remember all five phases."
+
+After: "declare what you own. Add `_demolition_pre` only if you have genuinely bespoke ordering."
+
+The compliance document still matters — it's the reference for what the crew *does*, and the source of truth for what new crash-classes look like. But the individual node author no longer has to internalise it to ship a correct node.
+
 ### 2026-04-18 — PaletteNode shake-delete rendering artefacts
 
 **Symptom.** Shake-deleting a PaletteNode left visible rasterised residue on the canvas for a frame or two — swatch-row pixels / border outline remnants in the area the node had occupied. No crash, no Event Viewer entry; the Python teardown log showed all five phases + `_prepare_for_removal complete` firing cleanly at 13:52:13.
