@@ -169,8 +169,24 @@ class HealthNode(BaseNode):
         Install the OS-level click monitor.
         Called synchronously on ItemSceneHasChanged — main thread, Qt loop running.
         Idempotent.
+
+        Gated on `[intricate.health] click_monitor` in settings.toml
+        (default: off).  The monitor installs a WH_MOUSE_LL low-level
+        Windows mouse hook, which delays every mouse event system-wide
+        up to LowLevelHooksTimeout (default 200ms) while Windows waits
+        for our callback to return on the Qt main thread.  Under any
+        main-thread load that causes message-queue pressure (trace
+        logging, active paint loop, settlers, etc.) the delay is
+        visible as sticky cursor response.  Opt-in only — users who
+        actively want click inspection flip the setting, otherwise the
+        HealthNode just omits the clicked-item line.
         """
         if self._monitor is not None:
+            return
+        import pretty_widgets.utils.settings as _s
+        if not bool(_s.get_nested("intricate", "health", "click_monitor", False)):
+            self._last_clicked_type = "click monitor off"
+            self._last_clicked_item = "enable in [intricate.health] click_monitor"
             return
         try:
             self._monitor = OSClickMonitor(self)
