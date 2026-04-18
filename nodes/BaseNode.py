@@ -831,36 +831,52 @@ class BaseNode(QGraphicsRectItem):
             except RuntimeError:
                 ghost_rect = None
             def _deferred(n=node, sc=scene, r=ghost_rect):
+                # Widen catch to Exception.  Previously RuntimeError-only
+                # meant an unexpected AttributeError/TypeError would
+                # propagate, break this callback, and leave the node
+                # alive in the scene (2026-04-18 ghost).  Whatever goes
+                # wrong here, the removal intent must not be abandoned
+                # — the straggler sweep in _release_bulk catches anything
+                # this leg missed.
                 try:
                     sc.removeItem(n)
-                except RuntimeError:
+                except Exception:
                     pass
                 if r is not None:
                     try:
                         sc.invalidate(r)
-                    except RuntimeError:
+                    except Exception:
                         pass
             QTimer.singleShot(0, _deferred)
 
         def _release_bulk(sc=scene):
             sc._bulk_removing = max(0, getattr(sc, '_bulk_removing', 1) - 1)
-            # Defensive net: once the outermost bulk burst has settled,
-            # force a full viewport repaint to catch any paint residue
-            # the per-node invalidates may have missed under heavy load.
-            # Observed 2026-04-18: after N cycles of spawn-many →
-            # shake-delete-all, one node's border chrome occasionally
-            # stayed on the viewport buffer even though the node had
-            # been removed from the scene and its rect invalidated.
-            # Qt's paint scheduler can run mid-batch when hundreds of
-            # removeItems fire in one tick and coalesce the invalidates
-            # imperfectly.  The nuclear repaint here is a single paint,
-            # after the burst, so marginal cost is negligible — and
-            # every bulk-delete ends with a clean visual slate.
             if sc._bulk_removing == 0:
+                # Straggler sweep: any node whose demolish crew already
+                # ran (`_removal_done == True`) but which is somehow
+                # still in the scene is a stranded survivor.  A
+                # deferred removeItem call that silently failed, an
+                # exception in the callback, a bookkeeping mismatch
+                # — whatever the cause, the intent was clear and the
+                # visible result is a node that looks alive but whose
+                # teardown contract is already complete.  Force-remove.
+                for item in list(sc.items()):
+                    if getattr(item, '_removal_done', False):
+                        try:
+                            sc.removeItem(item)
+                        except Exception:
+                            pass
+                # Nuclear repaint: force a full viewport refresh to
+                # catch any paint residue the per-node invalidates may
+                # have missed under heavy bulk load.  Qt's paint
+                # scheduler can run mid-batch when hundreds of
+                # removeItems fire in one tick and coalesce the
+                # invalidates imperfectly.  A single paint, after the
+                # burst, marginal cost negligible.
                 try:
                     for _view in sc.views():
                         _view.viewport().update()
-                except RuntimeError:
+                except Exception:
                     pass
         def _defer_release(sc=scene):
             QTimer.singleShot(0, _release_bulk)
@@ -902,31 +918,41 @@ class BaseNode(QGraphicsRectItem):
                 except RuntimeError:
                     ghost_rect = None
                 def _deferred_remove(node=self, sc=scene, r=ghost_rect):
+                    # All catches widened to Exception after the
+                    # 2026-04-18 chain-leftover ghost — a non-RuntimeError
+                    # in any leg must not abandon the removal intent.
                     try:
                         if sc.mouseGrabberItem() is node:
                             node.ungrabMouse()
-                    except RuntimeError:
+                    except Exception:
                         pass
                     try:
                         sc.removeItem(node)
-                    except RuntimeError:
+                    except Exception:
+                        pass
+                    # Straggler double-check: if removeItem quietly failed
+                    # and the node is still in the scene with demolish
+                    # already done, one more removal attempt.  The demolish
+                    # contract is complete either way; the visual state
+                    # must match.
+                    try:
+                        if getattr(node, '_removal_done', False) and node.scene() is sc:
+                            sc.removeItem(node)
+                    except Exception:
                         pass
                     if r is not None:
                         try:
                             sc.invalidate(r)
-                        except RuntimeError:
+                        except Exception:
                             pass
-                    # Defensive net: force a viewport repaint alongside the
-                    # rect invalidate.  Even for a single-node shake-delete,
-                    # the paint scheduler can occasionally leave the node's
-                    # border chrome on the back buffer — observed 2026-04-18
-                    # after an isolated shake on a node previously detached
-                    # from its chain.  Same mechanism as the bulk-delete
-                    # safety net, single paint, negligible marginal cost.
+                    # Force a viewport repaint alongside the rect
+                    # invalidate.  Even for a single-node shake-delete,
+                    # the paint scheduler can occasionally leave the
+                    # node's border chrome on the back buffer.
                     try:
                         for _view in sc.views():
                             _view.viewport().update()
-                    except RuntimeError:
+                    except Exception:
                         pass
                 QTimer.singleShot(0, _deferred_remove)
 

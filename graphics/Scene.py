@@ -1129,10 +1129,20 @@ class IntricateScene(QGraphicsScene):
         def _release_bulk(sc=self):
             sc._bulk_removing = max(0, getattr(sc, '_bulk_removing', 1) - 1)
             if sc._bulk_removing == 0:
+                # Straggler sweep — any node whose demolish already ran
+                # but somehow stayed in the scene gets a forced removal.
+                # Matches the same sweep in BaseNode._shake_delete_group's
+                # _release_bulk (2026-04-18 chain-leftover ghost).
+                for item in list(sc.items()):
+                    if getattr(item, '_removal_done', False):
+                        try:
+                            sc.removeItem(item)
+                        except Exception:
+                            pass
                 try:
                     for _view in sc.views():
                         _view.viewport().update()
-                except RuntimeError:
+                except Exception:
                     pass
         def _defer_release(sc=self):
             QTimer.singleShot(0, _release_bulk)
