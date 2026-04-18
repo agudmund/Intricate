@@ -1116,6 +1116,22 @@ class ClaudeNode(BaseNode):
             except (RuntimeError, TypeError): pass
             self._watcher.deleteLater()
             self._watcher = None
+        # Sever signal connections on _input BEFORE the crew schedules
+        # its deferred deletion via proxy teardown.  deleteLater() leaves
+        # a window where the inner widget still has signals wired to
+        # bound methods on this node — a late submitted / textChanged /
+        # focused emission during that window (focus change triggered by
+        # teardown, for example) fastfails the process (0xc0000409 in
+        # ucrtbase.dll).  Observed 2026-04-18 during shake-delete of a
+        # ClaudeNode mid-reply-stream.  Same class as the MarkdownNode
+        # signal-destructor race from compliance 2026-04-18.
+        if getattr(self, '_input', None) is not None:
+            try: self._input.submitted.disconnect(self._send_input)
+            except (RuntimeError, TypeError): pass
+            try: self._input.textChanged.disconnect(self._on_input_changed)
+            except (RuntimeError, TypeError): pass
+            try: self._input.focused.disconnect(self._on_input_focused)
+            except (RuntimeError, TypeError): pass
 
     def _demolition_post(self) -> None:
         # The crew tore down _input_proxy and _body_proxy (including

@@ -14,6 +14,10 @@
 
 ## 2026-04-18
 
+### Inner-widget signal-destructor race closed on ClaudeNode (+ MergeNode sweep)
+
+`0xc0000409` Qt fastfail in `ucrtbase.dll` two seconds after ClaudeNode shake-delete completed cleanly. Signals on inner widgets (`_input.submitted / textChanged / focused`) weren't disconnected before the crew's proxy teardown `deleteLater`'d the widget — late emissions during the deferred-destruction window hit bound methods on the dying node. Same class as the MarkdownNode fix earlier; now explicitly documented as a rule: any `self._inner.signal.connect(self._method)` where `_inner` is inside a declared proxy must be severed in `_demolition_pre`. Swept MergeNode's `_list.customContextMenuRequested` for the same shape. See `Documents/Compliance/Node Cleanup Compliance.md` 2026-04-18 entry.
+
 ### `08f5c4b` — Architecture doc refresh for 0.5.0 Era + breadcrumb infrastructure
 
 Rewrote `Architecture.md` for the new paradigms landed over the preceding 24 hours. Then — realising the Architecture doc was going stale within a single day of iteration — stripped line counts and folder-tree diagrams from it, added a "last refreshed" marker at the top, and seeded this changelog as an append-only breadcrumb trail. Future readers get the big picture from Architecture, the drift since from here.

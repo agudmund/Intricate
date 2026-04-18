@@ -234,6 +234,38 @@ The button-driven `_split_into_nodes` call on a live MarkdownNode is unaffected 
 
 Both are bounded cases of the same underlying principle: *any deferred-removal pattern must close all inflight-signal windows before the deferral, not during it.*
 
+### 2026-04-18 — ClaudeNode inner-widget signal-destructor race
+
+**Symptom.** `0xc0000409` (STATUS_STACK_BUFFER_OVERRUN, Qt fastfail) in `ucrtbase.dll` at 20:33:58, two seconds after `_prepare_for_removal complete` logged for a shake-deleted ClaudeNode at 20:33:56. All five crew phases ran cleanly — the crash was purely on the Qt side, after Python teardown appeared successful.
+
+**Root cause.** The ClaudeNode's inner `_input` widget (`_InputEdit`, a `QTextEdit` subclass) has three signal connections wired to bound methods on the node itself:
+
+```
+self._input.submitted.connect(self._send_input)
+self._input.textChanged.connect(self._on_input_changed)
+self._input.focused.connect(self._on_input_focused)  # via QTimer.singleShot(0, ...)
+```
+
+The demolition crew's proxy teardown for `_input_proxy` sets the proxy's widget to None, severs the proxy, and `deleteLater()`s the inner widget — standard canonical recipe. But `deleteLater()` schedules C++ deletion for the next event-loop tick. Between `deleteLater()` and actual destruction, the widget still holds its signal connections to bound methods on `self`. If any of those signals fire during that window — a late `focused` emission from focus change triggered by the teardown itself, a `textChanged` from Qt's internal cleanup, a `submitted` from a late keystroke queued before teardown began — the slot invokes a bound method on a node mid-destruction. Destructor collides with emission → fastfail.
+
+Same class as the MarkdownNode fix from earlier today: deferred Qt deletion + signals connected to soon-to-die targets = race window. Different node, different signals, identical failure mode.
+
+**Fix applied to `nodes/ClaudeNode.py::_demolition_pre`:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | Disconnect `_input.submitted` → `_send_input` | Before proxy teardown schedules widget deletion |
+| 2 | Disconnect `_input.textChanged` → `_on_input_changed` | Same |
+| 3 | Disconnect `_input.focused` → `_on_input_focused` | Same; this one especially because focus events can fire during teardown |
+
+Each guarded with `try/except (RuntimeError, TypeError)` for idempotence — safe to run multiple times, safe if the connection was never actually made.
+
+**Sweep — MergeNode._list.customContextMenuRequested.** Same pattern scanned for, found one more: `MergeNode._list` (a `QListWidget` inside `_list_proxy`) had an unaddressed `customContextMenuRequested → _list_context_menu` connection. Low-probability because it only fires on right-click, but added to `MergeNode._demolition_pre` as cheap insurance.
+
+**Rule generalised for future nodes.** Any signal connection `self._inner_widget.signal.connect(self._bound_method)` where `_inner_widget` lives inside a proxy listed in `_demolition_proxies` must be explicitly disconnected in `_demolition_pre`. The crew's proxy teardown handles the widget's deletion but cannot infer which signals were connected to bound methods on the host node. When adding a new node that wires inner-widget signals, extend `_demolition_pre` with the matching disconnects.
+
+**Checklist addition:** audit new nodes for `self._<inner>.<signal>.connect(self.<method>)` patterns. If the inner widget is proxied, the signal must be severed before the crew's walk.
+
 ### 2026-04-18 — Demolition crew extraction (architectural refactor)
 
 **Context.** By this date the node teardown procedure had evolved into an official five-phase procedure documented above with detailed ordering rules, recurring recipes (proxy-widget teardown, timer stop+disconnect, thread bail, media-player sever), and an ever-expanding list of class-of-crash lessons. Every node carried the procedure in its own `_prepare_for_removal` override — and every new node had to re-learn the same recipes. Construction workers were carrying dynamite in their toolboxes.

@@ -634,6 +634,17 @@ class MergeNode(BaseNode):
                 except (RuntimeError, TypeError):
                     pass
         self._stop_sequence()
+        # Sever inner-widget signal BEFORE the crew schedules proxy
+        # teardown.  _list lives inside _list_proxy; deleteLater leaves
+        # a window where the signal can fire onto a dying node.  Same
+        # signal-destructor race class as ClaudeNode._input (compliance
+        # 2026-04-18).  Low-probability here (context menu only fires on
+        # right-click), but cheap insurance.
+        if getattr(self, '_list', None) is not None:
+            try:
+                self._list.customContextMenuRequested.disconnect(self._list_context_menu)
+            except (RuntimeError, TypeError):
+                pass
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION
