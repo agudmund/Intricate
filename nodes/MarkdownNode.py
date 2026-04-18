@@ -24,10 +24,11 @@ _BG_COLOR      = "#0d1117"   # GitHub dark theme background
 
 # Splitter threshold for the chain walk: paragraphs at or below this length
 # spawn as AboutNode callouts (the green pills); longer paragraphs become
-# WarmNodes (the dark substance panels).  ~140 chars lands roughly at
-# "one declarative sentence" vs "actual prose block" — the natural break
-# between a margin note and a body paragraph.  Tune at will.
-_CALLOUT_MAX_CHARS = 140
+# WarmNodes (the dark substance panels).  90 chars lands roughly at a
+# single short declarative or a caption-length statement — tightens the
+# AboutNode band to true margin notes and lets anything meatier read as
+# substance.  Tune at will.
+_CALLOUT_MAX_CHARS = 90
 
 # Characters that, on their own, indicate markdown structure rather than
 # content — horizontal rules (`---`, `***`, `___`), setext-style heading
