@@ -916,6 +916,18 @@ class BaseNode(QGraphicsRectItem):
                             sc.invalidate(r)
                         except RuntimeError:
                             pass
+                    # Defensive net: force a viewport repaint alongside the
+                    # rect invalidate.  Even for a single-node shake-delete,
+                    # the paint scheduler can occasionally leave the node's
+                    # border chrome on the back buffer — observed 2026-04-18
+                    # after an isolated shake on a node previously detached
+                    # from its chain.  Same mechanism as the bulk-delete
+                    # safety net, single paint, negligible marginal cost.
+                    try:
+                        for _view in sc.views():
+                            _view.viewport().update()
+                    except RuntimeError:
+                        pass
                 QTimer.singleShot(0, _deferred_remove)
 
 
