@@ -55,6 +55,37 @@ def _is_structural_only(text: str) -> bool:
     return len(dense) >= 3
 
 
+# ISO dates like 2026-04-15 are perfect for source files (sortable,
+# greppable, unambiguous) but read awkwardly on an AboutNode.  Rewrite
+# to "April 15th 2026" for display — same information, better cadence.
+import re as _re
+_ISO_DATE_RE = _re.compile(r'\b(\d{4})-(\d{2})-(\d{2})\b')
+
+_MONTH_NAMES = (
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+)
+
+
+def _ordinal(n: int) -> str:
+    """1st, 2nd, 3rd, 4th, 11th, 21st, …"""
+    if 10 <= n % 100 <= 20:
+        return f"{n}th"
+    return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
+
+
+def _prettify_dates(text: str) -> str:
+    """Replace ISO-8601 dates with 'Month Ordinal Year' in *text*.
+    Only touches the dates — surrounding prose is preserved unchanged.
+    Invalid date components (month > 12, day > 31) pass through as-is."""
+    def _repl(m):
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if not (1 <= mo <= 12 and 1 <= d <= 31):
+            return m.group(0)
+        return f"{_MONTH_NAMES[mo - 1]} {_ordinal(d)} {y}"
+    return _ISO_DATE_RE.sub(_repl, text)
+
+
 class MarkdownNode(BaseNode):
     """
     Base class for read-only markdown rendering nodes.
@@ -438,8 +469,9 @@ class MarkdownNode(BaseNode):
 
             # AboutNode for the heading
             if title:
-                about = scene.add_about_node(pos=_OFFSCREEN, label=title)
-                about.data.title = title[:40]
+                pretty_title = _prettify_dates(title)
+                about = scene.add_about_node(pos=_OFFSCREEN, label=pretty_title)
+                about.data.title = pretty_title[:40]
                 if first_node and source_hidden:
                     pos = spiral_place(scene, about)
                     first_node = False
@@ -478,8 +510,9 @@ class MarkdownNode(BaseNode):
 
                     if is_callout:
                         # Short paragraph — AboutNode callout
-                        node = scene.add_about_node(pos=_OFFSCREEN, label=para_stripped)
-                        node.data.title = para_stripped[:40]
+                        pretty = _prettify_dates(para_stripped)
+                        node = scene.add_about_node(pos=_OFFSCREEN, label=pretty)
+                        node.data.title = pretty[:40]
                     else:
                         # Multi-line paragraph — WarmNode
                         wdata = WarmNodeData(body_text=para_stripped, title="")
