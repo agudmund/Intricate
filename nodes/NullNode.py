@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - nodes/NullNode.py NullNode class
--Transparent passthrough anchor — position reference with ports, nothing else for enjoying
+-Intricate - nodes/NullNode.py NullNode class
+-The last of the null node chose a spot and stayed there, quietly anchoring whatever wanted to find it, For enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -16,7 +16,7 @@ from pretty_widgets.graphics.Theme import Theme
 
 class NullNode(BaseNode):
     """
-    Transparent passthrough anchor — Nuke's Dot, Houdini's Null SOP.
+    Transparent passthrough anchor.
 
     No content, no editor, no paint beyond a subtle crosshair.
     Just ports and a position you can wire into anything that needs
@@ -31,9 +31,6 @@ class NullNode(BaseNode):
         data.ports_visible = True
         super().__init__(data)
 
-        c = QColor(Theme.aboutBgColor)
-        c.setAlpha(max(30, Theme.aboutBgAlpha // 3))
-        self.setBrush(c)
         self._apply_depth()
 
     def _bg_color(self) -> QColor:
@@ -61,7 +58,7 @@ class NullNode(BaseNode):
 
         # Tiny label
         painter.setOpacity(0.4)
-        font = QFont(self._BODY_FONT, max(1, 7))
+        font = QFont(self._BODY_FONT, 7)
         painter.setFont(font)
         painter.setPen(QColor(Theme.nodeFontColor))
         painter.drawText(
@@ -72,6 +69,9 @@ class NullNode(BaseNode):
         painter.restore()
 
     def _prepare_for_removal(self) -> None:
+        """No custom teardown — NullNode holds no timers, proxies, or signals
+        beyond what BaseNode provides. Override kept explicit as a placeholder
+        anchor for future iterations (e.g. when the sticker migration lands)."""
         super()._prepare_for_removal()
 
     def to_dict(self) -> dict:

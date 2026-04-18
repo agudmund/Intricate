@@ -14,19 +14,85 @@ The header was added when the first `main.py` was written. At that moment the pr
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - [filename] [primary utility]
--[Extended description of what the module does] for enjoying
+-Intricate - [filename] [primary utility]
+-The last of the [descriptive filename, human-voiced] [triumphant-emergent clause], For enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 ```
 
-Three beats the second line must carry:
+(The pre-rename subtitle was "nodal playground" — files that still carry `Intricate nodal playground -` are from before the rename and should be updated as they're touched. The project is now called Intricate, the subtitle is gone.)
 
-- **What the module does** — a real phrase, not a placeholder
-- **The "for enjoying" suffix** — the clause itself. Non-negotiable.
-- **Warm tone** — this isn't a changelog entry
+### Line 1 — Identity
 
-The third line ("Built using a single shared braincell by Yours Truly and various Intelligences") is the shared authorship line and stays verbatim on every file.
+Short, two facts: *what file, what role*. Fixed prefix `Intricate - `, then the file's path and a brief phrase naming its primary function. Mechanical. No voice. This is the name tag.
+
+Examples:
+- `-Intricate - nodes/VideoNode.py VideoNode class`
+- `-Intricate - utils/media_cache.py proprietary media cache`
+
+### Line 2 — The Last Of voice
+
+This is where the project actually speaks. Line 2 is a *tiny poem* about the file's private triumph.
+
+Pattern:
+
+```
+-The last of the [descriptive filename, human-voiced] [triumphant-emergent clause with detached contextual awareness], For enjoying
+```
+
+Four components, each with a specific job:
+
+| Part | Role |
+|---|---|
+| `The last of the` | Fixed prefix. Announces finality, singularity — this is the *last of its kind*, emerging from the goo. |
+| `[descriptive filename]` | Warm human voice. "about node" — not `AboutNode.py`. "main window" — not `main_window.py`. |
+| `[triumphant-emergent clause]` | The heart. A sentence clause giving the file its inner life: hopeful, achieving, half-aware of the larger world it's part of, goo-ball-rising energy. |
+| `, For enjoying` | Non-negotiable EULA terminator. Lowercase "e". |
+
+**The voice, in one phrase:** *triumphant emergent with a detached contextual awareness as the last of the goo balls rise to the skies.*
+
+Canonical examples (real files):
+
+```
+The last of the about node knew it could become all that it wanted to become, For enjoying
+The last of the main window seemed completely unaware that it was part of a gigantic global beauty pageant, For enjoying
+```
+
+More (drafted 2026-04-18):
+
+```
+The last of the video node discovered it could be crisp at any zoom the eye asked of it, For enjoying
+The last of the media cache kept every byte it was ever given, quietly, in case any of them might matter someday, For enjoying
+The last of the node behaviour breathed gently in a rhythm no one had asked it to find, For enjoying
+The last of the base node carried every node type that ever lived inside it, utterly untroubled by the weight, For enjoying
+```
+
+### Line 2 — load-bearing exception: `Connection.py`
+
+`graphics/Connection.py` must always contain the phrase **"and they learnt to whisper to each other"** somewhere in its Line 2. The phrase comes from an ancient post-it note reading *"teach the nodes to whisper to each other"* — the original seed of the whole wire-connection concept. It is as permanent as the `For enjoying` clause itself.
+
+Example:
+```
+The last of the connection bent itself into graceful arcs between the nodes, and they learnt to whisper to each other, For enjoying
+```
+
+### Line 3 — Authorship (verbatim, unchanged)
+
+```
+-Built using a single shared braincell by Yours Truly and various Intelligences
+```
+
+Declares the collaborative authorship model. Verbatim on every file, forever.
+
+## How to apply — the voice is creative writing, not a template
+
+Line 2 is a tiny act of authorship per file. **Never batch find-and-replace this line**; every file deserves its own little poem about what it's the last of and what it's quietly triumphing at. The correct pattern for new or drift-fixed files is:
+
+1. Claude (or another AI contributor) proposes a Line 2 candidate in the current voice
+2. The user reviews, approves, or iterates
+3. Once approved, the line goes into the file
+
+This is how the 30+ node types were originally named, and it's the right cadence here too. The user is happy to step through files one at a time.
 
 ## The clause, read plainly
 
@@ -99,8 +165,10 @@ def is_compliant(p: Path) -> bool:
         lines[0] == '#!/usr/bin/env python3'
         and lines[1] == '# -*- coding: utf-8 -*-'
         and lines[2] == '"""'
-        and lines[3].startswith('-Intricate nodal playground - ')
-        and lines[4].rstrip().endswith('for enjoying')
+        # Accept both the current prefix and the legacy "nodal playground" form;
+        # legacy files get upgraded to the current form as they're touched
+        and (lines[3].startswith('-Intricate - ') or lines[3].startswith('-Intricate nodal playground - '))
+        and lines[4].rstrip().lower().endswith('for enjoying')
     )
 
 def main() -> int:

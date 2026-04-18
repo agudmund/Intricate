@@ -14,4 +14,28 @@
 *.gif binary
 *.webp binary
 *.psd binary
+# Video — never text-diff these, they're the DAW's source material
+*.mp4 binary
+*.mov binary
+*.mkv binary
+*.avi binary
+*.webm binary
+*.wmv binary
+*.flv binary
+*.m4v binary
+# Audio — DAW and VideoNode ingestion formats
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.ogg binary
+*.m4a binary
+*.aac binary
+*.wma binary
+# 3D / other media
+*.fbx binary
+*.exr binary
+*.tif binary
+*.tiff binary
+*.pyd binary
+# Large executables tracked via LFS when present
 *.exe filter=lfs diff=lfs merge=lfs -text
