@@ -85,7 +85,10 @@ def _prettify_label(text: str) -> str:
     Surrounding prose is preserved verbatim.  Invalid dates
     (month > 12, day > 31) pass through unchanged.  Em-dashes without
     surrounding spaces (compound words like ``word—word``) are untouched
-    — only the separator use converts."""
+    — only the separator use converts.  ``**bold**`` markers are left
+    in place here — they're consumed by AboutNode's paint pipeline
+    which routes through QTextDocument + HTML when bold markup is
+    present."""
     def _date_repl(m):
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if not (1 <= mo <= 12 and 1 <= d <= 31):
@@ -97,6 +100,33 @@ def _prettify_label(text: str) -> str:
     # compound-word em-dashes (which have no surrounding spaces).
     text = text.replace(" — ", ": ")
     return text
+
+
+# Leading-bold extraction for WarmNode titles.  Patterns caught:
+#   "**Daemon worker thread race** — the background…"
+#   "1. **Daemon worker thread race** — the background…"
+#   "- **Note** … rest"
+#   "**Symptom:** something"
+# Optional list markers (digit., -, *) before the bold, optional
+# separator (—, :, -) between bold and rest.  The ** markers are
+# stripped entirely; the extracted phrase becomes the title and the
+# remaining body keeps its substance.
+_LEADING_BOLD_RE = _re.compile(
+    r'^\s*(?:\d+\.\s+|[-*]\s+)?\*\*([^*]+?)\*\*\s*[—:\-]?\s*(.*)$',
+    _re.DOTALL,
+)
+
+
+def _extract_leading_bold(body: str) -> tuple[str | None, str]:
+    """If *body* has a leading ``**bold**`` phrase (optionally preceded
+    by a list marker, optionally followed by a separator), return
+    ``(title, rest)``.  Otherwise ``(None, body)``."""
+    m = _LEADING_BOLD_RE.match(body)
+    if not m:
+        return None, body
+    title = m.group(1).strip()
+    rest  = m.group(2).strip()
+    return title, rest
 
 
 class MarkdownNode(BaseNode):
@@ -527,8 +557,17 @@ class MarkdownNode(BaseNode):
                         node = scene.add_about_node(pos=_OFFSCREEN, label=pretty)
                         node.data.title = pretty[:40]
                     else:
-                        # Multi-line paragraph — WarmNode
-                        wdata = WarmNodeData(body_text=para_stripped, title="")
+                        # Multi-line paragraph — WarmNode.  If the body
+                        # opens with a **bold phrase** (with or without a
+                        # list marker in front), lift that phrase out as
+                        # the node's title and keep the remaining substance
+                        # as the body.  Echoes the compliance-doc shape
+                        # where each fix opens with a bold label.
+                        extracted_title, cleaned_body = _extract_leading_bold(para_stripped)
+                        if extracted_title:
+                            wdata = WarmNodeData(body_text=cleaned_body, title=extracted_title)
+                        else:
+                            wdata = WarmNodeData(body_text=para_stripped, title="")
                         node = WarmNode(wdata)
                         node.setPos(_OFFSCREEN)
                         scene.addItem(node)
