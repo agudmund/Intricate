@@ -175,12 +175,20 @@ def _transform_markdown_table(body: str) -> tuple[str, str] | None:
     sep = lines[1].strip()
     if not sep.startswith('|') or not all(c in _TABLE_SEP_CHARS for c in sep):
         return None
-    # Header row → title
+    # Header row → title.  English conjunction rules:
+    #   1 col:  "A"
+    #   2 cols: "A and B"
+    #   3+:     "A, B, and C" (Oxford comma)
     header_cells = [c.strip() for c in lines[0].strip().strip('|').split('|')]
     header_cells = [c for c in header_cells if c]
     if not header_cells:
         return None
-    title = ' and '.join(header_cells)
+    if len(header_cells) == 1:
+        title = header_cells[0]
+    elif len(header_cells) == 2:
+        title = f"{header_cells[0]} and {header_cells[1]}"
+    else:
+        title = ', '.join(header_cells[:-1]) + ', and ' + header_cells[-1]
     # Data rows → one body line each, pipes stripped, whitespace normalised.
     # Stop collecting at the first non-table line — content after the
     # table stays attached verbatim so footnotes / trailing prose survive.
