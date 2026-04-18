@@ -149,6 +149,58 @@ def _extract_leading_bold(body: str) -> tuple[str | None, str]:
     return title, rest
 
 
+# Markdown-table separator characters.  A line made only of these
+# (plus any amount of whitespace) is the `|---|---|` separator between
+# the header row and the data rows.
+_TABLE_SEP_CHARS = set("-|: \t")
+
+
+def _transform_markdown_table(body: str) -> tuple[str, str] | None:
+    """Detect a markdown table in *body* (lines starting with ``|`` plus
+    a ``|---|---|`` separator on line 2) and return ``(title, flat_body)``
+    where the header cells become the title joined with `` and ``, the
+    separator row is dropped, and each data row has its pipes stripped
+    and whitespace collapsed.  Returns ``None`` if *body* isn't a
+    recognisable table — caller falls through to other handling."""
+    lines = body.split('\n')
+    if len(lines) < 3:
+        return None
+    if not lines[0].lstrip().startswith('|'):
+        return None
+    sep = lines[1].strip()
+    if not sep.startswith('|') or not all(c in _TABLE_SEP_CHARS for c in sep):
+        return None
+    # Header row → title
+    header_cells = [c.strip() for c in lines[0].strip().strip('|').split('|')]
+    header_cells = [c for c in header_cells if c]
+    if not header_cells:
+        return None
+    title = ' and '.join(header_cells)
+    # Data rows → one body line each, pipes stripped, whitespace normalised.
+    # Stop collecting at the first non-table line — content after the
+    # table stays attached verbatim so footnotes / trailing prose survive.
+    data_lines: list[str] = []
+    tail_lines: list[str] = []
+    in_table = True
+    for line in lines[2:]:
+        if in_table and line.lstrip().startswith('|'):
+            stripped = line.strip().strip('|')
+            # Collapse the pipe-separated cells into a single line,
+            # single-spaced.  Preserves cell content verbatim.
+            cells = [c.strip() for c in stripped.split('|')]
+            data_lines.append(' '.join(c for c in cells if c))
+        else:
+            in_table = False
+            tail_lines.append(line)
+    flat = '\n'.join(data_lines)
+    # Preserve any trailing non-table content (rare but legal) beneath
+    # the transformed rows, separated by a blank line.
+    tail = '\n'.join(tail_lines).strip()
+    if tail:
+        flat = f"{flat}\n\n{tail}"
+    return title, flat
+
+
 class MarkdownNode(BaseNode):
     """
     Base class for read-only markdown rendering nodes.
@@ -577,17 +629,23 @@ class MarkdownNode(BaseNode):
                         node = scene.add_about_node(pos=_OFFSCREEN, label=pretty)
                         node.data.title = pretty[:40]
                     else:
-                        # Multi-line paragraph — WarmNode.  If the body
-                        # opens with a **bold phrase** (with or without a
-                        # list marker in front), lift that phrase out as
-                        # the node's title and keep the remaining substance
-                        # as the body.  Echoes the compliance-doc shape
-                        # where each fix opens with a bold label.
-                        extracted_title, cleaned_body = _extract_leading_bold(para_stripped)
-                        if extracted_title:
-                            wdata = WarmNodeData(body_text=cleaned_body, title=extracted_title)
+                        # Multi-line paragraph — WarmNode.  Try two title-
+                        # extractions in order: markdown table → header
+                        # row becomes title, data rows become a clean
+                        # pipe-stripped body; otherwise leading **bold
+                        # phrase** (with or without a list marker) gets
+                        # lifted out as title.  Both echo the compliance-
+                        # doc shape.
+                        table_result = _transform_markdown_table(para_stripped)
+                        if table_result:
+                            table_title, table_body = table_result
+                            wdata = WarmNodeData(body_text=table_body, title=table_title)
                         else:
-                            wdata = WarmNodeData(body_text=para_stripped, title="")
+                            extracted_title, cleaned_body = _extract_leading_bold(para_stripped)
+                            if extracted_title:
+                                wdata = WarmNodeData(body_text=cleaned_body, title=extracted_title)
+                            else:
+                                wdata = WarmNodeData(body_text=para_stripped, title="")
                         node = WarmNode(wdata)
                         node.setPos(_OFFSCREEN)
                         scene.addItem(node)
