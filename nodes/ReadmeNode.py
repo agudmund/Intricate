@@ -79,7 +79,8 @@ class ReadmeNode(MarkdownNode):
                 for item in scene.items(candidate):
                     if item is node:
                         continue
-                    if isinstance(item, _BaseNode):
+                    # Duck-typed over BaseNode + StickerNode roots.
+                    if hasattr(item, 'data') and hasattr(item, 'to_dict'):
                         return False
                 return True
 

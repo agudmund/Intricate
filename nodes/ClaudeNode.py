@@ -583,13 +583,14 @@ class ClaudeNode(BaseNode):
         PADDING = 28                 # breathing room around each candidate rect
 
         def _clear(p: QPointF) -> bool:
-            """True if placing the node at p would not overlap any existing node."""
+            """True if placing the node at p would not overlap any existing node.
+            Duck-typed to cover BaseNode + StickerNode roots."""
             candidate_rect = QRectF(p.x() - PADDING, p.y() - PADDING,
                                     NW + PADDING * 2, NH + PADDING * 2)
             for item in scene.items(candidate_rect):
                 if item is node:
                     continue
-                if isinstance(item, _BaseNode):
+                if hasattr(item, 'data') and hasattr(item, 'to_dict'):
                     return False
             return True
 

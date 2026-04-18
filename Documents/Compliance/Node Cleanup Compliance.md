@@ -234,6 +234,46 @@ The button-driven `_split_into_nodes` call on a live MarkdownNode is unaffected 
 
 Both are bounded cases of the same underlying principle: *any deferred-removal pattern must close all inflight-signal windows before the deferral, not during it.*
 
+### 2026-04-18 — StickerNode detached from BaseNode (root-split refactor)
+
+**Context.** StickerNode previously inherited from BaseNode and overrode just enough to suppress the chrome — `_build_buttons` → `pass`, `_create_ports` → empty lists, `paint()` → skip chrome, `setBrush` → force `Qt.NoBrush` (to silence `NodeBehaviour.bg_anim`). This shape created a small paradox: every new feature on BaseNode had to be checked against "does the sticker want this, if not, what's the silencing pattern?" — a permanent tax for a node that conceptually has nothing in common with BaseNode except "lives on the canvas." The `setBrush` guard and the per-sticker `NodeBehaviour` cost both existed only because of the inheritance.
+
+**Refactor.** StickerNode now inherits directly from `QGraphicsRectItem`. It is a first-class root type, sibling to BaseNode, designed as the reference implementation for future raw-image-style nodes (postcards, patches, cut-outs) that share the chromeless-alpha-PNG pattern without wanting the structural-node apparatus. ValueNode is a candidate for the next migration to this root — it is the second chromeless node already in the tree.
+
+**Files changed:**
+
+| File | Change |
+|------|--------|
+| `nodes/_shake_detect.py` | **New.** Shared shake-detect helper: `ShakeDetector` class + module-level `arm_cooldown()` / `is_cooling_down()`. Same threshold constants and reversal math as BaseNode's inline implementation. |
+| `nodes/StickerNode.py` | Full rewrite. Inherits `QGraphicsRectItem` directly. Reimplements mouse-press/move/release, resize-at-corner, shake-to-delete, viewport pinning, and the idempotent `_prepare_for_removal` contract. Composes a `ShakeDetector`. Alpha click-through invariants documented in the class docstring. |
+| `nodes/BaseNode.py` | Cooldown state moved into the helper. `_shake_cooldown_until` / `_SHAKE_COOLDOWN_S` replaced with `_arm_shake_cooldown()` / `_shake_cooling_down()` imports. `_shake_detach`'s group filter now duck-types (`hasattr(item, 'connections')` + `hasattr(item, '_prepare_for_removal')`) so multi-select shake-delete includes both BaseNode variants and stickers. |
+| `graphics/Scene.py` | Session-save loop and scene-clear loop duck-type over node roots. BaseNode-specific teardown blocks (behaviour disconnect, timer stop) stay `isinstance(BaseNode)` — stickers correctly skip them. |
+| `main_window.py` | `_select_chain` and `_autosave` has-nodes check duck-type. |
+| `nodes/HealthNode.py` | GC census and scene-nodes counter now include both BaseNode and StickerNode — observability still accurate. |
+| `nodes/ClaudeNode.py`, `nodes/ReadmeNode.py`, `nodes/TextNode.py`, `utils/placement.py` | Collision-avoidance `_clear()` helpers duck-type over node roots so fresh nodes don't spawn on top of stickers. |
+| `Documents/Nodes/The Stickers Node.md` | Full writeup: alpha click-through as a feature with its three invariants, the pinning mechanism, the detach rationale. |
+
+**Behavioural deltas (verified via AST parse + import smoke test):**
+
+- `isinstance(sticker, BaseNode)` → `False`. This breaks exactly three code paths in the app, all intentionally updated above. Nothing else in the codebase grepped positive for a BaseNode-inheritance assumption against stickers.
+- Session round-trip: `StickerNode() → to_dict() → from_dict() → uuid match` confirmed.
+- `viewTransformed` signal on `IntricateView` confirmed present; StickerNode subscribes as primary pin channel, scrollbars kept as backup.
+- Shake cooldown is now module-level in `_shake_detect` and shared by both roots — physical feel of shake unchanged.
+
+**Wins:**
+
+1. **Paradox removed.** StickerNode no longer needs a `setBrush` guard, because nothing is trying to paint over it on hover. No `NodeBehaviour` to silence; no `_show_emoji_btn = False` class flag; no `_build_buttons → pass`. The silencing layer is gone because the inherited surface it was silencing is gone.
+2. **Zero per-sticker timer/animation tax.** No pulse timer, no bg animation, no signal connections beyond pin tracking. A 100-sticker canvas idles at canvas baseline.
+3. **Click-through feature permanently documented.** `Documents/Nodes/The Stickers Node.md` + class docstring + `paint()` inline comment all declare the invariants: no background fill, tight-to-pixmap rect, alpha-preserving paint pipeline.
+4. **Shake-detect logic now shared.** `ShakeDetector` is a 90-line helper usable by any future node root that wants the signature Intricate shake-delete gesture.
+
+**Risks observed:**
+
+- **Multi-shake with mixed selection.** If a user shakes a BaseNode with stickers selected, BaseNode's `_shake_delete_group` now includes the stickers via the duck-typed filter and purges them correctly. If a user shakes a sticker with BaseNodes selected, the sticker's `_on_shake_triggered` only deletes itself — it does not trigger a group purge. Single-shake-deletes-many-selected only works when the shake initiator is a BaseNode. Acceptable first-pass limitation; logged here for future symmetry pass.
+- **Duck-type drift.** Six sites now duck-type on `hasattr(item, 'data') and hasattr(item, 'to_dict')` instead of `isinstance(BaseNode)`. Looser. If any unrelated scene item grows a `to_dict` method, it would get picked up. No such items exist today.
+
+**Checklist addition:** when adding a new node root type (sibling to BaseNode and StickerNode), audit the six duck-typed sites to confirm they still mean what you want them to mean. They are: `graphics/Scene.py` (2: save loop, clear-all loop), `main_window.py` (2: `_select_chain`, `_autosave`), `nodes/HealthNode.py` (1 tuple), and the four collision-check `_clear()` helpers (`ClaudeNode`, `ReadmeNode`, `TextNode`, `utils/placement.py`).
+
 ### 2026-04-18 — StickerNode scrollbar signal-destructor race + GitNode ghost
 
 **Symptom A (crash):** `0xc0000409` (STATUS_STACK_BUFFER_OVERRUN, Qt fastfail) in `ucrtbase.dll` while shake-deleting a pinned StickerNode. Log shows StickerNode `_prepare_for_removal` logged phases 1–5 at 12:12:52, but the `_prepare_for_removal complete` line never fired — the process died between phase 5 and the tail return. Same fastfail family as the 2026-04-18 MarkdownNode fix, but triggered through a different per-frame signal.

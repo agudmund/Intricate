@@ -69,13 +69,16 @@ def spiral_place(scene, node, origin: QPointF | None = None,
         fallback = origin
 
     # ── Collision check ─────────────────────────────────────────────────
+    # Duck-typed across node roots: BaseNode variants and StickerNode
+    # (2026-04-18 split).  Any future root that carries `.data` and
+    # `.to_dict()` is treated as a real canvas item for placement.
     def _clear(p: QPointF) -> bool:
         candidate = QRectF(p.x() - padding, p.y() - padding,
                            nw + padding * 2, nh + padding * 2)
         for item in scene.items(candidate):
             if item is node:
                 continue
-            if isinstance(item, _BaseNode):
+            if hasattr(item, 'data') and hasattr(item, 'to_dict'):
                 return False
         return True
 

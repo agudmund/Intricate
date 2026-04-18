@@ -7,7 +7,7 @@
 """
 
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import Qt, QPointF, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QCursor
 
 
@@ -49,6 +49,14 @@ class IntricateView(QGraphicsView):
     # integer 3 so the slider's bottom position is reachable in one drag.
     ZOOM_MIN = 0.03
     ZOOM_MAX = 5.0
+
+    # Emitted after any transform mutation (pan, zoom, programmatic scale /
+    # translate). Qt does not provide a native transform-change signal, and
+    # pan-by-translate never moves the scrollbars, so viewport-pinned items
+    # (StickerNode when pinned, any future screen-space overlay) need this
+    # channel to stay anchored as the canvas moves beneath them. Emits only
+    # on actual transform changes — no timer, no per-paint polling.
+    viewTransformed = Signal()
 
     def __init__(self, scene: QGraphicsScene, parent=None):
         super().__init__(scene, parent)
@@ -101,6 +109,23 @@ class IntricateView(QGraphicsView):
 
         # ── Drag and drop ─────────────────────────────────────────────────────
         self.setAcceptDrops(True)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TRANSFORM EMISSION
+    # Overriding scale() and translate() is the passive "single source of
+    # truth" pattern: every transform mutation — whether from pan, wheel
+    # zoom, Alt+drag zoom, or a programmatic caller — flows through these
+    # two methods, so a single emit at each point catches all of it. No
+    # polling, no per-paint work, no dedicated timer.
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def scale(self, sx, sy):
+        super().scale(sx, sy)
+        self.viewTransformed.emit()
+
+    def translate(self, dx, dy):
+        super().translate(dx, dy)
+        self.viewTransformed.emit()
 
     # ─────────────────────────────────────────────────────────────────────────
     # BACKGROUND

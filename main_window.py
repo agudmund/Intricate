@@ -1091,10 +1091,12 @@ class IntricateApp(QMainWindow):
         )
 
     def _select_chain(self) -> None:
-        """Select all nodes connected to the current selection via wires."""
-        from nodes.BaseNode import BaseNode
+        """Select all nodes connected to the current selection via wires.
+        Duck-typed over BaseNode + StickerNode roots — stickers have
+        `connections = []` forever, so they contribute nothing to the
+        walk, but accepting them as seeds keeps the API uniform."""
         seeds = [item for item in self.scene.selectedItems()
-                 if isinstance(item, BaseNode)]
+                 if hasattr(item, 'connections')]
         if not seeds:
             return
         visited = set()
@@ -1110,7 +1112,7 @@ class IntricateApp(QMainWindow):
                     if neighbor and neighbor is not node and id(neighbor) not in visited:
                         queue.append(neighbor)
         for node in self.scene.items():
-            if isinstance(node, BaseNode) and id(node) in visited:
+            if hasattr(node, 'connections') and id(node) in visited:
                 node.setSelected(True)
 
     def _on_selection_changed(self) -> None:
@@ -2483,8 +2485,9 @@ class IntricateApp(QMainWindow):
             return
         # Never overwrite a session with an empty scene — protects against
         # save-on-close after a failed load wiping valid session data.
-        from nodes.BaseNode import BaseNode
-        has_nodes = any(isinstance(i, BaseNode) for i in self.scene.items())
+        # Duck-typed over any node root (BaseNode, StickerNode, future).
+        has_nodes = any(hasattr(i, 'to_dict') and hasattr(i, 'data')
+                        for i in self.scene.items())
         if not has_nodes:
             return
         path = self._session_path()

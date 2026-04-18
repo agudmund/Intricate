@@ -92,11 +92,13 @@ class HealthNode(BaseNode):
         try:
             gc.collect()
             from nodes.BaseNode import BaseNode as _BaseNode
+            from nodes.StickerNode import StickerNode as _StickerNode
+            _NODE_ROOTS = (_BaseNode, _StickerNode)
 
             try:
                 self._living_nodes = sum(
                     1 for obj in gc.get_objects()
-                    if isinstance(obj, _BaseNode)
+                    if isinstance(obj, _NODE_ROOTS)
                 )
             except RuntimeError:
                 pass
@@ -105,7 +107,7 @@ class HealthNode(BaseNode):
                 try:
                     self._scene_nodes = sum(
                         1 for item in self.scene().items()
-                        if isinstance(item, _BaseNode)
+                        if isinstance(item, _NODE_ROOTS)
                     )
                 except Exception:
                     self._scene_nodes = 0

@@ -735,7 +735,10 @@ class IntricateScene(QGraphicsScene):
         seen = set()
 
         for item in self.items():
-            if isinstance(item, BaseNode):
+            # Duck-typed node check — includes BaseNode variants AND the
+            # StickerNode root (2026-04-18 split). Any future root-type
+            # node that implements `to_dict` + `data` flows through too.
+            if hasattr(item, 'to_dict') and hasattr(item, 'data'):
                 nodes.append(item.to_dict())
             elif isinstance(item, Connection) and id(item) not in seen:
                 seen.add(id(item))
@@ -1072,8 +1075,9 @@ class IntricateScene(QGraphicsScene):
         # Tear down each node fully — _prepare_for_removal stops media players,
         # volume animations, and disconnects signals that would otherwise keep
         # VideoNodes alive and decoding in the background until GC runs.
+        # Duck-typed: BaseNode variants AND StickerNode root both flow here.
         for item in list(self.items()):
-            if isinstance(item, BaseNode):
+            if hasattr(item, '_prepare_for_removal') and hasattr(item, 'connections'):
                 try:
                     item._prepare_for_removal()
                     item.connections.clear()

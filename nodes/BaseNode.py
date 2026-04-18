@@ -20,14 +20,10 @@ from data.NodeData import NodeData
 from nodes.NodeBehaviour import NodeBehaviour
 from pretty_widgets.graphics.Theme import Theme
 from nodes.NodeButton import NodeButton, EmojiButton, BUTTON_SIZE
+from nodes._shake_detect import arm_cooldown as _arm_shake_cooldown, is_cooling_down as _shake_cooling_down
 
 
 def _c(hex_str): return QColor(hex_str)   # local shorthand
-
-# Shake-to-delete cooldown — module-level, shared across all nodes.
-# Prevents cascade-deletes when Qt transfers the mouse grab after removal.
-_SHAKE_COOLDOWN_S       = 0.8
-_shake_cooldown_until: float = 0.0
 
 
 # Visual constants resolved from Theme at import time
@@ -691,8 +687,7 @@ class BaseNode(QGraphicsRectItem):
         Also gated on a module-level cooldown that blocks cascade-deletes when
         Qt transfers the mouse grab after the previous node was removed.
         """
-        global _shake_cooldown_until
-        if _time.monotonic() < _shake_cooldown_until:
+        if _shake_cooling_down():
             return
         if not self._shake_press_active:
             return
@@ -743,8 +738,13 @@ class BaseNode(QGraphicsRectItem):
         Multiple nodes selected → purge entire selection."""
         scene = self.scene()
         if scene:
+            # Pick up any node-like peer in the selection — BaseNode *and*
+            # StickerNode (2026-04-18 root-split).  The duck-type check keeps
+            # future node roots working without another edit here.
             selected = [item for item in scene.selectedItems()
-                        if isinstance(item, BaseNode) and item is not self]
+                        if item is not self
+                        and hasattr(item, 'connections')
+                        and hasattr(item, '_prepare_for_removal')]
             if selected:
                 self._shake_delete_group(selected)
                 return
@@ -800,7 +800,6 @@ class BaseNode(QGraphicsRectItem):
     def _shake_delete(self) -> None:
         """Dissolve this node with a particle burst. Deferred to mouseRelease
         so the mouse grab releases cleanly before the scene removes the item."""
-        global _shake_cooldown_until
         scene = self.scene()
         if not scene:
             return
@@ -816,7 +815,7 @@ class BaseNode(QGraphicsRectItem):
             self._quiet_for_shake()
         except Exception:
             pass
-        _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
+        _arm_shake_cooldown()
         from graphics.Particles import sprinkle, orbital_burst, shake_mode
         center = self.mapToScene(self.rect().center())
         if shake_mode == "orbital":
@@ -832,12 +831,11 @@ class BaseNode(QGraphicsRectItem):
         The other selected nodes are removed directly via deferred
         QTimer since they don't hold an active mouse grab.
         """
-        global _shake_cooldown_until
         scene = self.scene()
         if not scene:
             return
 
-        _shake_cooldown_until = _time.monotonic() + _SHAKE_COOLDOWN_S
+        _arm_shake_cooldown()
         from graphics.Particles import sprinkle, orbital_burst, shake_mode
 
         # Particles on the shaken node
