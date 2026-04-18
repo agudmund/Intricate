@@ -18,6 +18,15 @@ PULSE_SCALE  = Theme.nodePulseScale
 PULSE_MIN_MS = Theme.nodePulseMinMs
 PULSE_MAX_MS = Theme.nodePulseMaxMs
 
+# Aerial-view gate — minimum on-screen node dimension (viewport pixels)
+# below which hover pulse + bg animations suppress themselves.  The
+# 1.018 scale factor produces a ~1 px visual delta at 60 px — anything
+# smaller is imperceptible and the animation is pure cost.  Matches the
+# 60 px landmark used by the VideoNode tiny-render pause.  Above this
+# threshold, pulse runs full fat for the signature gust-of-wind effect
+# (see memory: project_pulse_vibrance_commitment).
+_PULSE_MIN_ON_SCREEN_PX = 60.0
+
 
 class NodeBehaviour:
     """
@@ -126,8 +135,45 @@ class NodeBehaviour:
     def _bg_hover(self)    -> QColor: return self._blend(self._ensure_base(), Theme.primaryBorder, 0.015)
     def _bg_selected(self) -> QColor: return self._blend(self._ensure_base(), Theme.primaryBorder, 0.03)
 
+    def _should_pulse(self) -> bool:
+        """Aerial-view gate: skip pulse / bg animations when the node is
+        too small on screen for the effect to read.  Pulse animations are
+        a signature aesthetic at street-level zoom but pure CPU cost when
+        the scale delta is smaller than a pixel.  Evaluated per-trigger,
+        not per-tick — cheap."""
+        if self._node is None:
+            return False
+        try:
+            scene = self._node.scene()
+        except RuntimeError:
+            return False
+        if scene is None:
+            return False
+        views = scene.views()
+        if not views:
+            # No view context yet (e.g. during construction).  Default to
+            # active — the gate only exists to silence aerial views, not
+            # to suppress default behaviour when the view isn't wired.
+            return True
+        zoom = getattr(views[0], 'current_zoom', 1.0)
+        try:
+            rect = self._node.rect()
+        except (RuntimeError, AttributeError):
+            return True
+        smaller_dim = min(rect.width(), rect.height())
+        return smaller_dim * zoom >= _PULSE_MIN_ON_SCREEN_PX
+
     def _animate_bg_to(self, target: QColor, duration: int) -> None:
         self._ensure_base()   # guarantee _current_bg is initialised before use
+        # Aerial view: snap directly to the target colour without
+        # animating.  Preserves correctness (selection colour still
+        # updates, hover highlight still settles to the right resting
+        # tone) while dropping the 60Hz tick cost.  _on_bg_changed's
+        # _bulk_removing guard still applies via the explicit call.
+        if not self._should_pulse():
+            self.bg_anim.stop()
+            self._on_bg_changed(target)
+            return
         self.bg_anim.stop()
         self.bg_anim.setStartValue(QColor(self._current_bg))
         self.bg_anim.setEndValue(target)
@@ -160,9 +206,13 @@ class NodeBehaviour:
 
     def on_hover_enter(self):
         """Breathe in — scale swells, background warms toward the accent."""
-        if self.pulse_anim.state() == QVariantAnimation.Stopped:
-            self.pulse_anim.setDirection(QVariantAnimation.Forward)
-            self.pulse_anim.start()
+        # Aerial view: don't start the pulse.  The scale delta at that
+        # zoom is sub-pixel and invisible; _animate_bg_to below still
+        # updates the target colour but without the 60Hz tick cost.
+        if self._should_pulse():
+            if self.pulse_anim.state() == QVariantAnimation.Stopped:
+                self.pulse_anim.setDirection(QVariantAnimation.Forward)
+                self.pulse_anim.start()
         self._animate_bg_to(self._bg_hover(), 320)
 
     def on_hover_leave(self):
