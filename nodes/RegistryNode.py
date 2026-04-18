@@ -32,7 +32,7 @@ class RegistryNode(MarkdownNode):
         super().__init__(data)
 
         # Watch registry for live updates
-        from utils import registry
+        from utils.persistence import registry
         if registry.watcher:
             registry.watcher.changed.connect(self._on_registry_changed)
 
@@ -45,7 +45,7 @@ class RegistryNode(MarkdownNode):
     @staticmethod
     def _build_markdown() -> str:
         """Convert the registry into a readable markdown document."""
-        from utils import registry
+        from utils.persistence import registry
 
         lines = ["# Node Registry", ""]
 
@@ -111,7 +111,7 @@ class RegistryNode(MarkdownNode):
 
     def _open_in_editor(self) -> None:
         """Open node_registry.toml in the system default editor."""
-        from utils.registry import _registry_path
+        from utils.persistence.registry import _registry_path
         path = _registry_path()
         if not path.exists():
             return
@@ -125,7 +125,7 @@ class RegistryNode(MarkdownNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _demolition_pre(self) -> None:
-        from utils import registry
+        from utils.persistence import registry
         if registry.watcher:
             try:
                 registry.watcher.changed.disconnect(self._on_registry_changed)

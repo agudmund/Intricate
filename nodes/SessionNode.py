@@ -113,7 +113,7 @@ class SessionNode(BaseNode):
 
     def load_session_file(self, path: str) -> None:
         """Validate and summarise a session .json file."""
-        from utils.session import SessionManager
+        from utils.persistence.session import SessionManager
 
         self.data.source_path = path
         self.data.session_name = Path(path).stem
@@ -156,7 +156,7 @@ class SessionNode(BaseNode):
 
         # Reload from disk if we don't have the payload cached (e.g. restored from session)
         if self._cached_payload is None:
-            from utils.session import SessionManager
+            from utils.persistence.session import SessionManager
             self._cached_payload = SessionManager.get_session_data(self.data.source_path)
 
         if self._cached_payload is None:

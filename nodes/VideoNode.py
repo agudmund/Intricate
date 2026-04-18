@@ -238,7 +238,7 @@ class VideoNode(BaseNode):
             2. Cache key resolves         → play from cache, flag source missing
             3. Neither                    → placeholder, node remains empty
         """
-        from utils.media_cache import cached_path
+        from utils.persistence.media_cache import cached_path
 
         src_path = Path(self.data.source_path) if self.data.source_path else None
         cache_path = cached_path(self.data.cache_key) if self.data.cache_key else None
@@ -274,7 +274,7 @@ class VideoNode(BaseNode):
         import threading
         def _worker(node=self, path=src_path):
             try:
-                from utils.media_cache import cache_source_file
+                from utils.persistence.media_cache import cache_source_file
                 key = cache_source_file(path)
                 if not key:
                     return
@@ -307,7 +307,7 @@ class VideoNode(BaseNode):
                         and abs(st.st_mtime - node.data.source_mtime) < 1.0):
                     return   # clean — no change since last bind
                 # Fingerprint mismatch — spend the full hash to confirm drift.
-                from utils.media_cache import hash_file, key_hash
+                from utils.persistence.media_cache import hash_file, key_hash
                 live_hash = hash_file(path)
                 if live_hash is None:
                     return

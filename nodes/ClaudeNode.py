@@ -131,7 +131,7 @@ class ClaudeNode(BaseNode):
         Samples a phrase from PhrasePicker to seed each greeting's tone.
         """
         import random
-        from utils.PhrasePicker import motivationalMessages
+        from utils.pickers.PhrasePicker import motivationalMessages
         seed_phrase = random.choice(motivationalMessages)
         _GREETING_PROMPT = (
             "The user has just returned to Intricate — "
@@ -855,7 +855,7 @@ class ClaudeNode(BaseNode):
         self._reply_received = False
         self._stdout_accumulated = ""
         self._last_response_node = None   # reset chain — new question anchors back to ClaudeNode
-        from utils.ColorPicker import random as pick_color
+        from utils.pickers.ColorPicker import random as pick_color
         self._chain_color = pick_color()
         self._stream_q  = queue.SimpleQueue()
         self._status_q  = queue.SimpleQueue()

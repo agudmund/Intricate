@@ -11,7 +11,7 @@ from PySide6.QtGui import QPainterPath, QPen, QColor, QPainter
 from PySide6.QtCore import Qt, QPointF, QTimer
 from shiboken6 import isValid as _shibokenIsValid
 
-from utils.MotionCurves import GlideEngine
+from utils.motion.MotionCurves import GlideEngine
 
 
 def _endpoint_alive(node) -> bool:

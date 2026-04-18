@@ -728,7 +728,7 @@ class IntricateScene(QGraphicsScene):
         """Serialize all nodes and connections via SessionManager (rotation + checksum)."""
         from nodes.BaseNode import BaseNode
         from graphics.Connection import Connection
-        from utils.session import SessionManager
+        from utils.persistence.session import SessionManager
 
         nodes = []
         connections = []
@@ -793,7 +793,7 @@ class IntricateScene(QGraphicsScene):
         # cache_key contributes its key to the live set so its cached
         # bytes survive the sweep.
         try:
-            from utils.media_cache import gc_cache
+            from utils.persistence.media_cache import gc_cache
             _CACHED_TYPES = {"image", "video", "sticker"}
             live_keys = {
                 n.get("cache_key", "") for n in nodes
@@ -817,7 +817,7 @@ class IntricateScene(QGraphicsScene):
 
         Returns the viewport dict from the session (may be empty for legacy files).
         """
-        from utils.session import SessionManager
+        from utils.persistence.session import SessionManager
 
         payload = SessionManager.get_session_data(str(path))
         if payload is None:

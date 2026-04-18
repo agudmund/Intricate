@@ -305,7 +305,7 @@ class EmojiButton(QGraphicsObject):
             event.ignore()
             return
         import random
-        from utils.IconPicker import emojiIcons
+        from utils.pickers.IconPicker import emojiIcons
         self._set_emoji(random.choice(emojiIcons))
         self._cached_pixmap = None   # invalidate cache
         self._cached_emoji  = None

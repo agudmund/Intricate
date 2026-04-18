@@ -82,7 +82,7 @@ class BaseNode(QGraphicsRectItem):
         # Assign a random accent emoji if none was persisted from a prior session.
         if not data.emoji or data.emoji == "🌿":
             import random
-            from utils.IconPicker import emojiIcons
+            from utils.pickers.IconPicker import emojiIcons
             data.emoji = random.choice(emojiIcons)
         self.data = data
         self.setPos(QPointF(data.x, data.y))
@@ -146,7 +146,7 @@ class BaseNode(QGraphicsRectItem):
         self._untinted_brush = None
         _saved_tint = getattr(self.data, 'node_tint', '')
         if _saved_tint:
-            from utils.ColorPicker import all_colors as _ac
+            from utils.pickers.ColorPicker import all_colors as _ac
             try:
                 self._color_index = _ac().index(_saved_tint)
             except ValueError:
@@ -347,7 +347,7 @@ class BaseNode(QGraphicsRectItem):
         if self._show_emoji_btn:
             if not self.data.emoji:
                 import random
-                from utils.IconPicker import emojiIcons
+                from utils.pickers.IconPicker import emojiIcons
                 self.data.emoji = random.choice(emojiIcons)
             self._emoji_btn = EmojiButton(
                 self,
@@ -389,7 +389,7 @@ class BaseNode(QGraphicsRectItem):
     def _toggle_node_tint(self) -> None:
         """Cycle through ColorPicker palette colors as a temporary node highlight.
         Pressing through all colors returns to the natural default."""
-        from utils.ColorPicker import get as _pick, all_colors as _ac
+        from utils.pickers.ColorPicker import get as _pick, all_colors as _ac
         from PySide6.QtGui import QBrush
         colors = _ac()
 

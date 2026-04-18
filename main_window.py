@@ -25,10 +25,10 @@ from nodes.ImageNode import ImageNode
 from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
 from pretty_widgets.utils.logger import setup_logger
-from utils.PhrasePicker import motivationalMessages
+from utils.pickers.PhrasePicker import motivationalMessages
 from pretty_widgets.utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
-from utils.session import session_path, enter_project
+from utils.persistence.session import session_path, enter_project
 from pretty_widgets.PrettyCombo import combo as pretty_combo
 from pretty_widgets.PrettyLabel import label as pretty_label
 from pretty_widgets.PrettySlider import slider as pretty_slider
@@ -521,7 +521,7 @@ class IntricateApp(QMainWindow):
         """
         from nodes.ImageNode import ImageNode
         from nodes.VideoNode import VideoNode
-        from utils.media_cache import (
+        from utils.persistence.media_cache import (
             cache_dir, cache_pixmap, cache_source_file, hash_file, key_hash,
         )
 
@@ -629,7 +629,7 @@ class IntricateApp(QMainWindow):
         """Re-acquire the CWD lock by chdir-ing back to the active project."""
         path = self._session_path()
         if path:
-            from utils.session import project_root_from_session
+            from utils.persistence.session import project_root_from_session
             project_root = project_root_from_session(path)
             if project_root.exists():
                 try:
@@ -1257,7 +1257,7 @@ class IntricateApp(QMainWindow):
         joy_layout.addStretch()
 
         # Feed button — dynamic radial shadow, physical press depth
-        from widgets.StickerButton import StickerButton
+        from utils.StickerButton import StickerButton
         clean_pix = Theme.icon(Theme.iconCatnipFeedClean, fallback_color="#d87a9e")
         self._feed_btn = StickerButton(clean_pix, sz, parent=joy_container)
         self._feed_btn.setToolTip("Feed me")
@@ -1741,7 +1741,7 @@ class IntricateApp(QMainWindow):
 
     def _show_category_menu(self, category: str, btn: QPushButton) -> None:
         """Build a category menu from node_registry.toml entries."""
-        from utils import registry
+        from utils.persistence import registry
 
         self._ensure_dispatch()
         menu = self._styled_menu()
@@ -1788,7 +1788,7 @@ class IntricateApp(QMainWindow):
     def _show_info_menu(self, btn):
         """Info menu: registry entries + dynamic Documents/*.md files."""
         from pathlib import Path
-        from utils import registry
+        from utils.persistence import registry
 
         self._ensure_dispatch()
         menu = self._styled_menu()
@@ -2157,7 +2157,7 @@ class IntricateApp(QMainWindow):
         widest = max(fm.horizontalAdvance("Sound"), fm.horizontalAdvance("Quiet"))
         self._mute_btn.setFixedWidth(widest + 32)  # padding + Reey overshoot
         self._mute_btn.setMinimumHeight(fm.height() + 6 + 18)  # top + bottom padding
-        from utils.hover_glow import HoverGlow
+        from utils.motion.hover_glow import HoverGlow
 
         _mute_base = (
             f"QPushButton {{ background-color: {Theme.buttonBg};"
@@ -2460,7 +2460,7 @@ class IntricateApp(QMainWindow):
         if project_dir.exists() and not (project_dir / ".git").exists():
             self._git_init_project(project_dir, project_dir.name)
         try:
-            from utils.media_cache import set_cache_root
+            from utils.persistence.media_cache import set_cache_root
             set_cache_root(path.parent)
         except Exception:
             pass  # Cache setup failure is non-fatal

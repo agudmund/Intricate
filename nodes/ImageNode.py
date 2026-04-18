@@ -158,7 +158,7 @@ class ImageNode(BaseNode):
                 raw = b""
             if raw:
                 try:
-                    from utils.media_cache import cache_source_bytes
+                    from utils.persistence.media_cache import cache_source_bytes
                     cache_key = cache_source_bytes(raw, p.suffix)
                 except Exception:
                     pass
@@ -270,7 +270,7 @@ class ImageNode(BaseNode):
         pixmap = None
         cache_key = ""
         try:
-            from utils.media_cache import (
+            from utils.persistence.media_cache import (
                 load_cached, cache_source_bytes, cache_pixmap,
                 hash_file, key_hash,
             )
@@ -514,7 +514,7 @@ class ImageNode(BaseNode):
         except Exception as exc:
             self._spawn_caption_node(f"cannot read file: {exc}")
             return
-        from utils.HappyTimes import read_png_vision_stamp
+        from utils.persistence.HappyTimes import read_png_vision_stamp
         stamp = read_png_vision_stamp(p)
         if stamp:
             self._spawn_caption_node(stamp)
@@ -550,19 +550,19 @@ class ImageNode(BaseNode):
         if not p.exists():
             self._spawn_caption_node(f"stamp: file not found — {p.name}")
             return
-        from utils.HappyTimes import write_png_vision_stamp
+        from utils.persistence.HappyTimes import write_png_vision_stamp
         if not caption.startswith("Intricate: "):
             caption = f"Intricate: {caption}"
         write_png_vision_stamp(p, caption)
         # Verify it stuck
-        from utils.HappyTimes import read_png_vision_stamp
+        from utils.persistence.HappyTimes import read_png_vision_stamp
         verify = read_png_vision_stamp(p)
         if verify == caption:
             # Re-cache: the source bytes changed (new tEXt chunk), so the old
             # cache_key now points at a stale copy. Read fresh bytes, re-hash,
             # re-cache, and update the node's cache_key so cache mirrors source.
             try:
-                from utils.media_cache import cache_source_bytes
+                from utils.persistence.media_cache import cache_source_bytes
                 raw = p.read_bytes()
                 new_key = cache_source_bytes(raw, p.suffix)
                 if new_key:
@@ -585,7 +585,7 @@ class ImageNode(BaseNode):
         payload = ""
         if self.data.cache_key:
             try:
-                from utils.media_cache import cached_bytes
+                from utils.persistence.media_cache import cached_bytes
                 raw = cached_bytes(self.data.cache_key)
                 if raw:
                     payload = base64.b64encode(raw).decode("utf-8")
@@ -755,7 +755,7 @@ class ImageNode(BaseNode):
         # Cache handles persistence — ensure pasted images without a cache_key
         # get cached before save (belt-and-suspenders for edge cases).
         if self._pixmap and not self.data.cache_key:
-            from utils.media_cache import cache_pixmap
+            from utils.persistence.media_cache import cache_pixmap
             self.data.cache_key = cache_pixmap(self._pixmap)
         self.sync_data()
         return self.data.to_dict()

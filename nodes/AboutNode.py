@@ -76,7 +76,7 @@ class AboutNode(BaseNode):
 
     def _reshuffle_emoji(self) -> None:
         import random
-        from utils.IconPicker import emojiIcons
+        from utils.pickers.IconPicker import emojiIcons
         self._shuffle_emoji = random.choice(emojiIcons)
         self._shuffle_btn.update()
 

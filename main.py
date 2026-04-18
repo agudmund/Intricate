@@ -186,7 +186,7 @@ def main():
     logger.log(TRACE, "[boot:12] file watcher active")
 
     logger.log(TRACE, "[boot:12a] initialising node registry")
-    from utils import registry
+    from utils.persistence import registry
     _reg_watcher = registry.init_watcher()
     logger.debug(f"[boot] Node registry loaded: {len(registry.get_all_nodes())} types")
 

@@ -154,7 +154,7 @@ class StickerNode(QGraphicsRectItem):
         next session restore takes the fast cache-first path.
         The cached file is the same bytes as the source — format and
         metadata (EXIF, XMP, ICC, tEXt stamps) are preserved verbatim."""
-        from utils.media_cache import cache_source_bytes
+        from utils.persistence.media_cache import cache_source_bytes
         p = Path(path)
         if not p.exists():
             return
@@ -189,7 +189,7 @@ class StickerNode(QGraphicsRectItem):
         the full SHA when nothing's moved; a hash mismatch queues an
         AboutNode warning next to the sticker.  Policy is flag-don't-
         auto-fix — the user decides whether the drift is a drift."""
-        from utils.media_cache import load_cached, hash_file, key_hash
+        from utils.persistence.media_cache import load_cached, hash_file, key_hash
         pixmap = load_cached(self.data.cache_key)
         if pixmap is None or pixmap.isNull():
             # Cache miss — fall back to source, which also re-caches.
@@ -596,7 +596,7 @@ class StickerNode(QGraphicsRectItem):
         # hash key, not a base64 blob.  Covers pasted/generated stickers
         # that never had a source file on disk.
         if self._pixmap and not self.data.cache_key:
-            from utils.media_cache import cache_pixmap
+            from utils.persistence.media_cache import cache_pixmap
             try:
                 self.data.cache_key = cache_pixmap(self._pixmap)
             except Exception:

@@ -37,7 +37,7 @@ _DOT_R      = 5.0    # status dot radius
 _POLL_MS    = 10000   # refresh every 10 seconds
 
 
-from utils.session import SESSION_EXT
+from utils.persistence.session import SESSION_EXT
 _SESSION_FILENAMES = {
     f"session{SESSION_EXT}", f"session_previous{SESSION_EXT}", f"session_archive{SESSION_EXT}",
     # Legacy .json names — still classify as session-only until fully migrated
@@ -346,7 +346,7 @@ class GitNode(BaseNode):
             self._pushing = False
             self._dismiss_loading_node()
             import random
-            from utils.IconPicker import emojiIcons
+            from utils.pickers.IconPicker import emojiIcons
             self.data.emoji = random.choice(emojiIcons)
             self._poll_timer.start()
             # One final rescan to capture the last push results

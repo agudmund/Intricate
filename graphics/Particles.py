@@ -245,7 +245,7 @@ class _OrbitalBurst:
     def __init__(self, scene: QGraphicsScene, center: QPointF, count: int,
                  icon_name: str | None = None, lerp_rate: float = 0.1,
                  speed: float = 0.7, scale: float = ORBITAL_SCALE):
-        from utils.OrbitalMotion import OrbitalSwarm
+        from utils.motion.OrbitalMotion import OrbitalSwarm
 
         self._scene = scene
         self._cx    = center.x()

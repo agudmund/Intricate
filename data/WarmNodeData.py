@@ -9,7 +9,7 @@
 import random
 from dataclasses import dataclass, field
 from data.NodeData import NodeData
-from utils.PhrasePicker import motivationalMessages
+from utils.pickers.PhrasePicker import motivationalMessages
 
 
 @dataclass
