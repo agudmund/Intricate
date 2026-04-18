@@ -234,6 +234,38 @@ The button-driven `_split_into_nodes` call on a live MarkdownNode is unaffected 
 
 Both are bounded cases of the same underlying principle: *any deferred-removal pattern must close all inflight-signal windows before the deferral, not during it.*
 
+### 2026-04-18 — PaletteNode shake-delete rendering artefacts
+
+**Symptom.** Shake-deleting a PaletteNode left visible rasterised residue on the canvas for a frame or two — swatch-row pixels / border outline remnants in the area the node had occupied. No crash, no Event Viewer entry; the Python teardown log showed all five phases + `_prepare_for_removal complete` firing cleanly at 13:52:13.
+
+**Root cause.** PaletteNode hosts two `QGraphicsProxyWidget` children (`_title_proxy` for inline title editing, `_palette_proxy` for the scrollable swatch grid). The palette body is a deeply nested `_PaletteWidget` with a `QScrollArea` containing a grid of `_SwatchCell` widgets, each using `QFrame.setStyleSheet(background: <hex>)` for its swatch — Qt paints those through stylesheet backing stores that sit outside the QGraphicsScene paint pipeline.
+
+Two things compounded:
+
+1. **Teardown order was inverted** from the PrettyEdit recipe (`setWidget(None)` → widget detach + `deleteLater()` → `scene.removeItem(proxy)`). PaletteNode did `scene.removeItem(proxy)` first, then `setWidget(None)`. Both orderings "work" — no crash — but the PrettyEdit order gives Qt a cleaner sequence for tearing down backing stores.
+2. **No explicit `scene.invalidate()` of the proxies' former geometry.** `BaseNode`'s phase 0 invalidate covers the node's `boundingRect`, which geometrically contains the proxies. But for nested widgets backed by stylesheet pixmaps, `boundingRect` invalidation alone does not always reach the proxy's own cached pixels on the viewport buffer. Under the particle-storm load of shake-delete (8000 particles painting every frame), the stale pixels could persist for 1-3 frames.
+
+**Fix applied to `nodes/PaletteNode.py::_prepare_for_removal`:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | Snapshot each proxy's `sceneBoundingRect()` *before* teardown | Need those rects after the proxies are gone |
+| 2 | `proxy.setWidget(None)` | Sever C++ ownership first |
+| 3 | `widget.setParent(None)` + `widget.deleteLater()` on inner widgets | Detach and schedule clean C++ deletion |
+| 4 | `scene.removeItem(proxy)` | Pull proxy out of scene graph |
+| 5 | `proxy = None` | Clear Python reference |
+| 6 | `scene.invalidate(snapped_rect)` for each former proxy geometry | Force viewport repaint of those specific regions |
+| 7 | `super()._prepare_for_removal()` | BaseNode's phase 0 invalidate still runs as a second belt-and-braces sweep |
+
+**Lesson.** Any node hosting a QGraphicsProxyWidget whose inner widget tree renders via stylesheet backing stores (i.e. not pure QPainter operations) should invalidate the proxy's scene rect explicitly on teardown. The boundingRect-only invalidate that handles simple QPainter-painted nodes is necessary but not sufficient here.
+
+**Secondary audit candidates** (same shape, not yet verified):
+
+- `TreeNode._toolbar_proxy` — toolbar widget with buttons; may or may not produce visible residue on shake
+- `MergeNode._list_proxy` — `QListWidget` with styled items; potentially similar
+
+Both use the same "removeItem before setWidget(None)" order without explicit rect invalidation. Worth sweeping if artefacts show up.
+
 ### 2026-04-18 — StickerNode detached from BaseNode (root-split refactor)
 
 **Context.** StickerNode previously inherited from BaseNode and overrode just enough to suppress the chrome — `_build_buttons` → `pass`, `_create_ports` → empty lists, `paint()` → skip chrome, `setBrush` → force `Qt.NoBrush` (to silence `NodeBehaviour.bg_anim`). This shape created a small paradox: every new feature on BaseNode had to be checked against "does the sticker want this, if not, what's the silencing pattern?" — a permanent tax for a node that conceptually has nothing in common with BaseNode except "lives on the canvas." The `setBrush` guard and the per-sticker `NodeBehaviour` cost both existed only because of the inheritance.
