@@ -1193,7 +1193,10 @@ class IntricateApp(QMainWindow):
             b.setIconSize(QSize(sz, sz))
             b.setFlat(True)
             b.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
-            b.clicked.connect(lambda _=None, btn=b: menu_fn(btn))
+            def _on_click(_=None, btn=b, fn=menu_fn, label=tooltip):
+                logger.log(5, "[sidebar] category click → %s", label)
+                fn(btn)
+            b.clicked.connect(_on_click)
             install_tooltip(b)
             layout.addWidget(b, alignment=Qt.AlignHCenter)
 
