@@ -1,6 +1,6 @@
 # Intricate
 
-**Version 0.0.5 — The Breath of Thought Era**
+**Version 0.5.0 — The Other Era**
 
 A gentle nodal space where thoughts interlink ideas, transitioning thoughts to things.
 
