@@ -697,22 +697,27 @@ class IntricateScene(QGraphicsScene):
     # VIDEO VIEWPORT CULLING
     # ─────────────────────────────────────────────────────────────────────────
 
-    # Minimum on-screen dimension (in viewport pixels) for a VideoNode
-    # to stay playing at low zoom.  Below this the video frames are too
-    # small to perceive motion meaningfully, and the decoder cost is
-    # wasted — pause and keep painting the last frame as a static
-    # thumbnail.  The button-strip LOD_THRESHOLD is 0.25 (buttons hide);
-    # a 400 px video at zoom 0.15 is 60 px on screen — that's the point
-    # where a video "stops being worth the decode cost" for us.
-    _VIDEO_TINY_RENDER_PX = 60.0
+    # Minimum on-screen dimension (in viewport pixels) for a media node
+    # to stay active at low zoom.  Below this the cost is wasted: video
+    # frames are too small to perceive motion, audio is too far away in
+    # the cityscape metaphor ("we don't hear sounds from the helicopter
+    # view").  Button-strip LOD_THRESHOLD is 0.25 (buttons hide); a
+    # 400 px video at zoom 0.15 is 60 px on screen — the altitude at
+    # which the canvas shifts from interactive surface to map.
+    _MEDIA_TINY_RENDER_PX = 60.0
 
     def update_video_visibility(self, viewport_rect) -> None:
         """Pause/resume VideoNodes and AudioNodes based on viewport
-        intersection.  Also pauses VideoNodes whose on-screen size has
-        shrunk below _VIDEO_TINY_RENDER_PX so massive zoom-out doesn't
-        keep every video decoding at full frame rate for pixels nobody
-        can see.  AudioNodes are not affected by the tiny-render gate
-        — audio has no visual pixel relationship to zoom."""
+        intersection AND on-screen size.
+
+        The tiny-render gate closes the helicopter row of the sensory
+        ladder for both visual and audio media.  At aerial zoom every
+        media node is technically inside the viewport rect — all of them
+        — so plain intersection culling sees them as 'visible' and lets
+        every decoder run.  Pixel-size gating quiets them when the
+        canvas is being read as a map, not a surface.  Audio fades via
+        its existing _fade_volume machinery; video freezes on its last
+        decoded frame."""
         from nodes.VideoNode import VideoNode
         from nodes.AudioNode import AudioNode
         from PySide6.QtCore import QRectF
@@ -730,10 +735,10 @@ class IntricateScene(QGraphicsScene):
                 node_rect = item.mapRectToScene(item.rect())
                 in_view = padded.intersects(node_rect)
                 tiny = False
-                if in_view and isinstance(item, VideoNode):
+                if in_view:
                     on_screen_w = node_rect.width()  * zoom
                     on_screen_h = node_rect.height() * zoom
-                    tiny = min(on_screen_w, on_screen_h) < self._VIDEO_TINY_RENDER_PX
+                    tiny = min(on_screen_w, on_screen_h) < self._MEDIA_TINY_RENDER_PX
                 item._set_viewport_visible(in_view and not tiny)
 
     def pause_all_videos(self) -> None:
