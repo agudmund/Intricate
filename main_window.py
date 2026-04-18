@@ -315,7 +315,7 @@ class IntricateApp(QMainWindow):
         self.info_label_top = pretty_label("", alignment=Qt.AlignCenter)
         self.info_label_top.setStyleSheet(
             f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
-            f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: 13px;"
+            f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: 9px;"
         )
         self.info_label_top.setParent(self.top_toolbar)
         self._info_opacity_top = QGraphicsOpacityEffect()
