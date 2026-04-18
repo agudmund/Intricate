@@ -424,33 +424,45 @@ class MarkdownNode(BaseNode):
                 prev_node = about
                 first_node = False
 
-            # WarmNode for the body text
+            # Body — split into paragraphs.  Each paragraph spawns its own
+            # node: multi-line paragraphs become WarmNodes, single-line
+            # paragraphs become AboutNode callouts.  Gives the chain a
+            # per-statement reading rhythm instead of one wall of text per
+            # section (2026-04-18 browsability refinement).
             if body:
-                wdata = WarmNodeData(body_text=body, title="")
-                warm = WarmNode(wdata)
-                warm.setPos(_OFFSCREEN)
-                scene.addItem(warm)
-                scene.raise_node(warm)
+                paragraphs = [p for p in body.split("\n\n") if p.strip()]
+                for para in paragraphs:
+                    para_stripped = para.strip()
+                    is_single_line = "\n" not in para_stripped
 
-                # Let WarmNode's own auto-fit handle sizing
-                if hasattr(warm, '_auto_fit_height'):
-                    warm._auto_fit_height()
+                    if is_single_line:
+                        # Single-line paragraph — AboutNode callout
+                        node = scene.add_about_node(pos=_OFFSCREEN, label=para_stripped)
+                        node.data.title = para_stripped[:40]
+                    else:
+                        # Multi-line paragraph — WarmNode
+                        wdata = WarmNodeData(body_text=para_stripped, title="")
+                        node = WarmNode(wdata)
+                        node.setPos(_OFFSCREEN)
+                        scene.addItem(node)
+                        scene.raise_node(node)
+                        if hasattr(node, '_auto_fit_height'):
+                            node._auto_fit_height()
 
-                if first_node and source_hidden:
-                    pos = spiral_place(scene, warm)
+                    if first_node and source_hidden:
+                        pos = spiral_place(scene, node)
+                    else:
+                        chain_origin = self._wander_origin(prev_node)
+                        pos = spiral_place(
+                            scene, node, origin=chain_origin,
+                            fallback=chain_origin,
+                        )
+                    node.setPos(pos)
+                    if not (prev_node is self and source_hidden):
+                        conn = Connection(prev_node, node)
+                        scene.addItem(conn)
+                    prev_node = node
                     first_node = False
-                else:
-                    chain_origin = self._wander_origin(prev_node)
-                    pos = spiral_place(
-                        scene, warm, origin=chain_origin,
-                        fallback=chain_origin,
-                    )
-                warm.setPos(pos)
-                if not (prev_node is self and source_hidden):
-                    conn = Connection(prev_node, warm)
-                    scene.addItem(conn)
-                prev_node = warm
-                first_node = False
 
     @staticmethod
     def _wander_origin(prev_node) -> 'QPointF':
