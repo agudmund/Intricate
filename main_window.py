@@ -306,6 +306,22 @@ class IntricateApp(QMainWindow):
         self._exit_btn.setParent(self.top_toolbar)
         self._exit_btn.setToolTip("Exid, not a typo.  It's an exit button named exid")
         install_tooltip(self._exit_btn)
+
+        # ── Titlebar InfoBar mirror ─────────────────────────────────────────
+        # Same channel, different stage. When the bottom bar's InfoBar strip is
+        # not visible (curtains rolled up, or splitter dragged to fully hide),
+        # messages route here instead — with full personality preserved.
+        # Idle state is blank opacity-zero; only lit during a whispered message.
+        self.info_label_top = pretty_label("", alignment=Qt.AlignCenter)
+        self.info_label_top.setStyleSheet(
+            f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
+            f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: 15px;"
+        )
+        self.info_label_top.setParent(self.top_toolbar)
+        self._info_opacity_top = QGraphicsOpacityEffect()
+        self._info_opacity_top.setOpacity(0.0)
+        self.info_label_top.setGraphicsEffect(self._info_opacity_top)
+
         # Deferred first position — toolbar width isn't known at construction time
         QTimer.singleShot(0, self._reposition_exit_btn)
 
@@ -356,6 +372,23 @@ class IntricateApp(QMainWindow):
             tx = mx - self._tray_btn.width() - gap
             self._tray_btn.move(tx, y)
             self._tray_btn.raise_()
+
+        # Titlebar InfoBar — occupies the central dead zone between the
+        # curtains/project-selector cluster on the left and the tray/max/exit
+        # cluster on the right. Width flexes with window width; height is a
+        # comfortable 24px strip sitting vertically centered in the toolbar.
+        if hasattr(self, 'info_label_top'):
+            left_edge  = Theme.toolbarCurtainsX + (
+                self._curtains_btn.width() if hasattr(self, '_curtains_btn') else 0
+            ) + gap * 4
+            right_edge = (
+                self._tray_btn.x() if hasattr(self, '_tray_btn') else ex
+            ) - gap * 4
+            width  = max(60, right_edge - left_edge)
+            height = 24
+            iy = (tb.height() - height) // 2
+            self.info_label_top.setGeometry(left_edge, iy, width, height)
+            self.info_label_top.raise_()
 
     def _setup_system_tray(self) -> None:
         """Create the system tray icon with a restore / exit context menu."""
@@ -652,9 +685,11 @@ class IntricateApp(QMainWindow):
                 self.scene.pause_all_videos()
             self._last_docked_exe = ""
             self._dock_watcher.start()
+            self._start_meov()
         else:
             self._dock_watcher.stop()
             self._stop_hunger_glow()
+            self._stop_meov()
             # Clamp so the bottom edge never drops below the screen
             avail = self.screen().availableGeometry()
             y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
@@ -973,11 +1008,43 @@ class IntricateApp(QMainWindow):
                 self._v_splitter.setSizes([total - saved, saved])
         self._v_splitter.splitterMoved.connect(self._on_v_splitter_moved)
 
+    # Info bar row height — the "minimal" snap target. Matches the fixed height
+    # set on _info_bar_row in _setupBottomToolbar.
+    _INFO_BAR_STRIP_H = 28
+
     def _on_v_splitter_moved(self, _pos: int, _index: int) -> None:
-        """Persist bottom toolbar height whenever the vertical splitter moves."""
+        """Persist bottom toolbar height whenever the vertical splitter moves.
+
+        Also enforces two magnet-snap detents as the user drags the handle near
+        the bottom of the panel: snap to 0 (fully hidden) or to the InfoBar
+        strip height (minimal mode, only the whisper bar visible). Above the
+        snap zone the handle drags freely.
+        """
+        # Guard against the snap itself triggering recursive signals
+        if getattr(self, '_snap_guard', False):
+            return
+
         sizes = self._v_splitter.sizes()
-        if len(sizes) == 2:
-            set_value("ui", "bottom_height", sizes[1])
+        if len(sizes) != 2:
+            return
+
+        bottom = sizes[1]
+        strip  = self._INFO_BAR_STRIP_H
+        # Snap thresholds: below strip/2 → 0, below strip*1.5 → strip, else free
+        snap_to = None
+        if 0 < bottom < strip // 2:
+            snap_to = 0
+        elif strip // 2 <= bottom < int(strip * 1.5):
+            snap_to = strip
+
+        if snap_to is not None and snap_to != bottom:
+            self._snap_guard = True
+            total = sizes[0] + sizes[1]
+            self._v_splitter.setSizes([total - snap_to, snap_to])
+            self._snap_guard = False
+            bottom = snap_to
+
+        set_value("ui", "bottom_height", bottom)
 
     def _on_pin_toggled(self, pinned: bool) -> None:
         self._preview_pinned = pinned
@@ -2122,17 +2189,73 @@ class IntricateApp(QMainWindow):
             import os
             self.show_info(f"Snap saved → {path.name}", on_click=lambda: subprocess.Popen(["explorer", "/select,", str(path)]))
 
+    # =========================================================================
+    # Meov — the cat minding the app while the curtains are up
+    # =========================================================================
+
+    _MEOV_MIN_MS = 10 * 60 * 1000   # 10 minutes
+    _MEOV_MAX_MS = 15 * 60 * 1000   # 15 minutes
+    _MEOV_BANG_CHANCE = 0.2         # 1 in 5 ticks swaps dots for exclamations
+
+    def _meov_tick(self) -> None:
+        """One whispered meov. Escalates by a dot each time the cat waits.
+        Occasionally swaps the dots for a single or double exclamation when
+        the cat wants to sound a little more insistent than usual."""
+        self._meov_level += 1
+        if random.random() < self._MEOV_BANG_CHANCE:
+            message = "meov" + ("!" * random.randint(1, 2))
+        else:
+            message = "meov" + ("." * self._meov_level)
+        self.show_info(message)
+        self._meov_timer.start(random.randint(self._MEOV_MIN_MS, self._MEOV_MAX_MS))
+
+    def _start_meov(self) -> None:
+        """Begin the countdown. Called when the curtains roll up."""
+        self._meov_level = 0
+        self._meov_timer.start(random.randint(self._MEOV_MIN_MS, self._MEOV_MAX_MS))
+
+    def _stop_meov(self) -> None:
+        """Halt the cat. Called when the curtains come back down."""
+        if hasattr(self, '_meov_timer'):
+            self._meov_timer.stop()
+        self._meov_level = 0
+
+    def _active_info_surface(self):
+        """Pick which InfoBar surface should host the next message.
+
+        The InfoBar is one channel with two possible stages. When the bottom
+        bar's strip is not visible — curtains rolled up, or splitter dragged
+        so far down that the strip is gone — the message routes to the
+        titlebar mirror instead, preserving the same typewriter + fade
+        personality on the smaller stage.
+        """
+        curtains_up = getattr(self, 'is_collapsed', False)
+        try:
+            bottom_h = self._v_splitter.sizes()[1] if hasattr(self, '_v_splitter') else 999
+        except Exception:
+            bottom_h = 999
+        # Strip is considered visible if bottom has room for at least the info row
+        strip_visible = (not curtains_up) and bottom_h >= 20
+        if strip_visible:
+            return self.info_label, self._info_opacity
+        return self.info_label_top, self._info_opacity_top
+
     def show_info(self, message: str, on_click=None) -> None:
         """Typewriter reveal with simultaneous fade-in, hold 3 s, then fade out."""
         self._info_timer.stop()
         if hasattr(self, '_tw_timer') and self._tw_timer is not None:
             self._tw_timer.stop()
 
+        # Pick the stage at show-time. A message already in flight uses the
+        # stage it started on; picking a new one every tick would get jumpy
+        # if the user changes modes mid-whisper.
+        self._active_label, self._active_opacity = self._active_info_surface()
+
         self._tw_full    = message
         self._tw_index   = 0
         self._info_click_action = on_click
-        self.info_label.setText("")
-        self.info_label.setCursor(
+        self._active_label.setText("")
+        self._active_label.setCursor(
             Qt.PointingHandCursor if on_click else Qt.ArrowCursor
         )
 
@@ -2147,7 +2270,8 @@ class IntricateApp(QMainWindow):
 
     def _typewriter_tick(self) -> None:
         self._tw_index += 1
-        self.info_label.setText(self._tw_full[:self._tw_index])
+        target = getattr(self, '_active_label', self.info_label)
+        target.setText(self._tw_full[:self._tw_index])
         if self._tw_index < len(self._tw_full):
             # Irregular delay: short for most chars, occasional longer pause
             delay = random.choices(
@@ -2161,13 +2285,15 @@ class IntricateApp(QMainWindow):
 
     def _fade_info_out(self) -> None:
         self._info_click_action = None
-        self.info_label.setCursor(Qt.ArrowCursor)
+        target = getattr(self, '_active_label', self.info_label)
+        target.setCursor(Qt.ArrowCursor)
         self._animate_info_opacity(1.0, 0.0, 600)
 
     def _animate_info_opacity(self, start: float, end: float, duration: int) -> None:
         if self._info_anim:
             self._info_anim.stop()
-        self._info_anim = QPropertyAnimation(self._info_opacity, b"opacity")
+        effect = getattr(self, '_active_opacity', self._info_opacity)
+        self._info_anim = QPropertyAnimation(effect, b"opacity")
         self._info_anim.setDuration(duration)
         self._info_anim.setStartValue(start)
         self._info_anim.setEndValue(end)
@@ -2570,6 +2696,17 @@ class IntricateApp(QMainWindow):
                 f"{appName} is generally so happy that you are here. ✨"
             ))
             QTimer.singleShot(600, self._check_vaporize_restart)
+
+            # ── Meov timer ──────────────────────────────────────────────────
+            # While the curtains are rolled up the app whispers "meov" at
+            # escalating seriousness (one more dot each tick). Intermittent
+            # exclamation variants keep the cat's voice feeling alive.
+            # Resets and stops when the curtains come back down. The timer
+            # is armed here but doesn't start until toggle_curtains lifts it.
+            self._meov_level = 0
+            self._meov_timer = QTimer(self)
+            self._meov_timer.setSingleShot(True)
+            self._meov_timer.timeout.connect(self._meov_tick)
 
     def _animate_opacity(self, start: float, end: float, duration: int,
                           easing, on_finish=None) -> QPropertyAnimation:

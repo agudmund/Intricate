@@ -70,6 +70,8 @@ class ImageNode(BaseNode):
         self._pending_pixmap: QPixmap | None = None
         self._pending_cache_key: str | None = None   # "" = done with no key
         self._pending_drift: str | None = None        # drift-warning message or None
+        self._pending_size:  int | None = None        # fingerprint to fold into data after worker
+        self._pending_mtime: float | None = None
         self._loading: bool = False
 
         self._image_delivery_timer = QTimer()
@@ -164,6 +166,14 @@ class ImageNode(BaseNode):
                 if img is not None and not img.isNull():
                     pixmap = QPixmap.fromImage(img)
                     logger.info(f"image loaded: {p.name} ({pixmap.width()}x{pixmap.height()}px)")
+                # Record fingerprint of the just-cached source so the next
+                # session's drift check has a reference point.
+                try:
+                    st = p.stat()
+                    self._pending_size  = st.st_size
+                    self._pending_mtime = st.st_mtime
+                except OSError:
+                    pass
             self._pending_pixmap = pixmap
             self._pending_cache_key = cache_key
 
@@ -270,19 +280,38 @@ class ImageNode(BaseNode):
                 pixmap = load_cached(self.data.cache_key)
                 if pixmap is not None:
                     cache_key = self.data.cache_key
-                    # Passive drift check — if source still exists on disk,
-                    # hash it and compare against the cache_key's hash portion.
-                    # Mismatch means the source was edited outside Intricate
-                    # (Photoshop, Adobe stamp, tool re-save). Flag, don't auto-fix.
+                    # Passive drift check — cheap fingerprint (size + mtime)
+                    # first, full hash only on fingerprint change. Policy is
+                    # flag-don't-auto-fix, so we record the observed fingerprint
+                    # after each check. Same fingerprint on next restore means
+                    # nothing has changed since the last look → no re-warning.
+                    # A content change since the stored fingerprint triggers a
+                    # hash, and a hash-confirmed mismatch raises the drift flag.
                     if self.data.source_path:
                         sp = Path(self.data.source_path)
                         if sp.exists():
-                            src_hash = hash_file(sp)
-                            if src_hash and src_hash != key_hash(cache_key):
-                                self._pending_drift = (
-                                    f"source drifted — cache no longer matches\n"
-                                    f"{sp.name}"
-                                )
+                            try:
+                                st = sp.stat()
+                                cur_size, cur_mtime = st.st_size, st.st_mtime
+                            except OSError:
+                                cur_size, cur_mtime = 0, 0.0
+                            fingerprint_clean = (
+                                cur_size == self.data.source_size
+                                and abs(cur_mtime - self.data.source_mtime) < 1.0
+                                and self.data.source_size != 0
+                            )
+                            if not fingerprint_clean:
+                                src_hash = hash_file(sp)
+                                if src_hash and src_hash != key_hash(cache_key):
+                                    self._pending_drift = (
+                                        f"source drifted — cache no longer matches\n"
+                                        f"{sp.name}"
+                                    )
+                                # Record the fingerprint we just observed so
+                                # the next restore sees a clean match and stays
+                                # silent — we've already surfaced this state.
+                                self._pending_size  = cur_size
+                                self._pending_mtime = cur_mtime
 
             # Path 2: source file → cache raw bytes + decode for display
             if pixmap is None and self.data.source_path:
@@ -297,6 +326,14 @@ class ImageNode(BaseNode):
                         img = self._decode_with_orientation(raw)
                         if img is not None and not img.isNull():
                             pixmap = QPixmap.fromImage(img)
+                        # Record fingerprint of the freshly-cached source so
+                        # the next restore's drift check has a reference point
+                        try:
+                            st = p.stat()
+                            self._pending_size  = st.st_size
+                            self._pending_mtime = st.st_mtime
+                        except OSError:
+                            pass
 
             # Path 3: legacy base64
             if pixmap is None and self.data.image_b64:
@@ -329,6 +366,16 @@ class ImageNode(BaseNode):
             self._scaled_cache = None
         if cache_key:
             self.data.cache_key = cache_key
+
+        # Fold in the fingerprint the worker observed. Recording this silently
+        # (whether or not drift was surfaced) is what stops the next session
+        # restore from re-warning about the same unchanged-since-last-look state.
+        if self._pending_size is not None:
+            self.data.source_size = self._pending_size
+            self._pending_size = None
+        if self._pending_mtime is not None:
+            self.data.source_mtime = self._pending_mtime
+            self._pending_mtime = None
 
         drift = self._pending_drift
         self._pending_drift = None
@@ -693,6 +740,8 @@ class ImageNode(BaseNode):
         self._pending_pixmap = None
         self._pending_cache_key = None
         self._pending_drift = None
+        self._pending_size  = None
+        self._pending_mtime = None
         self._loading = False
         # Sever VisionWorker signals FIRST — if the worker finishes after
         # removal it would call _spawn_caption_node on a dead node, creating
