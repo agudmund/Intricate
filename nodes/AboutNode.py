@@ -220,53 +220,24 @@ class AboutNode(BaseNode):
         text_rect = QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
         label = self.data.label or self.data.title
 
-        # If the label carries markdown bold (`**phrase**`), route through
-        # QTextDocument + HTML so the bold renders inline.  Paired check
-        # with `label.count("**") >= 2` so a stray lone `**` doesn't
-        # force the richer path.  Markdown splitter-spawned AboutNodes
-        # commonly carry patterns like `**Symptom:** text…` which benefit
-        # from the emphasis.
-        has_bold = "**" in label and label.count("**") >= 2
         spacing = Theme.aboutLineSpacing
-        if spacing or has_bold:
-            # Use QTextDocument to render with custom line spacing and/or
-            # inline bold.  Must match PrettyEdit exactly when spacing is
-            # active: LineDistanceHeight mode and the same pad_top that
-            # the editor stylesheet applies when spacing is negative.
-            pad_top = max(0, int(abs(spacing))) if spacing and spacing < 0 else 0
+        if spacing:
+            # Use QTextDocument to render with custom line spacing.
+            # Must match PrettyEdit exactly: LineDistanceHeight mode and
+            # the same pad_top that the editor stylesheet applies when
+            # spacing is negative — otherwise painted text and editor
+            # text land on different pixels.
+            pad_top = max(0, int(abs(spacing))) if spacing < 0 else 0
             doc = QTextDocument()
             doc.setDefaultFont(font)
             doc.setTextWidth(text_rect.width())
             doc.setDocumentMargin(0)
-            if has_bold:
-                # Escape HTML metacharacters first, then re-introduce
-                # bold as <b> tags.  Preserves literal `<`, `>`, `&` in
-                # compliance-doc content (hex values, generics, etc.).
-                # Trailing-colon rule: `**Symptom:**` becomes
-                # `<b>Symptom</b>:` rather than `<b>Symptom:</b>` —
-                # the colon still does its label-separator work without
-                # being part of the bold emphasis, which reads awkward
-                # on a compressed AboutNode.
-                import html as _html
-                import re as _re_md
-                escaped = _html.escape(label)
-                def _bold_sub(m):
-                    inner = m.group(1)
-                    if inner.endswith(':'):
-                        return f"<b>{inner[:-1]}</b>:"
-                    return f"<b>{inner}</b>"
-                as_html = _re_md.sub(r'\*\*([^*]+?)\*\*', _bold_sub, escaped)
-                doc.setHtml(as_html)
-            else:
-                doc.setPlainText(label)
-            # Apply line-height only if spacing is explicitly set;
-            # bold-only renders at the default spacing.
-            if spacing:
-                fmt = QTextBlockFormat()
-                fmt.setLineHeight(spacing, QTextBlockFormat.LineHeightTypes.LineDistanceHeight.value)
-                cursor = QTextCursor(doc)
-                cursor.select(QTextCursor.Document)
-                cursor.mergeBlockFormat(fmt)
+            doc.setPlainText(label)
+            fmt = QTextBlockFormat()
+            fmt.setLineHeight(spacing, QTextBlockFormat.LineHeightTypes.LineDistanceHeight.value)
+            cursor = QTextCursor(doc)
+            cursor.select(QTextCursor.Document)
+            cursor.mergeBlockFormat(fmt)
             painter.translate(text_rect.left(), text_rect.top() + pad_top)
             doc.drawContents(painter, QRectF(0, 0, text_rect.width(), text_rect.height()))
         else:

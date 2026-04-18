@@ -81,14 +81,16 @@ def _prettify_label(text: str) -> str:
 
     - ISO dates (``2026-04-15``) → ``April 15th 2026``
     - em-dash separators (``A — B``) → colons (``A: B``)
+    - ``**bold**`` markers stripped — the original text remains in
+      place and renders as regular AboutNode styling.  The bold syntax
+      is markdown source ornamentation; on a compressed AboutNode label
+      the original "Text:" punctuation does the label-separator work
+      without needing inline font-weight.
 
     Surrounding prose is preserved verbatim.  Invalid dates
     (month > 12, day > 31) pass through unchanged.  Em-dashes without
     surrounding spaces (compound words like ``word—word``) are untouched
-    — only the separator use converts.  ``**bold**`` markers are left
-    in place here — they're consumed by AboutNode's paint pipeline
-    which routes through QTextDocument + HTML when bold markup is
-    present."""
+    — only the separator use converts."""
     def _date_repl(m):
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if not (1 <= mo <= 12 and 1 <= d <= 31):
@@ -99,6 +101,10 @@ def _prettify_label(text: str) -> str:
     # "date — label" / "term — definition" pattern without touching
     # compound-word em-dashes (which have no surrounding spaces).
     text = text.replace(" — ", ": ")
+    # Strip markdown bold markers.  The wrapped word stays, no font
+    # change; the text's own colon / em-dash / cadence carries the
+    # emphasis on a compressed AboutNode.
+    text = text.replace("**", "")
     return text
 
 
