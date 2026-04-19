@@ -1033,10 +1033,20 @@ class BaseNode(QGraphicsRectItem):
                         except Exception:
                             pass
                 QTimer.singleShot(0, _deferred_remove)
-                # Release two ticks after removeItem.  The first
-                # singleShot runs after _deferred_remove; the second
-                # covers any paint rescheduled by it.
-                QTimer.singleShot(0, lambda: QTimer.singleShot(0, _release_bulk))
+                # Release AFTER the particle fade window.  8000 sprinkle
+                # particles linger + fade over ~500ms; peer paint
+                # invalidations caused by particle rendering (especially
+                # at extreme zoom where a particle cluster covers a
+                # large chunk of the viewport) should see the quiescence
+                # flag raised throughout.  Previously the release fired
+                # two event-loop ticks (~32ms) after removeItem — too
+                # short for the zoom-out-then-zoom-in repro where
+                # viewTransformed cascades leave the paint scheduler
+                # backed up and straggling paints land on freshly-
+                # severed state after the flag was already lowered.
+                # 500ms matches the particle fade and gives the paint
+                # queue room to drain.
+                QTimer.singleShot(500, _release_bulk)
 
 
     def _try_splice_into_wire(self) -> None:
