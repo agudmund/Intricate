@@ -555,6 +555,27 @@ For isolated single-node deletions this is fine — the paint scheduler absorbs 
 
 ---
 
+### 2026-04-19 — Session crash-hunt arc (commit trail)
+
+A single working session during the PrettyEdit unification surfaced a sequence of related crashes — each trigger peeled back to reveal the next one underneath.  The full commit arc, in order, with the specific failure each closed:
+
+| Commit | What it closed |
+|---|---|
+| `254610e` | HealthNode post-teardown timer crash + TextNode chain fix |
+| `3f75390` | Seven dashboard nodes got the `_timer_slot_alive` helper — whole orphan-timer class gone |
+| `e77a360` | Single-shake finally raises `_bulk_removing` (peer-paint quiescence for chain deletions) |
+| `49ac53a` | `save_session` wraps straggler `to_dict` in try/except (autosave-2s-later crash) |
+| `1bb8bc2` | Quiescence window widened to 500ms to cover particle fade |
+| `d6144a5` | `setVisible(False)` + `ItemHasNoContents` before `removeItem` (closed a Qt6Widgets paint race — half-fix, exposed the real one) |
+| `573bbbe` | `faulthandler` + `unraisablehook` — diagnostic arming that actually caught the next one |
+| `f658d75` | `NoIndex` — eliminated the BSP stale-pointer class, which was the whole thing all along |
+
+**Pattern.** Every crash in the chain shared the same surface signature (0xc0000409 in ucrtbase.dll, or 0xc0000005 in Qt6Widgets.dll), but the underlying causes were all distinct: Python exception propagation through slot callbacks, orphan-timer dereferences, peer-paint-during-burst races, straggler serialisation, Qt's own BSP tree holding freed pointers.  Without the `faulthandler` capture (commit `573bbbe`), the final BSP crash would have remained unpinnable — the Event Viewer signature alone can't distinguish between the Python-exception-propagation and the Qt-C++-access-violation variants.
+
+**Takeaway for future forensic passes.**  Arm the diagnostic capture *early*, not as a last resort.  The first handful of fixes in this session (the ones before `573bbbe`) were accurate in their immediate targets but remote-diagnosed under a blindfold.  Once `fault.txt` started receiving real stack traces, the root cause fell out in one more commit.  Any future class of repeating-crash-signature should get the same treatment: `faulthandler.enable(file=...)` is stdlib, has no runtime cost when no fault fires, and converts silent C++ crashes into actionable breadcrumbs.
+
+---
+
 ## Checklist for Future Node Types
 
 When adding a new node type or auditing an existing one, walk through this checklist:
