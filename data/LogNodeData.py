@@ -13,7 +13,7 @@ from data.NodeData import NodeData
 @dataclass
 class LogNodeData(NodeData):
     node_type:   str   = field(default="log")
-    title:       str   = field(default="nodal.log")
+    title:       str   = field(default="intricate.log")
     width:       float = field(default=440.0)
     height:      float = field(default=320.0)
     depth_front: bool  = field(default=False)
@@ -28,7 +28,7 @@ class LogNodeData(NodeData):
         import uuid as _uuid
         return cls(
             node_id       = data.get("node_id",       0),
-            title         = data.get("title",         "nodal.log"),
+            title         = data.get("title",         "intricate.log"),
             uuid          = data.get("uuid",          _uuid.uuid4().hex),
             x             = float(data.get("x",       0.0)),
             y             = float(data.get("y",       0.0)),

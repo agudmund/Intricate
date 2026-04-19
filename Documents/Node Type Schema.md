@@ -163,7 +163,7 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 ### Tinkerbells Tail
 - **Type key:** `log` | **Icon:** `iconLog`
 - **Files:** `nodes/LogNode.py`, `data/LogNodeData.py`
-- Live tail of current session log file (nodal.log). QFileSystemWatcher fires on file writes; 1.5s poll timer backs it up. Keeps last 400 lines.
+- Live tail of current session log file (intricate.log). QFileSystemWatcher fires on file writes; 1.5s poll timer backs it up. Keeps last 400 lines.
 - `_has_depth_toggle = True`
 
 ### The Joy Inspector

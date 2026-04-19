@@ -244,7 +244,7 @@ All three families use `NodeButton` for rendering on the button strip. `NodeButt
 
 ### Logging
 
-Logs go to the directory set in `[shared] log_dir` in `settings.toml`, falling back to `./logs/nodal.log`. Three-slot rotation (current → previous → archive → recycle bin). TRACE (5) is the lowest level — used for per-frame diagnostics in file only.
+Logs go to the directory set in `[shared] log_dir` in `settings.toml`, falling back to `./logs/intricate.log`. Three-slot rotation (current → previous → archive → recycle bin). TRACE (5) is the lowest level — used for per-frame diagnostics in file only.
 
 ## Settings File Structure
 

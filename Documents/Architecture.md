@@ -101,7 +101,7 @@ Canonical catalogue with per-node detail lives in `Documents/Node Type Schema.md
 | BezierNode | Interactive bezier curve with draggable handles |
 | HealthNode | Live system monitor — GC census; OS click tracking opt-in via `[intricate.health] click_monitor` |
 | PerfNode | Performance metrics display |
-| LogNode | Live tail of nodal.log |
+| LogNode | Live tail of intricate.log |
 | TreeNode | Project folder structure walker |
 | GitNode | Git status dashboard for Desktop repos |
 | PaletteNode | Hex color swatch board |

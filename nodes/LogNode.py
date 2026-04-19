@@ -25,10 +25,10 @@ _MAX_LINES     = 400   # keep the last N lines to stay snappy
 
 class LogNode(BaseNode):
     """
-    Displays a live tail of the current session log file (nodal.log).
+    Displays a live tail of the current session log file (intricate.log).
 
     The log path is resolved from [shared] log_dir in settings.toml,
-    falling back to ./logs/nodal.log.
+    falling back to ./logs/intricate.log.
 
     A QFileSystemWatcher fires on every write to the file; a 1.5s poll
     timer backs it up in case the watcher loses track after rotation.
@@ -117,11 +117,11 @@ class LogNode(BaseNode):
         except Exception:
             logs_dir = Path(__file__).resolve().parent.parent / "logs"
 
-        # Most recent timestamped log (Rust logger: nodal_YYYY-MM-DD_HHMMSS.log)
-        candidates = sorted(logs_dir.glob("nodal_*.log"), key=lambda p: p.stat().st_mtime)
+        # Most recent timestamped log (Rust logger: intricate_YYYY-MM-DD_HHMMSS.log)
+        candidates = sorted(logs_dir.glob("intricate_*.log"), key=lambda p: p.stat().st_mtime)
         if candidates:
             return candidates[-1]
-        return logs_dir / "nodal.log"
+        return logs_dir / "intricate.log"
 
     def _refresh(self) -> None:
         # Orphan-timer guard (see BaseNode._timer_slot_alive).
