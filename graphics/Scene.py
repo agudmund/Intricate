@@ -767,18 +767,29 @@ class IntricateScene(QGraphicsScene):
             # Duck-typed node check — includes BaseNode variants AND the
             # StickerNode root (2026-04-18 split). Any future root-type
             # node that implements `to_dict` + `data` flows through too.
-            if hasattr(item, 'to_dict') and hasattr(item, 'data'):
-                nodes.append(item.to_dict())
-            elif isinstance(item, Connection) and id(item) not in seen:
-                seen.add(id(item))
-                try:
+            #
+            # Both legs wrap in RuntimeError catches because scene.items()
+            # can surface a straggler whose Python wrapper outlived the
+            # C++ side — to_dict() then hits ``self.mapRectToScene(...)``
+            # (via sync_data) on a dead QGraphicsItem and raises from
+            # libshiboken.  The old code caught this only for Connections;
+            # a node raising here propagated through the autosave QTimer
+            # signal and fastfailed the process (0xC0000409, no Python
+            # traceback — 2026-04-19 deletion-then-autosave-2s-later race).
+            # Skipping a stragger node from the save is correct: it's
+            # already logically gone, the save just shouldn't die over it.
+            try:
+                if hasattr(item, 'to_dict') and hasattr(item, 'data'):
+                    nodes.append(item.to_dict())
+                elif isinstance(item, Connection) and id(item) not in seen:
+                    seen.add(id(item))
                     if item.start_node and item.end_node:
                         connections.append({
                             "start_uuid": item.start_node.data.uuid,
                             "end_uuid":   item.end_node.data.uuid,
                         })
-                except RuntimeError:
-                    pass
+            except RuntimeError:
+                pass
 
         # Preserve existing description if one was loaded with this session
         description = getattr(self, '_session_description', "")
