@@ -248,34 +248,72 @@ class AboutNode(BaseNode):
     def paint_content(self, painter: QPainter) -> None:
         if self._editor and self._editor.proxy.isVisible():
             return
+
+        # Cached font + metrics.  AboutNodes are the most common node type
+        # in large scenes (up to ~1200 of them), so rebuilding QFont and
+        # QFontMetrics on every repaint tick was a hotspot worth removing.
+        # The cache invalidates whenever the Theme keys change, which covers
+        # live reloads of settings.toml.
+        fkey = (Theme.aboutFontFamily, Theme.aboutFontSize)
+        if getattr(self, '_font_key', None) != fkey:
+            f = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+            f.setStyleName(self._TITLE_STYLE)
+            self._font     = f
+            self._fm       = QFontMetrics(f)
+            self._font_key = fkey
+            self._trunc_key = None           # metrics changed — bust truncation cache
+        fm = self._fm
+
         painter.save()
-        font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
-        font.setStyleName(self._TITLE_STYLE)
-        painter.setFont(font)
+        painter.setFont(self._font)
         painter.setPen(QColor(Theme.aboutTextColor))
-        r = self.rect()
+
+        r    = self.rect()
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
-        top = self._anim_top_offset
-        text_rect = QRectF(r.left() + padL, r.top() + top + Theme.nodeTextPaddingTop, r.width() - padL - padR, r.height() - top)
+        top  = self._anim_top_offset
+        tx   = r.left() + padL
+        ty   = r.top()  + top + Theme.nodeTextPaddingTop
+        tw   = r.width()  - padL - padR
+        th   = r.height() - top
+        text_rect = QRectF(tx, ty, tw, th)
+
         label = self.data.label or self.data.title
 
-        fm = QFontMetrics(font)
-        bounding = fm.boundingRect(text_rect.toRect(), Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
-        if bounding.height() > text_rect.height() or bounding.width() > text_rect.width():
-            lines = label.splitlines(keepends=True)
-            visible = ""
-            line_h = fm.lineSpacing()
-            max_lines = max(1, int(text_rect.height() / line_h)) if line_h > 0 else 1
-            for i, ln in enumerate(lines):
-                if i >= max_lines:
-                    break
-                visible += ln
-            visible = visible.rstrip()
-            if len(visible) < len(label.rstrip()):
-                visible = visible + "…"
-            label = visible
-        painter.drawText(text_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
+        # Fast path — single-line label that fits both axes.  Covers the
+        # common case (short category labels on sticky-note AboutNodes) and
+        # skips the expensive boundingRect + line-splitting work entirely.
+        if ('\n' not in label
+                and fm.horizontalAdvance(label) <= tw
+                and fm.lineSpacing() <= th):
+            painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignTop, label)
+            painter.restore()
+            return
+
+        # Slow path — multi-line or overflow.  Cached per (label, w, h) so
+        # repeat repaints on a static rect skip the boundingRect call.
+        tkey = (label, round(tw), round(th))
+        if getattr(self, '_trunc_key', None) != tkey:
+            bounding = fm.boundingRect(
+                text_rect.toRect(),
+                Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
+                label,
+            )
+            if bounding.height() > th or bounding.width() > tw:
+                line_h = fm.lineSpacing()
+                max_lines = max(1, int(th / line_h)) if line_h > 0 else 1
+                lines = label.splitlines(keepends=True)
+                visible = "".join(lines[:max_lines]).rstrip()
+                if len(visible) < len(label.rstrip()):
+                    visible += "…"
+                self._trunc_visible = visible
+            else:
+                self._trunc_visible = label
+            self._trunc_key = tkey
+
+        painter.drawText(text_rect,
+                         Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
+                         self._trunc_visible)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────
