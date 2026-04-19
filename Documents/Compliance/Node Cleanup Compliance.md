@@ -486,6 +486,47 @@ After large-scale edits to shared widgets or node code — especially when extra
 
 ---
 
+### 2026-04-19 — HealthNode post-teardown timer fire on app shutdown
+
+**Symptom.** Event Viewer reported exception `0xc0000409` (STATUS_STACK_BUFFER_OVERRUN) in `ucrtbase.dll` at 11:37:41 AM in `pythonw.exe`.  `logs/crash.txt` captured the Python precursor:
+
+```
+File "nodes/HealthNode.py", line 123, in _poll_gc
+    self._poll_video_buffers()
+File "nodes/HealthNode.py", line 143, in _poll_video_buffers
+    scene = self.scene()
+RuntimeError: libshiboken: Internal C++ object (HealthNode) already deleted.
+```
+
+The session log ended at 11:37:39 with a clean AboutNode demolition trace; the crash fired two seconds later with no further log entries, consistent with app-close teardown where individual scene items are not routed through `itemChange → _prepare_for_removal`.
+
+**Root cause.** `HealthNode._poll_timer = QTimer()` is orphaned — HealthNode is a `QGraphicsRectItem` (not a `QObject`), so `QTimer(self)` isn't possible; Qt keeps the timer alive via its signal connection.  On user-triggered removal, `itemChange` with `value is None` calls `_poll_timer.stop()` and the demolition crew disconnects the timeout via `_demolition_timers`.  But on **non-deterministic app shutdown**, the scene is scrapped wholesale and the orphan timer keeps firing — `_poll_gc` dispatches onto a Python wrapper whose C++ side has been destroyed, `self.scene()` raises RuntimeError, and the unhandled exception propagates through Qt's C++ event loop and manifests as the stack buffer overrun.
+
+The existing `try/except Exception` in `_poll_gc` covered the body, but `_poll_video_buffers()` was called one line outside the guard — that was the hole.
+
+**Fix applied to `nodes/HealthNode.py::_poll_gc`:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | Probe `self.scene()` as a liveness check at method entry | A dead wrapper raises RuntimeError on any Qt access |
+| 2 | On RuntimeError, call `self._poll_timer.stop()` + `timeout.disconnect()` | Self-disarm so the timer can't fire again |
+| 3 | Return before touching any other Qt state | Prevents the cascade into `_poll_video_buffers` |
+
+**Lesson.** Orphan timers (those that can't be parented to a QObject because the owner is a QGraphicsItem) need a defensive post-teardown guard at the top of every slot they connect to, since the non-deterministic shutdown path will occasionally race past the deterministic cleanup hooks.  The orphan pattern is used by many nodes in the codebase (GitNode, LogNode, MergeNode, ClaudeNode, ClaudeInfoNode, JoyStatsNode, PerfNode, VideoNode, etc.); the same class of crash is latent in all of them and only manifests under precise shutdown timing.
+
+**Secondary audit candidates.**  The same guard shape should be added to other orphan-timer slots in time:
+
+- `ClaudeInfoNode._poll_timer` — same pattern as HealthNode
+- `JoyStatsNode._poll_timer` — same
+- `PerfNode._poll_timer` — same
+- `LogNode._poll_timer` — same
+- `VideoNode._cache_poll` — same
+- `MergeNode._refresh_timer` — same
+
+Apply as each is observed to race; the single-file fix is cheap and contained.
+
+---
+
 ## Checklist for Future Node Types
 
 When adding a new node type or auditing an existing one, walk through this checklist:

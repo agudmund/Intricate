@@ -350,19 +350,23 @@ class TextNode(BaseNode):
 
     def _split_into_about_nodes(self) -> None:
         """
-        Split each non-empty line of the body text into its own AboutNode.
+        Split each non-empty line of the body text into its own AboutNode,
+        chained to the previous one with a Connection wire.
 
         Placement rides the shared scatter in ``utils/placement.py``:
-        ``spiral_place`` for collision-aware seating, ``wander_origin`` to
-        walk the focal point across the canvas with every spawn so the
-        result reads as organic sticky-note drop rather than a fixed-centre
-        fan.  Each line passes through ``prettify_label`` first — ISO date
-        rewriting, em-dash → colon, bold/backtick stripping — and purely
-        structural lines (horizontal rules etc.) are filtered out.
+        ``spiral_place`` seats each node in a collision-free spot while
+        respecting wire-path clearance, and ``wander_origin`` walks the
+        focal point across the canvas with every spawn so the chain
+        reads as organic sticky-note drop rather than a linear marching-
+        right queue.  Each line passes through ``prettify_label`` first
+        (ISO date rewriting, em-dash → colon, bold/backtick stripping)
+        and purely structural lines (horizontal rules etc.) are filtered
+        out.
 
-        No wires.  TextNode's job is to atomise a block of text into
-        independent AboutNode pills; the reader stitches them together
-        spatially, not via chain links.
+        TextNode-only — every line becomes an AboutNode regardless of
+        length.  Richer spawners like MarkdownNode classify by length
+        and spawn WarmNodes for longer paragraphs; TextNode stays simple
+        by design.
         """
         scene = self.scene()
         if not scene:
@@ -374,6 +378,7 @@ class TextNode(BaseNode):
 
         from utils.placement import spiral_place, wander_origin
         from utils.label_cleanup import prettify_label, is_structural_only
+        from graphics.Connection import Connection
 
         _OFFSCREEN = QPointF(-999_999, -999_999)
 
@@ -388,24 +393,35 @@ class TextNode(BaseNode):
         if not lines:
             return
 
-        # First spawn anchors just to the right of the source node so the
-        # scatter has a consistent starting context; every subsequent
-        # spawn wanders off the previous node via wander_origin.
-        first_origin = self.pos() + QPointF(self.rect().width() + 60, 0)
-        prev_node = None
+        # Source node anchors the chain; every subsequent spawn wanders
+        # off the previous node via wander_origin, and gets wired to it.
+        prev_node = self
+        source_hidden = not self.isVisible()
+        first_spawn = True
 
         for line in lines:
             node = scene.add_about_node(pos=_OFFSCREEN, label=line)
             node.data.title = line[:40]
 
-            if prev_node is None:
-                origin = first_origin
+            if first_spawn and source_hidden:
+                pos = spiral_place(scene, node)
             else:
-                origin = wander_origin(prev_node)
-
-            pos = spiral_place(scene, node, origin=origin, fallback=origin)
+                chain_origin = wander_origin(prev_node)
+                pos = spiral_place(
+                    scene, node, origin=chain_origin,
+                    parent=prev_node,
+                    fallback=chain_origin,
+                )
             node.setPos(pos)
+
+            # Wire to the previous node unless the source is hidden and
+            # this is the very first spawn (no anchor to chain from).
+            if not (first_spawn and source_hidden):
+                conn = Connection(prev_node, node)
+                scene.addItem(conn)
+
             prev_node = node
+            first_spawn = False
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT
