@@ -245,27 +245,43 @@ class AboutNode(BaseNode):
     # PAINT
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Class-level shared font cache ─────────────────────────────────────
+    # Every AboutNode constructs the same QFont from the same Theme keys
+    # and the same _TITLE_STYLE, so instance-level caching was wasteful —
+    # a 1200-node scene meant 1200 QFont + 1200 QFontMetrics constructions
+    # stacking into the first paint pass after session load, registering
+    # as a visible hitch on reveal.  Sharing via a class-level dict keyed
+    # on the full font-identity tuple means one construction per distinct
+    # font config across the entire app lifetime (typically one, or two
+    # if theme changes during the session).  Memory cost: negligible —
+    # a QFont + QFontMetrics pair weighs a few KB, and the dict will
+    # never hold more than a handful of entries.  Dict is safe to share
+    # without locking because paint_content only runs on the main thread.
+    _SHARED_FONTS: dict = {}
+
     def paint_content(self, painter: QPainter) -> None:
         if self._editor and self._editor.proxy.isVisible():
             return
 
-        # Cached font + metrics.  AboutNodes are the most common node type
-        # in large scenes (up to ~1200 of them), so rebuilding QFont and
-        # QFontMetrics on every repaint tick was a hotspot worth removing.
-        # The cache invalidates whenever the Theme keys change, which covers
-        # live reloads of settings.toml.
-        fkey = (Theme.aboutFontFamily, Theme.aboutFontSize)
-        if getattr(self, '_font_key', None) != fkey:
+        # Resolve font + metrics from the class-shared cache.  On theme
+        # reload the tuple key changes, so a new entry is built once and
+        # every subsequent AboutNode paint reuses it.  Per-instance
+        # tracking (_font_key) is still kept so the truncation cache
+        # invalidates correctly when metrics change out from under it.
+        fkey = (Theme.aboutFontFamily, Theme.aboutFontSize, self._TITLE_STYLE)
+        cached = AboutNode._SHARED_FONTS.get(fkey)
+        if cached is None:
             f = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
             f.setStyleName(self._TITLE_STYLE)
-            self._font     = f
-            self._fm       = QFontMetrics(f)
-            self._font_key = fkey
+            cached = (f, QFontMetrics(f))
+            AboutNode._SHARED_FONTS[fkey] = cached
+        font, fm = cached
+        if getattr(self, '_font_key', None) != fkey:
+            self._font_key  = fkey
             self._trunc_key = None           # metrics changed — bust truncation cache
-        fm = self._fm
 
         painter.save()
-        painter.setFont(self._font)
+        painter.setFont(font)
         painter.setPen(QColor(Theme.aboutTextColor))
 
         r    = self.rect()
