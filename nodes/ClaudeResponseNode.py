@@ -52,8 +52,16 @@ class ClaudeResponseNode(BaseNode):
         self._min_height  = Theme.aboutMinHeight
         self._apply_depth()
 
+        # Lazy editor — _build_editor is called on first _start_edit
+        # trigger (double-click or edit-button activation).  The
+        # ClaudeResponseNode already has paint_content that renders
+        # the label from data.label, so idle state is already correct
+        # — the only change from the previous eager pattern is that
+        # construction cost moves from session-load to first edit.
+        # 22 ms per node × however-many responses adds up in
+        # Claude-heavy sessions; ~0 at load is the same story as
+        # TextNode/WarmNode/CushionsNode.
         self._editor: PrettyEdit | None = None
-        self._build_editor()
 
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -77,6 +85,10 @@ class ClaudeResponseNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_editor(self) -> None:
+        """Lazy-build the PrettyEdit on first _start_edit trigger.
+        Idempotent — subsequent calls are no-ops."""
+        if self._editor is not None:
+            return
         self._editor = PrettyEdit(
             self,
             font_family=Theme.aboutFontFamily,
@@ -96,6 +108,7 @@ class ClaudeResponseNode(BaseNode):
                       r.height() - (content_top - r.top()) - _PAD_V)
 
     def _start_edit(self) -> None:
+        self._build_editor()   # idempotent lazy build
         self._editor.start_edit(self.data.label, self._edit_rect(), select_all=False)
 
     def _on_committed(self, text: str) -> None:

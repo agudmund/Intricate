@@ -8,7 +8,7 @@
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QPainter, QFont, QColor
+from PySide6.QtGui import QPainter, QFont, QFontMetrics, QColor
 
 from nodes.BaseNode import BaseNode
 from data.CushionsNodeData import CushionsNodeData
@@ -29,6 +29,11 @@ class CushionsNode(BaseNode):
     """
     _has_depth_toggle = True
 
+    # Class-level shared font cache for idle-paint text.  Same pattern
+    # AboutNode / TextNode / WarmNode use: one QFont + one QFontMetrics
+    # across every CushionsNode instance.
+    _SHARED_FONTS: dict = {}
+
     def __init__(self, data: CushionsNodeData | None = None):
         if data is None:
             data = CushionsNodeData()
@@ -38,8 +43,10 @@ class CushionsNode(BaseNode):
         self._min_height  = Theme.aboutMinHeight
         self._apply_depth()
 
+        # Lazy editor — paint_content renders the label text in the
+        # idle state; the PrettyEdit only builds on first double-click.
+        # Matches the TextNode conversion (commit a2337bb).
         self._editor: PrettyEdit | None = None
-        self._build_editor()
 
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -59,29 +66,45 @@ class CushionsNode(BaseNode):
     # EDITOR
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_editor(self) -> None:
+    def _ensure_editor(self) -> None:
+        """Lazy-build the PrettyEdit on first double-click.  Idempotent."""
+        if self._editor is not None:
+            return
         self._editor = PrettyEdit(
             self,
             font_family=Theme.claudeBodyFontFamily,
             font_size=Theme.claudeBodyFontSize,
             font_color=Theme.nodeFontColor,
-            always_visible=True,
+            always_visible=False,
+            commit_on_focus_loss=True,
         )
         self._editor.setPlainText(self.data.label)
         self._editor.textChanged.connect(self._on_text_changed)
+        self._editor.committed.connect(self._on_committed)
         self._position_editor()
 
     def _on_text_changed(self) -> None:
-        self.data.label = self._editor.toPlainText()
+        if self._editor is not None:
+            self.data.label = self._editor.toPlainText()
 
-    def _position_editor(self) -> None:
+    def _on_committed(self, text: str) -> None:
+        """Editor lost focus — PrettyEdit has hidden its proxy;
+        paint_content takes over the visual."""
+        self.data.label = text
+        self.update()
+
+    def _body_rect(self) -> QRectF:
         r = self.rect()
-        self._editor.position(QRectF(
+        return QRectF(
             r.left()  + _PAD,
             r.top()   + _BUTTON_ZONE_H,
             r.width() - _PAD * 2,
             r.height() - _BUTTON_ZONE_H - _PAD,
-        ))
+        )
+
+    def _position_editor(self) -> None:
+        if self._editor is not None:
+            self._editor.position(self._body_rect())
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS
@@ -172,7 +195,32 @@ class CushionsNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
-        pass  # editor is always visible — nothing to paint
+        # Editor overlaid (active edit): the editor paints itself, skip.
+        if (self._editor is not None
+                and getattr(self._editor, 'proxy', None) is not None
+                and self._editor.proxy.isVisible()):
+            return
+        label = self.data.label or ""
+        if not label:
+            return
+
+        fkey = (Theme.claudeBodyFontFamily, Theme.claudeBodyFontSize)
+        cached = CushionsNode._SHARED_FONTS.get(fkey)
+        if cached is None:
+            f = QFont(Theme.claudeBodyFontFamily, max(1, Theme.claudeBodyFontSize))
+            cached = (f, QFontMetrics(f))
+            CushionsNode._SHARED_FONTS[fkey] = cached
+        font, _ = cached
+
+        painter.save()
+        painter.setFont(font)
+        painter.setPen(QColor(Theme.nodeFontColor))
+        painter.drawText(
+            self._body_rect(),
+            Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
+            label,
+        )
+        painter.restore()
 
     def setRect(self, rect) -> None:
         super().setRect(rect)
@@ -184,15 +232,16 @@ class CushionsNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        if self._editor:
-            self._editor.proxy.setFocus()
-            self._editor.setFocus(Qt.MouseFocusReason)
+        self._ensure_editor()
+        self._editor.start_edit(self.data.label, self._body_rect(), select_all=False)
         event.accept()
 
     def keyPressEvent(self, event) -> None:
-        if self._editor and self._editor.proxy.isVisible():
+        if (self._editor is not None
+                and getattr(self._editor, 'proxy', None) is not None
+                and self._editor.proxy.isVisible()):
             if event.key() == Qt.Key_Escape:
-                self._editor._restore_view_focus()
+                self._editor.commit()
                 if self.scene() and self.scene().views():
                     self.scene().views()[0].setFocus()
                 event.accept()
