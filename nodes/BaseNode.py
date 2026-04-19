@@ -949,7 +949,22 @@ class BaseNode(QGraphicsRectItem):
             scene = self.scene()
             if scene:
                 self.setSelected(False)
-                self.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
+                # Hide + mark no-contents BEFORE any further state mutation.
+                # Qt's paint dispatch consults visibility and the
+                # ItemHasNoContents flag at item-iteration time; setting
+                # both here pulls the node out of the paint list
+                # immediately, so no subsequent paint pass can reach a
+                # being-torn-down QGraphicsItem (fixes a Qt6Widgets
+                # 0xc0000005 access violation observed on the second
+                # shake in a quick sequence — the deleted node was still
+                # being iterated by the paint dispatch between setFlags
+                # clearing the interaction flags and _deferred_remove
+                # calling removeItem one event-loop tick later).
+                self.setVisible(False)
+                # GraphicsItemFlags with ItemHasNoContents signals to Qt
+                # that paint() should never be called on this item — even
+                # if invalidate rects cover its former geometry.
+                self.setFlags(QGraphicsRectItem.GraphicsItemFlag.ItemHasNoContents)
                 # Peer-paint-during-burst guard: raise the scene-level
                 # counter BEFORE particles and removal cascade so surviving
                 # peers (Connection glide ticks, NodeBehaviour pulses,
