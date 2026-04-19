@@ -59,7 +59,8 @@ def _html_to_plain(body: str) -> str:
 
 class _SmartPrettyEdit(PrettyEdit):
     """PrettyEdit subclass that intercepts oversized pastes before they land
-    in the document.
+    in the document, and exposes a class-level contextMenuEvent hook so the
+    owning node can prepend its own actions to the right-click menu.
 
     On a paste that would push the document past the owning WarmNode's
     split threshold, the paste is diverted to the node's chain-split
@@ -67,12 +68,36 @@ class _SmartPrettyEdit(PrettyEdit):
     to render multi-megabyte text in a single QTextEdit proxy — the
     exact condition that crashes Qt6Core.dll during scene load. Small
     pastes pass through unchanged.
+
+    contextMenuEvent is overridden at the *class* level (not assigned to an
+    instance) because PySide6's C++ → Python virtual dispatch only finds
+    overrides on the class — instance attribute shadowing is silently
+    ignored for Qt virtuals.  The owning node supplies a callback via
+    context_menu_extra(ctx) that receives the standard menu and is free
+    to insert / prepend / append actions before the menu is shown.
     """
 
-    def __init__(self, *args, threshold: int = 0, on_oversized_paste=None, **kwargs):
+    def __init__(self, *args, threshold: int = 0, on_oversized_paste=None,
+                 context_menu_extra=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._split_threshold = threshold
         self._on_oversized_paste = on_oversized_paste
+        self._context_menu_extra = context_menu_extra
+        # Set during right-click → suppresses the single commit-on-focus-loss
+        # triggered by View.mousePressEvent's self.setFocus(). Without this,
+        # the queued FocusOut hides the proxy before our deferred menu can
+        # open, leaving a dismissed/stranded popup.
+        self._suppress_next_commit = False
+
+    def commit(self):
+        """Suppress a single commit if armed by mousePressEvent on
+        right-click.  Without this, View.mousePressEvent's self.setFocus()
+        queues a FocusOut that triggers commit-on-focus-loss → proxy.hide()
+        before our synchronous exec() opens the menu."""
+        if self._suppress_next_commit:
+            self._suppress_next_commit = False
+            return None
+        return super().commit()
 
     def insertFromMimeData(self, mime) -> None:
         text = mime.text() or mime.html() or ''
@@ -88,6 +113,49 @@ class _SmartPrettyEdit(PrettyEdit):
                 _QTimer.singleShot(0, lambda e=existing, t=text: cb(e, t))
                 return
         super().insertFromMimeData(mime)
+
+    def mousePressEvent(self, event) -> None:
+        """Right-click → context menu.  Matches the working StickerNode
+        pattern (commit de24bd7): pretty_menu() with no parent → genuine
+        top-level popup with Qt.Popup window flag, executed synchronously
+        from the press handler.  Menu contents harvested from QTextEdit's
+        createStandardContextMenu() so the full set is preserved (Undo /
+        Redo / Cut / Copy / Paste / Delete / Select All), then 'The
+        Majestic' prepended via context_menu_extra.
+
+        commit-suppression is still required — View.mousePressEvent calls
+        self.setFocus() which triggers a queued FocusOut on this editor,
+        and commit-on-focus-loss would otherwise hide the proxy before
+        the synchronous exec() had a chance to run."""
+        if event.button() == Qt.RightButton:
+            self._suppress_next_commit = True
+            from pretty_widgets.PrettyMenu import menu as pretty_menu
+            ctx = pretty_menu()   # NO parent — top-level popup
+            # Harvest the full standard QTextEdit menu.  QActions can
+            # belong to multiple menus; reparenting them into ctx gives
+            # us the complete Undo/Redo/Cut/Copy/Paste/Delete/Select-All
+            # set with correct enable/disable state, without re-implementing
+            # any of Qt's internal logic.
+            std = self.createStandardContextMenu()
+            for action in list(std.actions()):
+                std.removeAction(action)
+                ctx.addAction(action)
+            std.deleteLater()
+            if self._context_menu_extra is not None:
+                try:
+                    self._context_menu_extra(ctx)
+                except Exception:
+                    pass
+            ctx.exec(event.globalPosition().toPoint())
+            ctx.deleteLater()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event) -> None:
+        # Right-click press is handled in mousePressEvent above — suppress
+        # Qt's follow-up QContextMenuEvent so a second menu doesn't flash.
+        event.accept()
 
 
 class WarmNode(BaseNode):
@@ -184,6 +252,7 @@ class WarmNode(BaseNode):
             normalize_layout=False,
             threshold=WARM_SPLIT_THRESHOLD,
             on_oversized_paste=self._split_oversized_paste,
+            context_menu_extra=self._add_majestic_action,
         )
         # Give emoji glyphs 3px extra descent room without affecting text layout.
         # CSS padding-bottom on the body element adds space below each line's
@@ -199,9 +268,6 @@ class WarmNode(BaseNode):
         self._editor.setPlainText(_html_to_plain(self.data.body_text))
         self._editor.textChanged.connect(self._on_text_changed)
         self._editor.committed.connect(self._on_committed)
-
-        # Extend the standard right-click menu with "Open in Notepad"
-        self._editor.contextMenuEvent = self._editor_context_menu
 
         self._editor.proxy.setGeometry(self._body_rect())
 
@@ -304,21 +370,17 @@ class WarmNode(BaseNode):
         _log.info("[warm split] %s — paste split into %d chunks (total %d chars)",
                   self.data.uuid[:8], len(chunks), len(full_content))
 
-    def _editor_context_menu(self, event) -> None:
-        """Standard context menu with 'Open in Notepad' prepended."""
-        from pretty_widgets.PrettyMenu import menu_stylesheet
-        ctx = self._editor.createStandardContextMenu()
-        ctx.setStyleSheet(menu_stylesheet())
-        # Prepend our action before the standard Cut/Copy/Paste
+    def _add_majestic_action(self, ctx) -> None:
+        """Prepend 'The Majestic' to the editor's standard context menu.
+        Called by _SmartPrettyEdit.contextMenuEvent after it builds the
+        styled menu but before showing it."""
         first = ctx.actions()[0] if ctx.actions() else None
-        notepad_action = ctx.addAction("Open in Notepad")
+        majestic_action = ctx.addAction("The Majestic")
         if first:
-            ctx.removeAction(notepad_action)
-            ctx.insertAction(first, notepad_action)
+            ctx.removeAction(majestic_action)
+            ctx.insertAction(first, majestic_action)
             ctx.insertSeparator(first)
-        notepad_action.triggered.connect(self._launch_editor)
-        ctx.exec(event.globalPos())
-        ctx.deleteLater()
+        majestic_action.triggered.connect(self._launch_editor)
 
     # ─────────────────────────────────────────────────────────────────────────
     # BRIDGE — WRITE
@@ -667,10 +729,6 @@ class WarmNode(BaseNode):
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
-
-    def contextMenuEvent(self, event) -> None:
-        """Fallback right-click — areas not covered by the body editor."""
-        super().contextMenuEvent(event)
 
     def focusOutEvent(self, event) -> None:
         """Restore view focus policy when the node loses focus."""

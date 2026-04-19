@@ -198,11 +198,27 @@ class BaseNode(QGraphicsRectItem):
 
     def sceneEventFilter(self, watched, event) -> bool:
         """Intercept right-clicks on child items (QGraphicsProxyWidgets, etc.)
-        before they reach the child.  Without this, the QTextEdit proxy eats
-        the right-click for its context menu and BaseNode never sees it."""
+        before they reach the child, so BaseNode can start a connection wire
+        instead of the child eating the click for its own context menu.
+
+        Exception: a *visible* QGraphicsProxyWidget means the user is actively
+        editing.  Subclasses override ``_show_proxy_context_menu(event)`` to
+        show their edit-context menu directly at press time — we can't rely
+        on Qt's QContextMenuEvent dispatch here because View.mousePressEvent
+        calls setFocus() on itself on every press, which defocuses the
+        editor → commit_on_focus_loss → proxy.hide() before the follow-up
+        QContextMenuEvent can reach the embedded widget."""
         from PySide6.QtCore import QEvent
+        from PySide6.QtWidgets import QGraphicsProxyWidget
         if (event.type() == QEvent.GraphicsSceneMousePress
                 and event.button() == Qt.RightButton):
+            # Visible proxy = active editor.  Let the press reach the
+            # inner QWidget's mousePressEvent — the widget handles its
+            # own right-click menu there (see _SmartPrettyEdit).  If we
+            # intercepted here we'd also kill the release + context-menu
+            # dispatch Qt would otherwise send to the child.
+            if isinstance(watched, QGraphicsProxyWidget) and watched.isVisible():
+                return False
             self.mousePressEvent(event)
             return True   # handled — child does not see it
         return super().sceneEventFilter(watched, event)
