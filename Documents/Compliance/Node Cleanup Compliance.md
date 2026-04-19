@@ -528,6 +528,33 @@ The helper probes ``self.scene()`` as a liveness check; on RuntimeError (dead wr
 
 ---
 
+### 2026-04-19 — Single-node shake-delete missing the `_bulk_removing` quiescence guard
+
+**Symptom.** Third 0xC0000409 of the day, same signature (stack buffer overrun in ucrtbase.dll, no Python traceback).  Reproducible on the "A Little Bit Funny" session: two specific AboutNodes (uuid `db8d91d6`, `1ba6acbb`) crash the app when shake-deleted one at a time from the right edge of a 105-node horizontal chain.  The chain was spawned by TextNode's split flow from a long testing checklist; each AboutNode is wired to its neighbour via a Connection.  crash.txt is stale from the earlier HealthNode trace — no fresh Python precursor, indicating a pure C++ paint-loop dereference, not a Python exception propagating out of a timer slot.
+
+**Root cause.** `BaseNode._shake_delete` (single-node path) does **not** increment `scene._bulk_removing` before it defers its `removeItem`.  Only `_shake_delete_group` and the bulk-clear path do.  The counter is the scene-level quiescence flag that gates peer repaints during a removal burst (Connection glide ticks, NodeBehaviour pulses, NodeButton, StickerNode viewport tracking).
+
+For isolated single-node deletions this is fine — the paint scheduler absorbs a small peer cascade without racing.  But when the deleted node sits inside a long chain of wires (the 100+ AboutNode checklist chain):
+
+1. `_shake_delete` spawns 8,000 particles and defers `removeItem`.
+2. Peer Connection glide timers continue ticking at 60Hz against the still-present-but-soon-to-be-severed wire.
+3. `_deferred_remove` fires on the next event-loop tick → `itemChange` → `_prepare_for_removal` → demolition crew runs all five phases.  Phase 0 zeroes flags and invalidates the scene rect (1337px wide for the extreme case, blanketing dozens of peers).
+4. A concurrent Connection glide tick or NodeBehaviour pulse on a surviving peer dereferences the dying node's rect / pos / state in the sub-millisecond window between phase 0 zeroing the geometry and the Qt paint loop re-entering.
+5. Stack cookie fails on the C runtime call, __fastfail → 0xC0000409.
+
+**Fix applied to `nodes/BaseNode.py::mouseReleaseEvent` (single-shake branch):**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | `scene._bulk_removing += 1` before `QTimer.singleShot(0, _deferred_remove)` | Raises the quiescence flag so peer glide ticks / bg pulses skip their per-frame repaint work during removal drain |
+| 2 | `_release_bulk` scheduled two event-loop ticks after `_deferred_remove` | First tick covers `removeItem`; second tick covers any paint it rescheduled.  Mirrors `_shake_delete_group`'s release shape |
+| 3 | Straggler sweep in `_release_bulk`: force-remove any node with `_removal_done == True` still in scene | Belt-and-braces — same sweep the group path carries for the ghost-leftover case from 2026-04-18 |
+| 4 | Final viewport repaint on release | Guarantees a clean visual slate in case the paint scheduler dropped anything during the quiescence window |
+
+**Lesson.** The `_bulk_removing` counter earns its keep any time a deletion triggers peer repaints — not just when the removal itself is batch-shaped.  Both shake-delete paths now raise it.  Any future removal pathway that touches items with many peer wires or per-frame peer mutators (move-to-trash, script-driven tidying) should do the same.
+
+---
+
 ## Checklist for Future Node Types
 
 When adding a new node type or auditing an existing one, walk through this checklist:

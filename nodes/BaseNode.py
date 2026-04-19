@@ -950,6 +950,20 @@ class BaseNode(QGraphicsRectItem):
             if scene:
                 self.setSelected(False)
                 self.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
+                # Peer-paint-during-burst guard: raise the scene-level
+                # counter BEFORE particles and removal cascade so surviving
+                # peers (Connection glide ticks, NodeBehaviour pulses,
+                # NodeButton, StickerNode viewport tracking) skip their
+                # per-frame repaint work while the single-node removal
+                # drains.  The group-shake path already does this at
+                # _shake_delete_group; the single-node path was missing it,
+                # which turned fine for isolated deletions but cascaded badly
+                # when a node sat in a long chain (deleting one edge of a
+                # ~100-node TextNode split chain at 12:09:36 — crash
+                # signature 0xC0000409, no Python traceback, indicating a
+                # peer paint path dereferenced dying state).  Counter, not
+                # flag, so overlapping single-deletes compose safely.
+                scene._bulk_removing = getattr(scene, '_bulk_removing', 0) + 1
                 # Capture the ghost rect before removal so we can force a
                 # repaint of that region; otherwise an 8000-particle burst
                 # saturates the event loop and the deleted node lingers
@@ -995,7 +1009,34 @@ class BaseNode(QGraphicsRectItem):
                             _view.viewport().update()
                     except Exception:
                         pass
+                def _release_bulk(sc=scene):
+                    # Lower the quiescence counter two event-loop ticks
+                    # after removeItem so any repaint scheduled by the
+                    # tail end of the removal still sees the flag raised.
+                    # Mirrors the release pattern in _shake_delete_group.
+                    sc._bulk_removing = max(0, getattr(sc, '_bulk_removing', 1) - 1)
+                    if sc._bulk_removing == 0:
+                        # Straggler sweep: any node whose demolish crew
+                        # already ran but somehow stayed in the scene
+                        # gets a forced removal — same belt-and-braces
+                        # as _shake_delete_group's release.
+                        for item in list(sc.items()):
+                            if getattr(item, '_removal_done', False):
+                                try:
+                                    sc.removeItem(item)
+                                except Exception:
+                                    pass
+                        # Single final viewport repaint on release.
+                        try:
+                            for _view in sc.views():
+                                _view.viewport().update()
+                        except Exception:
+                            pass
                 QTimer.singleShot(0, _deferred_remove)
+                # Release two ticks after removeItem.  The first
+                # singleShot runs after _deferred_remove; the second
+                # covers any paint rescheduled by it.
+                QTimer.singleShot(0, lambda: QTimer.singleShot(0, _release_bulk))
 
 
     def _try_splice_into_wire(self) -> None:
