@@ -695,7 +695,6 @@ class IntricateApp(QMainWindow):
             self._start_meov()
         else:
             self._dock_watcher.stop()
-            self._stop_hunger_glow()
             self._stop_meov()
             # Clamp so the bottom edge never drops below the screen
             avail = self.screen().availableGeometry()
@@ -1381,7 +1380,6 @@ class IntricateApp(QMainWindow):
         v = min(100, self.joy_bar.value() + 10)
         self.joy_bar.setValue(v)
         self._joy_hungry = False
-        self._stop_hunger_glow()
         # Reset the depletion timer so feeding buys a full cycle of peace
         if hasattr(self, '_joy_timer') and self._joy_timer.isActive():
             self._joy_timer.start()
@@ -1486,10 +1484,7 @@ class IntricateApp(QMainWindow):
         # Flip dirty once below threshold; feeding is the only way back
         if v < 15 and not self._joy_hungry:
             self._joy_hungry = True
-        if self._joy_hungry and self.is_collapsed:
-            self._start_hunger_glow()
-        elif not self._joy_hungry:
-            self._stop_hunger_glow()
+            self._start_meov()
 
     def _maybe_meow(self, hunger_pct: int) -> None:
         """Play a meow from audio/meows/ based on hunger level.
@@ -1547,41 +1542,6 @@ class IntricateApp(QMainWindow):
         self._meow_sfx.setSource(QUrl.fromLocalFile(str(chosen)))
         self._meow_sfx.setVolume(0.5)
         self._meow_sfx.play()
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # HUNGER GLOW — gentle toolbar pulse when the joy bucket is starving
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def _start_hunger_glow(self) -> None:
-        """Begin a gentle looping glow on the toolbar to ask for attention."""
-        if hasattr(self, '_glow_timer') and self._glow_timer.isActive():
-            return  # already glowing
-
-        self._glow_phase = 0.0
-        self._glow_timer = QTimer(self)
-        self._glow_timer.setInterval(50)  # 20fps
-        self._glow_timer.timeout.connect(self._tick_hunger_glow)
-        self._glow_timer.start()
-
-    def _tick_hunger_glow(self) -> None:
-        """Animate a soft breathing glow on the toolbar background."""
-        import math
-        self._glow_phase += 0.04  # slow breath
-        # Sine wave 0→1→0 for a gentle pulse
-        t = (math.sin(self._glow_phase) + 1.0) / 2.0
-        # Blend from windowBg toward a warm accent
-        bg = QColor(Theme.windowBg)
-        accent = QColor("#5c3e4f")  # muted rose from the progress bar gradient
-        r = int(bg.red()   + (accent.red()   - bg.red())   * t * 0.4)
-        g = int(bg.green() + (accent.green() - bg.green()) * t * 0.4)
-        b = int(bg.blue()  + (accent.blue()  - bg.blue())  * t * 0.4)
-        self.top_toolbar.setStyleSheet(f"background-color: rgb({r},{g},{b});")
-
-    def _stop_hunger_glow(self) -> None:
-        """Stop the hunger glow and restore the toolbar to its natural color."""
-        if hasattr(self, '_glow_timer') and self._glow_timer.isActive():
-            self._glow_timer.stop()
-        self.top_toolbar.setStyleSheet(f"background-color: {Theme.windowBg};")
 
     # ─────────────────────────────────────────────────────────────────────────
     # NODE SPAWN ACTIONS
@@ -2909,7 +2869,6 @@ class IntricateApp(QMainWindow):
             for _name, _slot in (
                 ('_joy_timer',   getattr(self, '_deplete_joy',       None)),
                 ('_happy_timer', getattr(self, '_tick_happy',        None)),
-                ('_glow_timer',  getattr(self, '_tick_hunger_glow',  None)),
             ):
                 _t = getattr(self, _name, None)
                 if _t is None:
