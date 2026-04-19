@@ -29,17 +29,33 @@ class TextNode(BaseNode):
     """
     _has_depth_toggle = True
 
+    # Class-level accumulators for session-load profiling.  Reset on each
+    # scene swap via _TextNodeConstructionTimings.reset().  Logged by
+    # Scene.load_session as a single summary line — no per-instance
+    # timing overhead accumulated into the hot path.
+    _TIMING_BUCKETS: dict = {'base': 0.0, 'build_editor': 0.0, 'other': 0.0, 'count': 0}
+
     def __init__(self, data: TextNodeData | None = None):
         if data is None:
             data = TextNodeData()
+        import time as _t
+        _t0 = _t.monotonic()
         super().__init__(data)
+        _t1 = _t.monotonic()
 
         self.setBrush(self._bg_color())
         self._min_height  = Theme.aboutMinHeight
         self._apply_depth()
 
         self._editor: PrettyEdit | None = None
+        _t2 = _t.monotonic()
         self._build_editor()
+        _t3 = _t.monotonic()
+
+        TextNode._TIMING_BUCKETS['base']         += (_t1 - _t0)
+        TextNode._TIMING_BUCKETS['other']        += (_t2 - _t1)
+        TextNode._TIMING_BUCKETS['build_editor'] += (_t3 - _t2)
+        TextNode._TIMING_BUCKETS['count']        += 1
 
     # ─────────────────────────────────────────────────────────────────────────
 

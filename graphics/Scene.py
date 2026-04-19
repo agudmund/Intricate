@@ -959,6 +959,29 @@ class IntricateScene(QGraphicsScene):
             logger.info("[load]   %-18s %4d × %.2f ms = %.0f ms",
                         _nt, _cnt, _per, _total_ms)
 
+        # Sub-phase accumulators for TextNode (which dominated the breakdown).
+        # Drained here so a reload gets fresh numbers, and so the next
+        # round of optimisation sees where the per-instance 31 ms actually
+        # lives (base vs. _build_editor vs. setup overhead).
+        try:
+            from nodes.TextNode import TextNode as _TN
+            _b = _TN._TIMING_BUCKETS
+            if _b['count'] > 0:
+                _cnt = _b['count']
+                logger.info(
+                    "[load]   text sub-phases: base=%.0f ms  other=%.0f ms  build_editor=%.0f ms  (n=%d)",
+                    _b['base'] * 1000, _b['other'] * 1000, _b['build_editor'] * 1000, _cnt,
+                )
+                logger.info(
+                    "[load]   text per-node:   base=%.2f ms  other=%.2f ms  build_editor=%.2f ms",
+                    _b['base'] * 1000 / _cnt, _b['other'] * 1000 / _cnt, _b['build_editor'] * 1000 / _cnt,
+                )
+            # Reset for next load
+            _b['base'] = _b['other'] = _b['build_editor'] = 0.0
+            _b['count'] = 0
+        except Exception:
+            pass
+
         from graphics.Connection import Connection
         _t_conn_start = _time.monotonic()
         for c in payload.get("connections", []):
