@@ -25,7 +25,7 @@
       "uuid": "f2fd11a902f543508b1ede32cb8fa322",
       "x": 328.39015336985403,
       "y": -2123.20740468878,
-      "width": 336.0,
+      "width": 341.0,
       "height": 500.0,
       "z_value": 0.0,
       "ports_visible": false,
@@ -41,12 +41,60 @@
       "x": 679.7919751259005,
       "y": -1200.8237554339967,
       "width": 300.0,
-      "height": 252.0,
+      "height": 592.0,
       "z_value": 0.0,
       "ports_visible": false,
       "shelf_visible": true,
       "depth_front": false,
       "node_tint": "#4a3a5a"
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Note",
+      "uuid": "3a3807d472224cd7a52ea6676060c767",
+      "x": 2115.026756465382,
+      "y": -852.4037305653926,
+      "width": 118.24458860092818,
+      "height": 48.3930279792404,
+      "z_value": -9.973000000000015,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Kinetic",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Note",
+      "uuid": "debed5eb2d404e5696605e42a4db61fa",
+      "x": 2295.0970445473204,
+      "y": -1007.9674113935768,
+      "width": 118.0,
+      "height": 42.0,
+      "z_value": -9.974000000000014,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "All Glory",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Note",
+      "uuid": "3a0bf881d94743adaad147aa1ded9613",
+      "x": 2675.0085627873677,
+      "y": -432.3268097384016,
+      "width": 627.0,
+      "height": 52.0,
+      "z_value": -9.975000000000014,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "source drifted \u2014 cache no longer matches\nHCm3ErpbQAAMQ6I.jpg",
+      "depth_front": false,
+      "node_tint": ""
     },
     {
       "node_id": 0,
@@ -69,8 +117,8 @@
       "node_type": "about",
       "title": "Irresistible",
       "uuid": "3bc244d762f74d21bb5ce58c5482fbba",
-      "x": 2151.9583217706295,
-      "y": -818.8778425690934,
+      "x": 1960.1674823934154,
+      "y": -598.3183772852984,
       "width": 145.60497552445804,
       "height": 51.86248174637137,
       "z_value": -9.977000000000013,
@@ -85,8 +133,8 @@
       "node_type": "about",
       "title": "Soft",
       "uuid": "27f013b0b52a424289068da96195807a",
-      "x": 1943.5283169125616,
-      "y": -865.5746078065447,
+      "x": 2010.6551106945863,
+      "y": -993.4351673913537,
       "width": 73.63797198519433,
       "height": 47.43586996248382,
       "z_value": -9.978000000000012,
@@ -165,8 +213,8 @@
       "node_type": "image",
       "title": "Image",
       "uuid": "6fdd7d146a9d4c5e8a6090de8e253eef",
-      "x": 2675.0085627873677,
-      "y": -1109.434641595747,
+      "x": 2675.008562787368,
+      "y": -1110.5001462589535,
       "width": 446.90545478794274,
       "height": 657.1078318573454,
       "z_value": -9.993000000000004,
@@ -176,22 +224,10 @@
       "cache_key": "4aff2f99c71b9104ad579d8d4331fc32b698ba252514ff1efba64520aa8152ea",
       "caption": "HCm3ErpbQAAMQ6I",
       "source_path": "C:\\Users\\thisg\\Desktop\\_asset\\Snips\\HCm3ErpbQAAMQ6I.jpg",
+      "source_size": 731909,
+      "source_mtime": 1772684560.0656705,
       "show_border": true,
       "depth_front": false
-    },
-    {
-      "node_id": 0,
-      "node_type": "warm",
-      "title": "Sweetums Cookies",
-      "uuid": "a9aa4b1cf6e045d6910317a671eb1401",
-      "x": 1558.1282766815693,
-      "y": -730.3622230896392,
-      "width": 415.03681227249035,
-      "height": 305.15032679818245,
-      "z_value": -9.994000000000003,
-      "ports_visible": false,
-      "shelf_visible": true,
-      "body_text": "There is a famous phrase that women use in certain groups \"Don't be a wife to a boyfriend\".  It just means you shouldn't be giving your all to people who don't really care that much about you.\n\nBut the fact of the matter is that dudes have a similar thing, just not an official slogan like the women do.  So like, what that other woman over there is trying to do is get wife privileges without even being a girlfriend.\n\nI'm not quite sure how to feel about that.\n\nEither we are spouses and glory, but that's not a thing for just random humans, and then you stalk me around because I'm nice to my spouse thinking you will get the same... what the heck is wrong with your head?"
     },
     {
       "node_id": 0,
@@ -206,9 +242,27 @@
       "ports_visible": false,
       "shelf_visible": true,
       "body_text": "The recipe for a perfect Sweetums cookie\n\nSoft, sweet, and irresistible."
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Sweetums Cookies",
+      "uuid": "a9aa4b1cf6e045d6910317a671eb1401",
+      "x": 1740.329574089923,
+      "y": -468.2480759407813,
+      "width": 415.03681227249035,
+      "height": 305.15032679818245,
+      "z_value": -10.0,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "There is a famous phrase that women use in certain groups \"Don't be a wife to a boyfriend\".  It just means you shouldn't be giving your all to people who don't really care that much about you.\n\nBut the fact of the matter is that dudes have a similar thing, just not an official slogan like the women do.  So like, what that other woman over there is trying to do is get wife privileges without even being a girlfriend.\n\nI'm not quite sure how to feel about that.\n\nEither we are spouses and glory, but that's not a thing for just random humans, and then you stalk me around because I'm nice to my spouse thinking you will get the same... what the heck is wrong with your head?"
     }
   ],
   "connections": [
+    {
+      "start_uuid": "debed5eb2d404e5696605e42a4db61fa",
+      "end_uuid": "3a3807d472224cd7a52ea6676060c767"
+    },
     {
       "start_uuid": "a9aa4b1cf6e045d6910317a671eb1401",
       "end_uuid": "6fdd7d146a9d4c5e8a6090de8e253eef"
@@ -252,12 +306,19 @@
     {
       "start_uuid": "ffbffebb2cd740a48484cc0ba6258560",
       "end_uuid": "27f013b0b52a424289068da96195807a"
+    },
+    {
+      "start_uuid": "6fdd7d146a9d4c5e8a6090de8e253eef",
+      "end_uuid": "3a0bf881d94743adaad147aa1ded9613"
     }
   ],
   "viewport": {
-    "camera_x": 1173.1206341906213,
-    "camera_y": -1345.7323896301136,
+    "camera_x": 2558.2766963593845,
+    "camera_y": -786.3424414465746,
     "camera_zoom": 0.9385224058901837
   },
-  "checksum": "eb26f605b7f27756"
+  "ui_migrations": [
+    "image_border_default_on_v1"
+  ],
+  "checksum": "3e75994838a34e70"
 }
