@@ -881,12 +881,24 @@ class IntricateScene(QGraphicsScene):
         """Clear the scene and restore from a session.json via SessionManager.
 
         Returns the viewport dict from the session (may be empty for legacy files).
+
+        Instrumented with per-phase millisecond timings so load bottlenecks
+        are visible in the log.  The 8s-to-30s regression between the
+        original TextNode-split checklist and today's state should show
+        up as a specific phase ballooning.
         """
+        import time as _time
         from utils.persistence.session import SessionManager
 
+        _t0 = _time.monotonic()
         payload = SessionManager.get_session_data(str(path))
         if payload is None:
             return {}
+        _t_parse = _time.monotonic()
+        _n_nodes = len(payload.get("nodes", []))
+        _n_conns = len(payload.get("connections", []))
+        logger.info("[load] parsed session: %d nodes, %d connections  (%.0f ms)",
+                    _n_nodes, _n_conns, (_t_parse - _t0) * 1000)
 
         # Store session description for round-trip persistence
         self._session_description = payload.get("description", "")
@@ -917,18 +929,38 @@ class IntricateScene(QGraphicsScene):
         # fault under shake+zoom workloads.  Left the prior toggle-off here
         # as a no-op for clarity about the original intent (avoid O(n²)
         # BSP rebuilds during bulk restore) — now purely documentary.
+        _t_restore_start = _time.monotonic()
         uuid_map = {}
+        _per_type_ms: dict = {}
+        _per_type_count: dict = {}
         for d in payload.get("nodes", []):
+            _nt = d.get("node_type", "?")
+            _t_node_start = _time.monotonic()
             try:
                 node = self._restore_node(d)
             except Exception:
                 logger.exception("Failed to restore %s node (uuid=%s)",
-                                 d.get("node_type"), d.get("uuid"))
+                                 _nt, d.get("uuid"))
                 node = None
+            _dt = (_time.monotonic() - _t_node_start) * 1000
+            _per_type_ms[_nt]    = _per_type_ms.get(_nt, 0.0) + _dt
+            _per_type_count[_nt] = _per_type_count.get(_nt, 0) + 1
             if node:
                 uuid_map[d.get("uuid")] = node
+        _t_restore = _time.monotonic()
+        logger.info("[load] restored nodes  (%.0f ms total)",
+                    (_t_restore - _t_restore_start) * 1000)
+        # Per-type breakdown: sorted by total time, shows which node type
+        # dominates load cost.  At 1200+ AboutNodes this will surface
+        # quickly when the hitch is per-node and not per-type.
+        for _nt, _total_ms in sorted(_per_type_ms.items(), key=lambda x: -x[1]):
+            _cnt = _per_type_count[_nt]
+            _per = _total_ms / _cnt if _cnt else 0.0
+            logger.info("[load]   %-18s %4d × %.2f ms = %.0f ms",
+                        _nt, _cnt, _per, _total_ms)
 
         from graphics.Connection import Connection
+        _t_conn_start = _time.monotonic()
         for c in payload.get("connections", []):
             start = uuid_map.get(c.get("start_uuid"))
             end   = uuid_map.get(c.get("end_uuid"))
@@ -940,6 +972,11 @@ class IntricateScene(QGraphicsScene):
                 except Exception:
                     logger.exception("Failed to restore connection %s → %s",
                                      c.get("start_uuid"), c.get("end_uuid"))
+        _t_conn = _time.monotonic()
+        logger.info("[load] restored connections: %d  (%.0f ms)",
+                    _n_conns, (_t_conn - _t_conn_start) * 1000)
+        logger.info("[load] TOTAL load_session: %.0f ms",
+                    (_t_conn - _t0) * 1000)
 
         # Scene stays on NoIndex scene-wide (see __init__).  No index
         # rebuild needed.
