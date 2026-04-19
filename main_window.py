@@ -1925,8 +1925,104 @@ class IntricateApp(QMainWindow):
                             mem_submenu.addSeparator()
                     menu.addMenu(mem_submenu).setText("Memory")
 
+        # ── Diagnostics ─────────────────────────────────────────────────
+        # Image-stamp + cache validation audit.  Walks every ImageNode in
+        # the active scene, compares source vs cache hashes, checks for
+        # stamp-placement anomalies (the "stamp on cache instead of
+        # source" pathology the audit exists to catch), and spawns a
+        # chain of findings on the canvas so every anomaly is visible
+        # and actionable.  See utils/audit/image_stamps.py.
+        menu.addSeparator()
+        audit_pix = Theme.icon(Theme.iconSession, fallback_color="#9a8a7a")
+        audit_act = menu.addAction(QIcon(audit_pix), "Audit Image Stamps…")
+        audit_act.setToolTip(
+            "Scan every ImageNode for source/cache drift and stamp-placement "
+            "anomalies.  Surfaces the report as an AboutNode chain on the canvas."
+        )
+        audit_act.triggered.connect(self._run_image_stamp_audit)
+
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
     def _show_claude_menu(self, btn):  self._show_category_menu("claude", btn)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # IMAGE STAMP AUDIT — diagnostic entry point
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _run_image_stamp_audit(self) -> None:
+        """Run the image-stamp validation audit and present the result
+        on the canvas as an AboutNode chain.
+
+        The chain anchors near the current viewport centre so the user
+        sees the report without hunting for it.  Each finding becomes
+        one AboutNode; clean-scene case produces a single affirming
+        node.  The full formatted report also lands in the log for
+        forensic retention.
+        """
+        from utils.audit.image_stamps import audit_and_log
+        from utils.placement import spiral_place, wander_origin
+        from graphics.Connection import Connection
+
+        report = audit_and_log(self.scene)
+
+        # Build the list of report lines that become AboutNode labels.
+        # Clean-scene case: a single affirming line so the user gets
+        # visible confirmation that the run happened.
+        if report.is_clean() and report.total_image_nodes > 0:
+            lines = [report.summary_line()]
+        elif report.total_image_nodes == 0:
+            lines = ["No ImageNodes in scene — nothing to audit"]
+        else:
+            # Headline + per-bucket findings, one AboutNode per line.
+            lines = [report.summary_line()]
+            for bucket in (report._CRITICAL_BUCKETS
+                           + report._WARN_BUCKETS
+                           + report._INFO_BUCKETS):
+                items = getattr(report, bucket)
+                if not items:
+                    continue
+                severity = ("CRITICAL" if bucket in report._CRITICAL_BUCKETS
+                            else "WARN"  if bucket in report._WARN_BUCKETS
+                            else "INFO")
+                lines.append(f"— {severity}: {bucket} ({len(items)}) —")
+                for f in items:
+                    short_uuid = f.uuid[:8] if f.uuid else "?"
+                    src_tail = (f.source_path.split('\\')[-1].split('/')[-1]
+                                if f.source_path else "<no source>")
+                    lines.append(f"{short_uuid}  {src_tail}: {f.detail}")
+
+        if not lines:
+            return
+
+        from PySide6.QtCore import QPointF
+        _OFFSCREEN = QPointF(-999_999, -999_999)
+
+        # Anchor first node near the current viewport centre.  Every
+        # subsequent spawn wanders off the previous one, same pattern
+        # TextNode's split uses — keeps the chain tidy and organic.
+        prev_node = None
+        for line in lines:
+            node = self.scene.add_about_node(pos=_OFFSCREEN, label=line)
+            node.data.title = line[:40]
+
+            if prev_node is None:
+                # Viewport-centred first anchor via spiral_place's None origin.
+                pos = spiral_place(self.scene, node)
+            else:
+                chain_origin = wander_origin(prev_node)
+                pos = spiral_place(
+                    self.scene, node, origin=chain_origin,
+                    parent=prev_node, fallback=chain_origin,
+                )
+            node.setPos(pos)
+
+            if prev_node is not None:
+                conn = Connection(prev_node, node)
+                self.scene.addItem(conn)
+            prev_node = node
+
+        # Whisper a summary via the InfoBar so the user knows the run
+        # fired even if the chain lands outside their current viewport.
+        self.show_info(report.summary_line())
 
     def _launch_claude_app(self) -> None:
         """Launch or focus+maximize the Claude desktop app."""
