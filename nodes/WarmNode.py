@@ -14,8 +14,9 @@ import time
 from pathlib import Path
 
 from pretty_widgets.PrettyEdit import PrettyEdit
-from PySide6.QtCore import Qt, QRectF, QPointF, QFileSystemWatcher, QTimer
-from PySide6.QtGui import QPainter, QFont, QFontMetrics, QColor, QPen
+from PySide6.QtCore import Qt, QRectF, QPointF, QPoint, QFileSystemWatcher, QTimer
+from PySide6.QtGui import QPainter, QPainterPath, QFont, QFontMetrics, QColor, QPen
+from PySide6.QtWidgets import QWidget
 
 from nodes.BaseNode import BaseNode
 from data.WarmNodeData import WarmNodeData
@@ -55,6 +56,67 @@ def _html_to_plain(body: str) -> str:
     doc = _QTextDocument()
     doc.setHtml(body)
     return doc.toPlainText()
+
+
+class _WireOverlay(QWidget):
+    """Transparent top-level widget that mirrors the floating-connection
+    wire on top of any popup menu.
+
+    A QGraphicsScene item can't be stacked above a QMenu popup — they
+    live in separate rendering trees (scene-rendered-in-viewport vs
+    top-level-popup-window).  So when a right-click spawns both a
+    context menu and a floating wire, the wire's endpoint is hidden
+    under the menu.
+
+    This overlay is a borderless stays-on-top widget covering the full
+    virtual desktop, raised above the menu, that re-draws the wire's
+    bezier path.  Mouse events pass through (transparent for input).
+    Updated in lockstep with the scene wire by the same cursor tracker."""
+
+    def __init__(self, start_screen_pos: QPoint):
+        super().__init__(None)
+        self.setWindowFlags(
+            Qt.FramelessWindowHint
+            | Qt.WindowStaysOnTopHint
+            | Qt.Tool
+            | Qt.WindowTransparentForInput
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        from PySide6.QtGui import QGuiApplication
+        # Cover the union of all screens so the wire is never clipped
+        vg = QGuiApplication.primaryScreen().virtualGeometry()
+        self.setGeometry(vg)
+        self._start = start_screen_pos
+        self._end = start_screen_pos
+        self.show()
+        self.raise_()
+
+    def update_end(self, screen_pos: QPoint) -> None:
+        self._end = screen_pos
+        self.update()
+
+    def paintEvent(self, _event) -> None:
+        from pretty_widgets.graphics.Theme import Theme
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        p0 = self.mapFromGlobal(self._start)
+        p1 = self.mapFromGlobal(self._end)
+        # Simple horizontal-tangent cubic bezier, same shape family the
+        # scene wires use (curvature weighted by the horizontal reach).
+        dx = abs(p1.x() - p0.x())
+        c1 = QPointF(p0.x() + dx * 0.5, p0.y())
+        c2 = QPointF(p1.x() - dx * 0.5, p1.y())
+        path = QPainterPath()
+        path.moveTo(QPointF(p0))
+        path.cubicTo(c1, c2, QPointF(p1))
+        pen = QPen(QColor(Theme.nodeBorder),
+                   Theme.nodeBorderWidth,
+                   Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.drawPath(path)
 
 
 class _SmartPrettyEdit(PrettyEdit):
@@ -141,21 +203,34 @@ class _SmartPrettyEdit(PrettyEdit):
                     if (scene is not None and scene.views()) else None)
             if scene is not None and hasattr(scene, 'begin_connection'):
                 scene.begin_connection(node)
+            # Overlay mirror of the wire, raised above the menu — scene
+            # items can't Z-stack over a top-level popup, so we paint a
+            # matching bezier on a transparent stays-on-top widget that
+            # covers the whole virtual desktop.  Start point: node's
+            # right-edge center, mapped scene → view → global.
+            from PySide6.QtGui import QCursor
+            start_screen = QCursor.pos()
+            if node is not None and view is not None:
+                r = node.rect()
+                right_center_scene = node.mapToScene(
+                    QPointF(r.right(), r.center().y()))
+                start_screen = view.mapToGlobal(
+                    view.mapFromScene(right_center_scene))
+            overlay = _WireOverlay(start_screen)
             # Cursor-tracking timer — the menu's modal event loop processes
             # QTimer events, so this fires throughout the exec() and keeps
-            # the wire endpoint glued to the mouse (which is hovering menu
-            # entries).  Without this the wire would sit frozen at the
-            # press point for the duration of the menu.
-            from PySide6.QtGui import QCursor
+            # both the scene wire AND the overlay endpoint glued to the
+            # cursor (which is hovering menu entries).
             tracker = QTimer()
             tracker.setInterval(16)   # ~60 fps
             def _track_cursor():
-                if scene is None or view is None:
-                    return
-                if not hasattr(scene, 'update_floating_connection'):
-                    return
-                scene_pos = view.mapToScene(view.mapFromGlobal(QCursor.pos()))
-                scene.update_floating_connection(scene_pos)
+                cursor = QCursor.pos()
+                if scene is not None and view is not None and hasattr(
+                        scene, 'update_floating_connection'):
+                    scene_pos = view.mapToScene(view.mapFromGlobal(cursor))
+                    scene.update_floating_connection(scene_pos)
+                overlay.update_end(cursor)
+                overlay.raise_()   # re-raise each tick in case menu re-stacks
             tracker.timeout.connect(_track_cursor)
             tracker.start()
             self._suppress_next_commit = True
@@ -179,6 +254,8 @@ class _SmartPrettyEdit(PrettyEdit):
             ctx.exec(event.globalPosition().toPoint())
             tracker.stop()
             tracker.deleteLater()
+            overlay.hide()
+            overlay.deleteLater()
             ctx.deleteLater()
             event.accept()
             return
