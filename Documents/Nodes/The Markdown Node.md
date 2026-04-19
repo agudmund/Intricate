@@ -72,7 +72,7 @@ The node appears instantly with an empty viewer. Content fills in shortly after 
 
 ### Background Color
 
-The node uses `#0d1117` (GitHub's dark theme background) instead of `Theme.nodeBg`. This is set in `__init__` via `setBrush()` and respects `Theme.aboutBgAlpha` for transparency. The depth toggle (`_apply_depth`) re-applies this brush so front/back layer switching preserves the GitHub look.
+The node uses `#0d1117` (GitHub's dark theme background) instead of `Theme.nodeBg`. This is set in `__init__` via `setBrush()` and respects `Theme.aboutTransparency` for the alpha blend. The depth toggle (`_apply_depth`) re-applies this brush so front/back layer switching preserves the GitHub look.
 
 ## HTML Viewer
 

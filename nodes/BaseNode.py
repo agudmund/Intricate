@@ -173,7 +173,7 @@ class BaseNode(QGraphicsRectItem):
         # Subclasses can still override _buttons_visible after super().__init__
         # to force a collapsed default (e.g. AboutNode).
         self._buttons_visible = getattr(self.data, 'shelf_visible', True)
-        self._anim_top_offset = self._BUTTON_ZONE_H if self._buttons_visible else 8.0
+        self._anim_top_offset = self._BUTTON_ZONE_H if self._buttons_visible else self._HIDDEN_TOP_OFFSET
 
         # ── Button strip ──────────────────────────────────────────────────────
         # Built last — geometry must be final before positioning.
@@ -1018,7 +1018,7 @@ class BaseNode(QGraphicsRectItem):
             for btn in self._buttons:
                 btn.hide()
             self._shelf_anim.setStartValue(self._anim_top_offset)
-            self._shelf_anim.setEndValue(8.0)
+            self._shelf_anim.setEndValue(self._HIDDEN_TOP_OFFSET)
         self._shelf_anim.start()
 
     def _on_shelf_tick(self, value: float) -> None:
@@ -1101,6 +1101,7 @@ class BaseNode(QGraphicsRectItem):
         painter.restore()
 
     _BUTTON_ZONE_H   = 40.0   # px reserved for the button strip (4 pad + 32 button + 4 gap)
+    _HIDDEN_TOP_OFFSET = 8.0  # px top margin when shelf is collapsed — subclass override for tighter nodes (e.g. AboutNode)
     _CONTENT_PAD     = 15.0   # horizontal padding for title/body text
     _TITLE_HEIGHT    = 40.0   # rect height allocated for title text
     _BODY_OFFSET     = 36.0   # px below title top where body text starts

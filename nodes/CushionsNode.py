@@ -48,7 +48,7 @@ class CushionsNode(BaseNode):
         c = QColor(tint) if tint and QColor(tint).isValid() else QColor(
             Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor
         )
-        c.setAlpha(Theme.aboutBgAlpha)
+        c.setAlpha(Theme.aboutTransparency)
         return c
 
     def _apply_depth(self) -> None:
@@ -151,6 +151,7 @@ class CushionsNode(BaseNode):
             chain_origin = self._wander_origin(prev_node)
             pos = spiral_place(
                 scene, node, origin=chain_origin,
+                parent=prev_node,
                 fallback=chain_origin, padding=PADDING,
             )
             node.setPos(pos)

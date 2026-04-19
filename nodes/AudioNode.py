@@ -63,7 +63,7 @@ class AudioNode(BaseNode):
 
         # ── Visual ────────────────────────────────────────────────────────
         c = QColor(Theme.aboutBgColor)
-        c.setAlpha(Theme.aboutBgAlpha)
+        c.setAlpha(Theme.aboutTransparency)
         self.setBrush(c)
         self._apply_depth()
 
@@ -416,7 +416,7 @@ class AudioNode(BaseNode):
     def _bg_color(self) -> QColor:
         tint = getattr(self.data, 'node_tint', '')
         c = QColor(tint) if tint and QColor(tint).isValid() else QColor(Theme.aboutBgColor)
-        c.setAlpha(Theme.aboutBgAlpha)
+        c.setAlpha(Theme.aboutTransparency)
         return c
 
     def _apply_depth(self) -> None:

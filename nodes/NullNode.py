@@ -35,7 +35,7 @@ class NullNode(BaseNode):
 
     def _bg_color(self) -> QColor:
         c = QColor(Theme.aboutBgColor)
-        c.setAlpha(max(30, Theme.aboutBgAlpha // 3))
+        c.setAlpha(max(30, Theme.aboutTransparency // 3))
         return c
 
     def _apply_depth(self) -> None:

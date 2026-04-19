@@ -230,7 +230,7 @@ class MarkdownNode(BaseNode):
         super().__init__(data)
 
         c = QColor(_BG_COLOR)
-        c.setAlpha(Theme.aboutBgAlpha)
+        c.setAlpha(Theme.aboutTransparency)
         self.setBrush(c)
         self._apply_depth()
 
@@ -267,7 +267,7 @@ class MarkdownNode(BaseNode):
 
     def _bg_color(self) -> QColor:
         c = QColor(_BG_COLOR)
-        c.setAlpha(Theme.aboutBgAlpha)
+        c.setAlpha(Theme.aboutTransparency)
         return c
 
     def _apply_depth(self) -> None:
@@ -607,6 +607,7 @@ class MarkdownNode(BaseNode):
                     chain_origin = self._wander_origin(prev_node)
                     pos = spiral_place(
                         scene, about, origin=chain_origin,
+                        parent=prev_node,
                         fallback=chain_origin,
                     )
                 about.setPos(pos)
@@ -700,6 +701,7 @@ class MarkdownNode(BaseNode):
                         chain_origin = self._wander_origin(prev_node)
                         pos = spiral_place(
                             scene, node, origin=chain_origin,
+                            parent=prev_node,
                             fallback=chain_origin,
                         )
                     node.setPos(pos)

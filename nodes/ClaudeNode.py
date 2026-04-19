@@ -1045,7 +1045,7 @@ class ClaudeNode(BaseNode):
 
     def _bg_color(self) -> QColor:
         c = QColor(Theme.claudeBgColorFront if self.data.depth_front else Theme.claudeBgColorBack)
-        c.setAlpha(Theme.claudeBgAlpha)
+        c.setAlpha(Theme.claudeTransparency)
         return c
 
     def _apply_input_style(self) -> None:

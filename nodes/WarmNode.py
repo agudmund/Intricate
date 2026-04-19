@@ -261,6 +261,7 @@ class WarmNode(BaseNode):
             chain_origin = wander_origin(prev_node)
             pos = spiral_place(
                 scene, node, origin=chain_origin,
+                parent=prev_node,
                 fallback=chain_origin, padding=_PADDING,
             )
             node.setPos(pos)

@@ -8,8 +8,7 @@
 
 from PySide6.QtWidgets import QGraphicsProxyWidget
 from PySide6.QtCore import Qt, QRectF, QSizeF
-from PySide6.QtGui import (QPainter, QFont, QColor, QFontMetrics,
-                           QTextDocument, QTextCursor, QTextBlockFormat)
+from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics
 
 _Z_FRONT       = 10.0
 _Z_BACK        = -10.0
@@ -23,6 +22,10 @@ from pretty_widgets.PrettyEdit import PrettyEdit
 class AboutNode(BaseNode):
     _has_depth_toggle = True
     _show_emoji_btn   = False
+    # Tighter than the general node default (8.0).  AboutNodes are sticky-note
+    # labels — the top strip is purely visual now that button reveal has moved
+    # to the resize gesture.  Matched visually against the bottom padding.
+    _HIDDEN_TOP_OFFSET = 2.0
     """
     A minimal sticky-note node.
 
@@ -37,24 +40,34 @@ class AboutNode(BaseNode):
     def __init__(self, data: AboutNodeData | None = None):
         if data is None:
             data = AboutNodeData()
+
+        # Default spawn dimensions match the tight layout _auto_expand
+        # produces once the node has content — top offset + single-line
+        # metrics + bottom padding.  No more manual yank-to-tighten on every
+        # fresh AboutNode; defaults spawn in their correct proportions.
+        font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
+        font.setStyleName(self._TITLE_STYLE)
+        fm = QFontMetrics(font)
         if data.height == 0.0:
-            data.height = Theme.aboutMinHeight + 2
+            data.height = AboutNode._HIDDEN_TOP_OFFSET + fm.lineSpacing() + 2
         if data.width == 0.0:
-            font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
-            font.setStyleName(self._TITLE_STYLE)
-            text_w = QFontMetrics(font).horizontalAdvance(data.label or data.title)
-            data.width = text_w + 28   # snug right edge
+            data.width = fm.horizontalAdvance(data.label or data.title) + 28   # snug right edge
 
         super().__init__(data)
 
         # Start with shelf collapsed — AboutNode shows buttons only on demand
+        # (revealed by dragging the resize handle; hidden by clicking the shelf
+        # background once revealed).  See Documents/Texture Notes.md for the
+        # full story behind this bespoke interaction model.
         self._buttons_visible = False
-        self._anim_top_offset = 8.0
+        self._anim_top_offset = self._HIDDEN_TOP_OFFSET
         for btn in self._buttons:
             btn.hide()
 
         self.setBrush(self._bg_color())
-        self._min_height = Theme.aboutMinHeight / 2 + 5
+        # Boundless — AboutNodes double as colour-indent stickers without text,
+        # so they're allowed to shrink freely below the text-holding breathing floor.
+        self._min_height = 0
         self._apply_depth()
 
         self._editor: PrettyEdit | None = None
@@ -91,7 +104,7 @@ class AboutNode(BaseNode):
                 c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
         else:
             c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
-        c.setAlpha(Theme.aboutBgAlpha)
+        c.setAlpha(Theme.aboutTransparency)
         return c
 
     def _apply_depth(self) -> None:
@@ -126,7 +139,7 @@ class AboutNode(BaseNode):
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
         top = self._anim_top_offset
-        return QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
+        return QRectF(r.left() + padL, r.top() + top + Theme.nodeTextPaddingTop, r.width() - padL - padR, r.height() - top)
 
     def _auto_expand(self) -> None:
         """Grow (or shrink) the node live while the user types."""
@@ -135,7 +148,7 @@ class AboutNode(BaseNode):
         doc  = self._editor.document()
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
-        padT = Theme.aboutTextPaddingTop + Theme.aboutFontVerticalOffset
+        padT = Theme.nodeTextPaddingTop
         top  = self._anim_top_offset
 
         # Let the document measure its natural (unwrapped) width so the node
@@ -145,7 +158,7 @@ class AboutNode(BaseNode):
         doc_h = doc.size().height()
 
         new_w = max(self._min_width,  doc_w + padL + padR + 8)
-        new_h = max(self._min_height, doc_h + top  + padT + 6)
+        new_h = max(self._min_height, doc_h + top  + padT + 2)
 
         cur = self.rect()
         if abs(new_w - cur.width()) < 1 and abs(new_h - cur.height()) < 1:
@@ -181,11 +194,38 @@ class AboutNode(BaseNode):
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
-    def mouseDoubleClickEvent(self, event) -> None:
-        # Top strip — delegate shelf toggle to BaseNode
-        if event.pos().y() < self.rect().top() + self._anim_top_offset:
+    # Px of vertical change during a resize before the shelf toggles.
+    # Small threshold = deliberate-direction detection; prevents twitchy
+    # flips from sub-pixel tremor on the drag.
+    _RESIZE_SHELF_THRESHOLD = 5.0
+
+    def mouseMoveEvent(self, event) -> None:
+        # Defer to BaseNode first so the resize actually happens and
+        # self.rect() reflects the updated geometry before we inspect it.
+        super().mouseMoveEvent(event)
+        # ── Bidirectional shelf coupling ─────────────────────────────────
+        # Resize direction drives shelf state:
+        #   • growing taller past the threshold  → reveal (with new emoji)
+        #   • shrinking shorter past the threshold → hide
+        # "I want to see the tools" is grow-intent; "I want to fit tight"
+        # is shrink-intent.  Width-only tuning is silent — shelf state
+        # only reacts to height delta.
+        if not self._is_resizing:
+            return
+        delta_h = self.rect().height() - self._resize_start_rect.height()
+        if not self._buttons_visible and delta_h > self._RESIZE_SHELF_THRESHOLD:
             self._reshuffle_emoji()
-            super().mouseDoubleClickEvent(event)
+            self._toggle_shelf()
+        elif self._buttons_visible and delta_h < -self._RESIZE_SHELF_THRESHOLD:
+            self._toggle_shelf()
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        # Don't enter edit mode if the double-click landed in the visible
+        # shelf zone — the user is interacting with buttons, not requesting
+        # text edit.  When the shelf is hidden the top strip is purely
+        # visual, so double-click there falls through to edit like the body.
+        if self._buttons_visible and event.pos().y() < self._BUTTON_ZONE_H:
+            event.accept()
             return
         self._start_edit()
         event.accept()
@@ -217,47 +257,25 @@ class AboutNode(BaseNode):
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
         top = self._anim_top_offset
-        text_rect = QRectF(r.left() + padL, r.top() + top + Theme.aboutFontVerticalOffset + Theme.aboutTextPaddingTop, r.width() - padL - padR, r.height() - top)
+        text_rect = QRectF(r.left() + padL, r.top() + top + Theme.nodeTextPaddingTop, r.width() - padL - padR, r.height() - top)
         label = self.data.label or self.data.title
 
-        spacing = Theme.aboutLineSpacing
-        if spacing:
-            # Use QTextDocument to render with custom line spacing.
-            # Must match PrettyEdit exactly: LineDistanceHeight mode and
-            # the same pad_top that the editor stylesheet applies when
-            # spacing is negative — otherwise painted text and editor
-            # text land on different pixels.
-            pad_top = max(0, int(abs(spacing))) if spacing < 0 else 0
-            doc = QTextDocument()
-            doc.setDefaultFont(font)
-            doc.setTextWidth(text_rect.width())
-            doc.setDocumentMargin(0)
-            doc.setPlainText(label)
-            fmt = QTextBlockFormat()
-            fmt.setLineHeight(spacing, QTextBlockFormat.LineHeightTypes.LineDistanceHeight.value)
-            cursor = QTextCursor(doc)
-            cursor.select(QTextCursor.Document)
-            cursor.mergeBlockFormat(fmt)
-            painter.translate(text_rect.left(), text_rect.top() + pad_top)
-            doc.drawContents(painter, QRectF(0, 0, text_rect.width(), text_rect.height()))
-        else:
-            # Fast path — default font spacing
-            fm = QFontMetrics(font)
-            bounding = fm.boundingRect(text_rect.toRect(), Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
-            if bounding.height() > text_rect.height() or bounding.width() > text_rect.width():
-                lines = label.splitlines(keepends=True)
-                visible = ""
-                line_h = fm.lineSpacing()
-                max_lines = max(1, int(text_rect.height() / line_h)) if line_h > 0 else 1
-                for i, ln in enumerate(lines):
-                    if i >= max_lines:
-                        break
-                    visible += ln
-                visible = visible.rstrip()
-                if len(visible) < len(label.rstrip()):
-                    visible = visible + "…"
-                label = visible
-            painter.drawText(text_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
+        fm = QFontMetrics(font)
+        bounding = fm.boundingRect(text_rect.toRect(), Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
+        if bounding.height() > text_rect.height() or bounding.width() > text_rect.width():
+            lines = label.splitlines(keepends=True)
+            visible = ""
+            line_h = fm.lineSpacing()
+            max_lines = max(1, int(text_rect.height() / line_h)) if line_h > 0 else 1
+            for i, ln in enumerate(lines):
+                if i >= max_lines:
+                    break
+                visible += ln
+            visible = visible.rstrip()
+            if len(visible) < len(label.rstrip()):
+                visible = visible + "…"
+            label = visible
+        painter.drawText(text_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, label)
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────

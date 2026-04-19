@@ -54,7 +54,7 @@ class TextNode(BaseNode):
                 c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
         else:
             c = QColor(Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor)
-        c.setAlpha(Theme.aboutBgAlpha)
+        c.setAlpha(Theme.aboutTransparency)
         return c
 
     def _apply_depth(self) -> None:

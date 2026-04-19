@@ -167,7 +167,7 @@ class CodeNode(BaseNode):
         c = QColor(tint) if tint and QColor(tint).isValid() else QColor(
             Theme.aboutBgColorFront if self.data.depth_front else Theme.aboutBgColor
         )
-        c.setAlpha(Theme.aboutBgAlpha)
+        c.setAlpha(Theme.aboutTransparency)
         return c
 
     def _apply_depth(self) -> None:
