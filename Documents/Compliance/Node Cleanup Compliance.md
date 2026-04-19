@@ -514,16 +514,17 @@ The existing `try/except Exception` in `_poll_gc` covered the body, but `_poll_v
 
 **Lesson.** Orphan timers (those that can't be parented to a QObject because the owner is a QGraphicsItem) need a defensive post-teardown guard at the top of every slot they connect to, since the non-deterministic shutdown path will occasionally race past the deterministic cleanup hooks.  The orphan pattern is used by many nodes in the codebase (GitNode, LogNode, MergeNode, ClaudeNode, ClaudeInfoNode, JoyStatsNode, PerfNode, VideoNode, etc.); the same class of crash is latent in all of them and only manifests under precise shutdown timing.
 
-**Secondary audit candidates.**  The same guard shape should be added to other orphan-timer slots in time:
+**Secondary audit sweep (same day, after a second 0xC0000409 at 11:53:21).**  A second Event Viewer crash with the same signature appeared within the same working session, triggered from a different orphan timer than HealthNode.  Rather than chase each instance reactively, the guard was extracted as a shared helper on BaseNode (``_timer_slot_alive(timer_attr)``) and applied to every dashboard-style node that uses the orphan-timer pattern:
 
-- `ClaudeInfoNode._poll_timer` — same pattern as HealthNode
-- `JoyStatsNode._poll_timer` — same
-- `PerfNode._poll_timer` — same
-- `LogNode._poll_timer` — same
-- `VideoNode._cache_poll` — same
-- `MergeNode._refresh_timer` — same
+- `HealthNode._poll_gc` — reworked to use the helper
+- `ClaudeInfoNode._kick_scan`
+- `JoyStatsNode._refresh`
+- `PerfNode._refresh`
+- `LogNode._refresh`
+- `VideoNode._check_cache_delivery` — supersedes the narrower `_destroyed` probe
+- `MergeNode._sync_list`
 
-Apply as each is observed to race; the single-file fix is cheap and contained.
+The helper probes ``self.scene()`` as a liveness check; on RuntimeError (dead wrapper) it stops + disconnects the named timer and returns False so the slot body early-exits.  One line per slot, centralised fix logic, easy to extend as new orphan-timer nodes are added.
 
 ---
 

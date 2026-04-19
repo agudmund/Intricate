@@ -86,28 +86,10 @@ class HealthNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _poll_gc(self) -> None:
-        # ── Post-teardown self-disarm ────────────────────────────────────
-        # _poll_timer is created without a parent (HealthNode is a
-        # QGraphicsRectItem, not a QObject — can't take `self` as parent),
-        # so on non-deterministic shutdown paths (scene scrapped wholesale
-        # without routing items through itemChange → _prepare_for_removal)
-        # the timer can fire after the C++ HealthNode has been destroyed.
-        # Accessing any Qt method on a dead wrapper raises RuntimeError,
-        # which propagates through Qt's C++ event loop and manifests as a
-        # STATUS_STACK_BUFFER_OVERRUN (0xC0000409) in ucrtbase.dll —
-        # precisely the crash signature the Node Cleanup Compliance doc
-        # exists to catch.  Probe self.scene() as a liveness check; if it
-        # raises, stop + disconnect the timer and bail so we don't touch
-        # any more dead state.
-        try:
-            _alive_check = self.scene
-            _alive_check()
-        except RuntimeError:
-            try:
-                self._poll_timer.stop()
-                self._poll_timer.timeout.disconnect()
-            except (RuntimeError, TypeError, AttributeError):
-                pass
+        # Orphan-timer guard — see BaseNode._timer_slot_alive docstring for
+        # the full crash context (0xC0000409 from a dead-wrapper access on
+        # non-deterministic shutdown).
+        if not self._timer_slot_alive('_poll_timer'):
             return
 
         self._poll_count += 1

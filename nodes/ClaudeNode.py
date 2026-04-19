@@ -1147,6 +1147,13 @@ class ClaudeNode(BaseNode):
             except (RuntimeError, TypeError): pass
             try: self._input.focused.disconnect(self._on_input_focused)
             except (RuntimeError, TypeError): pass
+            # _input is PrettyEdit in proxy-less mode; teardown() handles
+            # the caret timer, cursorPositionChanged, spellcheck, and the
+            # committed→_forward_commit connection we added in the
+            # _InputEdit subclass.  Safe to call even with proxy=None —
+            # the proxy-using branch inside teardown() is guarded.
+            try: self._input.teardown()
+            except (RuntimeError, AttributeError): pass
 
     def _demolition_post(self) -> None:
         # The crew tore down _input_proxy and _body_proxy (including

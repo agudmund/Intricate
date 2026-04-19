@@ -161,6 +161,9 @@ class MergeNode(BaseNode):
         Items store the AudioNode's uuid in their data role so we can
         map list order back to nodes for playback.
         """
+        # Orphan-timer guard (see BaseNode._timer_slot_alive).
+        if not self._timer_slot_alive('_refresh_timer'):
+            return
         audio_nodes = self._get_connected_audio_nodes()
         connected_uuids = {n.data.uuid for n in audio_nodes}
         uuid_to_node = {n.data.uuid: n for n in audio_nodes}

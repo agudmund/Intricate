@@ -146,6 +146,9 @@ class PerfNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _refresh(self) -> None:
+        # Orphan-timer guard (see BaseNode._timer_slot_alive).
+        if not self._timer_slot_alive('_poll_timer'):
+            return
         try:
             self.update()
         except RuntimeError:

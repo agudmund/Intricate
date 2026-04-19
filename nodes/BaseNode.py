@@ -284,6 +284,47 @@ class BaseNode(QGraphicsRectItem):
         ('_update_throttle_timer', '_flush_connection_update'),
     ]
 
+    def _timer_slot_alive(self, timer_attr: str = None) -> bool:
+        """Liveness probe for QTimer slots that outlive their C++ owner.
+
+        Orphan ``QTimer()`` instances (timers created without a QObject
+        parent — standard pattern across dashboard nodes because
+        QGraphicsRectItem isn't a QObject) can fire after the node's
+        C++ side has been destroyed on non-deterministic shutdown paths
+        (scene scrapped wholesale without routing items through
+        ``itemChange → _prepare_for_removal``).  Any Qt-method access on
+        a dead wrapper raises ``RuntimeError`` from libshiboken, which
+        propagates through Qt's C++ event loop and manifests as a
+        STATUS_STACK_BUFFER_OVERRUN (0xC0000409) in ucrtbase.dll.
+
+        Call this at the top of every timer-slot method that touches
+        Qt state::
+
+            def _poll_gc(self):
+                if not self._timer_slot_alive('_poll_timer'):
+                    return
+                ...
+
+        When *timer_attr* is given and the wrapper is dead, the named
+        timer is stopped + disconnected so it can't fire again.  Pass
+        ``None`` for slots that don't own their timer (shared timers
+        live elsewhere).  Returns ``True`` when it's safe to proceed.
+        """
+        try:
+            _ = self.scene
+            self.scene()
+        except RuntimeError:
+            if timer_attr:
+                t = getattr(self, timer_attr, None)
+                if t is not None:
+                    try:
+                        t.stop()
+                        t.timeout.disconnect()
+                    except (RuntimeError, TypeError, AttributeError):
+                        pass
+            return False
+        return True
+
     def _prepare_for_removal(self):
         """
         Graceful exit — called when the node is leaving its scene.

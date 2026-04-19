@@ -124,6 +124,9 @@ class LogNode(BaseNode):
         return logs_dir / "nodal.log"
 
     def _refresh(self) -> None:
+        # Orphan-timer guard (see BaseNode._timer_slot_alive).
+        if not self._timer_slot_alive('_poll_timer'):
+            return
         if self._editor is None:
             return
         if not self._log_path.exists():

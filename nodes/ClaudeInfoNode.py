@@ -123,6 +123,9 @@ class ClaudeInfoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────
 
     def _kick_scan(self) -> None:
+        # Orphan-timer guard (see BaseNode._timer_slot_alive).
+        if not self._timer_slot_alive('_poll_timer'):
+            return
         if self._scanning:
             return
         self._scanning = True

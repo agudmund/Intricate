@@ -322,10 +322,11 @@ class VideoNode(BaseNode):
 
     def _check_cache_delivery(self) -> None:
         """Main-thread pickup of background cache / drift workers."""
-        try:
-            if self._destroyed:
-                return
-        except RuntimeError:
+        # Orphan-timer guard (see BaseNode._timer_slot_alive) — supersedes
+        # the narrower _destroyed probe that previously lived here.
+        if not self._timer_slot_alive('_cache_poll'):
+            return
+        if self._destroyed:
             return
 
         key = self._pending_cache_key
