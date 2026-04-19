@@ -8,7 +8,7 @@
 
 from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QPainter, QFont, QColor
+from PySide6.QtGui import QPainter, QFont, QFontMetrics, QColor
 
 from nodes.BaseNode import BaseNode
 from data.TextNodeData import TextNodeData
@@ -29,33 +29,29 @@ class TextNode(BaseNode):
     """
     _has_depth_toggle = True
 
-    # Class-level accumulators for session-load profiling.  Reset on each
-    # scene swap via _TextNodeConstructionTimings.reset().  Logged by
-    # Scene.load_session as a single summary line — no per-instance
-    # timing overhead accumulated into the hot path.
-    _TIMING_BUCKETS: dict = {'base': 0.0, 'build_editor': 0.0, 'other': 0.0, 'count': 0}
+    # Class-level shared font cache (matches AboutNode's approach).
+    # All plain-mode TextNodes use the same Theme font; one QFont and
+    # one QFontMetrics serve every instance.
+    _SHARED_FONTS: dict = {}
 
     def __init__(self, data: TextNodeData | None = None):
         if data is None:
             data = TextNodeData()
-        import time as _t
-        _t0 = _t.monotonic()
         super().__init__(data)
-        _t1 = _t.monotonic()
 
         self.setBrush(self._bg_color())
         self._min_height  = Theme.aboutMinHeight
         self._apply_depth()
 
         self._editor: PrettyEdit | None = None
-        _t2 = _t.monotonic()
-        self._build_editor()
-        _t3 = _t.monotonic()
-
-        TextNode._TIMING_BUCKETS['base']         += (_t1 - _t0)
-        TextNode._TIMING_BUCKETS['other']        += (_t2 - _t1)
-        TextNode._TIMING_BUCKETS['build_editor'] += (_t3 - _t2)
-        TextNode._TIMING_BUCKETS['count']        += 1
+        # HTML mode stays eager — it's read-only, there's no user
+        # activation trigger that would make lazy viable.  Plain mode
+        # now defers PrettyEdit construction until the first
+        # double-click; paint_content renders the text in the idle
+        # state so the visual is indistinguishable from the old
+        # always-visible editor.
+        if self.data.render_html:
+            self._build_html_viewer()
 
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -78,11 +74,30 @@ class TextNode(BaseNode):
     # EDITOR
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_editor(self) -> None:
-        if self.data.render_html:
-            self._build_html_viewer()
-        else:
-            self._build_plain_editor()
+    def _ensure_plain_editor(self) -> None:
+        """Lazy-build the PrettyEdit on first edit trigger.  Idempotent:
+        subsequent calls are no-ops.  See the lazy-editor principle in
+        Documents/Architecture.md: at most one editor is active on the
+        canvas at any time, so building 895 PrettyEdits up-front was
+        pure waste — ~28 ms each, 85% of the 30 s session-load cost.
+        The paint_content fallback renders the text identically in the
+        idle state."""
+        if self._editor is not None:
+            return
+        self._editor = PrettyEdit(
+            self,
+            font_family=Theme.claudeBodyFontFamily,
+            font_size=Theme.claudeBodyFontSize,
+            font_color=Theme.nodeFontColor,
+            always_visible=False,
+            commit_on_focus_loss=True,
+        )
+        self._editor.setPlainText(self.data.label)
+        self._editor.textChanged.connect(self._on_text_changed)
+        self._editor.committed.connect(self._on_committed)
+        # Pre-size the proxy so start_edit's show() doesn't flash at
+        # the origin before the first geometry update.
+        self._position_editor()
 
     def _build_html_viewer(self) -> None:
         """Bare QTextEdit for read-only HTML rendering — no PrettyEdit."""
@@ -109,18 +124,9 @@ class TextNode(BaseNode):
         self._editor = te
         self._position_editor()
 
-    def _build_plain_editor(self) -> None:
-        """PrettyEdit for editable plain text — the standard TextNode mode."""
-        self._editor = PrettyEdit(
-            self,
-            font_family=Theme.claudeBodyFontFamily,
-            font_size=Theme.claudeBodyFontSize,
-            font_color=Theme.nodeFontColor,
-            always_visible=True,
-        )
-        self._editor.setPlainText(self.data.label)
-        self._editor.textChanged.connect(self._on_text_changed)
-        self._position_editor()
+    # _build_plain_editor absorbed into _ensure_plain_editor above —
+    # the only caller was __init__ at construction time, and now the
+    # call site is the first double-click (lazy).
 
     # _wrap_code_blocks removed — code blocks now render without
     # frame wrappers or background highlights, same as tree blocks.
@@ -333,19 +339,34 @@ class TextNode(BaseNode):
         return f'<body style="margin:8px;">{body}</body>'
 
     def _on_text_changed(self) -> None:
-        self.data.label = self._editor.toPlainText()
+        # Live sync during active edit so _split_into_about_nodes and
+        # save_session always see the current in-progress text even
+        # without an explicit commit.
+        if self._editor is not None:
+            self.data.label = self._editor.toPlainText()
 
-    def _position_editor(self) -> None:
+    def _on_committed(self, text: str) -> None:
+        """Fired by PrettyEdit when the editor loses focus.  PrettyEdit
+        has already hidden its proxy at this point; paint_content takes
+        over until the next edit trigger."""
+        self.data.label = text
+        self.update()
+
+    def _body_rect(self) -> QRectF:
+        """The area where text (painted or editor-overlaid) lives."""
         r = self.rect()
-        rect = QRectF(
+        return QRectF(
             r.left()  + _PAD,
             r.top()   + _BUTTON_ZONE_H,
             r.width() - _PAD * 2,
             r.height() - _BUTTON_ZONE_H - _PAD,
         )
+
+    def _position_editor(self) -> None:
+        rect = self._body_rect()
         if hasattr(self, '_html_proxy'):
             self._html_proxy.setGeometry(rect)
-        else:
+        elif self._editor is not None:
             self._editor.position(rect)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -444,7 +465,40 @@ class TextNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint_content(self, painter: QPainter) -> None:
-        pass  # editor is always visible — nothing to paint
+        # HTML mode: the read-only proxy fills the body area.
+        if self.data.render_html:
+            return
+        # Plain mode with editor currently overlaid (active edit):
+        # the editor's own paint renders the text, no need to duplicate.
+        if (self._editor is not None
+                and getattr(self._editor, 'proxy', None) is not None
+                and self._editor.proxy.isVisible()):
+            return
+        # Plain mode, idle — render the text from data.label so the
+        # node looks identical to its active-edit state without paying
+        # the PrettyEdit construction cost until the user actually
+        # clicks in.
+        label = self.data.label or ""
+        if not label:
+            return
+
+        fkey = (Theme.claudeBodyFontFamily, Theme.claudeBodyFontSize)
+        cached = TextNode._SHARED_FONTS.get(fkey)
+        if cached is None:
+            f = QFont(Theme.claudeBodyFontFamily, max(1, Theme.claudeBodyFontSize))
+            cached = (f, QFontMetrics(f))
+            TextNode._SHARED_FONTS[fkey] = cached
+        font, _ = cached
+
+        painter.save()
+        painter.setFont(font)
+        painter.setPen(QColor(Theme.nodeFontColor))
+        painter.drawText(
+            self._body_rect(),
+            Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
+            label,
+        )
+        painter.restore()
 
     def setRect(self, rect) -> None:
         super().setRect(rect)
@@ -456,18 +510,28 @@ class TextNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        if self._editor and hasattr(self._editor, 'proxy'):
-            self._editor.proxy.setFocus()
-            self._editor.setFocus(Qt.MouseFocusReason)
+        # HTML mode is read-only; ignore.
+        if self.data.render_html:
+            event.accept()
+            return
+        # Plain mode: first double-click lazily builds the editor, then
+        # start_edit shows + focuses.  Subsequent double-clicks on the
+        # same node reuse the existing hidden editor (no rebuild cost).
+        self._ensure_plain_editor()
+        self._editor.start_edit(self.data.label, self._body_rect(), select_all=False)
         event.accept()
 
     def keyPressEvent(self, event) -> None:
         if self.data.render_html:
             super().keyPressEvent(event)
             return
-        if self._editor and hasattr(self._editor, 'proxy') and self._editor.proxy.isVisible():
+        if (self._editor is not None
+                and getattr(self._editor, 'proxy', None) is not None
+                and self._editor.proxy.isVisible()):
             if event.key() == Qt.Key_Escape:
-                self._editor._restore_view_focus()
+                # Commit syncs data.label and hides the proxy via
+                # PrettyEdit.commit; paint_content takes over next frame.
+                self._editor.commit()
                 if self.scene() and self.scene().views():
                     self.scene().views()[0].setFocus()
                 event.accept()
