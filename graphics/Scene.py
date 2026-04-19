@@ -982,6 +982,37 @@ class IntricateScene(QGraphicsScene):
         except Exception:
             pass
 
+        # PrettyEdit construction sub-phases — drilled down one more level
+        # into the dominant _build_editor cost.  Shows which Qt call
+        # inside PrettyEdit's __init__ owns the per-instance time.
+        try:
+            from pretty_widgets.PrettyEdit import PrettyEdit as _PE
+            _pb = _PE._CONSTRUCTION_TIMINGS
+            if _pb['count'] > 0:
+                _cnt = _pb['count']
+                logger.info(
+                    "[load]   PrettyEdit totals: super=%.0f  qss=%.0f  palette=%.0f  proxy=%.0f  caret=%.0f ms  (n=%d)",
+                    _pb['super_and_setters'] * 1000,
+                    _pb['stylesheet']        * 1000,
+                    _pb['palette_margins']   * 1000,
+                    _pb['proxy']             * 1000,
+                    _pb['caret_timer']       * 1000,
+                    _cnt,
+                )
+                logger.info(
+                    "[load]   PrettyEdit per:    super=%.2f  qss=%.2f  palette=%.2f  proxy=%.2f  caret=%.2f ms",
+                    _pb['super_and_setters'] * 1000 / _cnt,
+                    _pb['stylesheet']        * 1000 / _cnt,
+                    _pb['palette_margins']   * 1000 / _cnt,
+                    _pb['proxy']             * 1000 / _cnt,
+                    _pb['caret_timer']       * 1000 / _cnt,
+                )
+            for _k in ('super_and_setters', 'stylesheet', 'palette_margins', 'proxy', 'caret_timer'):
+                _pb[_k] = 0.0
+            _pb['count'] = 0
+        except Exception:
+            pass
+
         from graphics.Connection import Connection
         _t_conn_start = _time.monotonic()
         for c in payload.get("connections", []):
