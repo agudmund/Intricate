@@ -128,6 +128,16 @@ class _SmartPrettyEdit(PrettyEdit):
         and commit-on-focus-loss would otherwise hide the proxy before
         the synchronous exec() had a chance to run."""
         if event.button() == Qt.RightButton:
+            # Start a floating connection wire in parallel with the menu —
+            # same gesture as right-clicking any other node for wiring.
+            # The menu is modal so the wire can't be dragged while it's
+            # open, but once the user dismisses the menu the wire is
+            # still floating and can be completed on a target node.
+            node = getattr(self, '_parent_node', None)
+            if node is not None:
+                scene = node.scene()
+                if scene is not None and hasattr(scene, 'begin_connection'):
+                    scene.begin_connection(node)
             self._suppress_next_commit = True
             from pretty_widgets.PrettyMenu import menu as pretty_menu
             ctx = pretty_menu()   # NO parent — top-level popup
