@@ -130,14 +130,34 @@ class _SmartPrettyEdit(PrettyEdit):
         if event.button() == Qt.RightButton:
             # Start a floating connection wire in parallel with the menu —
             # same gesture as right-clicking any other node for wiring.
-            # The menu is modal so the wire can't be dragged while it's
-            # open, but once the user dismisses the menu the wire is
-            # still floating and can be completed on a target node.
+            # The wire is intentionally "in the way": it tracks cursor
+            # position while the menu is open, pointing at whichever
+            # menu entry the user is hovering.  Once the menu closes the
+            # wire is still floating and can be completed on a target
+            # node (or cancelled with another right-click on the canvas).
             node = getattr(self, '_parent_node', None)
-            if node is not None:
-                scene = node.scene()
-                if scene is not None and hasattr(scene, 'begin_connection'):
-                    scene.begin_connection(node)
+            scene = node.scene() if node is not None else None
+            view = (scene.views()[0]
+                    if (scene is not None and scene.views()) else None)
+            if scene is not None and hasattr(scene, 'begin_connection'):
+                scene.begin_connection(node)
+            # Cursor-tracking timer — the menu's modal event loop processes
+            # QTimer events, so this fires throughout the exec() and keeps
+            # the wire endpoint glued to the mouse (which is hovering menu
+            # entries).  Without this the wire would sit frozen at the
+            # press point for the duration of the menu.
+            from PySide6.QtGui import QCursor
+            tracker = QTimer()
+            tracker.setInterval(16)   # ~60 fps
+            def _track_cursor():
+                if scene is None or view is None:
+                    return
+                if not hasattr(scene, 'update_floating_connection'):
+                    return
+                scene_pos = view.mapToScene(view.mapFromGlobal(QCursor.pos()))
+                scene.update_floating_connection(scene_pos)
+            tracker.timeout.connect(_track_cursor)
+            tracker.start()
             self._suppress_next_commit = True
             from pretty_widgets.PrettyMenu import menu as pretty_menu
             ctx = pretty_menu()   # NO parent — top-level popup
@@ -157,6 +177,8 @@ class _SmartPrettyEdit(PrettyEdit):
                 except Exception:
                     pass
             ctx.exec(event.globalPosition().toPoint())
+            tracker.stop()
+            tracker.deleteLater()
             ctx.deleteLater()
             event.accept()
             return
