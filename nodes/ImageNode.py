@@ -193,7 +193,8 @@ class ImageNode(BaseNode):
         Worker is parented to this node so it's cleaned up on removal.
         """
         try:
-            from utils.vision import VisionWorker, read_png_vision_stamp
+            from utils.vision import VisionWorker
+            from utils.persistence.png_stamp import read_png_vision_stamp
             import os
 
             # Fast path: PNG already stamped — use the embedded caption as-is
@@ -514,7 +515,7 @@ class ImageNode(BaseNode):
         except Exception as exc:
             self._spawn_caption_node(f"cannot read file: {exc}")
             return
-        from utils.persistence.HappyTimes import read_png_vision_stamp
+        from utils.persistence.png_stamp import read_png_vision_stamp
         stamp = read_png_vision_stamp(p)
         if stamp:
             self._spawn_caption_node(stamp)
@@ -550,12 +551,11 @@ class ImageNode(BaseNode):
         if not p.exists():
             self._spawn_caption_node(f"stamp: file not found — {p.name}")
             return
-        from utils.persistence.HappyTimes import write_png_vision_stamp
+        from utils.persistence.png_stamp import write_png_vision_stamp, read_png_vision_stamp
         if not caption.startswith("Intricate: "):
             caption = f"Intricate: {caption}"
         write_png_vision_stamp(p, caption)
         # Verify it stuck
-        from utils.persistence.HappyTimes import read_png_vision_stamp
         verify = read_png_vision_stamp(p)
         if verify == caption:
             # Re-cache: the source bytes changed (new tEXt chunk), so the old

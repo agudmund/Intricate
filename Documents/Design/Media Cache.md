@@ -141,6 +141,6 @@ No changes to `utils/media_cache.py` itself are usually needed — the API is st
 
 ## Relationship to Other Systems
 
-- **PNG stamping** (`utils/HappyTimes.py`) — writes `Intricate: <caption>` tEXt chunks into source PNG files. Post-stamp, `ImageNode` re-reads the stamped bytes and re-caches. The pre-stamp entry becomes an orphan and gets swept on the next save.
+- **PNG stamping** (`utils/persistence/png_stamp.py`) — writes `Intricate: <caption>` tEXt chunks into source PNG files. Post-stamp, `ImageNode` re-reads the stamped bytes and re-caches. The pre-stamp entry becomes an orphan and gets swept on the next save.
 - **Vision API** (`utils/vision.py`) — operates on `source_path` for the cold call, or on `cached_bytes(cache_key)` for the hot call. The cache is deliberately independent of Vision — nothing in `media_cache` knows Vision exists.
 - **Session save/load** (`utils/session.py` + `graphics/Scene.py`) — the session JSON carries `cache_key` per node, not bytes. On restore, each node resolves its key through the cache. If the cache directory is gone, nodes fall back to `source_path` and re-cache.

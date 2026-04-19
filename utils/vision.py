@@ -36,12 +36,6 @@ _MEDIA_TYPES = {
 }
 
 # ---------------------------------------------------------------------------
-# PNG vision-stamp helpers — canonical source is utils/HappyTimes.py
-# ---------------------------------------------------------------------------
-from utils.persistence.HappyTimes import read_png_vision_stamp, write_png_vision_stamp  # noqa: F401
-
-
-# ---------------------------------------------------------------------------
 # Background worker
 # ---------------------------------------------------------------------------
 

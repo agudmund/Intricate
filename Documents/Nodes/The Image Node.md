@@ -12,7 +12,7 @@ It is not a cat photo widget. It is a cat photo widget backed by infrastructure 
 | `data/ImageNodeData.py` | Pure Python dataclass — `cache_key`, `source_path`, `caption`, flags |
 | `utils/media_cache.py` | SHA-256 content-addressed byte-preserving cache (shared with VideoNode) |
 | `utils/vision.py` | VisionWorker — async Claude API call for image identification |
-| `utils/HappyTimes.py` | PNG tEXt stamp read/write helpers |
+| `utils/persistence/png_stamp.py` | PNG tEXt stamp read/write helpers |
 
 ## How It Works
 
