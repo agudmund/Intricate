@@ -220,6 +220,50 @@ def main():
             pass
     sys.excepthook = _excepthook
 
+    # sys.unraisablehook fires for exceptions Python couldn't propagate
+    # normally — including exceptions raised in __del__, weakref callbacks,
+    # and (critically for our purposes) exceptions inside Qt slots that
+    # PySide6 suppresses or converts before they'd reach sys.excepthook.
+    # Route them through the same crash.txt path so silent slot-exception
+    # crashes leave forensic breadcrumbs instead of stale traces.
+    def _unraisablehook(unraisable):
+        import traceback
+        tb_text = "".join(traceback.format_exception(
+            unraisable.exc_type, unraisable.exc_value, unraisable.exc_traceback,
+        ))
+        context = f"[unraisable: {unraisable.err_msg or 'slot exception'}]"
+        if unraisable.object is not None:
+            try: context += f" on {unraisable.object!r}"
+            except Exception: pass
+        logger.critical("%s\n%s", context, tb_text)
+        try:
+            crash_path = Path(__file__).resolve().parent / "logs" / "crash.txt"
+            crash_path.write_text(f"{context}\n\n{tb_text}", encoding="utf-8")
+        except Exception:
+            pass
+        try:
+            import intricate_log
+            intricate_log.flush()
+        except Exception:
+            pass
+    sys.unraisablehook = _unraisablehook
+
+    # faulthandler catches Windows structured exceptions (SEGFAULT,
+    # STATUS_ACCESS_VIOLATION, STATUS_STACK_BUFFER_OVERRUN) and writes a
+    # C-level stack dump to a file handle before the process dies.
+    # Writing to the log file gives us the faulting thread's call stack
+    # even when the crash is in Qt's C++ code and no Python exception
+    # fires — crucial for the class of ucrtbase/Qt6Widgets crashes that
+    # don't leave a Python traceback in crash.txt.
+    try:
+        import faulthandler
+        _fault_path = Path(__file__).resolve().parent / "logs" / "fault.txt"
+        _fault_file = open(_fault_path, "w", encoding="utf-8", buffering=1)
+        faulthandler.enable(file=_fault_file, all_threads=True)
+        logger.log(TRACE, "[boot:15a] faulthandler armed → logs/fault.txt")
+    except Exception as _fh_exc:
+        logger.warning("faulthandler install failed: %s", _fh_exc)
+
     # Register atexit handler to flush the ring buffer on clean shutdown.
     import atexit
     def _flush_log():
