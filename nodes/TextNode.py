@@ -6,9 +6,6 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-import math
-import random
-
 from PySide6.QtWidgets import QGraphicsProxyWidget, QTextEdit
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QFont, QColor
@@ -355,72 +352,60 @@ class TextNode(BaseNode):
         """
         Split each non-empty line of the body text into its own AboutNode.
 
-        Placement uses the same spiral-probe strategy as ClaudeNode response
-        nodes: spawn off-screen, measure real size, then spiral outward from
-        this node's position probing for a clear slot with PADDING breathing
-        room. Each subsequent node starts its search from the previous node's
-        position so the chain flows outward organically.
+        Placement rides the shared scatter in ``utils/placement.py``:
+        ``spiral_place`` for collision-aware seating, ``wander_origin`` to
+        walk the focal point across the canvas with every spawn so the
+        result reads as organic sticky-note drop rather than a fixed-centre
+        fan.  Each line passes through ``prettify_label`` first — ISO date
+        rewriting, em-dash → colon, bold/backtick stripping — and purely
+        structural lines (horizontal rules etc.) are filtered out.
+
+        No wires.  TextNode's job is to atomise a block of text into
+        independent AboutNode pills; the reader stitches them together
+        spatially, not via chain links.
         """
         scene = self.scene()
         if not scene:
             return
 
         text = self.data.label if self._editor is None else self._editor.toPlainText()
-        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if not text or not text.strip():
+            return
+
+        from utils.placement import spiral_place, wander_origin
+        from utils.label_cleanup import prettify_label, is_structural_only
+
+        _OFFSCREEN = QPointF(-999_999, -999_999)
+
+        # Filter + prettify up-front so the spawn loop only sees clean
+        # content that's going to become a real node.
+        lines: list[str] = []
+        for raw in text.splitlines():
+            stripped = raw.strip()
+            if not stripped or is_structural_only(stripped):
+                continue
+            lines.append(prettify_label(stripped))
         if not lines:
             return
 
-        from nodes.BaseNode import BaseNode as _BaseNode
-
-        PADDING         = 28
-        PROBES_PER_RING = 16
-        _OFFSCREEN      = QPointF(-999_999, -999_999)
-
-        origin = self.pos() + QPointF(self.rect().width() + 60, 0)
+        # First spawn anchors just to the right of the source node so the
+        # scatter has a consistent starting context; every subsequent
+        # spawn wanders off the previous node via wander_origin.
+        first_origin = self.pos() + QPointF(self.rect().width() + 60, 0)
+        prev_node = None
 
         for line in lines:
             node = scene.add_about_node(pos=_OFFSCREEN, label=line)
             node.data.title = line[:40]
-            nr = node.rect()
-            nw, nh = nr.width(), nr.height()
 
-            step       = max(1, int(max(nw, nh)) // 2)
-            max_radius = 4000
+            if prev_node is None:
+                origin = first_origin
+            else:
+                origin = wander_origin(prev_node)
 
-            def _clear(p):
-                candidate = QRectF(p.x() - PADDING, p.y() - PADDING,
-                                   nw + PADDING * 2, nh + PADDING * 2)
-                for item in scene.items(candidate):
-                    if item is node:
-                        continue
-                    # Duck-typed over BaseNode + StickerNode roots.
-                    if hasattr(item, 'data') and hasattr(item, 'to_dict'):
-                        return False
-                return True
-
-            pos = origin
-            found = _clear(origin)
-            if not found:
-                for radius in range(step, max_radius, step):
-                    base = random.uniform(0, 2 * math.pi)
-                    for k in range(PROBES_PER_RING):
-                        angle = base + k * (2 * math.pi / PROBES_PER_RING)
-                        candidate = QPointF(
-                            origin.x() + math.cos(angle) * radius,
-                            origin.y() + math.sin(angle) * radius,
-                        )
-                        if _clear(candidate):
-                            pos = candidate
-                            found = True
-                            break
-                    if found:
-                        break
-
-            if not found:
-                pos = origin
-
+            pos = spiral_place(scene, node, origin=origin, fallback=origin)
             node.setPos(pos)
-            origin = pos + QPointF(nw + 40, 0)
+            prev_node = node
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT
