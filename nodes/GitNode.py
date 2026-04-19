@@ -160,11 +160,20 @@ class _CommitDialog(QDialog):
         layout.addWidget(label)
 
         # ── Text input ───────────────────────────────────────────────────
-        from pretty_widgets.PrettyMenu import StyledLineEdit
-        self._input = StyledLineEdit()
-        self._input.setPlaceholderText("session sync\u2026")
+        # PrettyEdit in proxy-less mode for regular dialog layout.
+        from pretty_widgets.PrettyEdit import PrettyEdit
+        from PySide6.QtGui import QFontMetrics as _QFM
+        self._input = PrettyEdit(
+            None,
+            font_family    = Theme.healthFontFamily,
+            font_size      = Theme.healthFontSizeLabel,
+            font_color     = Theme.textPrimary,
+            always_visible = True,
+            enter_commits  = True,
+            placeholder    = "session sync\u2026",
+        )
         self._input.setStyleSheet(f"""
-            QLineEdit {{
+            QTextEdit {{
                 background: {Theme.backDrop};
                 color: {Theme.textPrimary};
                 border: 1px solid {Theme.primaryBorder};
@@ -174,7 +183,9 @@ class _CommitDialog(QDialog):
                 font-size: {Theme.healthFontSizeLabel}pt;
             }}
         """)
-        self._input.returnPressed.connect(self.accept)
+        _fm = _QFM(self._input.font())
+        self._input.setFixedHeight(_fm.lineSpacing() + 14)
+        self._input.committed.connect(lambda _t: self.accept())
         layout.addWidget(self._input)
 
         # ── Buttons ──────────────────────────────────────────────────────
@@ -195,7 +206,7 @@ class _CommitDialog(QDialog):
         self._input.setFocus()
 
     def message(self) -> str:
-        return self._input.text()
+        return self._input.toPlainText().strip()
 
 
 class GitNode(BaseNode):

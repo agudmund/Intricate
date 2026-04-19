@@ -19,6 +19,7 @@ from PySide6.QtCore import QRectF, QFileSystemWatcher, QTimer, Signal, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsProxyWidget, QFrame, QVBoxLayout
 from pretty_widgets.PrettyMenu import StyledTextEdit as QTextEdit
+from pretty_widgets.PrettyEdit import PrettyEdit
 
 from nodes.BaseNode import BaseNode
 from data.ClaudeNodeData import ClaudeNodeData
@@ -26,25 +27,30 @@ from pretty_widgets.graphics.Theme import Theme
 import pretty_widgets.utils.settings as settings
 
 
-class _InputEdit(QTextEdit):
-    """Multiline input; plain Enter submits, Shift+Enter inserts newline."""
+class _InputEdit(PrettyEdit):
+    """Claude's input — PrettyEdit with two extra contract signals the rest
+    of ClaudeNode already wires to: ``submitted(str)`` fired on non-empty
+    Enter (cleared after), and ``focused()`` on focusInEvent (drives the
+    depth-front bump).
+
+    Plain Enter commits; Shift+Enter inserts a newline — inherited from
+    PrettyEdit's ``enter_commits=True`` path.  Proxy-less mode because
+    ClaudeNode owns the outer QFrame and its own ``_input_proxy``."""
     submitted = Signal(str)
     focused   = Signal()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.committed.connect(self._forward_commit)
+
+    def _forward_commit(self, text: str) -> None:
+        if text:
+            self.submitted.emit(text)
+        self.clear()
 
     def focusInEvent(self, event) -> None:
         super().focusInEvent(event)
         self.focused.emit()
-
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not (
-            event.modifiers() & Qt.KeyboardModifier.ShiftModifier
-        ):
-            text = self.toPlainText().strip()
-            if text:
-                self.submitted.emit(text)
-                self.clear()
-        else:
-            super().keyPressEvent(event)
 
 
 class ClaudeNode(BaseNode):
@@ -453,11 +459,20 @@ class ClaudeNode(BaseNode):
         return fm.lineSpacing() * lines + 10
 
     def _build_input(self) -> None:
-        self._input = _InputEdit()
+        # PrettyEdit in proxy-less mode; ClaudeNode wraps the widget in
+        # its own _input_frame + _input_proxy (see below) for the
+        # dual-border styling, so PrettyEdit doesn't create its own proxy.
+        self._input = _InputEdit(
+            None,
+            font_family    = Theme.claudeBodyFontFamily,
+            font_size      = Theme.claudeBodyFontSize,
+            font_color     = Theme.textPrimary,
+            always_visible = True,
+            enter_commits  = True,
+            placeholder    = "Type a message…",
+        )
         self._input.submitted.connect(self._send_input)
         self._input.setFrameShape(QTextEdit.Shape.NoFrame)
-        self._input.setPlaceholderText("Type a message…")
-        self._input.setFont(QFont(Theme.claudeBodyFontFamily, max(1, Theme.claudeBodyFontSize)))
 
         # Wrap in a QFrame so the outer dark border and inner light border can
         # both use the shorthand `border` property — Qt QSS only honours
