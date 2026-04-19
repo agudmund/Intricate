@@ -72,6 +72,31 @@ class IntricateScene(QGraphicsScene):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        # ── Index method: NoIndex ─────────────────────────────────────────
+        # QGraphicsScene defaults to BspTreeIndex, which builds a spatial
+        # index over item bounding rects so items(rect) queries run in
+        # O(log n) instead of O(n).  The tradeoff: every add/remove/move
+        # must update the BSP tree, and the update isn't atomic with the
+        # removal.  Under write-heavy workloads (shake-delete cascades
+        # with particles constantly spawning/despawning, rapid zoom
+        # invalidating viewport regions, animations mutating item
+        # geometry at 60Hz) the index can hold pointers to freed items
+        # between cleanup and rebalance.  A paint dispatch that walks
+        # the BSP mid-update dereferences the stale pointer → 0xc0000005
+        # access violation in Qt6Widgets.dll.
+        #
+        # Observed 2026-04-19: repeated shake-delete + rapid-zoom repro
+        # consistently faulted at the same Qt6Widgets.dll offset 0x3977f3
+        # — identified via faulthandler dump.  Switching to NoIndex
+        # removes the entire class of BSP-stale-pointer crashes.  The
+        # O(n) query cost is noise at our scene sizes (typical ~200
+        # nodes, upper bound ~1200) compared to every other per-paint
+        # cost the scene already carries.
+        #
+        # Qt's own docs: "For scenes that frequently change the position
+        # and size of its items, NoIndex may be more efficient."
+        self.setItemIndexMethod(self.ItemIndexMethod.NoIndex)
+
         # Tight focal area for the experimental phase.
         # Cat strategy: certain ground first, expand when ready.
         self.setSceneRect(-500.0, -500.0, 1000.0, 1000.0)
@@ -887,10 +912,11 @@ class IntricateScene(QGraphicsScene):
                 logger.info("[migration] image_border_default_on_v1 — flipped %d node(s)", touched)
         self._ui_migrations = ui_migrations
 
-        # Suspend BSP indexing during bulk restore — rebuild once at the end.
-        # At 1200 nodes this turns O(n²) index rebuilds into a single O(n) pass.
-        self.setItemIndexMethod(self.ItemIndexMethod.NoIndex)
-
+        # Index method is already NoIndex scene-wide (see __init__) since
+        # the BSP tree's staleness-on-remove caused a recurring 0xc0000005
+        # fault under shake+zoom workloads.  Left the prior toggle-off here
+        # as a no-op for clarity about the original intent (avoid O(n²)
+        # BSP rebuilds during bulk restore) — now purely documentary.
         uuid_map = {}
         for d in payload.get("nodes", []):
             try:
@@ -915,8 +941,8 @@ class IntricateScene(QGraphicsScene):
                     logger.exception("Failed to restore connection %s → %s",
                                      c.get("start_uuid"), c.get("end_uuid"))
 
-        # Re-enable BSP indexing — single rebuild for all items
-        self.setItemIndexMethod(self.ItemIndexMethod.BspTreeIndex)
+        # Scene stays on NoIndex scene-wide (see __init__).  No index
+        # rebuild needed.
 
         return payload.get("viewport", {})
 
