@@ -15,7 +15,7 @@ from pathlib import Path
 
 from pretty_widgets.PrettyEdit import PrettyEdit
 from PySide6.QtCore import Qt, QRectF, QPointF, QFileSystemWatcher, QTimer
-from PySide6.QtGui import QPainter, QFont, QColor, QPen
+from PySide6.QtGui import QPainter, QFont, QFontMetrics, QColor, QPen
 
 from nodes.BaseNode import BaseNode
 from data.WarmNodeData import WarmNodeData
@@ -114,14 +114,25 @@ class WarmNode(BaseNode):
 
     _has_depth_toggle = True
 
+    # Class-level shared font cache for body paint (matches AboutNode /
+    # TextNode pattern).  All WarmNode idle bodies use the same font, so
+    # one QFont + one QFontMetrics serve every instance rather than one
+    # pair per node.
+    _SHARED_BODY_FONTS: dict = {}
+
     def __init__(self, data: WarmNodeData | None = None):
         if data is None:
             data = WarmNodeData()
         super().__init__(data)
 
         # ── Body text editor ──────────────────────────────────────────────────
-        self._editor: PrettyEdit | None = None
-        self._build_body_editor()
+        # Lazy: only built on first double-click in the body zone.  See
+        # the TextNode precedent (commit a2337bb) and the same principle
+        # AboutNode has always used — one active editor on the canvas at
+        # a time, so 146 eager builds at session load was pure waste.
+        # paint_content renders the body text from data.body_text when
+        # the editor is absent.
+        self._editor: 'PrettyEdit | None' = None
 
         # ── Bridge state (runtime only — not persisted) ───────────────────────
         self._bridge_path: str | None = None
@@ -155,18 +166,21 @@ class WarmNode(BaseNode):
     # BODY EDITOR
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_body_editor(self) -> None:
-        """Build the PrettyEdit proxy, always visible — it IS the content.
-
-        Uses the smart-paste variant so a paste that would push the body
-        past WARM_SPLIT_THRESHOLD auto-splits into a chain of sibling
+    def _ensure_body_editor(self) -> None:
+        """Lazy-build the body PrettyEdit on first double-click in the
+        body zone.  Idempotent — subsequent calls are no-ops.  Uses the
+        smart-paste variant so a paste that would push the body past
+        WARM_SPLIT_THRESHOLD auto-splits into a chain of sibling
         WarmNodes instead of trying to render a single huge document."""
+        if self._editor is not None:
+            return
         self._editor = _SmartPrettyEdit(
             self,
             font_family=Theme.healthFontFamily,
             font_size=9,
             font_color=Theme.textPrimary,
-            always_visible=True,
+            always_visible=False,
+            commit_on_focus_loss=True,
             normalize_layout=False,
             threshold=WARM_SPLIT_THRESHOLD,
             on_oversized_paste=self._split_oversized_paste,
@@ -184,13 +198,12 @@ class WarmNode(BaseNode):
         # the tags cleanly; the user's ambient node styling takes over.
         self._editor.setPlainText(_html_to_plain(self.data.body_text))
         self._editor.textChanged.connect(self._on_text_changed)
+        self._editor.committed.connect(self._on_committed)
 
         # Extend the standard right-click menu with "Open in Notepad"
         self._editor.contextMenuEvent = self._editor_context_menu
 
         self._editor.proxy.setGeometry(self._body_rect())
-        # Fit height on restore — accounts for layout constant changes across versions
-        self._auto_fit_height()
 
     def _on_text_changed(self) -> None:
         """Sync text to data on every keystroke — no explicit commit needed.
@@ -202,6 +215,13 @@ class WarmNode(BaseNode):
             # Propagate inline edits to bridge if active
             if self._bridge_path and os.path.exists(self._bridge_path):
                 self._bridge_write_debounce.start()
+
+    def _on_committed(self, text: str) -> None:
+        """Fires when the lazy editor loses focus — PrettyEdit has already
+        hidden its proxy at this point.  paint_content takes over the
+        visual until the next edit trigger."""
+        self.data.body_text = text
+        self.update()
 
     def _split_oversized_paste(self, existing: str, new_text: str) -> None:
         """Called by _SmartPrettyEdit when a paste would push this node past
@@ -404,6 +424,11 @@ class WarmNode(BaseNode):
                 # the same helper used on construction.
                 self._editor.setPlainText(_html_to_plain(new_body))
                 self._editor.blockSignals(False)
+            else:
+                # Lazy-editor mode (idle): paint_content renders from
+                # data.body_text, so force a repaint to reflect the
+                # bridge-pushed change on the canvas.
+                self.update()
 
         # Apply title changes
         new_title = data.get("title", "")
@@ -623,14 +648,22 @@ class WarmNode(BaseNode):
         """
         Double-click zones:
 
-            Body zone   → focus the inline QTextEdit editor
+            Body zone   → lazy-build the inline editor, focus it
             Elsewhere   → shelf toggle (BaseNode default)
         """
         if self._body_rect().contains(event.pos()):
+            # First double-click in the body builds the editor; subsequent
+            # double-clicks reuse the existing hidden editor (no rebuild).
+            self._ensure_body_editor()
             if self.scene() and self.scene().views():
                 self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
-            self._editor.proxy.setFocus()
-            self._editor.setFocus(Qt.MouseFocusReason)
+            # start_edit positions, shows, and focuses the proxy in one
+            # pass — the same flow AboutNode and TextNode use.
+            self._editor.start_edit(
+                _html_to_plain(self.data.body_text),
+                self._body_rect(),
+                select_all=False,
+            )
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
@@ -652,6 +685,36 @@ class WarmNode(BaseNode):
     def paint_content(self, painter: QPainter) -> None:
         # Emoji + title — fully delegated to BaseNode
         super().paint_content(painter)
+        # Body text — painted from data.body_text in the idle state so
+        # the node looks identical to its active-edit state without
+        # paying the editor construction cost until the user actually
+        # double-clicks the body zone.  When the editor is alive and
+        # its proxy is visible, let the editor do its own paint (skip).
+        if (self._editor is not None
+                and getattr(self._editor, 'proxy', None) is not None
+                and self._editor.proxy.isVisible()):
+            return
+        body = self.data.body_text
+        if not body:
+            return
+
+        fkey = (Theme.healthFontFamily, 9)
+        cached = WarmNode._SHARED_BODY_FONTS.get(fkey)
+        if cached is None:
+            f = QFont(Theme.healthFontFamily, 9)
+            cached = (f, QFontMetrics(f))
+            WarmNode._SHARED_BODY_FONTS[fkey] = cached
+        font, _fm = cached
+
+        painter.save()
+        painter.setFont(font)
+        painter.setPen(QColor(Theme.textPrimary))
+        painter.drawText(
+            self._body_rect(),
+            Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
+            body,
+        )
+        painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────
     # GEOMETRY
@@ -700,13 +763,36 @@ class WarmNode(BaseNode):
         the bottom.  Those nodes have never been resized manually, so
         shrinking is safe.
         """
-        if not self._editor:
-            return
         r = self.rect()
-        # Tell the document to wrap at the current node width
         body_w = r.width() - PADDING * 2
-        self._editor.document().setTextWidth(body_w)
-        doc_h = self._editor.document().size().height()
+        if self._editor is not None:
+            # Active edit: measure via the editor's document (most accurate
+            # because it respects the same layout Qt will render with).
+            self._editor.document().setTextWidth(body_w)
+            doc_h = self._editor.document().size().height()
+        else:
+            # Idle (lazy): measure via QFontMetrics.boundingRect with word
+            # wrap — identical to what paint_content renders, so the fit
+            # is visually correct without paying the editor construction
+            # cost.  Called during session restore / MarkdownNode's snug-
+            # fit spawn flow for 146 WarmNodes that never had an editor.
+            fkey = (Theme.healthFontFamily, 9)
+            cached = WarmNode._SHARED_BODY_FONTS.get(fkey)
+            if cached is None:
+                _f = QFont(Theme.healthFontFamily, 9)
+                cached = (_f, QFontMetrics(_f))
+                WarmNode._SHARED_BODY_FONTS[fkey] = cached
+            fm = cached[1]
+            body = self.data.body_text or ""
+            if body:
+                from PySide6.QtCore import QRect as _QRect
+                probe_rect = _QRect(0, 0, int(body_w), 100000)
+                bounding = fm.boundingRect(
+                    probe_rect, Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop, body,
+                )
+                doc_h = bounding.height() + 6.0  # match CSS padding-bottom:3px × 2 headroom
+            else:
+                doc_h = 0.0
         # Total: body top offset + document height + padding + a small buffer
         needed = BODY_TOP + doc_h + PADDING + 16.0
         target = max(needed, self._min_height)
@@ -727,7 +813,9 @@ class WarmNode(BaseNode):
 
     def setRect(self, rect: QRectF) -> None:
         super().setRect(rect)
-        if self._editor and self._editor.proxy:
+        # Editor may be None (lazy, idle) or present (after first
+        # activation) — only reposition when it actually exists.
+        if self._editor is not None and self._editor.proxy is not None:
             self._editor.proxy.setGeometry(self._body_rect())
 
     # ─────────────────────────────────────────────────────────────────────────
