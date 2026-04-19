@@ -465,8 +465,11 @@ class DebouncedSpellHighlighter(QSyntaxHighlighter):
         """
         if not self.spell_check_enabled or not self._worker:
             return
+        doc = self.document()
+        if doc is None:
+            return
 
-        doc_size_kb = len(self.document().toPlainText().encode('utf-8')) / 1024
+        doc_size_kb = len(doc.toPlainText().encode('utf-8')) / 1024
         if doc_size_kb > self.SIZE_THRESHOLD_KB:
             if not self._document_too_large:
                 self._document_too_large = True
