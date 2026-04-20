@@ -876,8 +876,11 @@ class WarmNode(BaseNode):
         painter.save()
         painter.setFont(font)
         painter.setPen(QColor(Theme.textPrimary))
+        # Match the editor's 4px document margin (normalize_layout=False)
+        # so idle paint and active editor align on both axes.
+        body_rect = self._body_rect().adjusted(4, 4, 0, 0)
         painter.drawText(
-            self._body_rect(),
+            body_rect,
             Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
             body,
         )
