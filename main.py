@@ -8,7 +8,6 @@
 
 import sys
 import signal
-import socket
 import argparse
 import ctypes
 import logging
@@ -41,27 +40,16 @@ from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from pretty_widgets.utils.logger import setup_logger, set_log_level, TRACE
 import pretty_widgets.utils.settings as settings
 from pretty_widgets.utils.settings import appName, orgName
+from shared_braincell import is_singleton
 
-_INSTANCE_PORT = int(settings.get("intricate", "instance_port", default=47321))
-_instance_lock: socket.socket | None = None
-
-
-def _acquire_instance_lock() -> bool:
-    global _instance_lock
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
-    try:
-        sock.bind(("127.0.0.1", _INSTANCE_PORT))
-        sock.listen(1)
-        _instance_lock = sock   # keep alive for process lifetime
-        return True
-    except OSError:
-        sock.close()
-        return False
+_INSTANCE_START_PORT = int(settings.get("intricate", "instance_port", default=47321))
 
 
 def main():
-    if not _acquire_instance_lock():
+    # Singleton guard — handshake-validated, port-range fallback, logs
+    # foreign port holders for curiosity.  Returns False only if another
+    # Intricate instance is already running.
+    if not is_singleton("Intricate", start_port=_INSTANCE_START_PORT):
         sys.exit(0)
 
     # Name the process for the Windows taskbar and Task Manager Apps view
