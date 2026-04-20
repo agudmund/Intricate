@@ -194,9 +194,10 @@ class AboutNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     # Px of vertical change during a resize before the shelf toggles.
-    # Small threshold = deliberate-direction detection; prevents twitchy
-    # flips from sub-pixel tremor on the drag.
-    _RESIZE_SHELF_THRESHOLD = 5.0
+    # Higher threshold = comfortable deliberate drag before the shelf
+    # reveals; also prevents twitchy flips from sub-pixel tremor.  UX
+    # sweet-spot is an ongoing experiment.
+    _RESIZE_SHELF_THRESHOLD = 75.0
 
     def mouseMoveEvent(self, event) -> None:
         # Defer to BaseNode first so the resize actually happens and
