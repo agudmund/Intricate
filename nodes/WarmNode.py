@@ -14,9 +14,10 @@ import time
 from pathlib import Path
 
 from pretty_widgets.PrettyEdit import PrettyEdit
-from PySide6.QtCore import Qt, QRectF, QPointF, QPoint, QFileSystemWatcher, QTimer
-from PySide6.QtGui import QPainter, QPainterPath, QFont, QFontMetrics, QColor, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Qt, QRectF, QPointF, QFileSystemWatcher, QTimer, Signal
+from PySide6.QtGui import QPainter, QFont, QFontMetrics, QColor
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QVBoxLayout,
+                                QWidget)
 
 from nodes.BaseNode import BaseNode
 from data.WarmNodeData import WarmNodeData
@@ -58,65 +59,122 @@ def _html_to_plain(body: str) -> str:
     return doc.toPlainText()
 
 
-class _WireOverlay(QWidget):
-    """Transparent top-level widget that mirrors the floating-connection
-    wire on top of any popup menu.
+class _SceneMenuRow(QWidget):
+    """One row of _SceneMenu — renders a QAction as a clickable entry
+    with left-aligned label + right-aligned shortcut + PrettyMenu-style
+    hover gradient.  QPushButton doesn't give us tab-aligned shortcut
+    text out of the box, so we hand-build a QHBoxLayout + two QLabels."""
 
-    A QGraphicsScene item can't be stacked above a QMenu popup — they
-    live in separate rendering trees (scene-rendered-in-viewport vs
-    top-level-popup-window).  So when a right-click spawns both a
-    context menu and a floating wire, the wire's endpoint is hidden
-    under the menu.
+    clicked = Signal()
 
-    This overlay is a borderless stays-on-top widget covering the full
-    virtual desktop, raised above the menu, that re-draws the wire's
-    bezier path.  Mouse events pass through (transparent for input).
-    Updated in lockstep with the scene wire by the same cursor tracker."""
+    def __init__(self, action):
+        super().__init__()
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setProperty("menuitem", True)
+        self.setCursor(Qt.PointingHandCursor)
+        self._action = action
+        self._enabled = action.isEnabled()
 
-    def __init__(self, start_screen_pos: QPoint):
-        super().__init__(None)
-        self.setWindowFlags(
-            Qt.FramelessWindowHint
-            | Qt.WindowStaysOnTopHint
-            | Qt.Tool
-            | Qt.WindowTransparentForInput
-        )
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.setAttribute(Qt.WA_NoSystemBackground)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
-        from PySide6.QtGui import QGuiApplication
-        # Cover the union of all screens so the wire is never clipped
-        vg = QGuiApplication.primaryScreen().virtualGeometry()
-        self.setGeometry(vg)
-        self._start = start_screen_pos
-        self._end = start_screen_pos
-        self.show()
-        self.raise_()
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(16, 5, 16, 5)
+        lay.setSpacing(24)
+        # action.text() contains Qt mnemonic markers ("&Undo") — iconText
+        # strips them cleanly.  Prefer it; fall back to a manual strip for
+        # actions that don't set iconText.
+        text = action.iconText() or action.text().replace("&", "")
+        self._label = QLabel(text)
+        self._shortcut = QLabel(action.shortcut().toString())
+        self._shortcut.setProperty("shortcut", True)
+        lay.addWidget(self._label)
+        lay.addStretch(1)
+        lay.addWidget(self._shortcut)
 
-    def update_end(self, screen_pos: QPoint) -> None:
-        self._end = screen_pos
-        self.update()
+        if not self._enabled:
+            self.setProperty("disabled", True)
 
-    def paintEvent(self, _event) -> None:
-        from pretty_widgets.graphics.Theme import Theme
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        p0 = self.mapFromGlobal(self._start)
-        p1 = self.mapFromGlobal(self._end)
-        # Simple horizontal-tangent cubic bezier, same shape family the
-        # scene wires use (curvature weighted by the horizontal reach).
-        dx = abs(p1.x() - p0.x())
-        c1 = QPointF(p0.x() + dx * 0.5, p0.y())
-        c2 = QPointF(p1.x() - dx * 0.5, p1.y())
-        path = QPainterPath()
-        path.moveTo(QPointF(p0))
-        path.cubicTo(c1, c2, QPointF(p1))
-        pen = QPen(QColor(Theme.nodeBorder),
-                   Theme.nodeBorderWidth,
-                   Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        painter.setPen(pen)
-        painter.drawPath(path)
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.LeftButton and self._enabled:
+            self.clicked.emit()
+            ev.accept()
+            return
+        super().mousePressEvent(ev)
+
+
+class _SceneMenuSeparator(QFrame):
+    def __init__(self):
+        super().__init__()
+        self.setFixedHeight(1)
+        self.setProperty("sep", True)
+
+
+class _SceneMenu(QFrame):
+    """A scene-embeddable context menu mirroring PrettyMenu's look.
+
+    QMenu's action-rendering only engages in true popup mode, which
+    forces it to render above every scene item.  To put the menu
+    below the Murfy wire (Connection.zValue=9999), we build a plain
+    QFrame with a vertical stack of _SceneMenuRow entries and give
+    it the same QSS palette as PrettyMenu.
+    """
+
+    triggered = Signal(object)   # emits the QAction that fired
+    dismissed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("SceneMenu")
+        self._vbox = QVBoxLayout(self)
+        self._vbox.setContentsMargins(4, 4, 4, 4)
+        self._vbox.setSpacing(0)
+        self.setStyleSheet(self._qss())
+
+    @staticmethod
+    def _qss() -> str:
+        return f"""
+            QFrame#SceneMenu {{
+                background:    {Theme.backDrop};
+                border:        1px solid {Theme.primaryBorder};
+                border-radius: 9px;
+                font-family:   '{Theme.healthFontFamily}';
+                font-size:     {Theme.healthFontSizeLabel}pt;
+            }}
+            QWidget[menuitem="true"] {{
+                color:         {Theme.textPrimary};
+                border-radius: 5px;
+            }}
+            QWidget[menuitem="true"]:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1e1e1e, stop:0.4 #5c3e4f,
+                    stop:0.7 #a56a85, stop:1 #d87a9e);
+            }}
+            QWidget[menuitem="true"][disabled="true"] {{
+                color: #666;
+            }}
+            QLabel {{
+                background: transparent;
+            }}
+            QLabel[shortcut="true"] {{
+                color: #999;
+            }}
+            QFrame[sep="true"] {{
+                background: #555;
+                margin: 3px 8px;
+            }}
+        """
+
+    def add_action(self, action):
+        row = _SceneMenuRow(action)
+        row.clicked.connect(lambda a=action: self._fire(a))
+        self._vbox.addWidget(row)
+        return action
+
+    def add_separator(self):
+        self._vbox.addWidget(_SceneMenuSeparator())
+
+    def _fire(self, action):
+        action.trigger()
+        self.triggered.emit(action)
+        self.dismissed.emit()
 
 
 class _SmartPrettyEdit(PrettyEdit):
@@ -150,6 +208,7 @@ class _SmartPrettyEdit(PrettyEdit):
         # the queued FocusOut hides the proxy before our deferred menu can
         # open, leaving a dismissed/stranded popup.
         self._suppress_next_commit = False
+        self._ctx_click_filter = None
 
     def commit(self):
         """Suppress a single commit if armed by mousePressEvent on
@@ -177,86 +236,119 @@ class _SmartPrettyEdit(PrettyEdit):
         super().insertFromMimeData(mime)
 
     def mousePressEvent(self, event) -> None:
-        """Right-click → context menu.  Matches the working StickerNode
-        pattern (commit de24bd7): pretty_menu() with no parent → genuine
-        top-level popup with Qt.Popup window flag, executed synchronously
-        from the press handler.  Menu contents harvested from QTextEdit's
-        createStandardContextMenu() so the full set is preserved (Undo /
-        Redo / Cut / Copy / Paste / Delete / Select All), then 'The
-        Majestic' prepended via context_menu_extra.
+        """Right-click → context menu embedded in the scene.
 
-        commit-suppression is still required — View.mousePressEvent calls
-        self.setFocus() which triggers a queued FocusOut on this editor,
-        and commit-on-focus-loss would otherwise hide the proxy before
-        the synchronous exec() had a chance to run."""
+        The menu is wrapped in a QGraphicsProxyWidget parented under the
+        WarmNode so it becomes a scene citizen.  Crucial for the Murfy
+        sidekick wire: the Connection item lives at zValue=9999, so a
+        menu proxy at a lower Z guarantees the wire renders above the
+        menu.  A top-level Qt.Popup window would render above every
+        scene item regardless of Z — which is why the previous exec()
+        path made the wire impossible to stack over.
+
+        No modal exec() — show() displays the menu non-blocking and
+        View.mouseMoveEvent handles the wire's cursor tracking just
+        like any other right-click-to-connect gesture.  Dismissal:
+        action triggered, Escape key, or click outside the menu proxy.
+        """
         if event.button() == Qt.RightButton:
-            # Start a floating connection wire in parallel with the menu —
-            # same gesture as right-clicking any other node for wiring.
-            # The wire is intentionally "in the way": it tracks cursor
-            # position while the menu is open, pointing at whichever
-            # menu entry the user is hovering.  Once the menu closes the
-            # wire is still floating and can be completed on a target
-            # node (or cancelled with another right-click on the canvas).
             node = getattr(self, '_parent_node', None)
             scene = node.scene() if node is not None else None
             view = (scene.views()[0]
                     if (scene is not None and scene.views()) else None)
             if scene is not None and hasattr(scene, 'begin_connection'):
                 scene.begin_connection(node)
-            # Overlay mirror of the wire, raised above the menu — scene
-            # items can't Z-stack over a top-level popup, so we paint a
-            # matching bezier on a transparent stays-on-top widget that
-            # covers the whole virtual desktop.  Start point: node's
-            # right-edge center, mapped scene → view → global.
-            from PySide6.QtGui import QCursor
-            start_screen = QCursor.pos()
-            if node is not None and view is not None:
-                r = node.rect()
-                right_center_scene = node.mapToScene(
-                    QPointF(r.right(), r.center().y()))
-                start_screen = view.mapToGlobal(
-                    view.mapFromScene(right_center_scene))
-            overlay = _WireOverlay(start_screen)
-            # Cursor-tracking timer — the menu's modal event loop processes
-            # QTimer events, so this fires throughout the exec() and keeps
-            # both the scene wire AND the overlay endpoint glued to the
-            # cursor (which is hovering menu entries).
-            tracker = QTimer()
-            tracker.setInterval(16)   # ~60 fps
-            def _track_cursor():
-                cursor = QCursor.pos()
-                if scene is not None and view is not None and hasattr(
-                        scene, 'update_floating_connection'):
-                    scene_pos = view.mapToScene(view.mapFromGlobal(cursor))
-                    scene.update_floating_connection(scene_pos)
-                overlay.update_end(cursor)
-                overlay.raise_()   # re-raise each tick in case menu re-stacks
-            tracker.timeout.connect(_track_cursor)
-            tracker.start()
             self._suppress_next_commit = True
-            from pretty_widgets.PrettyMenu import menu as pretty_menu
-            ctx = pretty_menu()   # NO parent — top-level popup
-            # Harvest the full standard QTextEdit menu.  QActions can
-            # belong to multiple menus; reparenting them into ctx gives
-            # us the complete Undo/Redo/Cut/Copy/Paste/Delete/Select-All
-            # set with correct enable/disable state, without re-implementing
-            # any of Qt's internal logic.
-            std = self.createStandardContextMenu()
-            for action in list(std.actions()):
-                std.removeAction(action)
-                ctx.addAction(action)
-            std.deleteLater()
+
+            from PySide6.QtWidgets import QGraphicsProxyWidget
+            ctx = _SceneMenu()
+            # The Majestic on top — the real action a user will ever pick.
+            # The standard text actions sit below as visual furniture that
+            # the Murfy wire has something to animate against.
             if self._context_menu_extra is not None:
                 try:
-                    self._context_menu_extra(ctx)
+                    from PySide6.QtGui import QAction
+                    class _CtxShim:
+                        """Shim mapping the legacy QMenu.addAction API onto
+                        _SceneMenu.add_action.  _add_majestic_action was
+                        written against a QMenu; this lets it reach our
+                        scene-embedded menu without changes."""
+                        def __init__(self_, m): self_.m = m
+                        def actions(self_): return []
+                        def addAction(self_, text):
+                            a = QAction(text)
+                            self_.m.add_action(a)
+                            return a
+                        def removeAction(self_, a): pass
+                        def insertAction(self_, before, a): pass
+                        def insertSeparator(self_, before): self_.m.add_separator()
+                    self._context_menu_extra(_CtxShim(ctx))
+                except Exception:
+                    _log.warning("[WarmNode] context_menu_extra failed", exc_info=True)
+            ctx.add_separator()
+            # Harvest the full standard QTextEdit action set.  QAction
+            # objects can belong to multiple menus; the standard menu
+            # stays alive just long enough for us to pull its actions.
+            std = self.createStandardContextMenu()
+            for action in std.actions():
+                if action.isSeparator():
+                    ctx.add_separator()
+                else:
+                    ctx.add_action(action)
+            # Keep `std` alive until the scene menu is dismissed — it owns
+            # the QAction signal connections that power Undo/Cut/Paste.
+            ctx._std_source = std
+            ctx.adjustSize()
+
+            # Proxy under the node.  Connection's zValue=9999 is already
+            # higher than anything we set here, so the wire renders over
+            # the menu automatically.
+            proxy = QGraphicsProxyWidget(node)
+            proxy.setWidget(ctx)
+            proxy.setZValue(100.0)   # above siblings, still below wires
+
+            # Position at the global cursor, mapped into the node's local coords.
+            from PySide6.QtGui import QCursor
+            if view is not None:
+                scene_cursor = view.mapToScene(view.mapFromGlobal(QCursor.pos()))
+                proxy.setPos(node.mapFromScene(scene_cursor))
+
+            # Dismissal
+            def _dismiss(*_):
+                try:
+                    proxy.setWidget(None)
+                    scene.removeItem(proxy)
                 except Exception:
                     pass
-            ctx.exec(event.globalPosition().toPoint())
-            tracker.stop()
-            tracker.deleteLater()
-            overlay.hide()
-            overlay.deleteLater()
-            ctx.deleteLater()
+                try:
+                    ctx._std_source.deleteLater()
+                except Exception:
+                    pass
+                ctx.deleteLater()
+                proxy.deleteLater()
+                try:
+                    scene.removeEventFilter(self._ctx_click_filter)
+                except Exception:
+                    pass
+                self._ctx_click_filter = None
+            ctx.dismissed.connect(_dismiss)
+            # Escape + click-outside: scene-level event filter.  QMenu's
+            # own shortcut handling stops at its own bounds; outside clicks
+            # land on the scene first.
+            from PySide6.QtCore import QEvent, QObject
+            class _CtxClickFilter(QObject):
+                def eventFilter(self_, obj, ev):
+                    if ev.type() == QEvent.GraphicsSceneMousePress:
+                        # Dismiss if the press is outside the proxy's scene rect
+                        if not proxy.sceneBoundingRect().contains(ev.scenePos()):
+                            _dismiss()
+                    elif ev.type() == QEvent.KeyPress and ev.key() == Qt.Key_Escape:
+                        _dismiss()
+                    return False
+            self._ctx_click_filter = _CtxClickFilter()
+            scene.installEventFilter(self._ctx_click_filter)
+
+            ctx.show()
             event.accept()
             return
         super().mousePressEvent(event)
