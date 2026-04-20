@@ -1563,22 +1563,98 @@ class IntricateApp(QMainWindow):
     # NODE SPAWN ACTIONS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _viewport_center(self):
-        """Current viewport center in scene coordinates."""
+    def _viewport_spawn_anchor(self):
+        """Preferred first-try position for sidebar-spawned nodes, in scene
+        coordinates.  Biased to the upper-left quadrant of the current
+        viewport (C3 on a 12×12 grid ≈ 25% from left, 25% from top).
+
+        Rationale: the user's focus is usually somewhere around the
+        viewport centre, and dropping a fresh node on top of that focus
+        is disruptive.  Landing upper-left keeps the new node clearly
+        visible while leaving the focus area intact.  Contrasts with
+        chain-spawns (MarkdownNode split, WarmNode paste-split) which
+        bias toward the right following reading direction."""
         vp = self.view.viewport()
-        return self.view.mapToScene(vp.width() // 2, vp.height() // 2)
+        return self.view.mapToScene(vp.width() // 4, vp.height() // 4)
 
     def _spawn(self, add_fn, status_msg: str, **kwargs):
-        """Place a node at the viewport centre and update the status bar."""
+        """Create a node via *add_fn* and place it at the upper-left spawn
+        anchor, falling through to scatter if that spot is occupied.
+
+        Singleton factories (HealthNode, PerfNode, GitNode) return the
+        existing instance when one already exists.  We detect that case
+        by snapshotting the scene's item set before calling the factory:
+        if the returned node was ALREADY in that set, the factory
+        handed us back an existing node rather than creating a new one.
+        Positional detection (comparing to the off-screen sentinel) was
+        unreliable because some factories recenter the incoming pos
+        (e.g. add_log_node subtracts half the rect), so the sentinel
+        didn't round-trip unchanged.
+
+        The factory is called with an off-screen position so spiral_place
+        can measure the node's rect without collision artefacts, then the
+        final position is applied.  Same pattern WarmNode's paste-split
+        and MarkdownNode's auto-split use for chain-spawning."""
+        from PySide6.QtCore import QPointF
+        from utils.placement import spiral_place
+
+        _OFFSCREEN = QPointF(-999_999, -999_999)
+
+        # Snapshot existing items by id() so we can tell a reused
+        # singleton from a newly-created node regardless of where its
+        # position landed after the factory's internal adjustments.
+        existing_ids = {id(item) for item in self.scene.items()}
+
         try:
-            node = add_fn(pos=self._viewport_center(), **kwargs)
+            node = add_fn(pos=_OFFSCREEN, **kwargs)
         except Exception:
             logger.exception("Failed to spawn node via %s", add_fn.__name__)
             return None
+        if node is None:
+            return None
+
+        # Singleton-reuse detection — the returned node already lived in
+        # the scene before we asked for a new one.
+        if id(node) in existing_ids:
+            self._animate_camera_to(node.sceneBoundingRect().center())
+            self._status(f"already have a {type(node).__name__} — heading there")
+            return node
+
+        origin = self._viewport_spawn_anchor()
+        clear_pos = spiral_place(self.scene, node, origin=origin)
+        node.setPos(clear_pos)
+
         from utils.audio import audio
         audio.play_chime()
         self._status(status_msg)
         return node
+
+    def _animate_camera_to(self, target: "QPointF", duration: int = 250):
+        """Smoothly pan the viewport to centre on *target* in scene coords.
+
+        Uses the same 250ms InOutSine easing as BaseNode's shelf reveal
+        so the camera move reads as intentional motion rather than a
+        snap — the visual grammar of 'pay attention here' is shared
+        across the app."""
+        from PySide6.QtCore import QVariantAnimation, QEasingCurve, QPointF
+        vp = self.view.viewport()
+        start = self.view.mapToScene(vp.width() // 2, vp.height() // 2)
+        anim = QVariantAnimation(self)
+        anim.setDuration(duration)
+        anim.setEasingCurve(QEasingCurve.InOutSine)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+
+        def _tick(t):
+            x = start.x() + (target.x() - start.x()) * t
+            y = start.y() + (target.y() - start.y()) * t
+            self.view.centerOn(QPointF(x, y))
+
+        anim.valueChanged.connect(_tick)
+        anim.start()
+        # Keep a reference so the animation isn't garbage-collected
+        # mid-flight.  Replaces any previous pan animation in progress.
+        self._camera_anim = anim
 
     def _spawn_warm_node(self):        self._spawn(self.scene.add_warm_node,         "a warm thought arrives")
     def _spawn_about_node(self):       self._spawn(self.scene.add_about_node,        "a little note for later")
@@ -2842,8 +2918,6 @@ class IntricateApp(QMainWindow):
             QTimer.singleShot(250, lambda: self.show_info(
                 f"{appName} is generally so happy that you are here. ✨"
             ))
-            QTimer.singleShot(600, self._check_vaporize_restart)
-
             # ── Meov timer ──────────────────────────────────────────────────
             # While the curtains are rolled up the app whispers "meov" at
             # escalating seriousness (one more dot each tick). Intermittent
@@ -2872,20 +2946,6 @@ class IntricateApp(QMainWindow):
         """Fade the window opacity from 0 → 1 on show."""
         self.fadeIn = self._animate_opacity(0.0, 1.0, 1500, QEasingCurve.OutCubic)
 
-    def _check_vaporize_restart(self):
-        """Spawn a response node if the previous session ended via 'then vaporize'."""
-        flag = Path(__file__).resolve().parent / ".vaporize_restart.json"
-        if not flag.exists():
-            return
-        try:
-            data  = json.loads(flag.read_text(encoding="utf-8"))
-            reply = data.get("reply", "").strip()
-        except Exception:
-            reply = ""
-        flag.unlink(missing_ok=True)
-        if reply:
-            pos  = self._viewport_center()
-            self.scene.add_claude_response_node(pos=pos, label=reply)
 
     def _restore_camera(self) -> None:
         """Restore the saved viewport centre and zoom level.

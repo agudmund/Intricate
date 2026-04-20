@@ -560,9 +560,19 @@ class IntricateScene(QGraphicsScene):
         return node
 
     def add_git_node(self, pos: QPointF | None = None):
-        """Add a GitNode showing repo status across all Desktop projects."""
+        """Add a GitNode at pos.  One per scene — GitNode is filesystem-
+        heavy (polls repo status across all Desktop projects), so
+        accidental duplicates would multiply the garbage collector's
+        load.  Returns the existing one if present, letting the
+        sidebar-spawn path animate the camera to it instead of adding
+        another."""
         from nodes.GitNode import GitNode
         from data.GitNodeData import GitNodeData
+
+        for item in self.items():
+            if isinstance(item, GitNode):
+                return item
+
         node = GitNode(GitNodeData())
         node._first_scan = True   # loading ceremony only on fresh sidebar spawn
         if pos is not None:

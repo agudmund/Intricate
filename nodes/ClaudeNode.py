@@ -731,10 +731,6 @@ class ClaudeNode(BaseNode):
             self._spawn_response_node(reply)
 
         if close_after:
-            import json
-            from pathlib import Path
-            flag = Path(__file__).resolve().parent.parent / ".vaporize_restart.json"
-            flag.write_text(json.dumps({"reply": reply}), encoding="utf-8")
             from PySide6.QtWidgets import QApplication, QMainWindow
             from PySide6.QtCore import QTimer
             win = next((w for w in QApplication.topLevelWidgets()
