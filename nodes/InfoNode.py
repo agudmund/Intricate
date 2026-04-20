@@ -52,6 +52,33 @@ class InfoNode(BaseNode):
         max_w = max(fm.horizontalAdvance(line) for line in all_lines)
         data.width = max(data.width, max_w + 30)
 
+        # Auto-size height to fit every section — mirrors the per-line
+        # y-advances in paint_content so content never clips.  Touched
+        # when a new version history line or body stanza is added.
+        _SECTION_PAD = 12          # gap before history and footnote sections
+        _VERSION_GAP = 28          # gap between era line and description
+        _VERSION_LINE_H = 18
+        _BODY_LINE_H    = 16
+        _HISTORY_LINE_H = 14
+        _FOOT_LINE_H    = 14
+        _FOOT_LINES     = 2        # "Nodes harmed" + "but many were aggressively fluffed"
+        _TAIL_PAD       = 10       # breathing room under the last footnote line
+        needed_below_title = (
+            _VERSION_LINE_H * 2                     # Version + Era
+            + _VERSION_GAP
+            + _BODY_LINE_H * len(self._BODY_LINES)  # description stanza
+            + _SECTION_PAD
+            + _HISTORY_LINE_H * len(__version_history__)
+            + _SECTION_PAD
+            + _FOOT_LINE_H * _FOOT_LINES
+            + _TAIL_PAD
+        )
+        # _body_top() includes the title band; use a representative value
+        # so we don't have to instantiate super() first.  AboutNode's
+        # _body_top is ~50 for the font sizes used here.
+        needed_total = 50 + needed_below_title
+        data.height = max(data.height, needed_total)
+
         super().__init__(data)
         self.setBrush(self._bg_color())
         self._apply_depth()
