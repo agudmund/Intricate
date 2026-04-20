@@ -47,7 +47,7 @@ class InfoNode(BaseNode):
         from main import __version__, __era__, __version_history__
         body_font = QFont("Lato", max(1, Theme.aboutFontSize - 1))
         fm = QFontMetrics(body_font)
-        history_lines = [f"  {v}  —  {e}" for v, e in __version_history__]
+        history_lines = [f"  {line}" for line in __version_history__]
         all_lines = [f"Version {__version__}", __era__] + history_lines + self._BODY_LINES
         max_w = max(fm.horizontalAdvance(line) for line in all_lines)
         data.width = max(data.width, max_w + 30)
@@ -118,17 +118,19 @@ class InfoNode(BaseNode):
             )
             y += 16
 
-        # Version history
+        # Version history — rendered as authored prose, verbatim.  Lines
+        # matching the current __version__ get a brighter opacity so the
+        # "you are here" reads without any extra chrome.
         y += 12
         history_font = QFont("Lato", max(1, Theme.aboutFontSize - 2))
         painter.setFont(history_font)
-        for ver, era in __version_history__:
-            is_current = ver == __version__
+        for line in __version_history__:
+            is_current = line.startswith(f"{__version__} ")
             painter.setOpacity(0.85 if is_current else 0.55)
             painter.drawText(
                 QRectF(r.left() + pad, y, r.width() - pad * 2, 16),
                 Qt.AlignLeft | Qt.AlignTop,
-                f"  {ver}  —  {era}",
+                f"  {line}",
             )
             y += 14
 

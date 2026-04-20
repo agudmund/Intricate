@@ -17,15 +17,16 @@ __version__ = "0.5.0"
 __era__     = "The Other Era"
 
 __version_history__ = [
-    ("0.0.1", "The Fluff Era"),
-    ("0.0.2", "All Glory"),
-    ("0.0.3", "The Interlinking Era"),
-    ("0.0.5", "The Breath of Air Era"),
-    ("Two",   "Two"),
-    ("0.1.0", "The Dawn of a New Era of Mankind"),
-    ("0.2.0", "The Prestige Era"),
-    ("0.3.0", "The Expressive Era"),
-    ("0.5.0", "The Other Era"),
+    "0.1.0 - The Fluff Era",
+    "0.0.2 - The Era where we fixed the typo in the version counter",
+    "0.0.3 - The Interlinking Era",
+    'There is also one named Two, its not a descendant of One or something, it\'s its name "Two"',
+    "0.0.5 - The Breath of Air Era",
+    '0.0.4 - Is missing - is its actual name, not that it is missing, its named "0.0.4 - Is Missing", and came after 0.0.5',
+    "0.1.0 - The Dawn of a new Era of Mankind",
+    "0.2.0 - The Prestige Era",
+    "0.3.0 - The Expressive Era",
+    "0.5.0 - The Other Era, Not the untold one.",
 ]
 
 # Reconfigure stdout/stderr to UTF-8 so emoji in log lines don't crash on
