@@ -32,13 +32,19 @@ TITLE_HEIGHT    = 22.0      # Title band below emoji row
 PADDING         = 10.0      # General internal padding
 BODY_TOP        = PADDING + EMOJI_SIZE + 16.0   # Body text starts below title + breathing room
 
-# Oversized-paste threshold. A single paste whose total would push the node
-# past this size triggers an automatic chain-split into multiple WarmNodes.
-# 50 KB is generous for prose (a long chapter is ~30–50 KB) and comfortably
-# below the sizes where Qt's text layout costs real frames — the 5.8 MB
-# skyscraper that caused the 2026-04-18 crash would split into ~120 nodes
-# instead of one proxy Qt can't render.
-WARM_SPLIT_THRESHOLD = 50_000
+# Paste-split is paragraph-aware, not character-aware.  Any paste
+# containing double-newline paragraph breaks (\n\n) gets chain-split
+# one WarmNode per paragraph — the author of the text already did the
+# cognitive work of separating thoughts, we just honour it.  A single
+# unbroken paragraph stays in one node (width-wrap handles it).
+#
+# The safety ceiling below is the escape valve for a pathological
+# single-paragraph wall — 20 KB is roughly 5-8 printed pages; beyond
+# that we fall back to the cascading chunker so no node ends up with
+# a multi-megabyte document crammed into one proxy (the 2026-04-18
+# crash class).  For natural prose paragraphs this ceiling is almost
+# never hit.
+WARM_SPLIT_SAFETY_CEILING = 20_000
 
 # Bridge file lives alongside session data
 _BRIDGE_DIR = Path(__file__).resolve().parent.parent / "Documents" / "data"
@@ -221,18 +227,38 @@ class _SmartPrettyEdit(PrettyEdit):
         return super().commit()
 
     def insertFromMimeData(self, mime) -> None:
+        """Paragraph-aware split detection.
+
+        If the incoming paste contains paragraph breaks (\\n\\n), it's
+        treated as multi-paragraph content worthy of a chain-spawn —
+        one WarmNode per paragraph, matching MarkdownNode's chain
+        philosophy.  A single-paragraph paste goes in normally and the
+        node's width-wrap handles it.  A pathologically long single
+        paragraph (> WARM_SPLIT_SAFETY_CEILING) also triggers the
+        split as a safety net, via the cascading chunker."""
         text = mime.text() or mime.html() or ''
-        if (text and self._on_oversized_paste is not None
-                and self._split_threshold > 0):
+        if not text or self._on_oversized_paste is None:
+            super().insertFromMimeData(mime)
+            return
+
+        # Paragraph-aware detection: any \n\n means multi-paragraph.
+        paragraph_count = text.count('\n\n') + 1 if text.strip() else 0
+        too_long = len(text) > self._split_threshold
+        should_split = paragraph_count > 1 or too_long
+
+        _log.info(
+            f"[paste] text_len={len(text)} paragraphs={paragraph_count} "
+            f"safety_ceiling={self._split_threshold} "
+            f"split={should_split}"
+        )
+
+        if should_split:
             existing = self.toPlainText()
-            if len(existing) + len(text) > self._split_threshold:
-                # Defer so the paste action's own event processing completes
-                # before the scene starts growing — keeps Qt's state machine
-                # out of our way while we spawn nodes.
-                from PySide6.QtCore import QTimer as _QTimer
-                cb = self._on_oversized_paste
-                _QTimer.singleShot(0, lambda e=existing, t=text: cb(e, t))
-                return
+            from PySide6.QtCore import QTimer as _QTimer
+            cb = self._on_oversized_paste
+            _QTimer.singleShot(0, lambda e=existing, t=text: cb(e, t))
+            return
+
         super().insertFromMimeData(mime)
 
     def mousePressEvent(self, event) -> None:
@@ -438,9 +464,10 @@ class WarmNode(BaseNode):
     def _ensure_body_editor(self) -> None:
         """Lazy-build the body PrettyEdit on first double-click in the
         body zone.  Idempotent — subsequent calls are no-ops.  Uses the
-        smart-paste variant so a paste that would push the body past
-        WARM_SPLIT_THRESHOLD auto-splits into a chain of sibling
-        WarmNodes instead of trying to render a single huge document."""
+        smart-paste variant so a multi-paragraph paste auto-splits
+        into a chain of sibling WarmNodes (one per paragraph), and a
+        paste exceeding WARM_SPLIT_SAFETY_CEILING falls back to the
+        cascading chunker as a safety net."""
         if self._editor is not None:
             return
         # Caret height = tight bounds of lowercase 'l'.  Lato's ascent
@@ -458,7 +485,7 @@ class WarmNode(BaseNode):
             commit_on_focus_loss=True,
             normalize_layout=False,
             caret_height=_l_height,
-            threshold=WARM_SPLIT_THRESHOLD,
+            threshold=WARM_SPLIT_SAFETY_CEILING,
             on_oversized_paste=self._split_oversized_paste,
             context_menu_extra=self._add_majestic_action,
         )
@@ -498,24 +525,28 @@ class WarmNode(BaseNode):
         self.update()
 
     def _split_oversized_paste(self, existing: str, new_text: str) -> None:
-        """Called by _SmartPrettyEdit when a paste would push this node past
-        WARM_SPLIT_THRESHOLD. Chunks the combined content gently (paragraphs
-        first, then smaller boundaries), keeps the first chunk in this node,
-        and spawns additional WarmNodes for the rest — chained with
-        Connection wires so the original reading order is preserved
-        spatially. Same placement machinery CushionsNode._export uses.
+        """Paragraph-aware chain-split.
 
-        Catches the pathology at paste time rather than letting Qt try to
-        render a multi-megabyte document in a single proxy (the 2026-04-18
-        crash class). Whispers the split count via InfoBar so the action
-        isn't invisible — the user sees a chain of new nodes appear.
+        Split *full_content* on double-newline paragraph breaks; each
+        paragraph becomes its own chunk (and therefore its own WarmNode).
+        A paragraph that still exceeds WARM_SPLIT_SAFETY_CEILING falls
+        back to the cascading chunker so no single node ends up with
+        a multi-megabyte document crammed into one proxy (the
+        2026-04-18 crash class).
+
+        Keeps the first chunk in this node, spawns additional WarmNodes
+        for the rest — chained with Connection wires so the original
+        reading order is preserved spatially.  Same placement machinery
+        CushionsNode._export uses.  No cap on chain length: Intricate
+        is optimised to load 1200+ nodes in ~36ms, so a thousand-
+        paragraph paste is on-spec.
         """
-        from utils.text_chunker import chunk_text
+        from utils.text_chunker import paragraph_chunks
         from graphics.Connection import Connection
         from utils.placement import spiral_place, wander_origin
 
         full_content = (existing + new_text) if existing else new_text
-        chunks = chunk_text(full_content, max_chars=WARM_SPLIT_THRESHOLD)
+        chunks = paragraph_chunks(full_content, WARM_SPLIT_SAFETY_CEILING)
         if not chunks:
             return
 

@@ -128,8 +128,8 @@ class CushionsNode(BaseNode):
         Info/MarkdownNode pipeline.
         """
         from PySide6.QtCore import QPointF, QRectF
-        from utils.text_chunker import chunk_text
-        from nodes.WarmNode import WARM_SPLIT_THRESHOLD
+        from utils.text_chunker import paragraph_chunks
+        from nodes.WarmNode import WARM_SPLIT_SAFETY_CEILING
 
         scene = self.scene()
         if not scene:
@@ -138,7 +138,7 @@ class CushionsNode(BaseNode):
         text = self.data.label if self._editor is None else self._editor.toPlainText()
         if not text or not text.strip():
             return
-        paragraphs = chunk_text(text, max_chars=WARM_SPLIT_THRESHOLD)
+        paragraphs = paragraph_chunks(text, WARM_SPLIT_SAFETY_CEILING)
         if not paragraphs:
             return
 

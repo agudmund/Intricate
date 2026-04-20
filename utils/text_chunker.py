@@ -43,6 +43,30 @@ def chunk_text(text: str, max_chars: int = DEFAULT_CHUNK_CHARS) -> list[str]:
     return [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
 
 
+def paragraph_chunks(text: str, safety_ceiling: int = DEFAULT_CHUNK_CHARS) -> list[str]:
+    """Split *text* into chunks where each chunk is one paragraph.
+
+    Paragraph boundary = ``\\n\\n``.  The author's paragraph breaks are
+    the primary signal — we honour them verbatim, one chunk per
+    paragraph, regardless of chunk size.  Any paragraph that still
+    exceeds *safety_ceiling* falls back to the cascading chunker in
+    :func:`chunk_text` so no pathologically long single paragraph
+    produces a node Qt can't render.
+
+    This is the preferred splitter for creative-writing workflows
+    where each paragraph is one discrete thought and the user wants
+    one node per thought, no matter how short or how long the chain.
+    """
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    out: list[str] = []
+    for p in paragraphs:
+        if len(p) <= safety_ceiling:
+            out.append(p)
+        else:
+            out.extend(chunk_text(p, max_chars=safety_ceiling))
+    return out
+
+
 def _greedy_pack(text: str, sep: str, max_chars: int) -> list[str]:
     """Split *text* by *sep* then greedily pack adjacent pieces into chunks
     no larger than *max_chars*. Preserves the separator when rejoining so
