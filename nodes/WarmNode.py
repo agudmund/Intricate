@@ -351,14 +351,21 @@ class WarmNode(BaseNode):
         WarmNodes instead of trying to render a single huge document."""
         if self._editor is not None:
             return
+        # Caret height = tight bounds of lowercase 'l'.  Lato's ascent
+        # includes diacritic headroom above the cap line, so the caret
+        # would overshoot if we used that; matching the ascender-glyph
+        # silhouette keeps it indistinguishable from an 'l' on the line.
+        fm = QFontMetrics(QFont(Theme.warmBodyFontFamily, Theme.warmBodyFontSize))
+        _l_height = fm.tightBoundingRect("l").height() + 1   # +1 for AA edge
         self._editor = _SmartPrettyEdit(
             self,
-            font_family=Theme.healthFontFamily,
-            font_size=9,
+            font_family=Theme.warmBodyFontFamily,
+            font_size=Theme.warmBodyFontSize,
             font_color=Theme.textPrimary,
             always_visible=False,
             commit_on_focus_loss=True,
             normalize_layout=False,
+            caret_height=_l_height,
             threshold=WARM_SPLIT_THRESHOLD,
             on_oversized_paste=self._split_oversized_paste,
             context_menu_extra=self._add_majestic_action,
@@ -865,10 +872,10 @@ class WarmNode(BaseNode):
         if not body:
             return
 
-        fkey = (Theme.healthFontFamily, 9)
+        fkey = (Theme.warmBodyFontFamily, Theme.warmBodyFontSize)
         cached = WarmNode._SHARED_BODY_FONTS.get(fkey)
         if cached is None:
-            f = QFont(Theme.healthFontFamily, 9)
+            f = QFont(Theme.warmBodyFontFamily, Theme.warmBodyFontSize)
             cached = (f, QFontMetrics(f))
             WarmNode._SHARED_BODY_FONTS[fkey] = cached
         font, _fm = cached
@@ -946,10 +953,10 @@ class WarmNode(BaseNode):
             # is visually correct without paying the editor construction
             # cost.  Called during session restore / MarkdownNode's snug-
             # fit spawn flow for 146 WarmNodes that never had an editor.
-            fkey = (Theme.healthFontFamily, 9)
+            fkey = (Theme.warmBodyFontFamily, Theme.warmBodyFontSize)
             cached = WarmNode._SHARED_BODY_FONTS.get(fkey)
             if cached is None:
-                _f = QFont(Theme.healthFontFamily, 9)
+                _f = QFont(Theme.warmBodyFontFamily, Theme.warmBodyFontSize)
                 cached = (_f, QFontMetrics(_f))
                 WarmNode._SHARED_BODY_FONTS[fkey] = cached
             fm = cached[1]
