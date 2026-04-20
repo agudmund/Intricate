@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QPropertyAnimation, QEasin
 from PySide6.QtGui import QPainter, QFont, QColor
 from PySide6.QtWidgets import QFileDialog
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from shiboken6 import isValid as _shiboken_isValid
 
 from nodes.BaseNode import BaseNode
 from data.AudioNodeData import AudioNodeData
@@ -108,14 +109,29 @@ class AudioNode(BaseNode):
 
         self.update()
 
+    # ── Cross-thread slot guard ──────────────────────────────────────────────
+    # QMediaPlayer runs its decoder on its own thread; positionChanged,
+    # durationChanged and mediaStatusChanged are queued across threads into
+    # the GUI thread. The demolition crew disconnects them during teardown,
+    # but Qt does not cancel *already-queued* meta-call events. So an
+    # in-flight position tick can still land on the dead Python wrapper and
+    # dereference its C++ half — an access violation in Qt6Core. Guard
+    # every cross-thread slot with shiboken validity so late arrivals return
+    # silently. Disconnect is still the primary defence; this is the net.
     def _on_duration(self, ms: int) -> None:
+        if not _shiboken_isValid(self):
+            return
         self._duration_ms = ms
 
     def _on_position(self, ms: int) -> None:
+        if not _shiboken_isValid(self):
+            return
         self._position_ms = ms
         self.update()
 
     def _on_media_status(self, status) -> None:
+        if not _shiboken_isValid(self):
+            return
         if status == QMediaPlayer.MediaStatus.LoadedMedia:
             if self._restore_pos > 0:
                 self._player.setPosition(self._restore_pos)
