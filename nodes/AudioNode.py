@@ -609,25 +609,40 @@ class AudioNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
-    # Volume anim + player signals are declared; the bespoke pause-after-
-    # fade shape of the original teardown (setVolume(0) + deferred stop)
-    # stays in the pre-hook because ordering matters.
+    # Volume anim declared; media-player linkage is bespoke — we sever
+    # player → audio synchronously in the pre-hook (mirrors VideoNode's
+    # 2026-04-16 canonical pattern).  Deferred stop via singleShot(0)
+    # left a window where the decoder thread delivered a queued
+    # positionChanged / mediaStatusChanged into a dead AudioNode,
+    # tripping shiboken "Internal C++ object already deleted".
     _demolition_animations = [('_vol_anim', ['finished'])]
-    _demolition_workers = [
-        ('_player', ['durationChanged', 'positionChanged', 'mediaStatusChanged']),
-    ]
 
     def _demolition_pre(self) -> None:
-        # Fade volume to zero first; the actual stop is deferred one
-        # event-loop tick so the audio sink drains cleanly.  Crew walks
-        # the animation manifest right after this, so the vol_anim is
-        # stopped and disconnected before the deferred stop fires.
+        # Volume → 0 first so the audio sink drains cleanly before we
+        # tear down the player.
         if self._audio is not None:
             try: self._audio.setVolume(0.0)
             except RuntimeError: pass
-        if self._player is not None:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, self._player.stop)
+        # Sever every cross-thread signal synchronously.  Queued
+        # meta-calls already in the event queue will still fire, but
+        # the receive-side isValid() guards in _on_duration /
+        # _on_position / _on_media_status catch those.
+        try: self._player.durationChanged.disconnect(self._on_duration)
+        except (RuntimeError, TypeError): pass
+        try: self._player.positionChanged.disconnect(self._on_position)
+        except (RuntimeError, TypeError): pass
+        try: self._player.mediaStatusChanged.disconnect(self._on_media_status)
+        except (RuntimeError, TypeError): pass
+        # Synchronous stop + sever + deleteLater — the canonical pattern
+        # from VideoNode 2026-04-16.
+        try: self._player.stop()
+        except (RuntimeError, AttributeError): pass
+        try: self._player.setAudioOutput(None)
+        except (RuntimeError, AttributeError): pass
+        try: self._player.deleteLater()
+        except (RuntimeError, AttributeError): pass
+        try: self._audio.deleteLater()
+        except (RuntimeError, AttributeError): pass
         self._vol_anim = None
 
     def to_dict(self) -> dict:

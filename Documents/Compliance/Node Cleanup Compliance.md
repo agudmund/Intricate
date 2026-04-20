@@ -576,6 +576,41 @@ A single working session during the PrettyEdit unification surfaced a sequence o
 
 ---
 
+### 2026-04-20 — AudioNode (sibling of VideoNode 2026-04-16 fix, caught during session switch)
+
+**Symptom.** Session switch while a prior session held an AudioNode (not playing) and the incoming session had two VideoNodes mid-loop-with-audio. App tore the old session down, then crashed. Event Viewer: access violation `0xc0000005` in `Qt6Core.dll`. `crash.txt` carried the unraisable:
+
+```
+RuntimeError: libshiboken: Internal C++ object (AudioNode) already deleted.
+  File "nodes/AudioNode.py", line 116, in _on_position
+    self.update()
+```
+
+`fault.txt` showed the main thread in the normal Qt event loop — the crash was a queued `positionChanged` meta-call landing on a dead AudioNode wrapper.
+
+**Root cause.** AudioNode's `_demolition_pre` used `QTimer.singleShot(0, self._player.stop)` — the exact antipattern that was fixed on VideoNode on **2026-04-16** (synchronous stop + sever + `deleteLater`). The deferred stop left a one-tick window where the QMediaPlayer decoder thread could still enqueue a `positionChanged` / `durationChanged` / `mediaStatusChanged` meta-call into the GUI thread. Those meta-calls outlived the disconnect (Qt does not cancel already-queued events) and outlived the wrapper's C++ half — access violation on the first dereference.
+
+This is the same class as VideoNode 2026-04-16. AudioNode was simply missed in that original sweep.
+
+**Fix applied to `nodes/AudioNode.py`:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | Removed `_demolition_workers` manifest entry for `_player` | Signal disconnection needs to happen inside `_demolition_pre` synchronously, not in the post-walk |
+| 2 | Added synchronous `disconnect` of `durationChanged`, `positionChanged`, `mediaStatusChanged` in `_demolition_pre` (each wrapped in `try/except (RuntimeError, TypeError)`) | Severs the cross-thread edge before the player is stopped |
+| 3 | Replaced `QTimer.singleShot(0, self._player.stop)` with synchronous `self._player.stop()` | No deferred window for queued meta-calls |
+| 4 | Added `self._player.setAudioOutput(None)` | Severs the player→audio C++ chain |
+| 5 | Added `self._player.deleteLater()` + `self._audio.deleteLater()` | Schedules deterministic C++ teardown |
+| 6 | Added belt-and-braces `shiboken6.isValid(self)` guard at the top of `_on_duration`, `_on_position`, `_on_media_status` | Receive-side net — a queued meta-call that got past the disconnect returns silently instead of crashing |
+
+**Cross-reference.** Canonical pattern lives in `nodes/VideoNode.py::_demolition_pre` (2026-04-16). The AudioNode implementation is now a narrower mirror of it (no sink, single audio chain instead of two outputs).
+
+**Sweep.** Three files use `QMediaPlayer` in `nodes/`: `VideoNode.py` (canonical, 2026-04-16), `AudioNode.py` (this fix, 2026-04-20), `MergeNode.py` (subscribes to peer `mediaStatusChanged` only; already disconnects in its own `_demolition_pre`). No outstanding holes.
+
+**Lesson.** When a fix lands on one node type, grep the node directory for the same signal / object family and audit each sibling that day. The 2026-04-16 VideoNode entry had no companion AudioNode entry — that gap directly caused this crash four days later. The Checklist below now carries a bullet point: *"If the fix touches a shared Qt subsystem (QMediaPlayer, QGraphicsProxyWidget, QThread, etc.), grep for every sibling that uses it and walk them through the same pattern in the same commit."*
+
+---
+
 ## Checklist for Future Node Types
 
 When adding a new node type or auditing an existing one, walk through this checklist:
@@ -590,6 +625,8 @@ When adding a new node type or auditing an existing one, walk through this check
 - [ ] Does the node use cross-thread callbacks? → never use `QTimer.singleShot` from worker threads; use flags polled by a main-thread timer instead
 - [ ] Does the node own any per-frame mutator that schedules a paint on a **peer** (not just itself)? → early-return when `node.scene()._bulk_removing > 0`. Scene-level quiescence is the bulk-delete safety net.
 - [ ] Does any paint/glide routine dereference a `QGraphicsItem` it does not own (e.g. a wire reading its endpoint node)? → guard with `shiboken6.isValid(x)` + `x.scene() is not None` before every dereference inside paint / timer ticks.
+- [ ] Does the node own a `QMediaPlayer` (or any Qt object whose decoder runs on its own thread)? → in `_demolition_pre`: (1) volume to zero, (2) synchronously disconnect every cross-thread signal, (3) synchronously `stop()`, (4) sever output (`setAudioOutput(None)` / `setVideoOutput(None)`), (5) `deleteLater()`. Never defer the stop via `QTimer.singleShot` — queued meta-calls survive the gap. Guard receiving slots with `shiboken6.isValid(self)` as belt-and-braces.
+- [ ] **Sibling sweep:** when a fix lands on a shared Qt subsystem (QMediaPlayer, QGraphicsProxyWidget, QThread, etc.), `grep` the node directory for every sibling that uses it and walk them through the same pattern **in the same commit**. AudioNode 2026-04-20 was a VideoNode 2026-04-16 crash that outlived the fix by four days because the sibling sweep was skipped.
 
 ## Guard: `_removal_done`
 
