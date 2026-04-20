@@ -49,9 +49,9 @@ from utils.label_cleanup import (
 # separator (—, :, -) between bold and rest.  The ** markers are
 # stripped entirely; the extracted phrase becomes the title and the
 # remaining body keeps its substance.
-_LEADING_BOLD_RE = _re.compile(
+_LEADING_BOLD_RE = re.compile(
     r'^\s*(?:\d+\.\s+|[-*]\s+)?\*\*([^*]+?)\*\*\s*[—:\-]?\s*(.*)$',
-    _re.DOTALL,
+    re.DOTALL,
 )
 
 
