@@ -49,7 +49,7 @@ class AboutNode(BaseNode):
         font.setStyleName(self._TITLE_STYLE)
         fm = QFontMetrics(font)
         if data.height == 0.0:
-            data.height = AboutNode._HIDDEN_TOP_OFFSET + fm.lineSpacing() + 2
+            data.height = AboutNode._HIDDEN_TOP_OFFSET + fm.lineSpacing() + Theme.aboutHighlightTrim + 6
         if data.width == 0.0:
             data.width = fm.horizontalAdvance(data.label or data.title) + 28   # snug right edge
 
@@ -139,7 +139,7 @@ class AboutNode(BaseNode):
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
         top = self._anim_top_offset
-        return QRectF(r.left() + padL, r.top() + top + Theme.nodeTextPaddingTop, r.width() - padL - padR, r.height() - top)
+        return QRectF(r.left() + padL, r.top() + top + Theme.aboutHighlightTrim, r.width() - padL - padR, r.height() - top)
 
     def _auto_expand(self) -> None:
         """Grow (or shrink) the node live while the user types."""
@@ -148,7 +148,6 @@ class AboutNode(BaseNode):
         doc  = self._editor.document()
         padL = Theme.aboutTextPaddingLeft
         padR = Theme.aboutTextPaddingRight
-        padT = Theme.nodeTextPaddingTop
         top  = self._anim_top_offset
 
         # Let the document measure its natural (unwrapped) width so the node
@@ -158,7 +157,7 @@ class AboutNode(BaseNode):
         doc_h = doc.size().height()
 
         new_w = max(self._min_width,  doc_w + padL + padR + 8)
-        new_h = max(self._min_height, doc_h + top  + padT + 2)
+        new_h = max(self._min_height, doc_h + top  + Theme.aboutHighlightTrim + 6)
 
         cur = self.rect()
         if abs(new_w - cur.width()) < 1 and abs(new_h - cur.height()) < 1:
@@ -289,7 +288,7 @@ class AboutNode(BaseNode):
         padR = Theme.aboutTextPaddingRight
         top  = self._anim_top_offset
         tx   = r.left() + padL
-        ty   = r.top()  + top + Theme.nodeTextPaddingTop
+        ty   = r.top()  + top + Theme.aboutHighlightTrim
         tw   = r.width()  - padL - padR
         th   = r.height() - top
         text_rect = QRectF(tx, ty, tw, th)
