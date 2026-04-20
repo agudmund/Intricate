@@ -71,6 +71,7 @@ class AboutNode(BaseNode):
         self._apply_depth()
 
         self._editor: PrettyEdit | None = None
+        self._shelf_anchor_h: float | None = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS
@@ -193,11 +194,19 @@ class AboutNode(BaseNode):
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
-    # Px of vertical change during a resize before the shelf toggles.
-    # Higher threshold = comfortable deliberate drag before the shelf
-    # reveals; also prevents twitchy flips from sub-pixel tremor.  UX
-    # sweet-spot is an ongoing experiment.
-    _RESIZE_SHELF_THRESHOLD = 75.0
+    # Asymmetric shelf thresholds.  Reveal demands a deliberate yank so
+    # a gentle padding adjustment doesn't surface the buttons by accident;
+    # hide is lighter so the user can dial the final height down tight
+    # without the shelf clinging on past the last line of text.  Both
+    # tuned by feel — ongoing UX experiment.
+    _RESIZE_SHELF_REVEAL_THRESHOLD = 75.0
+    _RESIZE_SHELF_HIDE_THRESHOLD   = 30.0
+
+    def mousePressEvent(self, event) -> None:
+        # Seed the shelf anchor at the start of any drag so the first
+        # threshold check measures from press-time height.
+        self._shelf_anchor_h = self.rect().height()
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
         # Defer to BaseNode first so the resize actually happens and
@@ -205,19 +214,23 @@ class AboutNode(BaseNode):
         super().mouseMoveEvent(event)
         # ── Bidirectional shelf coupling ─────────────────────────────────
         # Resize direction drives shelf state:
-        #   • growing taller past the threshold  → reveal (with new emoji)
-        #   • shrinking shorter past the threshold → hide
-        # "I want to see the tools" is grow-intent; "I want to fit tight"
-        # is shrink-intent.  Width-only tuning is silent — shelf state
-        # only reacts to height delta.
+        #   • growing taller past the reveal threshold → reveal
+        #   • shrinking shorter past the hide threshold → hide
+        # Measured against _shelf_anchor_h, which is re-seeded after every
+        # toggle so a single continuous drag can flip the shelf multiple
+        # times.  Independent of BaseNode's resize bookkeeping.
         if not self._is_resizing:
             return
-        delta_h = self.rect().height() - self._resize_start_rect.height()
-        if not self._buttons_visible and delta_h > self._RESIZE_SHELF_THRESHOLD:
+        if self._shelf_anchor_h is None:
+            self._shelf_anchor_h = self.rect().height()
+        delta_h = self.rect().height() - self._shelf_anchor_h
+        if not self._buttons_visible and delta_h > self._RESIZE_SHELF_REVEAL_THRESHOLD:
             self._reshuffle_emoji()
             self._toggle_shelf()
-        elif self._buttons_visible and delta_h < -self._RESIZE_SHELF_THRESHOLD:
+            self._shelf_anchor_h = self.rect().height()
+        elif self._buttons_visible and delta_h < -self._RESIZE_SHELF_HIDE_THRESHOLD:
             self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
 
     def mouseDoubleClickEvent(self, event) -> None:
         # Don't enter edit mode if the double-click landed in the visible
