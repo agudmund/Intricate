@@ -618,37 +618,62 @@ class AudioNode(BaseNode):
     _demolition_animations = [('_vol_anim', ['finished'])]
 
     def _demolition_pre(self) -> None:
+        # ── Block signals on both Qt objects FIRST ───────────────────────
+        # Nothing queues a new event during teardown regardless of whether
+        # we know about the signal. Covers QMediaPlayer's internal
+        # emissions (playbackStateChanged, errorOccurred, bufferProgress,
+        # sourceChanged, etc.) that we never connected to but Qt / the
+        # WMF backend might still fire — those queued events processed
+        # after deleteLater would land on freed memory and trigger
+        # STATUS_HEAP_CORRUPTION (0xc0000374) in ntdll.
+        for _obj in (self._player, self._audio):
+            if _obj is not None:
+                try: _obj.blockSignals(True)
+                except (RuntimeError, AttributeError): pass
+
         # Volume → 0 first so the audio sink drains cleanly before we
-        # tear down the player.
+        # tear down the player. Signals are blocked so no slot fires.
         if self._audio is not None:
             try: self._audio.setVolume(0.0)
-            except RuntimeError: pass
-        # Sever every cross-thread signal synchronously.  Queued
-        # meta-calls already in the event queue will still fire, but
-        # the receive-side isValid() guards in _on_duration /
-        # _on_position / _on_media_status catch those.
-        try: self._player.durationChanged.disconnect(self._on_duration)
-        except (RuntimeError, TypeError): pass
-        try: self._player.positionChanged.disconnect(self._on_position)
-        except (RuntimeError, TypeError): pass
-        try: self._player.mediaStatusChanged.disconnect(self._on_media_status)
-        except (RuntimeError, TypeError): pass
+            except (RuntimeError, AttributeError): pass
+
+        # Nuke ALL signal connections on each object — belt-and-suspenders
+        # alongside blockSignals above. .disconnect() with no args drops
+        # every outgoing connection in one call.
+        for _obj in (self._player, self._audio):
+            if _obj is not None:
+                try: _obj.disconnect()
+                except (RuntimeError, TypeError): pass
+
         # Synchronous stop + sever + deleteLater — the canonical pattern
-        # from VideoNode 2026-04-16.
-        try: self._player.stop()
-        except (RuntimeError, AttributeError): pass
-        try: self._player.setAudioOutput(None)
-        except (RuntimeError, AttributeError): pass
-        try: self._player.deleteLater()
-        except (RuntimeError, AttributeError): pass
-        try: self._audio.deleteLater()
-        except (RuntimeError, AttributeError): pass
+        # from VideoNode 2026-04-21.
+        if self._player is not None:
+            try: self._player.stop()
+            except (RuntimeError, AttributeError): pass
+            try: self._player.setAudioOutput(None)
+            except (RuntimeError, AttributeError): pass
+
+        for _obj in (self._player, self._audio):
+            if _obj is not None:
+                try: _obj.deleteLater()
+                except (RuntimeError, AttributeError): pass
+
+        # Drop Python wrapper refs so any post-teardown reference gets a
+        # clean AttributeError instead of dereferencing a dangling pointer.
+        # Order: null refs AFTER deleteLater so Qt still has a valid
+        # pointer when scheduling cleanup.
+        self._player = None
+        self._audio = None
+
         self._vol_anim = None
 
     def to_dict(self) -> dict:
         self.data.playback_pos = self._position_ms
         self.data.volume = int(self._target_volume * 100)
-        self.data.muted = self._audio.isMuted()
+        # Guard Qt probe — post-teardown self._audio is None.
+        if self._audio is not None:
+            try: self.data.muted = self._audio.isMuted()
+            except (RuntimeError, AttributeError): pass
         self.sync_data()
         return self.data.to_dict()
 

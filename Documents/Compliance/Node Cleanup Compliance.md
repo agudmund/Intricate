@@ -611,6 +611,45 @@ This is the same class as VideoNode 2026-04-16. AudioNode was simply missed in t
 
 ---
 
+### 2026-04-21 — VideoNode + AudioNode STATUS_HEAP_CORRUPTION (post-teardown heap write via unknown-signal leak)
+
+**Symptom.** User removed a VideoNode mid-playback (`heh.mp4`). Teardown log showed every phase completing cleanly (`_prepare_for_removal complete`). Milliseconds later, app disappeared with no Python traceback — `crash.txt` was unchanged. Windows Event Viewer:
+
+- Faulting application: `pythonw.exe`
+- Faulting module: `ntdll.dll`
+- Exception code: **`0xc0000374`** (STATUS_HEAP_CORRUPTION — ntdll's heap checker caught a write to freed memory)
+
+`fault.txt` (faulthandler) confirmed the main thread was deep in `app.exec()` with no Python frames active — the crash was in pure C++ territory (Qt / ntdll), moments after teardown.
+
+**Root cause.** Two interacting faults in the 2026-04-16 canonical `_demolition_pre` pattern:
+
+1. **Targeted-disconnect leak.** The old pattern disconnected only signals WE registered (`videoFrameChanged`, `durationChanged`, `positionChanged`, `mediaStatusChanged`). QMediaPlayer has many more — `playbackStateChanged`, `errorOccurred`, `bufferProgress`, `sourceChanged`, plus internal slots wired into the Media Foundation backend. Any of those can queue a meta-call after our targeted disconnect. Since we never connected to them, we never thought to disconnect; the receive-side `shiboken6.isValid(self)` guards only protect slots on *our* node — they don't help when the queued event targets an internal Qt slot that writes to the wrapper's member fields.
+
+2. **Live Python ref + `deleteLater` double-risk.** `self._player.deleteLater()` was called but `self._player` kept its Python reference. If the VideoNode is garbage-collected between `deleteLater` and the event loop processing the DeferredDelete event, PySide can destroy the C++ side via normal refcount drop, and then the queued DeferredDelete fires on already-freed memory. Double-free → heap corruption.
+
+Either vector alone is enough for `0xc0000374`; both operating together meant the old pattern was a race waiting for the right timing.
+
+**Fix applied to `nodes/VideoNode.py` and `nodes/AudioNode.py` (sibling sweep in same commit):**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | `blockSignals(True)` on every Qt object FIRST | Nothing queues new events during teardown — covers signals we never explicitly connected to |
+| 2 | Fade audio volume to 0 (signals already blocked, no slot fires) | Clean audio sink drain |
+| 3 | `.disconnect()` with **no args** on player / sink / audio | Drops every outgoing connection in one call — removes the targeted-disconnect-leak vector entirely |
+| 4 | Synchronous `stop()` + `setVideoOutput(None)` + `setAudioOutput(None)` | Unchanged from 2026-04-16 — sever the media pipeline |
+| 5 | `deleteLater()` on each object | Unchanged |
+| 6 | **`self._player = None`**, `self._sink = None`, `self._audio = None` | Drops Python wrapper refs AFTER `deleteLater` so Qt still has a valid pointer when scheduling cleanup. Any post-teardown reference now gets a clean `AttributeError` instead of dereferencing a dangling pointer |
+
+**Companion guard: `to_dict` None-awareness.** After teardown, `self._audio` / `self._player` are None. Session save can still hit `to_dict` on a removed-but-not-yet-GC'd node. Fields like `self.data.muted = self._audio.isMuted()` now None-guard and fall through to the existing `self.data` values — preserves last-known state instead of crashing mid-save.
+
+**Sibling sweep.** Per the 2026-04-20 checklist addition, `grep`'d the node directory for `QMediaPlayer` usage: VideoNode (this fix), AudioNode (this fix — same commit), MergeNode (only subscribes to peer `mediaStatusChanged`, unaffected — its `_demolition_pre` already handles its own disconnects). Both media-owning siblings patched in the same commit this time.
+
+**Escalation ladder.** The 2026-04-16 pattern was gentle-first — targeted disconnects for signals we registered, trust Qt to not queue things we never asked about. That's correct behaviour in a well-mannered Qt world. QMediaPlayer on Windows isn't that world — the WMF backend fires callbacks we didn't sign up for, and queued meta-calls survive wrapper destruction. The "nuclear option" (`blockSignals(True)` + `.disconnect()` with no args) is reserved for this specific class of Qt-backend fragility where the sender is beyond our connection graph. Keep targeted disconnects everywhere else; keep receive-side `shiboken6.isValid(self)` as the belt; reach for the nuclear option only when the sender can't be enumerated.
+
+**Diagnostic signature for future forensics.** `pythonw.exe` + `ntdll.dll` + **`0xc0000374`** + a `_prepare_for_removal complete` on a media node in the log tail milliseconds before the crash timestamp = this class. If it appears on a new node type that owns a QMediaPlayer, copy the six-step pattern above as the first response.
+
+---
+
 ## Checklist for Future Node Types
 
 When adding a new node type or auditing an existing one, walk through this checklist:
@@ -625,7 +664,7 @@ When adding a new node type or auditing an existing one, walk through this check
 - [ ] Does the node use cross-thread callbacks? → never use `QTimer.singleShot` from worker threads; use flags polled by a main-thread timer instead
 - [ ] Does the node own any per-frame mutator that schedules a paint on a **peer** (not just itself)? → early-return when `node.scene()._bulk_removing > 0`. Scene-level quiescence is the bulk-delete safety net.
 - [ ] Does any paint/glide routine dereference a `QGraphicsItem` it does not own (e.g. a wire reading its endpoint node)? → guard with `shiboken6.isValid(x)` + `x.scene() is not None` before every dereference inside paint / timer ticks.
-- [ ] Does the node own a `QMediaPlayer` (or any Qt object whose decoder runs on its own thread)? → in `_demolition_pre`: (1) volume to zero, (2) synchronously disconnect every cross-thread signal, (3) synchronously `stop()`, (4) sever output (`setAudioOutput(None)` / `setVideoOutput(None)`), (5) `deleteLater()`. Never defer the stop via `QTimer.singleShot` — queued meta-calls survive the gap. Guard receiving slots with `shiboken6.isValid(self)` as belt-and-braces.
+- [ ] Does the node own a `QMediaPlayer` (or any Qt object whose decoder runs on its own thread)? → in `_demolition_pre`, the six-step 2026-04-21 pattern: **(1) `blockSignals(True)` on every Qt object first**, (2) volume to zero, **(3) `.disconnect()` with no args (not targeted) — nukes ALL connections including signals we never registered for**, (4) synchronously `stop()` + sever output (`setAudioOutput(None)` / `setVideoOutput(None)`), (5) `deleteLater()`, **(6) null the Python refs (`self._player = None` etc.) AFTER `deleteLater` so post-teardown references get AttributeError instead of dangling-pointer dereference**. Never defer the stop via `QTimer.singleShot`. Guard receiving slots with `shiboken6.isValid(self)` as the belt. Null-guard any `to_dict` probes on these objects — session save can land after teardown.
 - [ ] **Sibling sweep:** when a fix lands on a shared Qt subsystem (QMediaPlayer, QGraphicsProxyWidget, QThread, etc.), `grep` the node directory for every sibling that uses it and walk them through the same pattern **in the same commit**. AudioNode 2026-04-20 was a VideoNode 2026-04-16 crash that outlived the fix by four days because the sibling sweep was skipped.
 
 ## Guard: `_removal_done`
