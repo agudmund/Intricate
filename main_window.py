@@ -1391,6 +1391,55 @@ class IntricateApp(QMainWindow):
         count = len(created)
         self.show_info(f"Pasted {count} node{'s' if count != 1 else ''}")
 
+    def import_intricate_file(self, path: str) -> int:
+        """Read a session file from disk and spawn its chain into the
+        currently loaded scene. Shared entry point for:
+          - Command-line: `python main.py file.intricate`
+          - Double-click in Windows Explorer (via file association +
+            singleton IPC from shared_braincell.send_command)
+          - Any future File menu / drag-drop shortcut
+
+        Behaviourally mirrors the SessionNode "Total Recall" drag-drop
+        and Ctrl+V paste paths — chain anchors at the current viewport
+        centre, newly-created nodes are auto-selected so they move as
+        one chunk. Returns the count of nodes actually created.
+        """
+        from utils.persistence.session import SessionManager
+        fname = Path(path).name
+        try:
+            payload = SessionManager.get_session_data(path)
+        except Exception:
+            logger.exception("[import] failed to parse session file: %s", path)
+            self.show_info(f"Couldn't parse {fname}")
+            return 0
+        if not payload or not payload.get("nodes"):
+            self.show_info(f"No nodes found in {fname}")
+            return 0
+
+        try:
+            anchor = self.view.mapToScene(self.view.viewport().rect().center())
+        except Exception:
+            logger.exception("[import] view not ready for file: %s", path)
+            return 0
+
+        try:
+            created = self.scene.import_session(payload, anchor=anchor)
+        except Exception:
+            logger.exception("[import] import_session failed for %s", path)
+            return 0
+
+        if created:
+            self.scene.clearSelection()
+            for node in created:
+                try:
+                    node.setSelected(True)
+                except RuntimeError:
+                    pass
+
+        n = len(created)
+        self.show_info(f"Imported {n} node{'s' if n != 1 else ''} from {fname}")
+        return n
+
     def _on_selection_changed(self) -> None:
         """Update the preview panel when selection changes — skipped while pinned."""
         if self._preview_pinned:

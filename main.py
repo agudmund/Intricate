@@ -11,6 +11,7 @@ import signal
 import argparse
 import ctypes
 import logging
+from pathlib import Path
 
 __version__ = "0.6.0"
 __era__     = "The Housekeeping before paradise arrives Era"
@@ -46,25 +47,189 @@ from shared_braincell import is_singleton
 _INSTANCE_START_PORT = int(settings.get("intricate", "instance_port", default=47321))
 
 
+_SESSION_FILE_EXTS = {".intricate", ".json", ".jsonl"}
+
+
+# ── Windows file association (HKCU, per-user, no admin required) ────────────
+# Registers ".intricate" with Windows Explorer so double-clicking a session
+# file launches (or hands off to) this Intricate install. Uses HKEY_CURRENT_USER
+# exclusively — no touching HKLM, no elevation prompts, no machine-wide state.
+# Idempotent: if the keys already match the expected values, _ensure_file_association
+# is a no-op with no writes and no log entries.
+
+_REGISTRY_PROG_ID = "Intricate.Session"
+_REGISTRY_DESCRIPTION = "Intricate Session File"
+
+
+def _expected_association_command() -> str:
+    """The expected HKCU shell\\open\\command value for this Intricate install."""
+    main_py = str(Path(__file__).resolve())
+    return f'"{sys.executable}" "{main_py}" "%1"'
+
+
+def _expected_association_icon() -> str:
+    """The expected DefaultIcon value for the file association."""
+    return str(Path(__file__).resolve().parent / "icons" / "intricate.ico")
+
+
+def _read_hkcu(path: str) -> str | None:
+    """Read HKCU\\<path>'s default value; returns None if the key is missing."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path, 0, winreg.KEY_READ) as k:
+            val, _type = winreg.QueryValueEx(k, "")
+            return str(val) if val is not None else None
+    except OSError:
+        return None
+
+
+def register_file_association(logger=None) -> bool:
+    """Write HKCU file-association keys for .intricate → this Intricate install.
+
+    Four keys under HKCU\\Software\\Classes\\:
+      .intricate                                         → ProgID alias
+      Intricate.Session                                  → friendly name
+      Intricate.Session\\DefaultIcon                     → icon file
+      Intricate.Session\\shell\\open\\command            → launch command
+
+    Returns True on success, False if any key write failed. Safe to call
+    repeatedly — writing the same value twice is a no-op in practice.
+    """
+    import winreg
+    command = _expected_association_command()
+    icon    = _expected_association_icon()
+    try:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\.intricate") as k:
+            winreg.SetValue(k, "", winreg.REG_SZ, _REGISTRY_PROG_ID)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\Intricate.Session") as k:
+            winreg.SetValue(k, "", winreg.REG_SZ, _REGISTRY_DESCRIPTION)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\Intricate.Session\DefaultIcon") as k:
+            winreg.SetValue(k, "", winreg.REG_SZ, icon)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\Intricate.Session\shell\open\command") as k:
+            winreg.SetValue(k, "", winreg.REG_SZ, command)
+        if logger:
+            logger.info("[association] registered .intricate → %s", command)
+        return True
+    except OSError as e:
+        if logger:
+            logger.warning("[association] write failed: %s", e)
+        return False
+
+
+def unregister_file_association(logger=None) -> int:
+    """Remove HKCU .intricate association keys. Returns count of keys
+    actually removed (missing keys count as 0 but don't error)."""
+    import winreg
+    # Delete from deepest first — DeleteKey only removes empty keys
+    keys = [
+        r"Software\Classes\Intricate.Session\shell\open\command",
+        r"Software\Classes\Intricate.Session\shell\open",
+        r"Software\Classes\Intricate.Session\shell",
+        r"Software\Classes\Intricate.Session\DefaultIcon",
+        r"Software\Classes\Intricate.Session",
+        r"Software\Classes\.intricate",
+    ]
+    removed = 0
+    for key_path in keys:
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path)
+            removed += 1
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            if logger:
+                logger.warning("[unregister] couldn't delete %s: %s", key_path, e)
+    if logger:
+        logger.info("[association] unregistered .intricate (%d key(s) removed)", removed)
+    return removed
+
+
+def _ensure_file_association(logger=None) -> None:
+    """Passive startup check — only writes the registry if the current
+    association is missing or points somewhere other than this install.
+    Silent no-op when state is already correct (no writes, no log noise
+    that might trip a registry-watching sentinel on a machine-state audit)."""
+    current_progid  = _read_hkcu(r"Software\Classes\.intricate")
+    current_command = _read_hkcu(r"Software\Classes\Intricate.Session\shell\open\command")
+    expected_cmd    = _expected_association_command()
+    if current_progid == _REGISTRY_PROG_ID and current_command == expected_cmd:
+        # Already correctly registered for this install — nothing to do
+        return
+    # Either missing or stale (e.g. repo moved) — refresh
+    if logger:
+        reason = "missing" if current_progid is None else "stale (points elsewhere)"
+        logger.info("[association] %s — refreshing HKCU .intricate registration", reason)
+    register_file_association(logger)
+
+
 def main():
+    # Parse CLI first — we might be a secondary instance with file
+    # arguments to forward to the primary (e.g. user double-clicked a
+    # .intricate file while Intricate is already running).
+    parser = argparse.ArgumentParser(description=appName)
+    parser.add_argument("files", nargs="*",
+                        help=".intricate/.json/.jsonl session files to import into the current scene")
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--trace", action="store_true")
+    parser.add_argument("--register", action="store_true",
+                        help="Register .intricate file association in HKCU, then exit")
+    parser.add_argument("--unregister", action="store_true",
+                        help="Remove .intricate file association from HKCU, then exit")
+    args = parser.parse_args()
+
+    # Registration operations run before anything else — they don't need a
+    # Qt app or logger. Write to stdout so the user sees the result.
+    if args.register:
+        ok = register_file_association()
+        print(f"[association] {'registered' if ok else 'FAILED'}: "
+              f".intricate → {_expected_association_command()}")
+        sys.exit(0 if ok else 1)
+    if args.unregister:
+        n = unregister_file_association()
+        print(f"[association] unregistered (removed {n} key(s))")
+        sys.exit(0)
+
+    # Absolutise + filter to existing session-like files
+    from pathlib import Path as _P
+    _session_files: list[str] = []
+    for f in args.files:
+        p = _P(f)
+        if p.is_file() and p.suffix.lower() in _SESSION_FILE_EXTS:
+            _session_files.append(str(p.resolve()))
+
     # Singleton guard — handshake-validated, port-range fallback, logs
     # foreign port holders for curiosity.  Returns False only if another
     # Intricate instance is already running.
     if not is_singleton("Intricate", start_port=_INSTANCE_START_PORT):
+        # Secondary instance — forward file arguments to the primary so
+        # they open in its currently-loaded scene, then exit quietly.
+        # This is the double-click-while-already-running path: Windows
+        # launches a new pythonw.exe with the file as arg, we detect the
+        # primary is holding the port, and route the import request over.
+        if _session_files:
+            from shared_braincell import send_command
+            for path in _session_files:
+                send_command("Intricate",
+                             {"cmd": "import", "path": path},
+                             _INSTANCE_START_PORT)
         sys.exit(0)
 
     # Name the process for the Windows taskbar and Task Manager Apps view
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appName)
     ctypes.windll.kernel32.SetConsoleTitleW(appName)
 
-    parser = argparse.ArgumentParser(description=appName)
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--trace", action="store_true")
-    args = parser.parse_args()
+    # Passive file-association check happens further down, after the logger
+    # is live, so refresh events get captured in the log with context.
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     logger = setup_logger()
+
+    # Now that logger is live, run the passive file-association check
+    try:
+        _ensure_file_association(logger)
+    except Exception:
+        logger.exception("[association] passive check raised — continuing without association")
 
     # CLI flags override; otherwise fall back to [intricate] log_level in settings.toml
     if args.trace:
@@ -271,6 +436,45 @@ def main():
         except Exception:
             pass
     atexit.register(_exit_pycache_cleanup)
+
+    # ── CLI file imports ─────────────────────────────────────────────────
+    # If launched with session file arguments (either from CLI or from a
+    # double-click that routed through file association), queue them for
+    # import after the initial session has fully loaded. Deferred by 2s
+    # so the scene is ready to receive spawned nodes.
+    if _session_files:
+        def _do_cli_imports():
+            for path in _session_files:
+                try:
+                    window.import_intricate_file(path)
+                except Exception:
+                    logger.exception("[cli] import failed for %s", path)
+        from PySide6.QtCore import QTimer as _QT
+        _QT.singleShot(2000, _do_cli_imports)
+
+    # ── IPC command pump ─────────────────────────────────────────────────
+    # Drains commands sent by secondary instances (e.g. when a user
+    # double-clicks another .intricate file while this instance is
+    # already running). Held as a window attribute so GC doesn't collect
+    # it while the event loop is still running.
+    from shared_braincell import drain_commands
+    from PySide6.QtCore import QTimer as _QT
+    window._cmd_pump_timer = _QT()
+    window._cmd_pump_timer.setInterval(250)
+    def _pump_commands():
+        for cmd in drain_commands("Intricate"):
+            op = cmd.get("cmd")
+            if op == "import":
+                path = cmd.get("path")
+                if path:
+                    try:
+                        window.import_intricate_file(path)
+                    except Exception:
+                        logger.exception("[ipc] import failed for %s", path)
+            else:
+                logger.warning("[ipc] unknown command: %r", cmd)
+    window._cmd_pump_timer.timeout.connect(_pump_commands)
+    window._cmd_pump_timer.start()
 
     logger.log(TRACE, "[boot:15] window shown — entering event loop")
 
