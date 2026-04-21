@@ -525,8 +525,62 @@ class IntricateApp(QMainWindow):
 
     _folders_unlocked = False
 
+    def _make_exid_button(self, text: str, clicked=None, tooltip: str = "",
+                           left_padding: int = 4) -> QPushButton:
+        """Create + place a staging-area ("eXid") utility button in the
+        bottom toolbar's right group. Encapsulates the canonical test-bench
+        styling (16pt font, Theme.buttonBg, 6px radius, HoverGlow install,
+        font-metric width plus Reey-overshoot padding) and wakes up the
+        buttons_row if the bench was dormant.
+
+        Args:
+            text: button label (used for both caption and width-from-metrics)
+            clicked: slot connected to clicked signal
+            tooltip: tooltip text
+            left_padding: interior left padding — tune up to ~14 for Reey
+                glyphs that extend beyond QFontMetrics.horizontalAdvance()
+
+        Returns:
+            The button, already placed in the right_layout. Caller can keep
+            a reference (e.g. for install_tooltip or later removal) but
+            doesn't need to call addWidget.
+        """
+        from PySide6.QtGui import QFontMetrics
+        from utils.motion.hover_glow import HoverGlow
+
+        btn = button(text, clicked=clicked)
+        btn.setMinimumSize(0, 0)
+        if tooltip:
+            btn.setToolTip(tooltip)
+
+        font = btn.font()
+        font.setPointSize(16)
+        btn.setFont(font)
+
+        # Width: label's font-metric advance + generous Reey overshoot so
+        # glyphs that extend beyond the advance (common on Reey faces)
+        # don't clip.
+        fm = QFontMetrics(font)
+        btn.setFixedWidth(fm.horizontalAdvance(text) + 32)
+        btn.setMinimumHeight(fm.height() + 6 + 18)
+
+        base_style = (
+            f"QPushButton {{ background-color: {Theme.buttonBg};"
+            f" border: none; border-radius: 6px;"
+            f" padding: 6px 2px 18px {left_padding}px; }}"
+        )
+        HoverGlow.install(btn, base_style)
+
+        # Place the button and wake the bench up. The dormant-state hide
+        # at init gets reversed the moment any candidate lands here.
+        self._exid_right_layout.addWidget(btn)
+        if hasattr(self, 'buttons_row'):
+            self.buttons_row.show()
+        return btn
+
     def _show_toolbar_context_menu(self, global_pos) -> None:
-        """Right-click the top toolbar to unlock/lock project folders."""
+        """Right-click the top toolbar — project folder lock, media cache
+        refresh, audio mute toggle, polaroid viewport snapshot."""
         menu = self._styled_menu()
         if self._folders_unlocked:
             act = menu.addAction("Lock Folders")
@@ -540,6 +594,21 @@ class IntricateApp(QMainWindow):
         refresh = menu.addAction("Refresh Media Cache")
         refresh.setToolTip("Purge the project's media cache and re-ingest from sources (images + videos)")
         refresh.triggered.connect(self._refresh_media_cache)
+
+        menu.addSeparator()
+        from utils.audio import audio
+        if audio.is_muted():
+            mute_act = menu.addAction("Unmute")
+            mute_act.setToolTip("Restore audio — chimes, video nodes, audio nodes fade back in")
+        else:
+            mute_act = menu.addAction("Mute")
+            mute_act.setToolTip("Silence all audio — chimes and every video / audio node")
+        mute_act.triggered.connect(self._toggle_global_mute)
+
+        snap = menu.addAction("Polaroid Snapshot")
+        snap.setToolTip("Capture the current viewport with transparent background (alpha)")
+        snap.triggered.connect(self._snapshot_viewport)
+
         menu.exec(global_pos)
 
     def _refresh_media_cache(self) -> None:
@@ -1214,12 +1283,32 @@ class IntricateApp(QMainWindow):
         )
         layout.setSpacing(Theme.sidebarButtonGap)
 
-        def _cat_btn(icon_name, tooltip, menu_fn):
-            """Category button — icon fills the entire button, no Qt frame overhead."""
+        def _cat_btn(icon_name, tooltip, menu_fn, scale=None):
+            """Category button — icon fills the entire button, no Qt frame overhead.
+
+            Sidebar icons (cream-on-transparent line art inside a ring) have
+            ~22% transparent padding baked into the PNG, so a button at
+            setIconSize(sz, sz) renders with ~6-7px of dead whitespace on
+            every edge. That dead space dominates the visible gap between
+            stacked buttons — sidebarButtonGap looks neutralised no matter
+            what value it holds. The default 1.28× scale (matches
+            NodeButton.py:137) inflates the icon rect so the glyph content
+            reaches the button's edges; after this, sidebarButtonGap is
+            the ONLY contributor to the visible gap.
+
+            The optional `scale` kwarg overrides the family default for
+            icons whose fill ratio differs — e.g. the Anthropic logo has
+            closer to 100% fill, so it needs scale=1.0 (or less) to avoid
+            clipping the sidebar edge while still reading comparable in
+            visual size to the circular family. Future: per-family fill
+            ratios in [theme.sidebar].
+            """
             sz = Theme.iconButtonSize
+            effective_scale = scale if scale is not None else Theme.sidebarIconScale
+            ico_sz = int(sz * effective_scale)
             b = button(icon_name=icon_name, tooltip=tooltip)
             b.setFixedSize(sz, sz)
-            b.setIconSize(QSize(sz, sz))
+            b.setIconSize(QSize(ico_sz, ico_sz))
             b.setFlat(True)
             b.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
             def _on_click(_=None, btn=b, fn=menu_fn, label=tooltip):
@@ -1236,12 +1325,16 @@ class IntricateApp(QMainWindow):
         _cat_btn(Theme.iconHealthGroup,  "Health", self._show_health_menu)
         _cat_btn(Theme.iconToolsGroup,   "Tools",  self._show_tools_menu)
         _cat_btn(Theme.iconInfoGroup,    "Info",   self._show_info_menu)
-        _cat_btn(Theme.iconAnthropic,    "Claude", self._show_claude_menu)
-
-        # ── Stretch pushes slider/bar to the bottom ───────────────────────────
-        layout.addStretch()
+        # Anthropic logo fills its bounding box closer to 100% than the
+        # circular family, so scale=1.0 keeps it visually comparable in
+        # size to the circular icons without clipping the sidebar edge.
+        _cat_btn(Theme.iconAnthropic,    "Claude", self._show_claude_menu, scale=1.0)
 
         # ── Sliders row (top) + progress-bars row (bottom) ───────────────────
+        # No explicit stretch — sliders_row carries the Expanding vertical
+        # sizePolicy so IT absorbs the gap between the last category button
+        # and the progress-bars row. At max value, the slider handle reaches
+        # up to just under the button row, matching the layout intent.
         # Target layout is 3 sticker sliders above, 3 pink progress bars below.
         # Each row is a 3-column grid at sz // 3 per column so columns align
         # vertically between the two rows. Current population:
@@ -1263,10 +1356,15 @@ class IntricateApp(QMainWindow):
         # ── Sliders row ──────────────────────────────────────────────────────
         sliders_row = QWidget()
         sliders_row.setStyleSheet("background: transparent;")
+        # Expanding vertical so this row absorbs all vertical slack between
+        # the top category buttons and the progress-bars row below — the
+        # sliders inside inherit the space and their handles travel to the
+        # full physical extent rather than being pinned at bar_min_height.
+        sliders_row.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         sliders_row_layout = QHBoxLayout(sliders_row)
         sliders_row_layout.setContentsMargins(0, 0, 0, 0)
         sliders_row_layout.setSpacing(0)
-        sliders_row_layout.setAlignment(Qt.AlignHCenter | Qt.AlignBottom)
+        sliders_row_layout.setAlignment(Qt.AlignHCenter)
 
         # Blur slider — drives the backdrop opacity layer (was called fog;
         # renamed because it's actually the blur transparency level).
@@ -1282,7 +1380,10 @@ class IntricateApp(QMainWindow):
             minimumHeight=bar_min_height,
             valueChanged=self._on_blur_slider_changed,
         )
-        sliders_row_layout.addWidget(self.blur_slider, alignment=Qt.AlignBottom)
+        # No alignment flag — a Qt alignment on addWidget disables expansion,
+        # so the slider would stay pinned at minimumHeight. Letting it fill
+        # the row is the whole point of the Expanding sizePolicy above.
+        sliders_row_layout.addWidget(self.blur_slider)
 
         # Zoom slider — moved from the bottom toolbar to live with its peers.
         self._zoom_slider = pretty_slider(
@@ -1298,12 +1399,15 @@ class IntricateApp(QMainWindow):
             pageStep=25,
             valueChanged=self._on_zoom_slider,
         )
-        sliders_row_layout.addWidget(self._zoom_slider, alignment=Qt.AlignBottom)
+        sliders_row_layout.addWidget(self._zoom_slider)
 
         # Reserved column for a future 3rd slider
         sliders_row_layout.addSpacerItem(_reserved_slot())
 
-        layout.addWidget(sliders_row, alignment=Qt.AlignHCenter)
+        # No alignment on the outer addWidget either — same reason. The
+        # inner sliders_row_layout already handles horizontal centering
+        # via its setAlignment(Qt.AlignHCenter) on the QHBoxLayout.
+        layout.addWidget(sliders_row)
         layout.addSpacing(2)
 
         # ── Progress-bars row ────────────────────────────────────────────────
@@ -2320,23 +2424,33 @@ class IntricateApp(QMainWindow):
         self.bottomToolbar.setStyleSheet(f"background: {Theme.windowBg};")
 
         outer = QVBoxLayout(self.bottomToolbar)
-        outer.setContentsMargins(10, 6, 10, 6)
+        # Zero vertical outer margins so the dormant bottomToolbar matches
+        # the top toolbar's Theme.handleHeightTop exactly. When the bench
+        # wakes up, the buttons_row's own height stacks below with the 4px
+        # inter-item spacing supplying the visual breathing room.
+        outer.setContentsMargins(10, 0, 10, 0)
         outer.setSpacing(4)
 
         # ── Info bar row ──────────────────────────────────────────────────────
+        # Height matches Theme.handleHeightTop so the bottom infobar sits at
+        # exactly the same thickness as the top titlebar when dormant.
         _info_bar_row = QWidget()
-        _info_bar_row.setFixedHeight(28)
+        _info_bar_row.setFixedHeight(Theme.handleHeightTop)
         _info_bar_row.setStyleSheet("background: transparent;")
         _info_bar_layout = QHBoxLayout(_info_bar_row)
         _info_bar_layout.setContentsMargins(0, 0, 0, 0)
         _info_bar_layout.setSpacing(0)
 
         self.info_label = pretty_label("", alignment=Qt.AlignCenter)
+        # Bottom padding nudges the text upward so it reads centered in y —
+        # italic Chandler42 at 16px has a visual centre below its geometric
+        # one (ascenders are larger than descenders), so without the nudge
+        # the glyphs feel pinned to the window's bottom edge.
         self.info_label.setStyleSheet(
-            f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
+            f"background: transparent; border: none; padding: 0px 4px 4px 4px;"
             f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: 16px;"
         )
-        self.info_label.setFixedHeight(28)
+        self.info_label.setFixedHeight(Theme.handleHeightTop)
 
         self._info_opacity = QGraphicsOpacityEffect()
         self._info_opacity.setOpacity(0.0)
@@ -2360,53 +2474,23 @@ class IntricateApp(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
 
-        # ── Right group — zoom / Sound / Polaroid / eXid ─────────────────────
+        # ── Right group — eXid test bench for new utility buttons ───────────
+        # The staging area for utilities whose value is still being evaluated.
+        # Promotion pipeline:
+        #   1. Park new utility here via self._make_exid_button(...)
+        #   2. Use it for ~1–2 weeks in real sessions
+        #   3. If used regularly → graduate to a permanent home
+        #      (titlebar right-click menu, sidebar, etc.)
+        #   4. If unused → just remove it
+        # Currently empty — the most recent graduates (Sound, Polaroid)
+        # moved to the titlebar context menu as permanent entries. This is
+        # the first time the bench has been clear; expect new candidates
+        # to land here soon.
         right_group = QWidget()
         right_group.setStyleSheet("background: transparent;")
         right_layout = QHBoxLayout(right_group)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
-
-        # Zoom slider moved to the sidebar bars_row; bottom toolbar's right
-        # group now holds only Sound / Polaroid.
-
-        from utils.audio import audio
-        self._mute_btn = button("Quiet" if audio.is_muted() else "Sound", clicked=self._toggle_global_mute)
-        self._mute_btn.setMinimumSize(0, 0)
-        self._mute_btn.setToolTip("Unmute all" if audio.is_muted() else "Mute all")
-        mute_font = self._mute_btn.font()
-        mute_font.setPointSize(16)
-        self._mute_btn.setFont(mute_font)
-        # Fix width so toggling Sound/Quiet doesn't shift the slider.
-        # Reey glyphs extend well beyond QFontMetrics advance, so add generous room.
-        from PySide6.QtGui import QFontMetrics
-        fm = QFontMetrics(mute_font)
-        widest = max(fm.horizontalAdvance("Sound"), fm.horizontalAdvance("Quiet"))
-        self._mute_btn.setFixedWidth(widest + 32)  # padding + Reey overshoot
-        self._mute_btn.setMinimumHeight(fm.height() + 6 + 18)  # top + bottom padding
-        from utils.motion.hover_glow import HoverGlow
-
-        _mute_base = (
-            f"QPushButton {{ background-color: {Theme.buttonBg};"
-            f" border: none; border-radius: 6px;"
-            f" padding: 6px 2px 18px 14px; }}"
-        )
-        HoverGlow.install(self._mute_btn, _mute_base)
-        right_layout.addWidget(self._mute_btn)
-
-        self._snap_btn = button("Polaroid", clicked=self._snapshot_viewport)
-        self._snap_btn.setMinimumSize(0, 0)
-        self._snap_btn.setToolTip("Snapshot viewport (alpha)")
-        snap_font = self._snap_btn.font()
-        snap_font.setPointSize(16)
-        self._snap_btn.setFont(snap_font)
-        _snap_base = (
-            f"QPushButton {{ background-color: {Theme.buttonBg};"
-            f" border: none; border-radius: 6px;"
-            f" padding: 6px 2px 18px 4px; }}"
-        )
-        HoverGlow.install(self._snap_btn, _snap_base)
-        right_layout.addWidget(self._snap_btn)
 
         # ── Progress bar — hidden at rest, floats between the two groups ──────
         self._bottom_progress = QProgressBar()
@@ -2420,8 +2504,19 @@ class IntricateApp(QMainWindow):
             f"QProgressBar::chunk {{ background: {Theme.primaryBorder}; border-radius: 4px; }}"
         )
 
-        buttons_row = _ButtonBar(left_group, right_group, self._bottom_progress)
-        outer.addWidget(buttons_row)
+        # Save references so _make_exid_button can place new candidates
+        # into right_layout and auto-show the bench when it wakes up.
+        self._exid_right_layout = right_layout
+        self.buttons_row = _ButtonBar(left_group, right_group, self._bottom_progress)
+        outer.addWidget(self.buttons_row)
+
+        # Dormant-state shrink: when both bench groups are empty, hide the
+        # buttons_row so the bottom toolbar collapses to just the infobar.
+        # Hidden bench → thin toolbar → when a new test button lands, the
+        # bench wakes up and the toolbar visibly thickens. Thickness is
+        # the incentive to keep an eye on what's parked there.
+        if left_layout.count() == 0 and right_layout.count() == 0:
+            self.buttons_row.hide()
 
         # Add to vertical splitter — canvas stretches, toolbar stays compact
         self._v_splitter.addWidget(self.bottomToolbar)
@@ -2461,12 +2556,12 @@ class IntricateApp(QMainWindow):
 
         On unmute, each media node fades from silence to its target volume
         over 1 s so the listener isn't hit with a sudden wall of sound.
+        The state-driven label lives in the titlebar context menu, which
+        regenerates on each right-click and reads the current mute state.
         """
         from utils.audio import audio
         muted = not audio.is_muted()
         audio.set_muted(muted)
-        self._mute_btn.setText("Quiet" if muted else "Sound")
-        self._mute_btn.setToolTip("Unmute all" if muted else "Mute all")
         from nodes.VideoNode import VideoNode
         from nodes.AudioNode import AudioNode
         for item in self.scene.items():
