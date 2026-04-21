@@ -111,13 +111,22 @@ class NodeBehaviour:
 
     @staticmethod
     def _blend(a, b, t: float) -> QColor:
-        """Linear interpolate between two colors (hex str or QColor) at factor t."""
+        """Linear interpolate between two colors (hex str or QColor) at factor t.
+
+        Preserves the first colour's alpha — hover and selection tints should
+        shift hue subtly, not flip the node between translucent and opaque.
+        Without this, a node with an alpha<255 brush visibly flashes to full
+        opacity on hover because QColor(r, g, b) defaults alpha to 255,
+        which reads as a larger lightness shift than the 0.015/0.03 blend
+        itself.
+        """
         if isinstance(a, str): a = QColor(a)
         if isinstance(b, str): b = QColor(b)
         return QColor(
             int(a.red()   + (b.red()   - a.red())   * t),
             int(a.green() + (b.green() - a.green()) * t),
             int(a.blue()  + (b.blue()  - a.blue())  * t),
+            a.alpha(),
         )
 
     def _ensure_base(self) -> QColor:
