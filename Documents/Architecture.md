@@ -11,7 +11,7 @@
 
 **Intricate** is a frameless, always-on-top node-based visual canvas built with PySide6. Part of the **Single Shared Braincell** app family — a suite of apps that share live configuration, a widget package, a theme system, and a shared frozen runtime.
 
-**Current version:** 0.5.0 — "The Other Era"
+**Current version:** 0.6.0 — "The Housekeeping before paradise arrives Era"
 
 ## The Family
 

@@ -12,8 +12,8 @@ import argparse
 import ctypes
 import logging
 
-__version__ = "0.5.0"
-__era__     = "The Other Era"
+__version__ = "0.6.0"
+__era__     = "The Housekeeping before paradise arrives Era"
 
 __version_history__ = [
     "0.1.0 - The Fluff Era",
@@ -26,6 +26,7 @@ __version_history__ = [
     "0.2.0 - The Prestige Era",
     "0.3.0 - The Expressive Era",
     "0.5.0 - The Other Era, Not the untold one.",
+    "0.6.0 - The Housekeeping before paradise arrives Era",
 ]
 
 # Reconfigure stdout/stderr to UTF-8 so emoji in log lines don't crash on

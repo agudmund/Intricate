@@ -12,6 +12,18 @@
 
 ---
 
+## 2026-04-21
+
+### Version bump: 0.6.0, "The Housekeeping before paradise arrives Era"
+
+Two empty Kanban focal lists in one morning — zero bugs, zero active housekeeping — a first in the project's history. Changes gathered in the sweep: cross-session copy/paste (the v0.0.2 ceiling, the bug that caused the full-repo rewrite originally, finally closed), right-sidebar pin survives session switch + app restart, restart-on-close singleton release fixed after silent post-`shared_braincell`-migration break, bottom toolbar dormant shrink + eXid test-bench workflow, sidebar 2-row bars grid with icon-fill compensation, media-node teardown heap-corruption fix (VideoNode + AudioNode six-step pattern against `0xc0000374`), CRITICAL log emoji tag, PrettyPill widget extraction, `[theme.sidebar]` TOML migration, curtains + maximize taskbar breathing margin. Era name reflects the moment: paradise hasn't arrived, but everything breakable has been tended to and the ceiling on what can be built next has been removed.
+
+### Cross-session copy/paste — the v0.0.2 ceiling lifted
+
+Ctrl+C captures the selected chain as a pure-Python dict; session switch is harmless because the dict holds zero Qt references; Ctrl+V spawns fresh nodes via the existing `Scene.import_session` path (battle-tested by SessionNode's "Total Recall" drag-drop since v0.0.2). The historic bug in this territory killed both Intricate and Notepad++ Duplex+ Turbo and caused the full-repo delete + handwritten 2k-line core rewrite; it fell on the first attempt this time because the foundation — `to_dict`/`from_dict` universal, UUID remap generic, `_KNOWN_TYPES` whitelisting — had accumulated into the exact shape the fix required. Concrete validation that the 20+ iterations of refactor-safety discipline were load-bearing for something specific.
+
+---
+
 ## 2026-04-18
 
 ### Inner-widget signal-destructor race closed on ClaudeNode (+ MergeNode sweep)

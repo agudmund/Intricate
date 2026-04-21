@@ -2566,7 +2566,7 @@ class IntricateApp(QMainWindow):
                     project_path=str(project_root) if project_root else "")
 
     def _spawn_info_node(self):
-        self._spawn(self.scene.add_info_node, "version 0.5.0")
+        self._spawn(self.scene.add_info_node, "version 0.6.0")
 
     def _spawn_git_node(self):
         self._spawn(self.scene.add_git_node, "Remember to say the product name!")

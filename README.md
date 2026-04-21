@@ -1,6 +1,6 @@
 # Intricate
 
-**Version 0.5.0 — The Other Era**
+**Version 0.6.0 — The Housekeeping before paradise arrives Era**
 
 A gentle nodal space where thoughts interlink ideas, transitioning thoughts to things.
 
