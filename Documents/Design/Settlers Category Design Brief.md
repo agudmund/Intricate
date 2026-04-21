@@ -106,11 +106,13 @@ For TOML fields that store a Python list as a string (e.g. `"['__pycache__', 'no
 
 **Chip anatomy:**
 - `QFrame`, fixed height 20px, `QSizePolicy.Fixed` both axes
-- `QHBoxLayout`, margins `(8, 0, 4, 0)`, spacing 2px
+- `QHBoxLayout`, margins `(8, 0, 4, 3)`, spacing 2px — the 3px bottom bias nudges the label upward so lowercase-heavy text (`__pycache__`, `.pyc`, `.log`) doesn't feel bottom-anchored. Font metrics reserve ascender/cap-height space that goes unused without uppercase letters; the asymmetric margin compensates
 - `QLabel` — Chandler42 italic, 9px, `Theme.textPrimary`
 - `QPushButton("×")` — 12×12px, flat, transparent; hover turns `#d87a9e`
 - Border radius 10px (half of 20px height → true pill shape)
 - Background `Theme.windowBg`, border `1px solid Theme.primaryBorder`
+
+**Row wrapping:** When the number of pills exceeds the horizontal space, the chip container wraps onto additional lines and grows vertically to fit. Only pill rows do this — slider and checkbox rows remain single-line and tight. Implemented in `PrettyPillRow` via a custom flow layout that reports `heightForWidth`, so the enclosing QHBoxLayout re-sizes the whole row upward. The 28px `min_height` keeps an empty row visually at standard chip height.
 
 **Data flow:** `ast.literal_eval` parses the hidden field text → Python list → chips rebuild. Removing or adding a chip immediately serializes back to `str(list)` and triggers the standard `_on_field_changed` → TOML write pipeline.
 
