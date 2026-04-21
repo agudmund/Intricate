@@ -231,11 +231,16 @@ class Connection(QGraphicsPathItem):
         if self.start_node is None:
             self._glide_timer.stop()
             return
-        # Peer-paint-during-burst guard: if the scene is mid bulk removal,
-        # or either endpoint's C++ side is gone, park this tick. update()
-        # here would invalidate a region whose widget may already be freed.
+        # Peer-paint-during-burst guard: if the scene is mid bulk removal
+        # OR bulk addition, park this tick. update() here would invalidate
+        # a region whose widget may already be freed (remove case) or
+        # cascade paint invalidation across the import's other wires (add
+        # case — see Scene.import_session for the 89-node hang rationale).
         sc = self.scene()
-        if sc is not None and getattr(sc, '_bulk_removing', 0) > 0:
+        if sc is not None and (
+            getattr(sc, '_bulk_removing', 0) > 0
+            or getattr(sc, '_bulk_adding', 0) > 0
+        ):
             return
         if not _endpoint_alive(self.start_node):
             self._glide_timer.stop()

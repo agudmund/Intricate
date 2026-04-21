@@ -952,24 +952,42 @@ class IntricateScene(QGraphicsScene):
         # fault under shake+zoom workloads.  Left the prior toggle-off here
         # as a no-op for clarity about the original intent (avoid O(n²)
         # BSP rebuilds during bulk restore) — now purely documentary.
+        # Same protections as import_session — _bulk_adding counter to gate
+        # any peer animations that might be alive (shouldn't be in a fresh
+        # post-release scene, but cheap safety for startup edge cases), plus
+        # the processEvents yield for Windows-watchdog responsiveness. See
+        # import_session comment for full rationale.
+        from PySide6.QtCore import QEventLoop
+        from PySide6.QtWidgets import QApplication
+        _LOAD_YIELD_EVERY = 10
+        _YIELD_BUDGET_MS  = 50
+
+        self._bulk_adding = getattr(self, '_bulk_adding', 0) + 1
+        self.blockSignals(True)
         _t_restore_start = _time.monotonic()
         uuid_map = {}
         _per_type_ms: dict = {}
         _per_type_count: dict = {}
-        for d in payload.get("nodes", []):
-            _nt = d.get("node_type", "?")
-            _t_node_start = _time.monotonic()
-            try:
-                node = self._restore_node(d)
-            except Exception:
-                logger.exception("Failed to restore %s node (uuid=%s)",
-                                 _nt, d.get("uuid"))
-                node = None
-            _dt = (_time.monotonic() - _t_node_start) * 1000
-            _per_type_ms[_nt]    = _per_type_ms.get(_nt, 0.0) + _dt
-            _per_type_count[_nt] = _per_type_count.get(_nt, 0) + 1
-            if node:
-                uuid_map[d.get("uuid")] = node
+        try:
+            for i, d in enumerate(payload.get("nodes", [])):
+                _nt = d.get("node_type", "?")
+                _t_node_start = _time.monotonic()
+                try:
+                    node = self._restore_node(d)
+                except Exception:
+                    logger.exception("Failed to restore %s node (uuid=%s)",
+                                     _nt, d.get("uuid"))
+                    node = None
+                _dt = (_time.monotonic() - _t_node_start) * 1000
+                _per_type_ms[_nt]    = _per_type_ms.get(_nt, 0.0) + _dt
+                _per_type_count[_nt] = _per_type_count.get(_nt, 0) + 1
+                if node:
+                    uuid_map[d.get("uuid")] = node
+                if (i + 1) % _LOAD_YIELD_EVERY == 0:
+                    QApplication.processEvents(QEventLoop.ExcludeUserInputEvents, _YIELD_BUDGET_MS)
+        finally:
+            self.blockSignals(False)
+            self._bulk_adding = max(0, getattr(self, '_bulk_adding', 1) - 1)
         _t_restore = _time.monotonic()
         logger.info("[load] restored nodes  (%.0f ms total)",
                     (_t_restore - _t_restore_start) * 1000)
@@ -1053,39 +1071,89 @@ class IntricateScene(QGraphicsScene):
             prepared.append(d)
 
         # ── Restore nodes ────────────────────────────────────────────────────
+        # Two protections stack here, each addressing a different failure mode
+        # observed on the 2026-04-21 89-node import hang:
+        #
+        # 1. _bulk_adding scene counter — mirrors the _bulk_removing quiescence
+        #    pattern. Existing peer NodeBehaviour pulse/bg animations and
+        #    Connection glide ticks early-return while this counter is > 0,
+        #    so the tight construction loop doesn't cascade paint invalidation
+        #    across the pre-existing scene. This is what load_session gets
+        #    "for free" via the session-switch rebuild (fresh empty scene
+        #    means no peer animations to cascade); import_session lands into
+        #    a populated scene and needs the gate explicitly. Without this,
+        #    89 nodes added to a 49-node scene hung Windows "not responding"
+        #    past 5s; 1200 nodes loaded into a fresh scene completed in ≈2s.
+        #
+        # 2. processEvents every _IMPORT_YIELD_EVERY nodes — belt-and-suspenders
+        #    against the Windows watchdog even in the quiet-scene case, and
+        #    lets the main-thread _cache_poll timer drain background-worker
+        #    _pending_* fields periodically. ExcludeUserInputEvents keeps
+        #    mid-import clicks out of the re-entry surface.
+        from PySide6.QtCore import QEventLoop
+        from PySide6.QtWidgets import QApplication
+        _IMPORT_YIELD_EVERY = 10
+        _YIELD_BUDGET_MS    = 50
+
+        # scene.blockSignals(True) silences scene.changed / selectionChanged
+        # emission across every addItem in the loop. Downstream observers
+        # (main_window._schedule_autosave debounce resets, selection
+        # handlers) stay quiet for the duration — one atomic "N things
+        # arrived" moment externally, instead of 89 interleaved events.
+        # Complements _bulk_adding (which gates per-item animation
+        # callbacks) — scene.blockSignals can't stop those because they
+        # emit from per-QVariantAnimation QObjects, not the scene.
+        self._bulk_adding = getattr(self, '_bulk_adding', 0) + 1
+        self.blockSignals(True)
         uuid_map: dict[str, object] = {}
         created: list = []
-        for i, d in enumerate(prepared):
-            ntype = d.get("node_type", "?")
-            logger.log(5, "[import] restoring node %d/%d type=%s uuid=%s",
-                        i + 1, len(prepared), ntype, d.get("uuid", "?")[:8])
-            try:
-                node = self._restore_node(d)
-            except Exception:
-                logger.exception("[import] failed to restore node %d type=%s",
-                                 i + 1, ntype)
-                node = None
-            if node:
-                uuid_map[d["uuid"]] = node
-                created.append(node)
-
-        logger.log(5, "[import] nodes done — %d/%d created, wiring %d connections",
-                    len(created), len(prepared), len(conns_raw))
-
-        # ── Wire connections ─────────────────────────────────────────────────
-        from graphics.Connection import Connection
-        for c in conns_raw:
-            new_start = old_to_new.get(c.get("start_uuid", ""))
-            new_end   = old_to_new.get(c.get("end_uuid",   ""))
-            start = uuid_map.get(new_start)
-            end   = uuid_map.get(new_end)
-            if start and end and start is not end:
+        try:
+            for i, d in enumerate(prepared):
+                ntype = d.get("node_type", "?")
+                logger.log(5, "[import] restoring node %d/%d type=%s uuid=%s",
+                            i + 1, len(prepared), ntype, d.get("uuid", "?")[:8])
                 try:
-                    conn = Connection(start, end)
-                    self.addItem(conn)
-                    conn.update_path()
+                    node = self._restore_node(d)
                 except Exception:
-                    logger.exception("[import] failed to wire connection")
+                    logger.exception("[import] failed to restore node %d type=%s",
+                                     i + 1, ntype)
+                    node = None
+                if node:
+                    uuid_map[d["uuid"]] = node
+                    created.append(node)
+                if (i + 1) % _IMPORT_YIELD_EVERY == 0:
+                    QApplication.processEvents(QEventLoop.ExcludeUserInputEvents, _YIELD_BUDGET_MS)
+
+            logger.log(5, "[import] nodes done — %d/%d created, wiring %d connections",
+                        len(created), len(prepared), len(conns_raw))
+
+            # ── Wire connections ─────────────────────────────────────────────
+            from graphics.Connection import Connection
+            for i, c in enumerate(conns_raw):
+                new_start = old_to_new.get(c.get("start_uuid", ""))
+                new_end   = old_to_new.get(c.get("end_uuid",   ""))
+                start = uuid_map.get(new_start)
+                end   = uuid_map.get(new_end)
+                if start and end and start is not end:
+                    try:
+                        conn = Connection(start, end)
+                        self.addItem(conn)
+                        conn.update_path()
+                    except Exception:
+                        logger.exception("[import] failed to wire connection")
+                if (i + 1) % _IMPORT_YIELD_EVERY == 0:
+                    QApplication.processEvents(QEventLoop.ExcludeUserInputEvents, _YIELD_BUDGET_MS)
+        finally:
+            self.blockSignals(False)
+            self._bulk_adding = max(0, getattr(self, '_bulk_adding', 1) - 1)
+            # Emit one aggregated scene.changed so the autosave debounce
+            # picks up the import as a single batch. Rect is the scene
+            # rect — handlers (e.g. _schedule_autosave) don't use the
+            # specific rect, just treat it as "something changed".
+            try:
+                self.changed.emit([self.sceneRect()])
+            except Exception:
+                pass
 
         logger.log(5, "[import] complete — %d nodes, connections wired", len(created))
         return created

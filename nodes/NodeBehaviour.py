@@ -193,14 +193,20 @@ class NodeBehaviour:
         self._current_bg = color
         if self._node is None:
             return
-        # Peer quiescence: during a bulk-remove burst the surrounding
-        # event loop is draining scheduled removeItem calls. A setBrush()
-        # here would schedule a repaint that can land after a peer's
-        # C++ side has been freed. Skip the mutation — the final target
-        # colour will still be correct; we just drop interim frames.
+        # Peer quiescence: during a bulk-remove OR bulk-add burst the
+        # surrounding event loop is saturated. A setBrush() here would
+        # schedule a repaint that can land after a peer's C++ side has
+        # been freed (remove case), or cascade paint invalidation across
+        # existing peers during a bulk import (add case — see
+        # Scene.import_session comment for the 89-node hang). Skip the
+        # mutation either way — the final target colour still resolves
+        # correctly once the burst ends; we just drop interim frames.
         try:
             sc = self._node.scene()
-            if sc is not None and getattr(sc, '_bulk_removing', 0) > 0:
+            if sc is not None and (
+                getattr(sc, '_bulk_removing', 0) > 0
+                or getattr(sc, '_bulk_adding', 0) > 0
+            ):
                 return
         except RuntimeError:
             return
@@ -241,12 +247,16 @@ class NodeBehaviour:
 
     def _on_pulse_value(self, value: float) -> None:
         """Apply the pulse's interpolated scale to the node, unless the scene
-        is mid bulk-remove — in which case skip the paint-invalidating mutation."""
+        is mid bulk-remove or bulk-add — in either case skip the paint-
+        invalidating mutation. See _on_bg_changed for the full rationale."""
         if self._node is None:
             return
         try:
             sc = self._node.scene()
-            if sc is not None and getattr(sc, '_bulk_removing', 0) > 0:
+            if sc is not None and (
+                getattr(sc, '_bulk_removing', 0) > 0
+                or getattr(sc, '_bulk_adding', 0) > 0
+            ):
                 return
             self._node.setScale(value)
         except RuntimeError:
