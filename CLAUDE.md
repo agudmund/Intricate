@@ -265,7 +265,7 @@ Current sections:
 ```toml
 [window]          # geometry persistence (x, y, width, height)
 
-[canvas]          # fog_alpha — backdrop opacity
+[canvas]          # blur_alpha — backdrop opacity (driven by the sidebar blur slider)
 
 [session]         # last_loaded — path to last session file
 

@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect, QSystemTrayIcon, QMenu, QDialog
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout, QGraphicsScene, QGraphicsView, QSplitter, QSizePolicy, QSpacerItem, QProgressBar, QLabel, QFrame, QScrollArea, QGraphicsOpacityEffect, QSystemTrayIcon, QMenu, QDialog
 from PySide6.QtGui import QIcon, QPixmap, QColor
 from PySide6.QtCore import Qt, QEasingCurve, QPropertyAnimation, QPointF, QSize, QRect, QEvent, QTimer
 from graphics.Scene import IntricateScene
@@ -720,12 +720,18 @@ class IntricateApp(QMainWindow):
         else:
             self._dock_watcher.stop()
             self._stop_meov()
-            # Clamp so the bottom edge never drops below the screen
+            # Clamp so the bottom edge never drops below the screen — and
+            # keep the same _TASKBAR_TRIGGER_MARGIN that maximise reserves,
+            # so the auto-hide taskbar trigger zone stays reachable after
+            # the curtains roll back down.
             avail = self.screen().availableGeometry()
-            y = min(start_rect.y(), avail.bottom() - self.original_height + 1)
+            effective_bottom = avail.bottom() - self._TASKBAR_TRIGGER_MARGIN
+            max_height = effective_bottom - avail.top() + 1
+            height = min(self.original_height, max_height)
+            y = min(start_rect.y(), effective_bottom - height + 1)
             y = max(avail.top(), y)
             end_rect = QRect(start_rect.x(), y,
-                             start_rect.width(), self.original_height)
+                             start_rect.width(), height)
             # ③ Show content AFTER animation exists but BEFORE start()
             self._sidebar_splitter.show()
 
@@ -1235,44 +1241,91 @@ class IntricateApp(QMainWindow):
         # ── Stretch pushes slider/bar to the bottom ───────────────────────────
         layout.addStretch()
 
-        # ── Fog slider ────────────────────────────────────────────────────────
-        # Vertical, top = opaque (255), bottom = transparent (0).
-        # Placeholder — will drive fog layer alpha when that arrives.
+        # ── Sliders row (top) + progress-bars row (bottom) ───────────────────
+        # Target layout is 3 sticker sliders above, 3 pink progress bars below.
+        # Each row is a 3-column grid at sz // 3 per column so columns align
+        # vertically between the two rows. Current population:
+        #   sliders row   → blur (col 1), zoom (col 2), reserved (col 3)
+        #   progress row  → reserved (col 1), reserved (col 2), joy (col 3)
+        # Reserved slots use fixed-size spacers so column alignment is
+        # preserved before the future peers land.
         import pretty_widgets.utils.settings as _s
-        _fog_init = int(_s.get_nested("intricate", "canvas", "fog_alpha", 180))
-        self.fog_slider = pretty_slider(
+        sz = Theme.iconButtonSize
+        bar_width = sz // 3
+        bar_min_height = sz * 2
+
+        def _reserved_slot():
+            return QSpacerItem(
+                bar_width, bar_min_height,
+                QSizePolicy.Fixed, QSizePolicy.Fixed,
+            )
+
+        # ── Sliders row ──────────────────────────────────────────────────────
+        sliders_row = QWidget()
+        sliders_row.setStyleSheet("background: transparent;")
+        sliders_row_layout = QHBoxLayout(sliders_row)
+        sliders_row_layout.setContentsMargins(0, 0, 0, 0)
+        sliders_row_layout.setSpacing(0)
+        sliders_row_layout.setAlignment(Qt.AlignHCenter | Qt.AlignBottom)
+
+        # Blur slider — drives the backdrop opacity layer (was called fog;
+        # renamed because it's actually the blur transparency level).
+        _blur_init = int(_s.get_nested("intricate", "canvas", "blur_alpha", 180))
+        self.blur_slider = pretty_slider(
             Qt.Vertical,
             handle_icon="slider_handle_vertical.png",
             handle_size=28,
             range=(0, 255),
-            value=_fog_init,
+            value=_blur_init,
             invertedAppearance=False,
-            fixedWidth=Theme.sidebarWidth() - Theme.sidebarPadding * 2,
-            minimumHeight=80,
-            valueChanged=self._on_fog_slider_changed,
+            fixedWidth=bar_width,
+            minimumHeight=bar_min_height,
+            valueChanged=self._on_blur_slider_changed,
         )
-        layout.addWidget(self.fog_slider, alignment=Qt.AlignHCenter)
+        sliders_row_layout.addWidget(self.blur_slider, alignment=Qt.AlignBottom)
 
-        layout.addSpacing(4)
+        # Zoom slider — moved from the bottom toolbar to live with its peers.
+        self._zoom_slider = pretty_slider(
+            Qt.Vertical,
+            handle_icon="slider_handle_vertical.png",
+            handle_size=28,
+            range=(3, 500),
+            value=100,
+            invertedAppearance=False,
+            fixedWidth=bar_width,
+            minimumHeight=bar_min_height,
+            singleStep=5,
+            pageStep=25,
+            valueChanged=self._on_zoom_slider,
+        )
+        sliders_row_layout.addWidget(self._zoom_slider, alignment=Qt.AlignBottom)
 
-        # ── Joy bucket — own bottom-anchored container ────────────────────────
-        # Separated from the top category buttons so stretch works between them.
-        sz = Theme.iconButtonSize
+        # Reserved column for a future 3rd slider
+        sliders_row_layout.addSpacerItem(_reserved_slot())
 
-        joy_container = QWidget()
-        joy_container.setStyleSheet("background-color: transparent;")
-        joy_layout = QVBoxLayout(joy_container)
-        joy_layout.setContentsMargins(0, 0, 0, 0)
-        joy_layout.setSpacing(0)
-        joy_layout.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
+        layout.addWidget(sliders_row, alignment=Qt.AlignHCenter)
+        layout.addSpacing(2)
 
+        # ── Progress-bars row ────────────────────────────────────────────────
+        progress_bars_row = QWidget()
+        progress_bars_row.setStyleSheet("background: transparent;")
+        progress_bars_row_layout = QHBoxLayout(progress_bars_row)
+        progress_bars_row_layout.setContentsMargins(0, 0, 0, 0)
+        progress_bars_row_layout.setSpacing(0)
+        progress_bars_row_layout.setAlignment(Qt.AlignHCenter | Qt.AlignBottom)
+
+        # Reserved columns for the two future progress bars
+        progress_bars_row_layout.addSpacerItem(_reserved_slot())
+        progress_bars_row_layout.addSpacerItem(_reserved_slot())
+
+        # Joy bar — hunger/mood indicator, rises on feed, drains on time.
         self.joy_bar = QProgressBar()
         self.joy_bar.setOrientation(Qt.Vertical)
         self.joy_bar.setRange(0, 100)
         self.joy_bar.setValue(int(_s.get_nested("intricate", "joy", "bar_value", 100)))
         self.joy_bar.setTextVisible(False)
-        self.joy_bar.setFixedWidth(sz // 3)
-        self.joy_bar.setMinimumHeight(sz * 2)
+        self.joy_bar.setFixedWidth(bar_width)
+        self.joy_bar.setMinimumHeight(bar_min_height)
         self.joy_bar.setStyleSheet(f"""
             QProgressBar {{
                 background: {Theme.backDrop};
@@ -1286,8 +1339,20 @@ class IntricateApp(QMainWindow):
                 border-radius: 2px;
             }}
         """)
-        joy_layout.addWidget(self.joy_bar, alignment=Qt.AlignHCenter)
-        joy_layout.addStretch()
+        progress_bars_row_layout.addWidget(self.joy_bar, alignment=Qt.AlignBottom)
+
+        layout.addWidget(progress_bars_row, alignment=Qt.AlignHCenter)
+        layout.addSpacing(4)
+
+        # ── Joy bucket — own bottom-anchored container (feed + sleep) ────────
+        # The joy bar moved up into the bars_row; this container now holds
+        # only the feed button and sleep toggle.
+        joy_container = QWidget()
+        joy_container.setStyleSheet("background-color: transparent;")
+        joy_layout = QVBoxLayout(joy_container)
+        joy_layout.setContentsMargins(0, 0, 0, 0)
+        joy_layout.setSpacing(0)
+        joy_layout.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
 
         # Feed button — dynamic radial shadow, physical press depth
         from utils.StickerButton import StickerButton
@@ -1366,12 +1431,19 @@ class IntricateApp(QMainWindow):
 
         return sidebar
 
-    def _on_fog_slider_changed(self, value: int) -> None:
-        """Drive canvas fog transparency and persist to settings."""
-        self.view._fog_alpha = value
+    def _on_blur_slider_changed(self, value: int) -> None:
+        """Drive canvas blur transparency and persist to settings.
+
+        Guarded against self.view not existing — same early-sidebar reason
+        as _on_zoom_slider. Setting the slider's initial value fires this
+        once before the view lands.
+        """
+        if not hasattr(self, 'view'):
+            return
+        self.view._blur_alpha = value
         self.view.viewport().update()
         import pretty_widgets.utils.settings as _s
-        _s.set_nested("intricate", "canvas", "fog_alpha", value)
+        _s.set_nested("intricate", "canvas", "blur_alpha", value)
 
     def _on_feed_pressed(self) -> None:
         """Mouse down — StickerButton handles the depth shift visually."""
@@ -2295,19 +2367,8 @@ class IntricateApp(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
 
-        self._zoom_slider = pretty_slider(
-            Qt.Horizontal,
-            use_scroll_icon=True,
-            handle_size=28,
-            range=(3, 500),
-            value=100,
-            fixedWidth=250,
-            fixedHeight=32,
-            singleStep=5,
-            pageStep=25,
-            valueChanged=self._on_zoom_slider,
-        )
-        right_layout.addWidget(self._zoom_slider)
+        # Zoom slider moved to the sidebar bars_row; bottom toolbar's right
+        # group now holds only Sound / Polaroid.
 
         from utils.audio import audio
         self._mute_btn = button("Quiet" if audio.is_muted() else "Sound", clicked=self._toggle_global_mute)
@@ -2378,7 +2439,15 @@ class IntricateApp(QMainWindow):
         QTimer.singleShot(0, self._restore_bottom_height)
 
     def _on_zoom_slider(self, value: int) -> None:
-        """Slider dragged — set the view zoom to the slider's value."""
+        """Slider dragged — set the view zoom to the slider's value.
+
+        Guarded against self.view not existing: the sidebar (and hence
+        this slider) is now built earlier in __init__ than the view,
+        and setting the slider's initial value fires valueChanged once
+        during construction. Silently no-op until the view lands.
+        """
+        if not hasattr(self, 'view'):
+            return
         target = value / 100.0
         current = self.view.current_zoom
         if abs(target - current) < 0.001:

@@ -62,7 +62,8 @@ class IntricateView(QGraphicsView):
         super().__init__(scene, parent)
 
         self.current_zoom  = 1.0
-        self._fog_alpha    = 180       # driven by sidebar fog slider (0=clear, 255=opaque)
+        import pretty_widgets.utils.settings as _s
+        self._blur_alpha   = int(_s.get_nested("intricate", "canvas", "blur_alpha", 180))   # driven by sidebar blur slider (0=clear, 255=opaque)
         self._last_pan_pos: QPointF | None = None
         self._on_zoom_changed = None   # optional callback, set by main_window
 
@@ -136,7 +137,7 @@ class IntricateView(QGraphicsView):
         painter.save()
         painter.resetTransform()
         c = QColor(Theme.backDrop)
-        c.setAlpha(self._fog_alpha)
+        c.setAlpha(self._blur_alpha)
         painter.fillRect(self.viewport().rect(), c)
         painter.restore()
 
