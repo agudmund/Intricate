@@ -280,6 +280,9 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        logging.critical(f"Starting Intricate catastrophically failed", exc_info=True)
+        # Emoji suffix is the canonical visual-signal tag for CRITICAL —
+        # hardcoded here because this line fires before setup_logger's
+        # formatter is guaranteed to be installed (root logger fallback).
+        logging.critical("Starting Intricate catastrophically failed 🥺😮😭", exc_info=True)
         print(f"Intricate has entered the void: {e}", file=sys.stderr)
         sys.exit(1)
