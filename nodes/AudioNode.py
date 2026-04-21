@@ -668,13 +668,24 @@ class AudioNode(BaseNode):
         self._vol_anim = None
 
     def to_dict(self) -> dict:
-        self.data.playback_pos = self._position_ms
-        self.data.volume = int(self._target_volume * 100)
-        # Guard Qt probe — post-teardown self._audio is None.
-        if self._audio is not None:
-            try: self.data.muted = self._audio.isMuted()
+        # getattr-with-default on every read so to_dict cannot raise on a
+        # partially-initialised node — mirrors VideoNode 2026-04-21 defence
+        # against the clipboard-copy intermittent-drop class.
+        pos_ms = getattr(self, '_position_ms', None)
+        if pos_ms is not None:
+            self.data.playback_pos = int(pos_ms)
+        vol = getattr(self, '_target_volume', None)
+        if vol is not None:
+            try: self.data.volume = int(vol * 100)
+            except (TypeError, ValueError): pass
+        audio = getattr(self, '_audio', None)
+        if audio is not None:
+            try: self.data.muted = audio.isMuted()
             except (RuntimeError, AttributeError): pass
-        self.sync_data()
+        try:
+            self.sync_data()
+        except Exception:
+            pass
         return self.data.to_dict()
 
     @staticmethod

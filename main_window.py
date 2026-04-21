@@ -1256,8 +1256,11 @@ class IntricateApp(QMainWindow):
         The payload is stored on self as a plain dict — pure data,
         indestructible from Qt's perspective.
         """
+        from collections import Counter
         seeds = [item for item in self.scene.selectedItems()
                  if hasattr(item, 'connections') and hasattr(item, 'to_dict')]
+        logger.log(5, "[clipboard] copy begin — %d seeds in selection (%d total selected)",
+                   len(seeds), len(self.scene.selectedItems()))
         if not seeds:
             return
         visited_ids: set = set()
@@ -1270,21 +1273,56 @@ class IntricateApp(QMainWindow):
                 continue
             visited_ids.add(nid)
             captured.append(node)
-            for conn in node.connections:
-                for neighbour in (conn.start_node, conn.end_node):
+            # Guard the neighbour walk — if a node's C++ side is torn down
+            # mid-BFS, .connections or .start_node could raise RuntimeError.
+            # Silent crash here would drop every later node in the queue,
+            # which manifests as "the clipboard randomly loses half the chain".
+            try:
+                conns = list(node.connections)
+            except (RuntimeError, AttributeError):
+                conns = []
+            for conn in conns:
+                try:
+                    sn = conn.start_node
+                    en = conn.end_node
+                except (RuntimeError, AttributeError):
+                    continue
+                for neighbour in (sn, en):
                     if neighbour and neighbour is not node and id(neighbour) not in visited_ids:
                         queue.append(neighbour)
+
+        cap_types = Counter(type(n).__name__ for n in captured)
+        logger.log(5, "[clipboard] captured %d nodes by BFS: %s",
+                   len(captured), dict(cap_types))
 
         # Serialize nodes — per-node try/except so one broken to_dict
         # doesn't poison the whole copy
         node_dicts: list = []
+        dropped_types: list = []
         for n in captured:
             try:
                 d = n.to_dict()
-                if d and d.get("uuid"):
-                    node_dicts.append(d)
             except Exception:
-                logger.exception("[clipboard] to_dict failed on %r", n)
+                logger.exception("[clipboard] to_dict raised on %s", type(n).__name__)
+                dropped_types.append((type(n).__name__, "exception"))
+                continue
+            if not d:
+                logger.warning("[clipboard] %s.to_dict returned falsy", type(n).__name__)
+                dropped_types.append((type(n).__name__, "falsy"))
+                continue
+            if not d.get("uuid"):
+                logger.warning("[clipboard] %s.to_dict missing uuid; node_type=%r",
+                               type(n).__name__, d.get("node_type"))
+                dropped_types.append((type(n).__name__, "no-uuid"))
+                continue
+            node_dicts.append(d)
+
+        if dropped_types:
+            logger.warning("[clipboard] dropped %d node(s) during serialize: %s",
+                           len(dropped_types), dropped_types)
+        emit_types = Counter(d.get("node_type", "?") for d in node_dicts)
+        logger.log(5, "[clipboard] serialized %d/%d nodes by node_type: %s",
+                   len(node_dicts), len(captured), dict(emit_types))
 
         # Serialize connections — only where BOTH endpoints are captured
         captured_uuids = {d.get("uuid") for d in node_dicts if d.get("uuid")}

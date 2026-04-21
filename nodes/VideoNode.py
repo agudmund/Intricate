@@ -937,22 +937,42 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
-        self.data.playback_pos = self._position_ms
-        self.data.volume = int(self._target_volume * 100)
+        # Every read here uses getattr-with-default so to_dict can never raise,
+        # even on a partially-initialised node. Swallowing here caused videos
+        # to silently drop from the clipboard copy on at least one first
+        # attempt (2026-04-21) — non-reproducible race, but the class of "one
+        # missing attribute makes the whole serialize fail" is closed now.
+        # self.data.* fields fall through to whatever was loaded from session
+        # or set earlier, which is always preferable to raising.
+        pos_ms = getattr(self, '_position_ms', None)
+        if pos_ms is not None:
+            self.data.playback_pos = int(pos_ms)
+        vol = getattr(self, '_target_volume', None)
+        if vol is not None:
+            try: self.data.volume = int(vol * 100)
+            except (TypeError, ValueError): pass
         # Guard Qt probes — post-teardown these are None (see _demolition_pre),
         # and session save can still hit to_dict on a removed-but-not-yet-GC'd
         # node. Fall through to the existing data values in that case.
-        if self._audio is not None:
-            try: self.data.muted = self._audio.isMuted()
+        audio = getattr(self, '_audio', None)
+        if audio is not None:
+            try: self.data.muted = audio.isMuted()
             except (RuntimeError, AttributeError): pass
-        if self._player is not None:
+        player = getattr(self, '_player', None)
+        if player is not None:
             try:
                 self.data.was_playing = (
-                    self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-                    or self._was_playing_before_cull
+                    player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+                    or getattr(self, '_was_playing_before_cull', False)
                 )
             except (RuntimeError, AttributeError): pass
-        self.sync_data()
+        try:
+            self.sync_data()
+        except Exception:
+            # Partial-init catch — don't let sync_data failure drop the node
+            # from a clipboard copy; the data fields already carry the saved
+            # session values which are good enough to reconstruct elsewhere.
+            pass
         return self.data.to_dict()
 
     @staticmethod

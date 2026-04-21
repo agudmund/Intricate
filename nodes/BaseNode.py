@@ -1289,14 +1289,24 @@ class BaseNode(QGraphicsRectItem):
 
         Called before to_dict() so position and size are always current.
         Subclasses with additional visual state override this and call super().
+
+        Every field uses getattr-with-default so sync_data cannot raise on
+        a partially-initialised node — critical for the clipboard copy path,
+        which cannot afford to silently drop a node because one attribute
+        wasn't set yet. Fields fall through to whatever was last saved.
         """
-        self.data.x             = self.pos().x()
-        self.data.y             = self.pos().y()
-        self.data.width         = self.rect().width()
-        self.data.height        = self.rect().height()
-        self.data.z_value       = self.zValue()
-        self.data.ports_visible = self.ports_visible
-        self.data.shelf_visible = self._buttons_visible
+        try: self.data.x = self.pos().x()
+        except (RuntimeError, AttributeError): pass
+        try: self.data.y = self.pos().y()
+        except (RuntimeError, AttributeError): pass
+        try: self.data.width = self.rect().width()
+        except (RuntimeError, AttributeError): pass
+        try: self.data.height = self.rect().height()
+        except (RuntimeError, AttributeError): pass
+        try: self.data.z_value = self.zValue()
+        except (RuntimeError, AttributeError): pass
+        self.data.ports_visible = getattr(self, 'ports_visible', self.data.ports_visible)
+        self.data.shelf_visible = getattr(self, '_buttons_visible', self.data.shelf_visible)
 
     def to_dict(self) -> dict:
         """Sync visual state into data, then serialize."""

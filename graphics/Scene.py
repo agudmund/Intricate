@@ -798,33 +798,46 @@ class IntricateScene(QGraphicsScene):
         connections = []
         seen = set()
 
+        dropped: list = []   # (type_name, reason) — surfaced at warning level
         for item in self.items():
             # Duck-typed node check — includes BaseNode variants AND the
             # StickerNode root (2026-04-18 split). Any future root-type
             # node that implements `to_dict` + `data` flows through too.
             #
-            # Both legs wrap in RuntimeError catches because scene.items()
-            # can surface a straggler whose Python wrapper outlived the
-            # C++ side — to_dict() then hits ``self.mapRectToScene(...)``
-            # (via sync_data) on a dead QGraphicsItem and raises from
-            # libshiboken.  The old code caught this only for Connections;
-            # a node raising here propagated through the autosave QTimer
-            # signal and fastfailed the process (0xC0000409, no Python
-            # traceback — 2026-04-19 deletion-then-autosave-2s-later race).
-            # Skipping a stragger node from the save is correct: it's
-            # already logically gone, the save just shouldn't die over it.
-            try:
-                if hasattr(item, 'to_dict') and hasattr(item, 'data'):
-                    nodes.append(item.to_dict())
-                elif isinstance(item, Connection) and id(item) not in seen:
-                    seen.add(id(item))
+            # Broad exception catch with drop-logging (2026-04-21) mirrors
+            # the clipboard-copy defence. Prior behaviour caught only
+            # RuntimeError — correct for the straggler-C++-pointer case
+            # (scene.items() surfacing a node whose Python wrapper
+            # outlived the C++ side; to_dict hits mapRectToScene via
+            # sync_data and raises from libshiboken, see 2026-04-19
+            # autosave-2s-later crash) but silent on AttributeError /
+            # other partial-init faults that would otherwise propagate
+            # up and fastfail the save. Skipping a straggler is correct;
+            # logging the skip makes the data loss visible instead of
+            # silent.
+            if hasattr(item, 'to_dict') and hasattr(item, 'data'):
+                try:
+                    d = item.to_dict()
+                    if d:
+                        nodes.append(d)
+                    else:
+                        dropped.append((type(item).__name__, "falsy-dict"))
+                except Exception as e:
+                    dropped.append((type(item).__name__, f"{type(e).__name__}: {e}"))
+            elif isinstance(item, Connection) and id(item) not in seen:
+                seen.add(id(item))
+                try:
                     if item.start_node and item.end_node:
                         connections.append({
                             "start_uuid": item.start_node.data.uuid,
                             "end_uuid":   item.end_node.data.uuid,
                         })
-            except RuntimeError:
-                pass
+                except Exception as e:
+                    dropped.append(("Connection", f"{type(e).__name__}: {e}"))
+
+        if dropped:
+            logger.warning("[save] dropped %d item(s) from session: %s",
+                           len(dropped), dropped)
 
         # Preserve existing description if one was loaded with this session
         description = getattr(self, '_session_description', "")
