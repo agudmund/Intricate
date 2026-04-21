@@ -213,6 +213,15 @@ class IntricateApp(QMainWindow):
         # 7. Keyboard shortcuts
         from PySide6.QtGui import QShortcut, QKeySequence
         QShortcut(QKeySequence("Ctrl+A"), self, self._select_chain)
+        # Cross-session copy/paste — clipboard is a pure-Python dict that
+        # survives scene teardowns because it holds zero Qt references.
+        # Same dict shape as an .intricate session payload, consumed by
+        # the existing Scene.import_session path (used by SessionNode
+        # "Total Recall" drag-drop since v0.0.2 — paste is that same
+        # path keyboard-triggered).
+        self._node_clipboard_payload: dict | None = None
+        QShortcut(QKeySequence("Ctrl+C"), self, self._copy_selected_chain)
+        QShortcut(QKeySequence("Ctrl+V"), self, self._paste_node_chain)
 
         # 8. Load session for the initially selected project, then start autosave
         QTimer.singleShot(0, self._load_initial_session)
@@ -1223,6 +1232,126 @@ class IntricateApp(QMainWindow):
         for node in self.scene.items():
             if hasattr(node, 'connections') and id(node) in visited:
                 node.setSelected(True)
+
+    # =========================================================================
+    # Cross-session copy / paste — undo-cache-in-the-recycle-bin pattern
+    # =========================================================================
+    # The historic bug that killed both Intricate and Notepad++ Duplex+ Turbo
+    # (and led to the full-repo delete + handwritten 2k core rewrite) lived
+    # at the node/session boundary: clipboards that held live Qt objects
+    # couldn't survive session teardown. The fix is architectural — the
+    # clipboard is a pure Python dict, identical in shape to an .intricate
+    # session payload. Session switch purges the scene's Qt tree; the dict
+    # in self._node_clipboard_payload doesn't care because it holds zero
+    # Qt references. Paste funnels back through Scene.import_session — the
+    # SessionNode "Total Recall" drag-drop path that's been battle-tested
+    # since v0.0.2 — with a fresh UUID remap so there's never a collision.
+
+    def _copy_selected_chain(self) -> None:
+        """Ctrl+C — capture the selected chain as a session-payload dict.
+
+        BFS walks the selection's connected component, serializes every
+        node via to_dict, and emits connections only where BOTH endpoints
+        are in the captured set (no dangling refs ever reach paste).
+        The payload is stored on self as a plain dict — pure data,
+        indestructible from Qt's perspective.
+        """
+        seeds = [item for item in self.scene.selectedItems()
+                 if hasattr(item, 'connections') and hasattr(item, 'to_dict')]
+        if not seeds:
+            return
+        visited_ids: set = set()
+        captured: list = []
+        queue = list(seeds)
+        while queue:
+            node = queue.pop(0)
+            nid = id(node)
+            if nid in visited_ids:
+                continue
+            visited_ids.add(nid)
+            captured.append(node)
+            for conn in node.connections:
+                for neighbour in (conn.start_node, conn.end_node):
+                    if neighbour and neighbour is not node and id(neighbour) not in visited_ids:
+                        queue.append(neighbour)
+
+        # Serialize nodes — per-node try/except so one broken to_dict
+        # doesn't poison the whole copy
+        node_dicts: list = []
+        for n in captured:
+            try:
+                d = n.to_dict()
+                if d and d.get("uuid"):
+                    node_dicts.append(d)
+            except Exception:
+                logger.exception("[clipboard] to_dict failed on %r", n)
+
+        # Serialize connections — only where BOTH endpoints are captured
+        captured_uuids = {d.get("uuid") for d in node_dicts if d.get("uuid")}
+        seen_conn_ids: set = set()
+        conn_dicts: list = []
+        for n in captured:
+            for conn in n.connections:
+                cid = id(conn)
+                if cid in seen_conn_ids:
+                    continue
+                seen_conn_ids.add(cid)
+                if conn.start_node is None or conn.end_node is None:
+                    continue
+                try:
+                    su = conn.start_node.data.uuid
+                    eu = conn.end_node.data.uuid
+                except Exception:
+                    continue
+                if su in captured_uuids and eu in captured_uuids:
+                    conn_dicts.append({"start_uuid": su, "end_uuid": eu})
+
+        self._node_clipboard_payload = {
+            "nodes":       node_dicts,
+            "connections": conn_dicts,
+        }
+        n_count = len(node_dicts)
+        w_count = len(conn_dicts)
+        pieces = f"{n_count} node{'s' if n_count != 1 else ''}"
+        if w_count:
+            pieces += f" + {w_count} wire{'s' if w_count != 1 else ''}"
+        self.show_info(f"Copied {pieces}")
+
+    def _paste_node_chain(self) -> None:
+        """Ctrl+V — spawn the clipboard payload into the current session.
+
+        Delegates to Scene.import_session which handles fresh-UUID remap,
+        position offsetting relative to the viewport centre, and wire
+        reconstruction. Non-destructive: pasting twice spawns two
+        independent copies. Silently no-ops on empty clipboard or if
+        the view isn't ready yet.
+        """
+        payload = getattr(self, '_node_clipboard_payload', None)
+        if not payload or not payload.get("nodes"):
+            return
+        try:
+            anchor = self.view.mapToScene(self.view.viewport().rect().center())
+        except Exception:
+            return
+        try:
+            created = self.scene.import_session(payload, anchor=anchor)
+        except Exception:
+            logger.exception("[clipboard] paste failed")
+            return
+
+        # Auto-select the pasted chain so the user can drag the whole chunk
+        # to a nice place without the extra Ctrl+A click — mirrors the
+        # SessionNode "Total Recall" drag-drop behaviour.
+        if created:
+            self.scene.clearSelection()
+            for node in created:
+                try:
+                    node.setSelected(True)
+                except RuntimeError:
+                    pass  # node may have been removed during import
+
+        count = len(created)
+        self.show_info(f"Pasted {count} node{'s' if count != 1 else ''}")
 
     def _on_selection_changed(self) -> None:
         """Update the preview panel when selection changes — skipped while pinned."""
