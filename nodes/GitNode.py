@@ -34,7 +34,57 @@ _log = setup_logger("git")
 
 _ROW_H      = 20.0   # height per repo row
 _DOT_R      = 5.0    # status dot radius
-_POLL_MS    = 10000   # refresh every 10 seconds
+_POLL_MS    = 10000   # default refresh period — overridden by [node.git] poll_interval_ms
+
+
+def _get_excluded_repos() -> set[str]:
+    """Read [node.git] exclude_repos live at call time.  Folders whose
+    basename appears here are skipped during scan + push — used for
+    cloned-but-not-maintained repos living on Desktop alongside the
+    user's own projects."""
+    import ast
+    import pretty_widgets.utils.settings as _s
+    val = _s.get_nested("node", "git", "exclude_repos", default=[])
+    if isinstance(val, list):
+        return set(val)
+    if isinstance(val, str) and val.strip().startswith("["):
+        try:
+            result = ast.literal_eval(val)
+            if isinstance(result, (list, tuple)):
+                return set(result)
+        except Exception:
+            pass
+    return set()
+
+
+def _get_poll_interval_ms() -> int:
+    """Read [node.git] poll_interval_ms at call time, with fallback to
+    the baked-in default."""
+    import pretty_widgets.utils.settings as _s
+    val = _s.get_nested("node", "git", "poll_interval_ms", default=_POLL_MS)
+    try:
+        return max(1000, int(val))   # floor at 1s to avoid runaway scans
+    except (TypeError, ValueError):
+        return _POLL_MS
+
+
+_DOT_COLORS_DEFAULT = {
+    "session":  "#7ac47a",   # green
+    "dirty":    "#7a9ac4",   # blue
+    "unpushed": "#c4a87a",   # amber
+}
+
+
+def _get_status_colors() -> dict:
+    """Read [node.git] status_color_* keys at call time, with fallback
+    to the baked-in defaults.  Each key maps a status name to a hex
+    string; the caller feeds that into QColor to paint the dot."""
+    import pretty_widgets.utils.settings as _s
+    return {
+        status: _s.get_nested("node", "git", f"status_color_{status}",
+                              default=_DOT_COLORS_DEFAULT[status])
+        for status in _DOT_COLORS_DEFAULT
+    }
 
 
 from utils.persistence.session import SESSION_EXT
@@ -81,9 +131,12 @@ def _scan_repos() -> list[tuple[str, str]]:
     desktop = Path.home() / "Desktop"
     if not desktop.exists():
         return []
+    excluded = _get_excluded_repos()
     repos = []
     for folder in sorted(desktop.iterdir()):
         if not folder.is_dir() or folder.name.startswith("."):
+            continue
+        if folder.name in excluded:
             continue
         git_dir = folder / ".git"
         if not git_dir.exists():
@@ -244,7 +297,7 @@ class GitNode(BaseNode):
 
         self._poll_timer = QTimer()
         self._poll_timer.timeout.connect(self._refresh)
-        self._poll_timer.start(_POLL_MS)
+        self._poll_timer.start(_get_poll_interval_ms())
         # Initial scan deferred so the node appears immediately
         QTimer.singleShot(0, self._refresh)
 
@@ -622,14 +675,23 @@ class GitNode(BaseNode):
         # All futures done — signal completion for the delivery timer
         self._push_complete = True
 
+    # Legacy hardcoded default that means "use Theme" — not a real custom tint.
+    # Existing sessions saved with this value fall through to the theme colours.
+    _LEGACY_TINTS = {"#4a3a5a"}
+
     def _bg_color(self) -> QColor:
         tint = getattr(self.data, 'node_tint', '')
-        c = QColor(tint) if tint and QColor(tint).isValid() else QColor(Theme.aboutBgColor)
+        if tint and tint.lower() not in self._LEGACY_TINTS and QColor(tint).isValid():
+            c = QColor(tint)
+        else:
+            c = QColor(Theme.gitBgColorFront if self.data.depth_front else Theme.gitBgColor)
         c.setAlpha(Theme.aboutTransparency)
         return c
 
     def _apply_depth(self) -> None:
         super()._apply_depth()
+        # Stop any in-flight animation before setting the new color — otherwise
+        # _on_bg_changed fires after us and overwrites the brush with the old target.
         beh = getattr(self, 'behaviour', None)
         if beh:
             beh.bg_anim.stop()
@@ -680,12 +742,8 @@ class GitNode(BaseNode):
                     if y + _ROW_H > r.bottom():
                         return
                     if status != "clean":
-                        _dot_colors = {
-                            "session":  "#7ac47a",   # green
-                            "dirty":    "#7a9ac4",   # blue
-                            "unpushed": "#c4a87a",   # amber
-                        }
-                        dot_color = QColor(_dot_colors.get(status, "#7a9ac4"))
+                        _dot_colors = _get_status_colors()
+                        dot_color = QColor(_dot_colors.get(status, _DOT_COLORS_DEFAULT["dirty"]))
                         painter.setBrush(dot_color)
                         painter.setPen(Qt.NoPen)
                         dot_x = r.left() + pad + _DOT_R

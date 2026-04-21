@@ -24,7 +24,7 @@ class GitNodeData(NodeData):
     width:       float = field(default=300.0)
     height:      float = field(default=400.0)
     depth_front: bool  = field(default=False)
-    node_tint:   str   = field(default="#4a3a5a")
+    node_tint:   str   = field(default="")   # empty → Theme.gitBgColor/Front drives the node body
 
     def to_dict(self) -> dict:
         data = super().to_dict()

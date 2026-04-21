@@ -68,12 +68,26 @@ For hex color attributes (values starting with `#`). Arranged horizontally when 
 | Widget | Alignment | Details |
 |--------|-----------|---------|
 | Label | Centered | Chandler42 font, 8pt, italic, weight 500, transparent background |
-| Swatch | H-centered | `QFrame`, 110x70px, solid background color, 1px `Theme.primaryBorder` border, 4px radius |
+| Swatch | H-centered | `_DraggableSwatch` (QFrame subclass), 110x70px, solid background color, 1px `Theme.primaryBorder` border, 4px radius. OpenHand cursor at rest, ClosedHand during drag |
 | Hex input | Centered | `QLineEdit`, max 9 chars, same Chandler42 styling as label |
 
 **Cell container:** `QVBoxLayout` with 0px top/bottom margins, 2px left/right, 2px spacing, top + center alignment.
 
-**Sync:** Typing in the hex input updates the hidden `QLineEdit` for TOML sync and repaints the swatch background in real time. Only applies the color when the value is a valid hex format (`#RGB`, `#RRGGBB`, or `#RRGGBBAA`).
+**Gentle drag gesture:** The swatch itself is the picker. Press and drag vertically to shift HSL lightness — up lightens, down darkens. Calibrated at 1.5 px per lightness unit (0–255 scale), so a ~100 px drag covers roughly two-thirds of the range. Hue and saturation stay fixed; only lightness moves. Alpha is preserved across `#RGB`, `#RRGGBB`, and `#RRGGBBAA` forms.
+
+**Philosophy:** This is a nudge, not a wheel. For hue-wide colour work, Photoshop and color.adobe.com remain the right tools. The Settlers swatch is the quiet one-axis adjustment that lives where you're already looking — no modal dialog, no RGBA picker, no colour-space navigation.
+
+**Sync contract:** The swatch emits `colorDragged(hex)` live during the drag, which feeds the hex input's `setText`, which drives the single `_sync` path that writes the hidden `QLineEdit` and repaints the swatch. One write path whether the user types or drags — both end up in TOML through the same pipeline. Only applies the color when the value is a valid hex format (`#RGB`, `#RRGGBB`, or `#RRGGBBAA`).
+
+### Convention: `bg_color` / `bg_color_front` — Two-State Depth Colors
+
+Each node type that participates in the depth-toggle feedback pattern exposes a paired `bg_color` (back / normal Z-layer) and `bg_color_front` (pinned-forward) in its `[node.xxx]` TOML section. The front colour is usually a slightly HSL-lifted variant of the back — same hue and saturation, higher lightness — "a slightly stronger emphasis of the same colour" that reads as pinned without shouting.
+
+**Node-side wiring:** each participating node overrides `_bg_color()` to branch on `self.data.depth_front`, and overrides `_apply_depth()` to stop the ambient `bg_anim`, null out `_bg_base`/`_current_bg`, then `setBrush(self._bg_color())`. The animation-stop-before-setBrush order is load-bearing — otherwise `_on_bg_changed` fires after the depth toggle and overwrites the brush with the outgoing target.
+
+**Current adopters:** AboutNode, GitNode. Once a third node joins, consider lifting the pattern into BaseNode with hookpoints. Until then, per-node override is the convention.
+
+**Not yet resolved in the convention:** when a node has a custom `node_tint` (user-chosen per-instance colour), the tint currently wins regardless of `depth_front`. A future refinement could HSL-lift the tint for the front state so tinted nodes also get depth-feedback — held off until a concrete use case calls for it.
 
 ## Section Description
 
