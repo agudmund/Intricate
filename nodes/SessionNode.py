@@ -21,12 +21,15 @@ class SessionNode(BaseNode):
     _has_depth_toggle = True
     _show_emoji_btn   = True
     """
-    Utility node for inspecting and importing external session .json files.
+    Utility node for inspecting and importing external session files.
 
-    Drop a session file onto the canvas (or onto this node) to see a summary
-    of its contents — node count, type breakdown, connection count. Hit the
-    import button to spawn all nodes and connections from that file onto the
-    canvas at the SessionNode's position.
+    Accepts `.json`, `.jsonl`, and `.intricate` extensions — all three are
+    parsed as JSON (single object). Drop a session file onto the canvas
+    (or onto this node) to see a summary of its contents — node count,
+    type breakdown, connection count. Hit the import button to spawn all
+    nodes and connections from that file onto the canvas at the
+    SessionNode's position. Heavily used as a "build in an isolated
+    session, drop into the master" workflow primitive.
     """
 
     def __init__(self, data: SessionNodeData | None = None):
@@ -77,7 +80,7 @@ class SessionNode(BaseNode):
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
-                if Path(url.toLocalFile()).suffix.lower() in (".json", ".intricate"):
+                if Path(url.toLocalFile()).suffix.lower() in (".json", ".jsonl", ".intricate"):
                     event.acceptProposedAction()
                     return
         event.ignore()
@@ -95,7 +98,7 @@ class SessionNode(BaseNode):
             return
         for url in event.mimeData().urls():
             path = url.toLocalFile()
-            if Path(path).suffix.lower() in (".json", ".intricate"):
+            if Path(path).suffix.lower() in (".json", ".jsonl", ".intricate"):
                 scene = self.scene()
                 if scene and hasattr(scene, 'add_session_node'):
                     offset = QPointF(40.0, 40.0)
@@ -112,7 +115,7 @@ class SessionNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def load_session_file(self, path: str) -> None:
-        """Validate and summarise a session .json file."""
+        """Validate and summarise a session file (.json, .jsonl, .intricate)."""
         from utils.persistence.session import SessionManager
 
         self.data.source_path = path

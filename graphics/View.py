@@ -14,7 +14,7 @@ from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QCursor
 _IMAGE_EXTENSIONS   = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 _VIDEO_EXTENSIONS   = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv", ".flv", ".m4v"}
 _AUDIO_EXTENSIONS   = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma"}
-_SESSION_EXTENSIONS = {".json"}
+_SESSION_EXTENSIONS = {".json", ".jsonl", ".intricate"}
 _CODE_EXTENSIONS    = {
     ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".cpp", ".c", ".h",
     ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".json", ".xml",
