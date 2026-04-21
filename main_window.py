@@ -1158,12 +1158,16 @@ class IntricateApp(QMainWindow):
             # Re-evaluate immediately so deselecting clears stale preview
             self._on_selection_changed()
         if pinned and self._preview_pixmap:
-            # Persist which image is pinned so it survives a restart
+            # Persist which image is pinned so it survives a restart.
+            # Caption goes along so the restore doesn't need the source
+            # ImageNode to be in the scene to recover it.
             set_value("ui", "preview_pinned", True)
             set_value("ui", "preview_pinned_path", self._pinned_source_path or "")
+            set_value("ui", "preview_pinned_caption", self._preview_caption.text())
         else:
             set_value("ui", "preview_pinned", False)
             set_value("ui", "preview_pinned_path", "")
+            set_value("ui", "preview_pinned_caption", "")
 
     def _update_preview(self, pixmap: QPixmap | None, caption: str = "", dims: str = "") -> None:
         """Push a new image into the preview panel."""
@@ -1236,23 +1240,58 @@ class IntricateApp(QMainWindow):
         self._update_preview(None)
 
     def _restore_pinned_preview(self) -> None:
-        """After session load: re-pin the previously pinned image if still present."""
+        """After session load: re-pin the previously pinned image.
+
+        Primary path finds a matching ImageNode in the current scene so
+        the caption / dims mirror the live node. If that fails — because
+        the pinned image lives in a different session than the one just
+        loaded, the ImageNode's async pixmap load hasn't completed yet,
+        or the node has been deleted since the pin was set — falls back
+        to loading the pixmap directly from the stored source_path using
+        the saved caption. Together these two paths make the pin survive
+        both session switches and app restarts.
+        """
         if not get("ui", "preview_pinned", False):
             return
         saved_path = get("ui", "preview_pinned_path", "")
         if not saved_path:
             return
+
+        # Primary: matching ImageNode in current scene (live node → live pixmap)
         for item in self.scene.items():
             if isinstance(item, ImageNode) and item._pixmap and not item._pixmap.isNull():
                 if item.data.source_path == saved_path:
                     self._show_node_preview(item)
-                    # Activate pin button without triggering _on_pin_toggled's save
-                    self._preview_pinned = True
-                    self._pin_btn.blockSignals(True)
-                    self._pin_btn.setChecked(True)
-                    self._pin_btn.setText("●")
-                    self._pin_btn.blockSignals(False)
+                    self._set_pin_active(True)
                     return
+
+        # Fallback: load directly from source_path on disk
+        p = Path(saved_path)
+        if p.is_file():
+            px = QPixmap(str(p))
+            if not px.isNull():
+                saved_caption = get("ui", "preview_pinned_caption", "")
+                self._pinned_source_path = saved_path
+                self._update_preview(
+                    px,
+                    saved_caption,
+                    f"{px.width()} × {px.height()}",
+                )
+                self._set_pin_active(True)
+        # If the file is gone, pin silently drops — user can re-pin from
+        # a new image. We deliberately don't clear the saved settings
+        # here so a temporarily-unmounted drive (e.g. external media)
+        # can restore the pin when it comes back.
+
+    def _set_pin_active(self, active: bool) -> None:
+        """Apply pin state + button glyph without triggering _on_pin_toggled's
+        settings save. Used by _restore_pinned_preview after the pinned
+        image is already loaded into the panel via its own path."""
+        self._preview_pinned = active
+        self._pin_btn.blockSignals(True)
+        self._pin_btn.setChecked(active)
+        self._pin_btn.setText("●" if active else "○")
+        self._pin_btn.blockSignals(False)
 
     # =================================================================================
     # The actual sidebar
@@ -3184,6 +3223,20 @@ class IntricateApp(QMainWindow):
 
     def _run_exit_script(self) -> None:
         logger.info(random.choice(motivationalMessages))
+        # Release the singleton port so the restart child can acquire it
+        # before we start fading out. Without this the child's
+        # is_singleton probe finds us still holding the port, exits
+        # silently, and the visible effect is "the X-button-restart
+        # feature stopped working" — even though the fade + spawn path
+        # is otherwise intact.
+        try:
+            from shared_braincell import release_singleton
+            release_singleton(appName)
+        except Exception:
+            pass
+        # Legacy fallback — older is_singleton implementations stored the
+        # socket on sys.modules['__main__']._instance_lock; harmless if
+        # the attribute isn't present.
         _main_module = sys.modules.get('__main__')
         if _main_module is not None and getattr(_main_module, '_instance_lock', None) is not None:
             try:
