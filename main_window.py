@@ -498,17 +498,25 @@ class IntricateApp(QMainWindow):
         # The sleep/wake button is the sole controller of the sleep state.
         return super().eventFilter(obj, event)
 
+    # Leave a small margin at the bottom when maximising so the Windows
+    # auto-hide taskbar's cursor-at-edge trigger zone stays reachable.
+    # Intricate is always-on-top and would otherwise overlay that 1-2px
+    # trigger band — a 5px gap gives the cursor a reliable runway without
+    # sacrificing any meaningful canvas real estate.
+    _TASKBAR_TRIGGER_MARGIN = 5
+
     def toggle_fullscreen(self):
         screen = self.screen().geometry()
-        if self.geometry() == screen:
-            # Already filling the screen — restore
+        target = screen.adjusted(0, 0, 0, -self._TASKBAR_TRIGGER_MARGIN)
+        if self.geometry() == target:
+            # Already filling the reserved area — restore
             if hasattr(self, '_pre_fullscreen_geometry'):
                 self.setGeometry(self._pre_fullscreen_geometry)
             self._is_fullscreen = False
         else:
-            # Not filling the screen — maximize regardless of flag state
+            # Not filling — maximize into the reserved area
             self._pre_fullscreen_geometry = self.geometry()
-            self.setGeometry(screen)
+            self.setGeometry(target)
             self._is_fullscreen = True
 
     # =========================================================================
