@@ -6,3 +6,6 @@ Documents/data/cache/
 
 # WarmNode → Majestic bridge transit files (ephemeral, per-session)
 Documents/data/.warm_bridge_*.json
+
+# Joy bucket counter — runtime state, not source (see utils/joy_buckets.py)
+Documents/data/joy_buckets.txt

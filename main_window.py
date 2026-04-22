@@ -1769,8 +1769,12 @@ class IntricateApp(QMainWindow):
         layout.addWidget(joy_container)
 
         # ── Joy bucket counter ─────────────────────────────────────────────
+        # Bucket count has its own tiny file store (utils/joy_buckets.py) —
+        # detached from settings.toml so the value can be tweaked by hand
+        # without touching the shared-braincell config surface.
         import pretty_widgets.utils.settings as _s
-        self._joy_bucket_count = int(_s.get_nested("intricate", "joy", "buckets", 0))
+        from utils import joy_buckets
+        self._joy_bucket_count = joy_buckets.get_buckets()
         self._joy_happy_secs   = float(_s.get_nested("intricate", "joy", "happy_secs", 0.0))
         self._joy_bucket_label = pretty_label(
             str(self._joy_bucket_count),
@@ -1958,10 +1962,13 @@ class IntricateApp(QMainWindow):
             self._persist_happy()
 
     def _persist_happy(self) -> None:
-        """Save happy accumulator and bucket count to settings."""
+        """Save happy accumulator and bucket count. happy_secs and bar_value
+        still live in settings.toml; the bucket count lives in its own
+        detached store (utils/joy_buckets.py)."""
         import pretty_widgets.utils.settings as _s
+        from utils import joy_buckets
         _s.set_nested("intricate", "joy", "happy_secs", round(self._joy_happy_secs, 1))
-        _s.set_nested("intricate", "joy", "buckets", self._joy_bucket_count)
+        joy_buckets.set_buckets(self._joy_bucket_count)
         _s.set_nested("intricate", "joy", "bar_value", self.joy_bar.value())
 
     def _deplete_joy(self) -> None:
