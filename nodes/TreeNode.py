@@ -373,18 +373,34 @@ class TreeNode(BaseNode):
         self._toolbar_proxy.show()
 
     def _open_in_explorer(self) -> None:
-        """Open the session's project root in Windows Explorer.
+        """Open the session's project root in Windows Explorer, rolling the
+        curtains up first so focus lands on the Explorer window cleanly.
 
         Uses os.startfile(path) — Windows resolves a directory to its
         default handler (Explorer). Silent no-op if the path is missing
         or the OS call fails; the feature is a shortcut, not a
         load-bearing operation.
+
+        Curtains-roll-up mirrors GitNode's "switch to GitHub Desktop"
+        pattern (GitNode.py _launch_github_desktop) — same effect: the
+        target app takes the foreground because Intricate's shrunken
+        itself out of the way, not because we fought for focus.
         """
         if not self.data.project_path:
             return
         project = Path(self.data.project_path)
         if not project.is_dir():
             return
+        # Roll up curtains before switching — makes Intricate yield the
+        # foreground by getting smaller, not by any explicit focus dance.
+        try:
+            views = self.scene().views() if self.scene() else []
+            if views:
+                mw = views[0].window()
+                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
+                    mw.toggle_curtains()
+        except Exception:
+            pass
         try:
             os.startfile(str(project))  # Windows: opens folder in Explorer
         except OSError as e:
