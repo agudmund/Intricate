@@ -10,9 +10,11 @@ import time
 
 from PySide6.QtCore import Qt, QRectF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
+from PySide6.QtWidgets import QGraphicsItem
 
 from nodes.BaseNode import BaseNode
 from data.NodeData import NodeData
+from data.JoyStatsNodeData import JoyStatsNodeData
 from pretty_widgets.graphics.Theme import Theme
 
 
@@ -23,22 +25,33 @@ class JoyStatsNode(BaseNode):
     Live debug display for the joy tamagotchi system.
 
     Reads all joy state from the main window every second and paints
-    a compact stats grid. No custom data — pure read-only display.
+    a compact stats grid. Also pinnable to the viewport — right-click
+    toggles the pin; while pinned the node stays in screen-space as
+    the canvas pans/zooms underneath it. Same mechanic StickerNode
+    uses for viewport-anchored HUD stickers.
     """
 
-    def __init__(self, data: NodeData | None = None):
+    def __init__(self, data: JoyStatsNodeData | None = None):
         if data is None:
-            data = NodeData(node_type="joy_stats", title="Joy Stats",
-                            width=240.0, height=280.0)
+            data = JoyStatsNodeData()
         super().__init__(data)
         self.setBrush(self._bg_color())
         self._apply_depth()
+
+        # Viewport pin state — mirrors StickerNode exactly.
+        self._pin_connected = False
 
         # 1-second poll — matches the happy accumulator tick rate
         self._poll_timer = QTimer()
         self._poll_timer.setInterval(1000)
         self._poll_timer.timeout.connect(self._refresh)
         self._poll_timer.start()
+
+        # Pinned-on-load — re-establish the viewport anchor once the
+        # scene/view are fully constructed. Deferred with a zero-delay
+        # timer so scene.views() is populated by the time we ask.
+        if data.pinned:
+            QTimer.singleShot(0, self._activate_pin)
 
     def _bg_color(self) -> QColor:
         tint = getattr(self.data, 'node_tint', '')
@@ -184,10 +197,133 @@ class JoyStatsNode(BaseNode):
         painter.restore()
 
     # ─────────────────────────────────────────────────────────────────────────
+    # INTERACTION — right-click to pin/unpin
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def mousePressEvent(self, event):
+        """Intercept right-click to show the pin context menu.
+
+        BaseNode's default mousePressEvent treats right-click as "begin
+        a wire connection" — which never applies to JoyStatsNode (it's
+        a HUD node, never wired). So we claim right-click here for the
+        pin/unpin action and defer everything else to super().
+        """
+        if event.button() == Qt.RightButton:
+            self._show_context_menu(event)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def _show_context_menu(self, event) -> None:
+        """Right-click menu. Pin toggle is the only action — same chrome
+        and vocabulary StickerNode uses (PrettyMenu via pretty_menu)."""
+        from pretty_widgets.PrettyMenu import menu as pretty_menu
+        ctx = pretty_menu()
+        pin_action = ctx.addAction("Pin to Viewport")
+        pin_action.setCheckable(True)
+        pin_action.setChecked(self.data.pinned)
+        pin_action.triggered.connect(self._toggle_pin)
+        # Map the scene-space event position to the screen for the menu.
+        view = self._get_view()
+        if view:
+            screen_pos = view.mapToGlobal(
+                view.mapFromScene(event.scenePos())
+            )
+        else:
+            screen_pos = event.screenPos()
+        ctx.exec(screen_pos)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # VIEWPORT PINNING — mirrors StickerNode's implementation
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _toggle_pin(self) -> None:
+        if self.data.pinned:
+            self._deactivate_pin()
+        else:
+            self._activate_pin()
+
+    def _activate_pin(self) -> None:
+        """Pin the node to its current viewport position — disable dragging
+        and record the viewport-space anchor point."""
+        self.data.pinned = True
+        self.setFlag(QGraphicsItem.ItemIsMovable, False)
+        view = self._get_view()
+        if view:
+            vp_pos = view.mapFromScene(self.pos())
+            self.data.pin_vp_x = vp_pos.x()
+            self.data.pin_vp_y = vp_pos.y()
+            self._connect_viewport_tracking(view)
+
+    def _deactivate_pin(self) -> None:
+        """Unpin — node becomes draggable again and moves with the canvas."""
+        self.data.pinned = False
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)
+        self._disconnect_viewport_tracking()
+
+    def _connect_viewport_tracking(self, view) -> None:
+        if self._pin_connected:
+            return
+        # Primary channel: the view emits viewTransformed on pan/zoom
+        # that mutate the transform directly. Scrollbars only fire when
+        # the scene rect grows past the viewport — rare, but kept as a
+        # backup channel.
+        if hasattr(view, 'viewTransformed'):
+            view.viewTransformed.connect(self._on_viewport_changed)
+        view.horizontalScrollBar().valueChanged.connect(self._on_viewport_changed)
+        view.verticalScrollBar().valueChanged.connect(self._on_viewport_changed)
+        self._pin_connected = True
+
+    def _disconnect_viewport_tracking(self) -> None:
+        if not self._pin_connected:
+            return
+        view = self._get_view()
+        if view:
+            if hasattr(view, 'viewTransformed'):
+                try:
+                    view.viewTransformed.disconnect(self._on_viewport_changed)
+                except (RuntimeError, TypeError):
+                    pass
+            try:
+                view.horizontalScrollBar().valueChanged.disconnect(self._on_viewport_changed)
+                view.verticalScrollBar().valueChanged.disconnect(self._on_viewport_changed)
+            except (RuntimeError, TypeError):
+                pass
+        self._pin_connected = False
+
+    def _on_viewport_changed(self, _value=None) -> None:
+        """Canvas transform moved — remap the node back to its recorded
+        viewport coordinate so it stays anchored in screen space."""
+        # Destructor/signal race guard — same as StickerNode's 2026-04-18
+        # fastfail case: a transform tick landing on a node mid-teardown.
+        import shiboken6
+        if not shiboken6.isValid(self):
+            return
+        scene = self.scene()
+        if scene is None or getattr(scene, '_bulk_removing', 0) > 0:
+            return
+        view = self._get_view()
+        if not view:
+            return
+        scene_pos = view.mapToScene(int(self.data.pin_vp_x), int(self.data.pin_vp_y))
+        self.setPos(scene_pos)
+
+    def _get_view(self):
+        scene = self.scene()
+        if scene and scene.views():
+            return scene.views()[0]
+        return None
+
+    # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
     _demolition_timers = [('_poll_timer', '_refresh')]
+
+    def _demolition_pre(self) -> None:
+        """Sever viewport tracking before the main teardown sequence —
+        the signal-destructor race is real, see _on_viewport_changed."""
+        self._disconnect_viewport_tracking()
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION
@@ -199,13 +335,4 @@ class JoyStatsNode(BaseNode):
 
     @staticmethod
     def from_dict(data: dict) -> 'JoyStatsNode':
-        nd = NodeData(
-            node_type="joy_stats", title="Joy Stats",
-            uuid=data.get("uuid", ""),
-            x=float(data.get("x", 0.0)), y=float(data.get("y", 0.0)),
-            width=float(data.get("width", 240.0)), height=float(data.get("height", 280.0)),
-            z_value=float(data.get("z_value", 0.0)),
-            ports_visible=data.get("ports_visible", False),
-            shelf_visible=data.get("shelf_visible", True),
-        )
-        return JoyStatsNode(nd)
+        return JoyStatsNode(JoyStatsNodeData.from_dict(data))
