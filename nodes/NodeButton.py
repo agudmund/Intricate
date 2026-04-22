@@ -6,6 +6,8 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import math
+
 from PySide6.QtWidgets import QGraphicsObject
 from PySide6.QtCore import Qt, QRectF, QPointF, QTimer
 from PySide6.QtGui import QPainter, QPixmap, QColor
@@ -71,8 +73,6 @@ class NodeButton(QGraphicsObject):
         self._pix_confirm = pixmap_confirm
         self._scaled_normal  = None   # cached display-size pixmap
         self._scaled_confirm = None
-        self._shadow_cache   = None   # cached shadow pixmap
-        self._shadow_source  = None   # tracks which source generated the shadow
 
         self.setAcceptHoverEvents(True)
         self.setCursor(Qt.PointingHandCursor)
@@ -88,24 +88,20 @@ class NodeButton(QGraphicsObject):
     # PAINT
     # ─────────────────────────────────────────────────────────────────────────
 
-    # Set True on sticker-style buttons to get dynamic radial shadow
-    _sticker_shadow = False
-    _sticker_pressed = False   # tactile press state
-    _SHADOW_DIST    = 3.0     # px offset for shadow in scene coords
-    _PRESS_DIST     = 1.5     # px offset for tactile press — gentle squish
-    _SHADOW_OPACITY = 0.55
-
-    def _build_shadow_pixmap(self, pix: QPixmap) -> QPixmap:
-        """Dark silhouette from the sticker's alpha — reads as a real shadow."""
-        sz = pix.size()
-        shadow = QPixmap(sz)
-        shadow.fill(QColor(0, 0, 0, 0))
-        p = QPainter(shadow)
-        p.drawPixmap(0, 0, pix)
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
-        p.fillRect(0, 0, sz.width(), sz.height(), QColor(20, 18, 16))
-        p.end()
-        return shadow
+    # Set True on sticker-style buttons to enable the tactile press indent.
+    # The press offset always points toward 7:30 on a clock (lower-left) so
+    # every sticker button in the app shares one light-source convention
+    # (light in the upper-right, surface dents in the opposite direction).
+    # The dynamic radial-shadow engine (shadow direction tracked window centre)
+    # is parked live in utils/StickerButton.py — used on the sidebar feed
+    # button and kept as the reference implementation for when 3D light-source
+    # nodes come online and feed per-button direction back in.
+    _sticker_shadow  = False
+    _sticker_pressed = False              # tactile press state
+    _PRESS_DIST      = 0.5                # px offset magnitude — gentle nudge inward
+    _PRESS_ANGLE_DEG = 210.0              # clock angle (12:00 = 0°, clockwise) — lower-left
+    _PRESS_DX = _PRESS_DIST * math.sin(math.radians(_PRESS_ANGLE_DEG))
+    _PRESS_DY = _PRESS_DIST * -math.cos(math.radians(_PRESS_ANGLE_DEG))
 
     def _get_scaled(self, source: QPixmap, size: int) -> QPixmap:
         """Return a display-size cached pixmap, rebuilding only when source changes."""
@@ -147,14 +143,9 @@ class NodeButton(QGraphicsObject):
         else:
             pix = self._get_scaled(source, int(scaled))
 
-        # Tactile press — gentle offset toward bottom-right
+        # Tactile press — icon dents toward lower-left (see class constants).
         if self._sticker_shadow and self._sticker_pressed:
-            draw_rect = draw_rect.translated(self._PRESS_DIST, self._PRESS_DIST)
-
-        # Dynamic radial shadow engine — proof of concept validated, parked until
-        # we add literal 3D light source nodes (NullNode as light → directional
-        # shadow per button → our own shading engine inside the button framework).
-        # Re-enable by wiring a light source position into the shadow direction.
+            draw_rect = draw_rect.translated(self._PRESS_DX, self._PRESS_DY)
 
         painter.drawPixmap(draw_rect.toRect(), pix)
 
