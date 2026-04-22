@@ -230,6 +230,17 @@ class TreeNode(BaseNode):
             data = TreeNodeData()
         super().__init__(data)
 
+        # Derive the title from the project folder name up front —
+        # paint_content keeps it refreshed on every paint, but until that
+        # first paint runs the title is still the "Tree" dataclass
+        # default. _auto_size (during refresh below) and the title-fit
+        # at the end of __init__ both read data.title, so setting it
+        # here makes both paths work against the real title instead of
+        # the placeholder. Without this the node spawns at default width
+        # and the real title clips on first paint.
+        if data.project_path:
+            self.data.title = Path(data.project_path).name
+
         self._editor: PrettyEdit | None = None
         self._hearts: list[QGraphicsPixmapItem] = []
         self._heart_pixmap: QPixmap | None = None
