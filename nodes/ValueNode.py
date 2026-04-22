@@ -80,6 +80,12 @@ class ValueNode(ChromelessRoot):
     _CAL_PORT_Y = -12   # vertical offset from rect center to the input tip
     _CAL_PORT_X =  10   # horizontal offset added to the base -ox left-edge position
 
+    # ── Generic unpinned resize — opt in to ChromelessRoot's corner grip ────
+    # Bottom-right grip sets the frozen screen size before pin. Works with
+    # the existing setRect override below which re-anchors ports + slider
+    # on every size change, so the slider proxy tracks the new rect live.
+    _UNPINNED_RESIZE_ENABLED = True
+
     # ── Demolition manifest — crew tears down the slider proxy ───────────────
 
     _demolition_proxies = ['_slider_proxy']

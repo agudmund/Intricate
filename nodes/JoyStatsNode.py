@@ -53,6 +53,12 @@ class JoyStatsNode(ChromelessRoot):
     _BODY_FONT       = "Lato"
     _BODY_FONT_BUMP  = -1
 
+    # ── Generic unpinned resize — opt in to ChromelessRoot's corner grip ────
+    # Bottom-right grip lets the user set the frozen screen size before
+    # pinning. Pair with ItemIgnoresTransformations (toggled by the root
+    # on pin) so the chosen size is preserved through zoom.
+    _UNPINNED_RESIZE_ENABLED = True
+
     def __init__(self, data: JoyStatsNodeData | None = None):
         if data is None:
             data = JoyStatsNodeData()

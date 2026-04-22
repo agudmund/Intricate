@@ -8,7 +8,7 @@
 
 import traceback
 
-from PySide6.QtCore import Qt, QRectF, QTimer
+from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem
 
@@ -95,6 +95,21 @@ class ChromelessRoot(QGraphicsRectItem):
     """
 
     # ─────────────────────────────────────────────────────────────────────────
+    # CLASS FLAGS — subclasses override to opt into generic behaviours
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # When True, the root offers a bottom-right corner-grip resize while
+    # unpinned — drag the grip to set the node's fixed size. The size
+    # the user lands on becomes the frozen screen-space size on the next
+    # pin. StickerNode stays False (it has its own bespoke resize with
+    # aspect-ratio preservation + cursor-hide); JoyStatsNode and ValueNode
+    # opt in to get the generic grip for free.
+    _UNPINNED_RESIZE_ENABLED = False
+    _RESIZE_GRIP_SIZE        = 18.0
+    _RESIZE_MIN_WIDTH        = 40.0
+    _RESIZE_MIN_HEIGHT       = 40.0
+
+    # ─────────────────────────────────────────────────────────────────────────
     # CONSTRUCTION
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -124,6 +139,13 @@ class ChromelessRoot(QGraphicsRectItem):
 
         # Pin state
         self._pin_connected = False
+
+        # Generic unpinned resize state — used only when the subclass opts
+        # in via ``_UNPINNED_RESIZE_ENABLED``. Start empty; mousePressEvent
+        # populates these on a corner-grip hit.
+        self._chrome_resizing       = False
+        self._chrome_resize_start   = QPointF()
+        self._chrome_resize_rect0   = QRectF()
 
         # Default interaction flags. Pin toggle disables ItemIsMovable
         # while pinned; ItemSendsScenePositionChanges so itemChange gets
@@ -191,13 +213,51 @@ class ChromelessRoot(QGraphicsRectItem):
             event.accept()
             return
         if event.button() == Qt.LeftButton:
+            # Generic unpinned corner-grip resize — bottom-right handle,
+            # only active when the subclass opted in and the node is
+            # currently unpinned. Resizing while unpinned is how the user
+            # tells us "freeze THIS size on the next pin". Claim the event
+            # before shake-arm so a resize-drag isn't mistaken for shake.
+            if (self._UNPINNED_RESIZE_ENABLED
+                    and not self.data.pinned
+                    and self._hit_resize_grip(event.pos())):
+                logger.log(TRACE, "[chrome-mouse] %s → resize grip hit", self._log_id())
+                self._chrome_resizing     = True
+                self._chrome_resize_start = event.pos()
+                self._chrome_resize_rect0 = self.rect()
+                event.accept()
+                return
             # Arm the shake detector for the duration of this drag.
             logger.log(TRACE, "[chrome-mouse] %s → shake.press()", self._log_id())
             self._shake.press()
         super().mousePressEvent(event)
         logger.log(TRACE, "[chrome-mouse] %s PRESS returned (super called)", self._log_id())
 
+    def _hit_resize_grip(self, local_pos: QPointF) -> bool:
+        """Bottom-right ``_RESIZE_GRIP_SIZE`` square of the node rect.
+        Item-local coords — matches the coordinate space that ``event.pos()``
+        arrives in (which is scene-units when unpinned, the only state
+        the grip is active in)."""
+        rect = self.rect()
+        grip = QRectF(rect.right()  - self._RESIZE_GRIP_SIZE,
+                      rect.bottom() - self._RESIZE_GRIP_SIZE,
+                      self._RESIZE_GRIP_SIZE, self._RESIZE_GRIP_SIZE)
+        return grip.contains(local_pos)
+
     def mouseMoveEvent(self, event):
+        # Generic resize path — consume the drag, update the rect, don't
+        # hand it to super() (super would otherwise translate the node).
+        if self._chrome_resizing:
+            delta = event.pos() - self._chrome_resize_start
+            new_w = max(self._RESIZE_MIN_WIDTH,
+                        self._chrome_resize_rect0.width()  + delta.x())
+            new_h = max(self._RESIZE_MIN_HEIGHT,
+                        self._chrome_resize_rect0.height() + delta.y())
+            self.prepareGeometryChange()
+            self.setRect(QRectF(self.rect().topLeft(), QSizeF(new_w, new_h)))
+            self.update()
+            event.accept()
+            return
         logger.log(TRACE, "[chrome-mouse] %s MOVE scene_pos=(%.1f,%.1f)",
                      self._log_id(), self.scenePos().x(), self.scenePos().y())
         super().mouseMoveEvent(event)
@@ -212,6 +272,10 @@ class ChromelessRoot(QGraphicsRectItem):
                else "left" if event.button() == Qt.LeftButton else "other")
         logger.log(TRACE, "[chrome-mouse] %s RELEASE button=%s shake_triggered=%s removal_done=%s",
                    self._log_id(), btn, self._shake_triggered, self._removal_done)
+        # Always clear the resize flag — a release ends whatever gesture
+        # was in progress. sync_data() below captures the final rect
+        # into the dataclass so the frozen-size invariant persists.
+        self._chrome_resizing = False
         self._shake.release()
         self.sync_data()
         super().mouseReleaseEvent(event)
@@ -289,6 +353,16 @@ class ChromelessRoot(QGraphicsRectItem):
         2026-04-22 bug: restore path was always overwriting pin_vp on
         load, causing pinned stickers to vanish off-screen after an
         app restart. Fixed by the two-path split.
+
+        ``ItemIgnoresTransformations`` is also toggled on here — while
+        pinned, the node renders at fixed screen-space scale regardless
+        of canvas zoom. The scene position is still anchored via the
+        view transform's translation (``mapToScene(pin_vp)`` in
+        ``_on_viewport_changed``), but the zoom factor is stripped from
+        the item's own rendering. Unpinning flips the flag back off so
+        the item scales with the canvas again (and becomes resizable
+        via the subclass's resize gesture). The node's rect() size is
+        thus "what you set while unpinned = the frozen screen size".
         """
         logger.log(TRACE, "[chrome-pin] %s ACTIVATE from_saved_vp=%s", self._log_id(), from_saved_vp)
         self.data.pinned = True
@@ -297,17 +371,41 @@ class ChromelessRoot(QGraphicsRectItem):
         if view is None:
             logger.warning("[chrome-pin] %s ACTIVATE called but no view available",
                            self._log_id())
+            # Still set IIT so a later view appearance renders consistently.
+            self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
             return
         if not from_saved_vp:
-            # User-initiated — anchor to the current on-screen position.
+            # User-initiated pin. The rect currently lives in scene-unit
+            # space (IIT off). IIT on reads rect as screen-pixel space,
+            # so multiply by the current zoom to keep the *visible* size
+            # continuous across the toggle. Without this, re-pinning at
+            # any zoom != 1x snaps visible size by the zoom factor —
+            # the "snap back on re-pin" bug the user reported.
+            zoom = float(getattr(view, 'current_zoom', 1.0)) or 1.0
+            if zoom != 1.0:
+                cur = self.rect()
+                self.prepareGeometryChange()
+                self.setRect(QRectF(cur.topLeft(),
+                                    QSizeF(cur.width()  * zoom,
+                                           cur.height() * zoom)))
+                logger.log(TRACE, "[chrome-pin] %s ACTIVATE rescaled rect ×%.3f (zoom) → (%.1f,%.1f)",
+                           self._log_id(), zoom, self.rect().width(), self.rect().height())
+            # Anchor to the current on-screen position. mapFromScene
+            # reports viewport-pixel coords regardless of IIT state.
             vp_pos = view.mapFromScene(self.pos())
             self.data.pin_vp_x = vp_pos.x()
             self.data.pin_vp_y = vp_pos.y()
             logger.log(TRACE, "[chrome-pin] %s ACTIVATE wrote pin_vp=(%.1f,%.1f) from current pos",
                        self._log_id(), self.data.pin_vp_x, self.data.pin_vp_y)
         else:
+            # Session restore — rect was serialised in screen-pixel space
+            # (saved while pinned) so IIT on renders it correctly without
+            # any rescale. pin_vp was also saved in screen pixels.
             logger.log(TRACE, "[chrome-pin] %s ACTIVATE preserving saved pin_vp=(%.1f,%.1f)",
                        self._log_id(), self.data.pin_vp_x, self.data.pin_vp_y)
+        # IIT on AFTER the rescale + pin_vp capture so self.pos() / rect
+        # reads in mapFromScene happen in the old (scene-unit) frame.
+        self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
         self._connect_viewport_tracking(view)
         if from_saved_vp:
             # Apply the saved anchor immediately — can't rely on a
@@ -318,10 +416,36 @@ class ChromelessRoot(QGraphicsRectItem):
                        self._log_id(), self.pos().x(), self.pos().y())
 
     def _deactivate_pin(self) -> None:
-        """Unpin — node becomes draggable again and moves with the canvas."""
+        """Unpin — node becomes draggable again, moves with the canvas,
+        AND scales with the canvas again. Clearing
+        ``ItemIgnoresTransformations`` restores the normal scene-item
+        rendering so the user can zoom to the node and re-tune its
+        rect() to pick the screen size they want frozen on the next
+        pin.
+
+        The rect is divided by the current zoom on unpin so the visible
+        on-screen size stays continuous across the IIT toggle — the pair
+        of this with the rescale in ``_activate_pin`` makes pin/unpin a
+        visually silent operation at any zoom level. sync_data() after
+        the user resizes while unpinned then stores the new screen-pixel
+        target (via the next pin's multiply).
+        """
         logger.log(TRACE, "[chrome-pin] %s DEACTIVATE", self._log_id())
         self.data.pinned = False
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
+        view = self._get_view()
+        zoom = float(getattr(view, 'current_zoom', 1.0)) if view else 1.0
+        if not zoom:
+            zoom = 1.0
+        if zoom != 1.0:
+            cur = self.rect()
+            self.prepareGeometryChange()
+            self.setRect(QRectF(cur.topLeft(),
+                                QSizeF(cur.width()  / zoom,
+                                       cur.height() / zoom)))
+            logger.log(TRACE, "[chrome-pin] %s DEACTIVATE rescaled rect ÷%.3f (zoom) → (%.1f,%.1f)",
+                       self._log_id(), zoom, self.rect().width(), self.rect().height())
+        self.setFlag(QGraphicsItem.ItemIgnoresTransformations, False)
         self._disconnect_viewport_tracking()
 
     def _connect_viewport_tracking(self, view) -> None:
