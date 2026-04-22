@@ -673,7 +673,7 @@ class TreeNode(BaseNode):
         # from the _TITLE_RIGHT_PAD class constant.
         right_pad = pad if self._TITLE_RIGHT_PAD is None else self._TITLE_RIGHT_PAD
         needed = int(title_w + pad + right_pad)
-        _log.info(
+        _log.debug(
             "[tree-fit] title=%r painted_w=%.1f pad=%s right_pad=%s needed=%d current=%.0f action=%s",
             self.data.title, title_w, pad, right_pad, needed, r.width(),
             "GROW" if needed > r.width() else "no-op",
@@ -682,8 +682,8 @@ class TreeNode(BaseNode):
             self.prepareGeometryChange()
             self.setRect(QRectF(r.x(), r.y(), needed, r.height()))
             self.data.width = needed
-            _log.info("[tree-fit] post-setRect rect.width=%.0f data.width=%.0f",
-                      self.rect().width(), self.data.width)
+            _log.debug("[tree-fit] post-setRect rect.width=%.0f data.width=%.0f",
+                       self.rect().width(), self.data.width)
 
     def _auto_size(self, text: str) -> None:
         """Resize the node to fit the full tree text — no scrollbar needed."""
@@ -726,7 +726,7 @@ class TreeNode(BaseNode):
         new_h = max(120, doc_h   + chrome_y)
 
         r = self.rect()
-        _log.info(
+        _log.debug(
             "[tree-autosize] title=%r title_w_calc=%.1f default_w=%.0f "
             "new_w=%.0f new_h=%.0f (prev rect w=%.0f h=%.0f)",
             self.data.title, title_w, default_w, new_w, new_h,

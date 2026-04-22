@@ -952,7 +952,9 @@ class BaseNode(QGraphicsRectItem):
             # Round-trip diagnostic — paired with the auto-fit logs in
             # TreeNode/WarmNode. "I set N, user landed at M." Comparing
             # N and M tells us the deliberate-target-vs-desired gap.
-            logger.info(
+            # Kept as DEBUG for future node-width debugging sessions —
+            # flip log level up to INFO temporarily if investigating.
+            logger.debug(
                 "[resize-end] %s title=%r final rect w=%.0f h=%.0f  data.width=%.0f",
                 type(self).__name__, getattr(self.data, 'title', ''),
                 self.rect().width(), self.rect().height(), self.data.width,

@@ -251,8 +251,8 @@ notes = ""
 buttons = "Open GitHub Desktop · Push all repos"
 
 [nodes.tree]
-name = "The Stuff and Stuff"
-tooltip = "Session file content"
+name = "Folder Structure"
+tooltip = "Project folder tree — in-process walker with gitignore + filter support"
 category = "tools"
 icon = "iconTree"
 icon_fallback = "#8888aa"

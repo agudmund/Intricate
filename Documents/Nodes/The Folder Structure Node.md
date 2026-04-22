@@ -1,6 +1,8 @@
-# The Stuff and Stuff Node
+# The Folder Structure Node
 
-The TreeNode that displays a live folder structure for any project. Registered in `node_registry.toml` as "The Stuff and Stuff" — the node you glance at to see what's actually on disk. It walks the directory in-process, respects gitignore, and renders the result as a styled tree with heart bullet icons for files and bold white labels for folders.
+The TreeNode that displays a live folder structure for any project. Registered in `node_registry.toml` as "Folder Structure" — the node you glance at to see what's actually on disk. It walks the directory in-process, respects gitignore, and renders the result as a styled tree with heart bullet icons for files and bold white labels for folders.
+
+*(Historical note: previously registered as "The Stuff and Stuff" — renamed 2026-04-22 to a plainer name.)*
 
 ## What It Shows
 
@@ -15,7 +17,7 @@ The node auto-sizes to fit all content — there is no scrollbar. The tree is re
 | `nodes/TreeNode.py` | Node class, walker, HTML builder, heart placement |
 | `data/TreeNodeData.py` | Pure Python dataclass — `tree_text`, `project_path` |
 | `icons/tree_file_icon.png` | Heart icon source (full-res, scaled at render time) |
-| `node_registry.toml` | Registry entry: name "The Stuff and Stuff", category "tools" |
+| `node_registry.toml` | Registry entry: name "Folder Structure", category "tools" |
 
 ## Architecture
 

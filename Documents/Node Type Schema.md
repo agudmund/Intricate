@@ -188,7 +188,7 @@ The sidebar runs top-to-bottom in this order. Each icon opens a category menu.
 - Git status dashboard for all Desktop repos. Polls git status every 10 seconds on daemon thread. GitHub Desktop launch and bulk push buttons on button strip.
 - `_has_depth_toggle = True`
 
-### The Stuff and Stuff (Tree)
+### Folder Structure (Tree)
 - **Type key:** `tree` | **Icon:** `iconTree`
 - **Files:** `nodes/TreeNode.py`, `data/TreeNodeData.py`
 - Project folder structure display via in-process tree walker. Respects gitignore and TOML filters. No subprocess or temp files.
