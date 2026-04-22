@@ -2240,6 +2240,47 @@ class IntricateApp(QMainWindow):
             "launch_claude_code": self._launch_claude_code,
         }
 
+    def _show_sidebar_menu(self, menu, btn) -> None:
+        """Execute a sidebar-category menu anchored below ``btn`` with a toggle-on-repeat guard.
+
+        Qt's default behaviour when the launcher button of an open popup is
+        clicked is to dismiss the popup AND then fire the button's clicked
+        signal — which re-enters the menu-show handler and immediately
+        re-opens the menu. That defeats the "click again to close" mental
+        model every other toggle in the app uses; users end up having to
+        click outside the menu just to reach the category button beneath
+        the open one.
+
+        The guard breaks that loop by:
+
+          1. On ``aboutToHide``, recording ``btn`` + timestamp IFF the
+             cursor is still inside ``btn`` — meaning the close was
+             triggered by clicking the launcher. Clicks outside the menu,
+             selected actions, and Esc dismissals leave the flag cleared,
+             so those paths keep their natural behaviour.
+          2. On subsequent show for the same ``btn`` within 150 ms,
+             swallowing the show and clearing the flag.
+
+        Both ``_show_category_menu`` and ``_show_info_menu`` route through
+        here so every sidebar button gets the same toggle behaviour.
+        """
+        import time
+        from PySide6.QtGui import QCursor
+
+        if (getattr(self, '_sidebar_menu_just_closed_for', None) is btn and
+                (time.time() - getattr(self, '_sidebar_menu_just_closed_time', 0.0)) < 0.15):
+            self._sidebar_menu_just_closed_for = None
+            return
+
+        def _on_hide(b=btn):
+            gp = QCursor.pos()
+            if b.rect().contains(b.mapFromGlobal(gp)):
+                self._sidebar_menu_just_closed_for = b
+                self._sidebar_menu_just_closed_time = time.time()
+        menu.aboutToHide.connect(_on_hide)
+
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
     def _show_category_menu(self, category: str, btn: QPushButton) -> None:
         """Build a category menu from node_registry.toml entries."""
         from utils.persistence import registry
@@ -2278,7 +2319,7 @@ class IntricateApp(QMainWindow):
             if handler and spawnable:
                 act.triggered.connect(handler)
 
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+        self._show_sidebar_menu(menu, btn)
 
     def _show_text_menu(self, btn):    self._show_category_menu("text", btn)
     def _show_images_menu(self, btn):  self._show_category_menu("images", btn)
@@ -2456,7 +2497,7 @@ class IntricateApp(QMainWindow):
         )
         audit_act.triggered.connect(self._run_image_stamp_audit)
 
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+        self._show_sidebar_menu(menu, btn)
     def _show_claude_menu(self, btn):  self._show_category_menu("claude", btn)
 
     # ─────────────────────────────────────────────────────────────────────────

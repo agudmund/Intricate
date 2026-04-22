@@ -462,12 +462,15 @@ class WarmNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _ensure_body_editor(self) -> None:
-        """Lazy-build the body PrettyEdit on first double-click in the
-        body zone.  Idempotent — subsequent calls are no-ops.  Uses the
-        smart-paste variant so a multi-paragraph paste auto-splits
-        into a chain of sibling WarmNodes (one per paragraph), and a
-        paste exceeding WARM_SPLIT_SAFETY_CEILING falls back to the
-        cascading chunker as a safety net."""
+        """Lazy-build the body PrettyEdit on first edit activation.
+        Idempotent — subsequent calls are no-ops.  Triggered from
+        ``mouseReleaseEvent`` (single-click-in-body gesture as of
+        2026-04-21) or from any other edit-request path that wants the
+        editor proxy live.  Uses the smart-paste variant so a
+        multi-paragraph paste auto-splits into a chain of sibling
+        WarmNodes (one per paragraph), and a paste exceeding
+        ``WARM_SPLIT_SAFETY_CEILING`` falls back to the cascading
+        chunker as a safety net."""
         if self._editor is not None:
             return
         # Caret height = tight bounds of lowercase 'l'.  Lato's ascent
@@ -945,28 +948,76 @@ class WarmNode(BaseNode):
         except Exception:
             pass
 
-    def mouseDoubleClickEvent(self, event) -> None:
-        """
-        Double-click zones:
+    def mousePressEvent(self, event) -> None:
+        """Arm a single-click → launch-editor gesture on unmodified left
+        clicks in the body zone.
 
-            Body zone   → lazy-build the inline editor, focus it
-            Elsewhere   → shelf toggle (BaseNode default)
+        The press is only ARMED if the click is a plain unmodified
+        left-click in the body zone — Shift/Ctrl clicks fall through to
+        Qt's default selection semantics. The actual editor launch fires
+        on ``mouseReleaseEvent`` so Qt's click-vs-drag distinction is
+        preserved: a drag (release with movement ≳ 4 px) moves the node,
+        a click (release within drag threshold of the press) opens the
+        editor.
+
+        Previously the editor was double-click activated. That made sense
+        while every WarmNode owned a live ``PrettyEdit`` from construction —
+        double-click was the "focus this one, since they're all already
+        loaded" gesture. After the 2026-04 lazy-per-node refactor the
+        editor is built on demand, so single-click is now the right cost
+        profile: clicking the node IS the request to edit it. On a populated
+        scene this also brings the sub-2-second 1200-node load number
+        forward into the interaction layer — the UX matches the new cost
+        model.
         """
-        if self._body_rect().contains(event.pos()):
-            # First double-click in the body builds the editor; subsequent
-            # double-clicks reuse the existing hidden editor (no rebuild).
-            self._ensure_body_editor()
-            if self.scene() and self.scene().views():
-                self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
-            # start_edit positions, shows, and focuses the proxy in one
-            # pass — the same flow AboutNode and TextNode use.
-            self._editor.start_edit(
-                _html_to_plain(self.data.body_text),
-                self._body_rect(),
-                select_all=False,
-            )
-            event.accept()
-            return
+        self._click_press_pos = None
+        if (event.button() == Qt.LeftButton
+                and event.modifiers() == Qt.NoModifier
+                and self._body_rect().contains(event.pos())):
+            self._click_press_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        """Release half of the single-click-to-edit gesture; see ``mousePressEvent``.
+
+        If the press was armed and the release lands within drag-threshold
+        of the press position, treat it as a click and launch the inline
+        editor. Otherwise Qt has already moved the node as a drag, and we
+        just defer to ``super()``.
+        """
+        if (event.button() == Qt.LeftButton
+                and self._click_press_pos is not None):
+            dx = event.pos().x() - self._click_press_pos.x()
+            dy = event.pos().y() - self._click_press_pos.y()
+            self._click_press_pos = None
+            # 4 px squared = 16; tighter than Qt's default drag distance
+            # so tiny drags don't get absorbed as clicks.
+            if (dx * dx + dy * dy) < 16.0:
+                self._ensure_body_editor()
+                if self.scene() and self.scene().views():
+                    self.scene().views()[0].setFocusPolicy(Qt.StrongFocus)
+                # start_edit positions, shows, and focuses the proxy in
+                # one pass — the same flow AboutNode and TextNode use.
+                self._editor.start_edit(
+                    _html_to_plain(self.data.body_text),
+                    self._body_rect(),
+                    select_all=False,
+                )
+                event.accept()
+                return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        """Double-click defers to BaseNode default.
+
+        The body-zone double-click that used to launch the inline editor
+        was retired on 2026-04-21 when the editor moved to single-click
+        activation (see ``mousePressEvent`` / ``mouseReleaseEvent``).
+        Keeping both would double-fire on a genuine double click, resetting
+        the editor mid-open. The top-strip double-click that toggles the
+        button shelf (emotions show/hide) is still handled by
+        ``BaseNode.mouseDoubleClickEvent`` via ``super()`` — unchanged.
+        """
         super().mouseDoubleClickEvent(event)
 
     def focusOutEvent(self, event) -> None:
