@@ -824,12 +824,23 @@ class IntricateApp(QMainWindow):
             self._start_meov()
         else:
             self._dock_watcher.stop()
+            # Defensive belt — a dock_anim (from _check_window_behind) can
+            # still be in flight when expand fires; left running, it fights
+            # the curtain_anim over the same `geometry` property. Stop it
+            # explicitly so the expand animation owns the channel.
+            if hasattr(self, '_dock_anim') and self._dock_anim is not None:
+                try:
+                    self._dock_anim.stop()
+                except RuntimeError:
+                    pass  # anim was already torn down
             self._stop_meov()
             # Clamp so the bottom edge never drops below the screen — and
             # keep the same _TASKBAR_TRIGGER_MARGIN that maximise reserves,
             # so the auto-hide taskbar trigger zone stays reachable after
             # the curtains roll back down.
-            avail = self.screen().availableGeometry()
+            screen = self.screen()
+            full   = screen.geometry()
+            avail  = screen.availableGeometry()
             effective_bottom = avail.bottom() - self._TASKBAR_TRIGGER_MARGIN
             max_height = effective_bottom - avail.top() + 1
             height = min(self.original_height, max_height)
@@ -837,6 +848,24 @@ class IntricateApp(QMainWindow):
             y = max(avail.top(), y)
             end_rect = QRect(start_rect.x(), y,
                              start_rect.width(), height)
+            # Diagnostic — the curtains bug on 2026-04-22 where expansion
+            # capped at a floating Explorer window's bottom rather than the
+            # real screen bottom. Captures every input to the height
+            # calculation so the next occurrence shows exactly which value
+            # went off (avail vs full screen geometry, original_height,
+            # end_rect actually planned). Only logs on expansion — low
+            # frequency, worth the context.
+            logger.debug(
+                "[curtains] expand → screen=%s full=%s avail=%s "
+                "reserved=%dpx original_h=%d max_h=%d → end=%s",
+                screen.name(),
+                (full.x(), full.y(), full.width(), full.height()),
+                (avail.x(), avail.y(), avail.width(), avail.height()),
+                full.height() - avail.height(),
+                self.original_height,
+                max_height,
+                (end_rect.x(), end_rect.y(), end_rect.width(), end_rect.height()),
+            )
             # ③ Show content AFTER animation exists but BEFORE start()
             self._sidebar_splitter.show()
 
