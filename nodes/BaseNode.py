@@ -1279,26 +1279,30 @@ class BaseNode(QGraphicsRectItem):
 
     def _measure_title_width(self) -> float:
         """Painted width of the current title, measured via QPainterPath
-        instead of QFontMetrics.horizontalAdvance.
+        and the EXACT same QFont construction the default paint_content
+        uses (line 1275: `QFont(Theme.aboutFontFamily, Theme.aboutFontSize)`
+        + setStyleName(self._TITLE_STYLE)).
 
-        QFontMetrics reads the font's advance table, which for certain
-        non-monospaced fonts (Chandler42 being a known friction point)
-        can over-report relative to the actual rendered ink — the
-        advance includes full per-glyph sidebearings even on the last
-        character, stacking trailing whitespace that never ends up
-        drawn. QPainterPath.addText() walks the actual glyph outlines
-        and returns the real painted bounds, which is what we want when
-        sizing the node to hug the title.
+        The historical bug this replaces: we were measuring with
+        `Theme.aboutFontSize + self._TITLE_FONT_BUMP` (18pt when the
+        user has [node.about] font_size = 12 in settings.toml), but
+        the default paint renders without the bump (12pt). That's a
+        1.5× overmeasurement, which propagates straight into the fit
+        formula — long titles get 1.5× more node width than they need.
+        See git history 2026-04-22 for the chase that found this.
 
-        Used by the title-fit paths (_auto_fit_title_width, TreeNode's
-        _auto_size). Keep QFontMetrics where it's reliable — height
-        metrics, simple ASCII advance in common fonts, etc. — but for
-        Chandler42 title sizing, QPainterPath is the honest measurement.
+        QPainterPath also avoids QFontMetrics' known friction with
+        non-monospaced fonts (Chandler42 being the reference case).
+
+        Subclasses that override paint_content with a different title
+        font size (e.g., AudioNode paints with +_TITLE_FONT_BUMP) must
+        override _measure_title_width to match — the measurement has
+        to track the paint, not the other way around.
         """
         if not self.data.title:
             return 0.0
         from PySide6.QtGui import QFont, QPainterPath
-        font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        font = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
         font.setStyleName(self._TITLE_STYLE)
         path = QPainterPath()
         path.addText(0, 0, font, self.data.title)
