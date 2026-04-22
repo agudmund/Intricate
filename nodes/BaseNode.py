@@ -1228,6 +1228,13 @@ class BaseNode(QGraphicsRectItem):
     _CONTENT_PAD     = 15.0   # horizontal padding for title/body text
     _TITLE_HEIGHT    = 40.0   # rect height allocated for title text
     _BODY_OFFSET     = 36.0   # px below title top where body text starts
+    # Right-side padding for the title rect. None = symmetric with the left
+    # pad (Theme.nodeTextPaddingLeft). Subclasses that auto-fit the node
+    # width to the title (WarmNode, TreeNode) override to a smaller int so
+    # the title can hug the right edge — left pad stays at the theme value,
+    # right pad is the tight number the subclass sets. Fit formulas must
+    # match exactly: needed = title_w + pad + _TITLE_RIGHT_PAD.
+    _TITLE_RIGHT_PAD: int | None = None
     _TITLE_FONT      = "Chandler42"
     _TITLE_STYLE     = "MediumOblique"   # Chandler42's pretty variant
     _TITLE_FONT_BUMP = 6      # added to Theme.aboutFontSize for title
@@ -1251,11 +1258,12 @@ class BaseNode(QGraphicsRectItem):
         """Text area below the button strip."""
         r   = self.rect()
         pad = Theme.nodeTextPaddingLeft
+        right_pad = pad if self._TITLE_RIGHT_PAD is None else self._TITLE_RIGHT_PAD
         top = self._content_top()
         return QRectF(
             r.left() + pad,
             r.top() + top,
-            r.width() - pad * 2,
+            r.width() - pad - right_pad,
             r.height() - self._anim_top_offset,
         )
 

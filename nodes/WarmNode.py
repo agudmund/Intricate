@@ -409,6 +409,12 @@ class WarmNode(BaseNode):
 
     _has_depth_toggle = True
 
+    # Tight right-side title padding — WarmNode auto-grows width to fit
+    # long titles (see _auto_fit_title_width). Left pad stays at the
+    # theme value for visual breathing; right pad hugs the title edge
+    # so wider titles don't get excess trailing blank space.
+    _TITLE_RIGHT_PAD = 4
+
     # Class-level shared font cache for body paint (matches AboutNode /
     # TextNode pattern).  All WarmNode idle bodies use the same font, so
     # one QFont + one QFontMetrics serve every instance rather than one
@@ -1091,12 +1097,12 @@ class WarmNode(BaseNode):
         fm = QFontMetrics(font)
         title_w = fm.horizontalAdvance(self.data.title)
         pad = Theme.nodeTextPaddingLeft
-        # title_w + pad*2 is the exact minimum — BaseNode's _title_rect
-        # already reserves `pad` on each side, so this gives the title
-        # precisely its own advance plus `pad` of visible breathing per
-        # edge. No extra trailing buffer; the old +8 was double-dipping
-        # on the breathing room _title_rect already provides.
-        needed = int(title_w + pad * 2)
+        # Tighten right-side: left pad for visual breathing, right pad
+        # follows _TITLE_RIGHT_PAD so the title hugs the right edge.
+        # Must match BaseNode._title_rect's right_pad — both derived
+        # from the same class constant.
+        right_pad = pad if self._TITLE_RIGHT_PAD is None else self._TITLE_RIGHT_PAD
+        needed = int(title_w + pad + right_pad)
         if needed > r.width():
             self.prepareGeometryChange()
             self.setRect(QRectF(r.x(), r.y(), needed, r.height()))
