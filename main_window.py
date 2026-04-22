@@ -1758,8 +1758,8 @@ class IntricateApp(QMainWindow):
         self._sleep_btn.setStyleSheet("QPushButton { border: none; padding: 0px; background: transparent; }")
         # Awake-state sticker — trio of hearts in the upper-left, echoing the
         # Thingaling heart above; at 24px it reads as a quiet corner accent.
-        # The sleeping-state sticker (eye mask) is a pending follow-up — until
-        # it lands, _sleep_joy falls back to the ☀️ glyph.
+        # The paired sleeping-state sticker (purple sleep mask) is swapped in
+        # by _sleep_joy when the joy system goes to sleep.
         self._sleep_btn.setIcon(QIcon(Theme.icon(Theme.iconAwakeIconic, fallback_color="#d87a9e")))
         self._sleep_btn.setIconSize(QSize(24, 24))
         self._sleep_btn.setToolTip("Tuck me in")
@@ -1886,10 +1886,7 @@ class IntricateApp(QMainWindow):
         self._joy_sleeping = True
         self._joy_timer.setInterval(self._JOY_SLEEP_INTERVAL)
         self._joy_timer.start()          # restart with new interval
-        # Sleeping-state sticker pending — fall back to the ☀️ glyph for now,
-        # clear the awake icon so text isn't shown beside a stale icon.
-        self._sleep_btn.setIcon(QIcon())
-        self._sleep_btn.setText("\u2600\ufe0f")  # ☀️ — press to wake
+        self._sleep_btn.setIcon(QIcon(Theme.icon(Theme.iconSleepingIconic, fallback_color="#9a7abf")))
         self._sleep_btn.setToolTip("Wake me up")
 
     def _wake_joy(self) -> None:
