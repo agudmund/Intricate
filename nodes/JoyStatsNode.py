@@ -11,9 +11,14 @@ import time
 from PySide6.QtCore import Qt, QRectF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
 
+import traceback
+
 from nodes.ChromelessRoot import ChromelessRoot
 from data.JoyStatsNodeData import JoyStatsNodeData
 from pretty_widgets.graphics.Theme import Theme
+from pretty_widgets.utils.logger import setup_logger
+
+_log = setup_logger("joy_stats")
 
 
 class JoyStatsNode(ChromelessRoot):
@@ -53,11 +58,17 @@ class JoyStatsNode(ChromelessRoot):
             data = JoyStatsNodeData()
         super().__init__(data)
 
+        _log.info("[joy-init] JoyStatsNode __init__ entered (uuid=%s)",
+                  getattr(data, 'uuid', '?')[:8])
+
         # 1-second poll — matches the happy accumulator tick rate
         self._poll_timer = QTimer()
         self._poll_timer.setInterval(1000)
         self._poll_timer.timeout.connect(self._refresh)
         self._poll_timer.start()
+
+        _log.info("[joy-init] JoyStatsNode __init__ complete (uuid=%s)",
+                  getattr(data, 'uuid', '?')[:8])
 
     # ─────────────────────────────────────────────────────────────────────────
     # COLOR + REFRESH
@@ -75,11 +86,14 @@ class JoyStatsNode(ChromelessRoot):
     def _refresh(self) -> None:
         """Timer slot — force a repaint so stats stay fresh. Orphan-timer
         guard via self.scene() probe, matching the BaseNode pattern."""
+        _log.debug("[joy-refresh] %s tick", self._log_id())
         try:
             if self.scene() is None:
+                _log.debug("[joy-refresh] %s no scene, skipping", self._log_id())
                 return
         except RuntimeError:
-            # C++ side gone — stop ourselves so we can't fire again.
+            _log.warning("[joy-refresh] %s RuntimeError on scene() — C++ side gone, stopping timer",
+                         self._log_id())
             try:
                 self._poll_timer.stop()
                 self._poll_timer.timeout.disconnect()
@@ -89,6 +103,8 @@ class JoyStatsNode(ChromelessRoot):
         try:
             self.update()
         except RuntimeError:
+            _log.warning("[joy-refresh] %s RuntimeError on update() — stopping timer",
+                         self._log_id())
             self._poll_timer.stop()
 
     def _get_window(self):
@@ -109,6 +125,8 @@ class JoyStatsNode(ChromelessRoot):
         """Full paint pipeline — background rect, then title + stats
         via paint_content. ChromelessRoot's paint() is empty by design,
         so every descendant owns its own rendering."""
+        _log.debug("[joy-paint] %s paint() entered (removal_done=%s)",
+                   self._log_id(), getattr(self, '_removal_done', '?'))
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
         # Rounded rect body so the stats text is readable against the canvas.
@@ -225,6 +243,16 @@ class JoyStatsNode(ChromelessRoot):
     # the poll timer on scene-leave. ChromelessRoot.itemChange hands
     # off to the same crew that BaseNode uses.
     _demolition_timers = [('_poll_timer', '_refresh')]
+
+    def _demolition_pre(self) -> None:
+        """Log entry/exit around the teardown so the cross-node-destruction
+        incident (2026-04-22) leaves a full paper trail. super() does the
+        pin disconnect; we log around it."""
+        _log.info("[joy-demolish] %s _demolition_pre ENTER", self._log_id())
+        _log.info("[joy-demolish] %s call stack:\n%s",
+                  self._log_id(), "".join(traceback.format_stack()[-15:]))
+        super()._demolition_pre()
+        _log.info("[joy-demolish] %s _demolition_pre DONE", self._log_id())
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION
