@@ -297,9 +297,9 @@ class AudioNode(BaseNode):
         self._split_btn.setToolTip("Split at playhead")
         self._buttons.append(self._split_btn)
 
-        # Loop toggle — sticker icons: direct arrow (off) / loop arrow (on)
-        loop_off_pix = Theme.icon(Theme.iconDirectAudio, fallback_color="#9a7abf")
-        loop_on_pix  = Theme.icon(Theme.iconLoopAudio,   fallback_color="#9a7abf")
+        # Loop toggle — sticker icons: return arrow (off / direct playback) / loop arrow (on)
+        loop_off_pix = Theme.icon(Theme.iconReturnIconic, fallback_color="#9a7abf")
+        loop_on_pix  = Theme.icon(Theme.iconLoopAudio,    fallback_color="#9a7abf")
         self._loop_btn = NodeButton(
             self, loop_off_pix, self._toggle_loop,
             pixmap_confirm=loop_on_pix, toggle=True,
