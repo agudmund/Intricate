@@ -137,10 +137,14 @@ class ChromelessRoot(QGraphicsRectItem):
                     data.pinned, data.z_value)
 
         # Restore pin state if the data says so — deferred one tick so
-        # scene/view are fully constructed by the time we ask.
+        # scene/view are fully constructed by the time we ask. Critical:
+        # pass from_saved_vp=True so the saved pin_vp coords are HONOURED
+        # rather than overwritten from the current (possibly pre-camera-
+        # restore) view transform. See _activate_pin for the rationale.
         if data.pinned:
-            logger.info("[chrome-init] %s scheduling pin restore", self._log_id())
-            QTimer.singleShot(0, self._activate_pin)
+            logger.info("[chrome-init] %s scheduling pin restore (saved vp=%.1f,%.1f)",
+                        self._log_id(), data.pin_vp_x, data.pin_vp_y)
+            QTimer.singleShot(0, lambda: self._activate_pin(from_saved_vp=True))
 
     # ─────────────────────────────────────────────────────────────────────────
     # LOGGING IDENTITY
@@ -265,23 +269,53 @@ class ChromelessRoot(QGraphicsRectItem):
         else:
             self._activate_pin()
 
-    def _activate_pin(self) -> None:
-        """Pin to current viewport position — disable dragging, record
-        viewport anchor, start tracking pan/zoom."""
-        logger.info("[chrome-pin] %s ACTIVATE", self._log_id())
+    def _activate_pin(self, from_saved_vp: bool = False) -> None:
+        """Pin to a viewport position — two callers with different needs:
+
+        User-initiated (``from_saved_vp=False``): the node sits at some
+        on-screen position the user wants to freeze. Compute pin_vp
+        from the current scene pos through the current view transform
+        and store it.
+
+        Session restore (``from_saved_vp=True``): the data already
+        carries valid pin_vp coords from when the session was saved.
+        DO NOT overwrite them — the view transform at restore time may
+        not yet be the saved camera (camera restore is also QTimer-
+        deferred), so mapFromScene(self.pos()) would produce garbage
+        pin_vp values. Instead, connect tracking and immediately apply
+        the saved pin_vp to the scene pos so the node lands where it
+        was pinned regardless of viewTransformed timing.
+
+        2026-04-22 bug: restore path was always overwriting pin_vp on
+        load, causing pinned stickers to vanish off-screen after an
+        app restart. Fixed by the two-path split.
+        """
+        logger.info("[chrome-pin] %s ACTIVATE from_saved_vp=%s", self._log_id(), from_saved_vp)
         self.data.pinned = True
         self.setFlag(QGraphicsItem.ItemIsMovable, False)
         view = self._get_view()
-        if view:
+        if view is None:
+            logger.warning("[chrome-pin] %s ACTIVATE called but no view available",
+                           self._log_id())
+            return
+        if not from_saved_vp:
+            # User-initiated — anchor to the current on-screen position.
             vp_pos = view.mapFromScene(self.pos())
             self.data.pin_vp_x = vp_pos.x()
             self.data.pin_vp_y = vp_pos.y()
-            self._connect_viewport_tracking(view)
-            logger.info("[chrome-pin] %s ACTIVATE done — vp=(%.1f,%.1f)",
-                        self._log_id(), vp_pos.x(), vp_pos.y())
+            logger.info("[chrome-pin] %s ACTIVATE wrote pin_vp=(%.1f,%.1f) from current pos",
+                        self._log_id(), self.data.pin_vp_x, self.data.pin_vp_y)
         else:
-            logger.warning("[chrome-pin] %s ACTIVATE called but no view available",
-                           self._log_id())
+            logger.info("[chrome-pin] %s ACTIVATE preserving saved pin_vp=(%.1f,%.1f)",
+                        self._log_id(), self.data.pin_vp_x, self.data.pin_vp_y)
+        self._connect_viewport_tracking(view)
+        if from_saved_vp:
+            # Apply the saved anchor immediately — can't rely on a
+            # viewTransformed emission firing after we connected, because
+            # camera restore may have fired it before this call ran.
+            self._on_viewport_changed()
+            logger.info("[chrome-pin] %s ACTIVATE applied saved anchor → scene_pos=(%.1f,%.1f)",
+                        self._log_id(), self.pos().x(), self.pos().y())
 
     def _deactivate_pin(self) -> None:
         """Unpin — node becomes draggable again and moves with the canvas."""
@@ -366,8 +400,10 @@ class ChromelessRoot(QGraphicsRectItem):
         """
         logger.info("[chrome-SHAKE] %s SHAKE TRIGGERED (already_triggered=%s removal_done=%s)",
                     self._log_id(), self._shake_triggered, self._removal_done)
-        logger.info("[chrome-SHAKE] %s call stack:\n%s",
-                    self._log_id(), "".join(traceback.format_stack()[-12:]))
+        for i, frame in enumerate(traceback.format_stack()[-12:]):
+            for line in frame.rstrip().splitlines():
+                logger.info("[chrome-SHAKE] %s   stack[%02d] %s",
+                            self._log_id(), i, line)
         if self._shake_triggered:
             logger.info("[chrome-SHAKE] %s BAIL — already triggered", self._log_id())
             return
@@ -414,10 +450,16 @@ class ChromelessRoot(QGraphicsRectItem):
             # THIS is the destructive path — log it loudly with a stack
             # trace so the next cross-node-destruction incident shows
             # exactly what called Qt into telling us we're leaving.
+            # Each frame emitted as its own log line because the
+            # Rust-backed logger truncates on newline (one log call =
+            # one line written). Multi-line stack traces collapse to
+            # just the first frame otherwise.
             logger.info("[chrome-DEMOLISH] %s SCENE-LEAVE detected — calling demolish()",
                         self._log_id())
-            logger.info("[chrome-DEMOLISH] %s call stack:\n%s",
-                        self._log_id(), "".join(traceback.format_stack()[-20:]))
+            for i, frame in enumerate(traceback.format_stack()[-20:]):
+                for line in frame.rstrip().splitlines():
+                    logger.info("[chrome-DEMOLISH] %s   stack[%02d] %s",
+                                self._log_id(), i, line)
             self._removal_done = True
             try:
                 from nodes._demolition import demolish

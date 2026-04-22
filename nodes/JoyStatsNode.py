@@ -247,10 +247,13 @@ class JoyStatsNode(ChromelessRoot):
     def _demolition_pre(self) -> None:
         """Log entry/exit around the teardown so the cross-node-destruction
         incident (2026-04-22) leaves a full paper trail. super() does the
-        pin disconnect; we log around it."""
+        pin disconnect; we log around it. Stack emitted frame-by-frame —
+        the Rust logger truncates on embedded newlines."""
         _log.info("[joy-demolish] %s _demolition_pre ENTER", self._log_id())
-        _log.info("[joy-demolish] %s call stack:\n%s",
-                  self._log_id(), "".join(traceback.format_stack()[-15:]))
+        for i, frame in enumerate(traceback.format_stack()[-15:]):
+            for line in frame.rstrip().splitlines():
+                _log.info("[joy-demolish] %s   stack[%02d] %s",
+                          self._log_id(), i, line)
         super()._demolition_pre()
         _log.info("[joy-demolish] %s _demolition_pre DONE", self._log_id())
 
