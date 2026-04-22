@@ -1090,12 +1090,10 @@ class WarmNode(BaseNode):
         nothing changes."""
         if not self.data.title:
             return
-        from PySide6.QtGui import QFont, QFontMetrics
         r = self.rect()
-        font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
-        font.setStyleName(self._TITLE_STYLE)
-        fm = QFontMetrics(font)
-        title_w = fm.horizontalAdvance(self.data.title)
+        # QPainterPath via _measure_title_width — avoids QFontMetrics'
+        # known friction with non-monospaced fonts (Chandler42).
+        title_w = self._measure_title_width()
         pad = Theme.nodeTextPaddingLeft
         # Tighten right-side: left pad for visual breathing, right pad
         # follows _TITLE_RIGHT_PAD so the title hugs the right edge.

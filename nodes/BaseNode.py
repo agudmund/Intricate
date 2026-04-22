@@ -1267,6 +1267,33 @@ class BaseNode(QGraphicsRectItem):
             r.height() - self._anim_top_offset,
         )
 
+    def _measure_title_width(self) -> float:
+        """Painted width of the current title, measured via QPainterPath
+        instead of QFontMetrics.horizontalAdvance.
+
+        QFontMetrics reads the font's advance table, which for certain
+        non-monospaced fonts (Chandler42 being a known friction point)
+        can over-report relative to the actual rendered ink — the
+        advance includes full per-glyph sidebearings even on the last
+        character, stacking trailing whitespace that never ends up
+        drawn. QPainterPath.addText() walks the actual glyph outlines
+        and returns the real painted bounds, which is what we want when
+        sizing the node to hug the title.
+
+        Used by the title-fit paths (_auto_fit_title_width, TreeNode's
+        _auto_size). Keep QFontMetrics where it's reliable — height
+        metrics, simple ASCII advance in common fonts, etc. — but for
+        Chandler42 title sizing, QPainterPath is the honest measurement.
+        """
+        if not self.data.title:
+            return 0.0
+        from PySide6.QtGui import QFont, QPainterPath
+        font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        font.setStyleName(self._TITLE_STYLE)
+        path = QPainterPath()
+        path.addText(0, 0, font, self.data.title)
+        return path.boundingRect().width()
+
     def paint_content(self, painter: QPainter):
         """
         Specialist paint handoff — override in subclasses.

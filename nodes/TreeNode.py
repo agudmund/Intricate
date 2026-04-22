@@ -665,12 +665,10 @@ class TreeNode(BaseNode):
         extra trailing buffer needed."""
         if not self.data.title:
             return
-        from PySide6.QtGui import QFont, QFontMetrics
         r = self.rect()
-        font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
-        font.setStyleName(self._TITLE_STYLE)
-        fm = QFontMetrics(font)
-        title_w = fm.horizontalAdvance(self.data.title)
+        # QPainterPath via _measure_title_width — avoids QFontMetrics'
+        # known friction with non-monospaced fonts (Chandler42).
+        title_w = self._measure_title_width()
         pad = Theme.nodeTextPaddingLeft
         # Must match BaseNode._title_rect's right_pad — both derived
         # from the _TITLE_RIGHT_PAD class constant.
@@ -703,12 +701,12 @@ class TreeNode(BaseNode):
         # Title width budget — left pad plus tight right pad per
         # _TITLE_RIGHT_PAD, matching _auto_fit_title_width and
         # BaseNode._title_rect exactly. Does NOT include TOOLBAR_W — the
-        # title sits above the toolbar, not beside it.
-        from PySide6.QtGui import QFont, QFontMetrics
-        title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        # title sits above the toolbar, not beside it. Uses
+        # _measure_title_width (QPainterPath) instead of QFontMetrics —
+        # Chandler42 friction point.
         title_pad = Theme.nodeTextPaddingLeft
         title_right_pad = title_pad if self._TITLE_RIGHT_PAD is None else self._TITLE_RIGHT_PAD
-        title_w = QFontMetrics(title_font).horizontalAdvance(self.data.title) + title_pad + title_right_pad
+        title_w = self._measure_title_width() + title_pad + title_right_pad
 
         # Width is title-driven only. Body content (tree lines) does NOT
         # widen the node — the body keeps the default width, and long
