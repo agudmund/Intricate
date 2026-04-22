@@ -56,14 +56,6 @@ Built with PySide6. Frameless, always-on-top, infinite zoomable canvas. Part of 
       ├── 📁 data/
       │     ├── 📄 NodeData.py     — base dataclass (no Qt)
       │     └── 📄 *NodeData.py    — one per node type, to_dict/from_dict
-      ├── 📁 widgets/
-      │     ├── 📄 PrettyButton.py — themed button with hover animation
-      │     ├── 📄 PrettyCombo.py  — themed combo box
-      │     ├── 📄 PrettySlider.py — themed slider with PNG handle support
-      │     ├── 📄 PrettyEdit.py   — inline text editor with selection highlight
-      │     ├── 📄 PrettyMenu.py   — styled context menus and text inputs
-      │     ├── 📄 PrettyLabel.py  — themed label
-      │     └── 📄 NoteEditor.py   — full note editing dialog
       └── 📁 utils/
             ├── 📄 settings.py     — TOML loader + file watcher
             ├── 📄 session.py      — save/load, rotation, checksum, migration

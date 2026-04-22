@@ -58,9 +58,6 @@ Every Python file must have this exact 3-line docstring header:
       ├── 📁 data/
       │     ├── 📄 NodeData.py       — base dataclass, no Qt
       │     └── 📄 XxxNodeData.py    — one per node type, state + serialization
-      ├── 📁 widgets/
-      │     ├── 📄 NoteEditor.py     — text editor dialog
-      │     └── 📄 PrettyButton.py   — themed button
       └── 📁 utils/
             ├── 📄 settings.py       — TOML loader + file watcher
             ├── 📄 logger.py         — 3-slot rotating log
@@ -279,7 +276,7 @@ Current sections:
 
 ## Pretty Widgets Package
 
-The `widgets/` directory in this repo contains **local copies** of the Pretty Widgets, but the **source of truth** is the shared pip package:
+All shared widgets for the Single Shared Braincell app family live in a separate pip package. Intricate imports them as `pretty_widgets.*` — there are no local copies in this repo.
 
 - **Repo:** https://github.com/agudmund/Pretty-Widgets
 - **Local path:** `C:\Users\thisg\Desktop\Pretty Widgets`
@@ -287,11 +284,12 @@ The `widgets/` directory in this repo contains **local copies** of the Pretty Wi
 - **Package name:** `pretty_widgets`
 - **Version check:** `python -c "import pretty_widgets; print(pretty_widgets.__version__)"`
 
-The package contains: PrettyButton, PrettyLabel, PrettyMenu, PrettyCombo, PrettySlider, PrettyCheckbox, and PrettyEdit. All seven widgets are shared across the Single Shared Braincell app family (Intricate, Notepad++ Duplex+ Turbo, and future apps).
+The package is self-contained — Theme, logger, and settings live inside it alongside the widget classes. Current exports:
 
-The widgets depend on `graphics.Theme` and `utils.settings` from the consuming app — those modules are not part of the package yet (planned for a future consolidation).
+- **Widgets** — `PrettyButton`, `PrettyLabel`, `PrettyMenu`, `PrettyCombo`, `PrettySlider`, `PrettyCheckbox`, `PrettyEdit`, `PrettyCaret`, `PrettyPill`, `PrettyTooltip`
+- **Shared infrastructure** — `pretty_widgets.graphics.Theme`, `pretty_widgets.utils.logger`, `pretty_widgets.utils.settings`
 
-If you see `widgets/PrettyButton.py` etc. in this repo but need to understand why they might be out of date, check the package version against the repo. The package is the canonical version.
+If a widget is behaving unexpectedly in Intricate, check the package's version and git log — the package is the canonical source.
 
 ## Cross-App Environment Variables
 
