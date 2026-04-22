@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - nodes/StickerNode.py StickerNode root type
--A first-class root of its own, no BaseNode inheritance, just image and canvas
+-Intricate - nodes/StickerNode.py StickerNode class
+-Chromeless alpha-PNG sticker — first descendant of ChromelessRoot for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -14,19 +14,22 @@ from PySide6.QtGui import QPainter, QPainterPath, QPixmap, QImage
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem, QFileDialog
 
 from data.StickerNodeData import StickerNodeData
+from nodes.ChromelessRoot import ChromelessRoot
+from nodes._shake_detect import arm_cooldown
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.utils.logger import setup_logger
-from nodes._shake_detect import ShakeDetector, arm_cooldown
 
 logger = setup_logger("sticker")
 
 
-class StickerNode(QGraphicsRectItem):
+class StickerNode(ChromelessRoot):
     """
-    Frameless, chromeless PNG sticker.  First-class root type — does NOT
-    inherit from BaseNode.  Stands as the reference implementation for
-    future raw-image-style nodes (postcards, patches, cut-outs) that want
-    the canvas integration without the structural-node apparatus.
+    Frameless, chromeless PNG sticker. First descendant of ChromelessRoot
+    (which carries the viewport-pin + shake-detect + right-click-menu
+    machinery all chromeless nodes share). Stands as the reference
+    implementation for future raw-image-style nodes (postcards, patches,
+    cut-outs) that want the canvas integration without the structural-
+    node apparatus.
 
     No buttons, no border, no caption — just the image with its alpha
     channel composited directly onto the canvas.  Double-click an empty
@@ -73,43 +76,25 @@ class StickerNode(QGraphicsRectItem):
     def __init__(self, data: StickerNodeData | None = None):
         if data is None:
             data = StickerNodeData()
-        super().__init__(QRectF(0, 0, data.width, data.height))
-        self.setPos(data.x, data.y)
+        # Root handles: pos, z, flags, pin state, shake detector,
+        # _removal_done, connections list, pin-restore timer.
+        super().__init__(data)
 
-        self.data = data
-        # `connections` stays empty for the lifetime of a sticker — they
-        # have no ports — but the attribute must exist because graphics/
-        # Connection.py and the scene's chain-select walkers duck-type on
-        # it.  An empty list is the safest possible presence.
-        self.connections: list = []
-
-        # Teardown guards (shared contract with BaseNode variants)
-        self._removal_done = False
+        # Sticker-specific state the root doesn't know about.
         self._pending_shake_delete = False
-
-        # Resize-at-corner state
         self._is_resizing       = False
         self._resize_start_pos  = QPointF()
         self._resize_start_rect = QRectF()
-
-        # Composed shake detector — stickers use the same physical feel
-        # and shared cooldown as every other shake-delete in the app.
-        self._shake = ShakeDetector(on_shake=self._on_shake_triggered)
-
-        # Image + pin state
         self._pixmap: QPixmap | None = None
-        self._pin_connected = False
 
-        # Qt flags — movable + selectable by default, disabled only while
-        # pinned.  ItemSendsScenePositionChanges so itemChange sees moves.
-        self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
-        self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
-
-        # No border, no fill — load-bearing for the alpha click-through.
+        # Alpha-click-through requires no fill / no border + no Qt caching
+        # so every repaint reads the current alpha channel honestly.
         self.setBrush(Qt.NoBrush)
         self.setPen(Qt.NoPen)
         self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+
+        # Apply StickerNode's z-floor — setZValue is overridden to enforce
+        # the floor on every subsequent setZValue call too.
         self.setZValue(max(data.z_value, self._Z_FLOOR))
 
         # Load image with cache-first hierarchy:
@@ -125,21 +110,6 @@ class StickerNode(QGraphicsRectItem):
             self._load_from_path(data.source_path)
         elif data.image_b64:
             self._load_from_b64(data.image_b64)
-
-        # Pinned stickers track the viewport — re-establish the pin once
-        # the scene / view are fully constructed.
-        if data.pinned:
-            QTimer.singleShot(0, self._activate_pin)
-
-    # ── Node-like contract ───────────────────────────────────────────────────
-
-    def sync_data(self) -> None:
-        """Fold current geometry back into the dataclass."""
-        self.data.x = self.pos().x()
-        self.data.y = self.pos().y()
-        self.data.width  = self.rect().width()
-        self.data.height = self.rect().height()
-        self.data.z_value = self.zValue()
 
     # ── Z depth ──────────────────────────────────────────────────────────────
 
@@ -296,12 +266,15 @@ class StickerNode(QGraphicsRectItem):
         event.accept()
 
     def mousePressEvent(self, event):
+        # Right-click → root handles the pin context menu via its own
+        # mousePressEvent path. Defer cleanly so _extra_context_menu_items
+        # gets its chance for sticker-only entries (currently none).
         if event.button() == Qt.RightButton:
-            self._show_context_menu(event)
-            event.accept()
+            super().mousePressEvent(event)
             return
         if event.button() == Qt.LeftButton:
-            # Corner resize-grip hit test
+            # Corner resize-grip hit test — sticker-specific bespoke
+            # gesture, claim the event before super() arms shake-detect.
             rect = self.rect()
             handle = QRectF(rect.right()  - self._RESIZE_GRIP,
                             rect.bottom() - self._RESIZE_GRIP,
@@ -317,28 +290,14 @@ class StickerNode(QGraphicsRectItem):
             view = self._get_view()
             if view:
                 view.setCursor(Qt.BlankCursor)
-            # Arm the shake detector for the duration of this drag.
-            self._shake.press()
+        # Defer shake-arm and drag plumbing to the root.
         super().mousePressEvent(event)
 
-    def _show_context_menu(self, event) -> None:
-        """Right-click menu. Pin toggle is the primary action — discoverable,
-        checkable, matches the Intricate voice (PrettyMenu chrome)."""
-        from pretty_widgets.PrettyMenu import menu as pretty_menu
-        ctx = pretty_menu()
-        pin_action = ctx.addAction("Pin to Viewport")
-        pin_action.setCheckable(True)
-        pin_action.setChecked(self.data.pinned)
-        pin_action.triggered.connect(self._toggle_pin)
-        # Map the scene-space event position to the screen for the menu.
-        view = self._get_view()
-        if view:
-            screen_pos = view.mapToGlobal(
-                view.mapFromScene(event.scenePos())
-            )
-        else:
-            screen_pos = event.screenPos()
-        ctx.exec(screen_pos)
+    def _extra_context_menu_items(self, ctx) -> None:
+        """StickerNode has no extra context-menu entries right now —
+        pin is the only action. Hook is declared so future additions
+        (reload image, re-centre, etc.) land here."""
+        pass
 
     def mouseMoveEvent(self, event):
         if self._is_resizing:
@@ -353,23 +312,12 @@ class StickerNode(QGraphicsRectItem):
             self.update()
             event.accept()
             return
+        # Root handles super() + shake tracking.
         super().mouseMoveEvent(event)
-        # Feed the shake detector with the post-move scene position + the
-        # view's current zoom so shake threshold is zoom-independent.
-        zoom = 1.0
-        scene = self.scene()
-        if scene and scene.views():
-            zoom = getattr(scene.views()[0], 'current_zoom', 1.0)
-        self._shake.track(self.scenePos(), zoom)
 
     def mouseReleaseEvent(self, event):
         self._is_resizing = False
-        self._shake.release()
-        # Sync geometry back to the dataclass now that the gesture ended.
-        self.data.x = self.pos().x()
-        self.data.y = self.pos().y()
-        self.data.width  = self.rect().width()
-        self.data.height = self.rect().height()
+        # Root syncs geometry + calls shake.release().
         super().mouseReleaseEvent(event)
         if event.button() == Qt.LeftButton:
             view = self._get_view()
@@ -442,89 +390,6 @@ class StickerNode(QGraphicsRectItem):
             sprinkle(scene, center, count=8000)
         self._pending_shake_delete = True
 
-    # ── Viewport pinning ─────────────────────────────────────────────────────
-
-    def _toggle_pin(self) -> None:
-        if self.data.pinned:
-            self._deactivate_pin()
-        else:
-            self._activate_pin()
-
-    def _activate_pin(self) -> None:
-        """Pin the sticker to its current viewport position."""
-        self.data.pinned = True
-        self.setFlag(QGraphicsItem.ItemIsMovable, False)
-        view = self._get_view()
-        if view:
-            vp_pos = view.mapFromScene(self.pos())
-            self.data.pin_vp_x = vp_pos.x()
-            self.data.pin_vp_y = vp_pos.y()
-            self._connect_viewport_tracking(view)
-
-    def _deactivate_pin(self) -> None:
-        """Unpin — sticker becomes draggable again and moves with the canvas."""
-        self.data.pinned = False
-        self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self._disconnect_viewport_tracking()
-
-    def _connect_viewport_tracking(self, view) -> None:
-        if self._pin_connected:
-            return
-        # Primary channel: the view declares its transform changes directly.
-        # Pan-by-translate and wheel-zoom both mutate the transform without
-        # moving the scrollbars, so this is the signal that actually fires
-        # during normal canvas navigation.
-        if hasattr(view, 'viewTransformed'):
-            view.viewTransformed.connect(self._on_viewport_changed)
-        # Secondary channel: scrollbars. Only ever move when the scene rect
-        # grows past the viewport — rare, but free to keep wired as backup.
-        view.horizontalScrollBar().valueChanged.connect(self._on_viewport_changed)
-        view.verticalScrollBar().valueChanged.connect(self._on_viewport_changed)
-        self._pin_connected = True
-
-    def _disconnect_viewport_tracking(self) -> None:
-        if not self._pin_connected:
-            return
-        view = self._get_view()
-        if view:
-            if hasattr(view, 'viewTransformed'):
-                try:
-                    view.viewTransformed.disconnect(self._on_viewport_changed)
-                except (RuntimeError, TypeError):
-                    pass
-            try:
-                view.horizontalScrollBar().valueChanged.disconnect(self._on_viewport_changed)
-                view.verticalScrollBar().valueChanged.disconnect(self._on_viewport_changed)
-            except (RuntimeError, TypeError):
-                pass
-        self._pin_connected = False
-
-    def _on_viewport_changed(self, _value=None) -> None:
-        """Canvas transform moved — remap the sticker back to its recorded
-        viewport coordinate so it stays anchored in screen space."""
-        # Signal-destructor race guard.  A transform tick firing into a
-        # sticker mid-teardown tripped 0xc0000409 (Qt fastfail) on
-        # 2026-04-18; leave these checks in place.
-        import shiboken6
-        if not shiboken6.isValid(self):
-            return
-        scene = self.scene()
-        if scene is None or getattr(scene, '_bulk_removing', 0) > 0:
-            return
-        if self._removal_done:
-            return
-        view = self._get_view()
-        if not view:
-            return
-        scene_pos = view.mapToScene(int(self.data.pin_vp_x), int(self.data.pin_vp_y))
-        self.setPos(scene_pos)
-
-    def _get_view(self):
-        scene = self.scene()
-        if scene and scene.views():
-            return scene.views()[0]
-        return None
-
     # ── Paint ────────────────────────────────────────────────────────────────
 
     def paint(self, painter, option, widget=None):
@@ -562,16 +427,9 @@ class StickerNode(QGraphicsRectItem):
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
-    def itemChange(self, change, value):
-        if (change == QGraphicsRectItem.GraphicsItemChange.ItemSceneChange
-                and value is None and not self._removal_done):
-            # StickerNode is its own root (not a BaseNode subclass), but
-            # it still hands off to the same demolition crew.  The crew
-            # tolerates missing connections / behaviour / buttons / ports
-            # and just runs the parts of the standard sequence that apply.
-            from nodes._demolition import demolish
-            demolish(self)
-        return super().itemChange(change, value)
+    # itemChange — ChromelessRoot handles scene-leave via the demolition
+    # crew. Root also holds _removal_done + the _on_viewport_changed
+    # race guard that used to live here.
 
     def _quiet_for_shake(self) -> None:
         """Synchronously silence viewport tracking before the deferred-
@@ -582,9 +440,9 @@ class StickerNode(QGraphicsRectItem):
         self._disconnect_viewport_tracking()
 
     def _demolition_pre(self) -> None:
-        """Sever viewport tracking signals and release the pixmap
+        """Sever viewport tracking (via super) and release the pixmap
         buffer before the crew runs its standard sequence."""
-        self._disconnect_viewport_tracking()
+        super()._demolition_pre()
         self._pixmap = None
 
     # ── Serialization ────────────────────────────────────────────────────────

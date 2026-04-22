@@ -69,6 +69,17 @@ class ChromelessRoot(QGraphicsRectItem):
         self.setPos(data.x, data.y)
         self.setZValue(data.z_value)
 
+        # `connections` stays empty for the lifetime of a chromeless
+        # node by default — most of them have no ports. The attribute
+        # must exist because graphics/Connection.py and the scene's
+        # chain-select walkers duck-type on it. Subclasses with real
+        # ports (ValueNode) manage this list themselves.
+        self.connections: list = []
+
+        # Teardown guards — matches the StickerNode contract shared with
+        # the demolition crew.
+        self._removal_done = False
+
         # Shake-delete detector — composition, not inheritance. Every
         # chromeless node participates in the shake gesture by default;
         # subclasses can override _on_shake_triggered to customise the
@@ -238,6 +249,8 @@ class ChromelessRoot(QGraphicsRectItem):
         import shiboken6
         if not shiboken6.isValid(self):
             return
+        if self._removal_done:
+            return
         scene = self.scene()
         if scene is None or getattr(scene, '_bulk_removing', 0) > 0:
             return
@@ -282,24 +295,31 @@ class ChromelessRoot(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     def itemChange(self, change, value):
-        """Hook scene-leave to trigger our teardown sequence.
+        """Hook scene-leave to trigger the demolition crew.
 
         QGraphicsRectItem doesn't know about ``_prepare_for_removal`` —
-        that's BaseNode's contract. For chromeless nodes we use the
+        that's BaseNode's contract. Chromeless nodes use the
         ``ItemSceneChange`` event: when ``value`` is None the item is
-        leaving its scene, and that's our cue to fire ``_demolition_pre``
-        for viewport tracking disconnect + subclass cleanup.
+        leaving its scene. We hand off to the shared demolition crew
+        (same one BaseNode uses), which tolerates missing connections
+        / behaviour / buttons / ports and runs the applicable parts of
+        the standard sequence. The crew calls our ``_demolition_pre``
+        and ``_demolition_post`` hooks at the right points.
         """
-        if change == QGraphicsItem.ItemSceneChange and value is None:
+        if (change == QGraphicsItem.ItemSceneChange and value is None
+                and not self._removal_done):
+            self._removal_done = True
             try:
-                self._demolition_pre()
+                from nodes._demolition import demolish
+                demolish(self)
             except Exception:
-                logger.exception("[chromeless] _demolition_pre raised during scene-leave")
+                logger.exception("[chromeless] demolish() raised during scene-leave")
         return super().itemChange(change, value)
 
     def _demolition_pre(self) -> None:
         """Root-level teardown — disconnect viewport tracking before
-        any signal/destructor race can land on us.
+        any signal/destructor race can land on us. Called by the
+        demolition crew before the main teardown sequence.
 
         Subclasses extend by overriding and calling ``super()``::
 
