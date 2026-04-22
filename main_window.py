@@ -1778,7 +1778,14 @@ class IntricateApp(QMainWindow):
         )
         self._joy_bucket_label.setToolTip(self._joy_bucket_tooltip())
         install_tooltip(self._joy_bucket_label)
-        self._joy_bucket_label.setStyleSheet(f"color: {Theme.textPrimary}; font-size: 10pt;")
+        # Pink variable-number colour (Settlers convention) + Nabana emphasis
+        # font (project-selector family) — the counter is a live value, so
+        # it gets the same visual treatment as other variable numerics.
+        self._joy_bucket_label.setStyleSheet(
+            "color: #ffb6c1;"
+            " font-family: 'My Olivin (Nabana)';"
+            " font-size: 10pt;"
+        )
         layout.addWidget(self._joy_bucket_label, alignment=Qt.AlignHCenter)
 
         layout.addSpacing(Theme.sidebarPadding)
