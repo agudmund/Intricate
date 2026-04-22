@@ -2,7 +2,7 @@
 
 A live wire between Intricate's canvas and Adobe Premiere Pro's timeline. The node owns a WebSocket client to a CEP extension running inside Premiere. Frames travel across as `Prop|Val|Track|Clip` tuples, the CEP panel routes them through ExtendScript into the open project, and the answers flow back the same wire with full project/sequence census attached.
 
-This is the canonical writeup for the node — read **just this doc** to pick up work without replaying the session it was built in. The architecture was planned in `Documents/Claude Plans/Premiere Bridge Phase 1.md`, which still holds the original reasoning and phase-ordering; this document tracks what's built and how to keep building.
+This is the canonical writeup for the node — read **just this doc** to pick up work without replaying the session it was built in. The original architectural reasoning and phase ordering live in the **Phase 1 History** section further down; the rest of this document tracks what's built and how to keep building.
 
 ## Current Phase
 
@@ -304,9 +304,9 @@ The `last_*` fields are persisted so the paint readout can show meaningful state
 | 🔄 retry | Trigger a mismatch, fix it in Premiere, click 🔄. | Handshake re-fires, AboutNode stays (user dismisses), dot goes pale-leaf. |
 | Silent-wire detection | While handshake is ready, close the CEP panel. | After ~15s, AboutNode reads *"The wire was up but went quiet — three heartbeats passed without a pong. Letting go."* Reconnect timer takes over. |
 
-## First Light (historical)
+## Phase 1 History
 
-Phase 1 round-trip achieved **Friday 2026-04-17 06:54 Reykjavik**. CEP panel log at that moment:
+First light achieved **Friday 2026-04-17 06:54 Reykjavik** — a `TXT|Hello 👋|0|0` packet from an Intricate `PremiereBridgeNode` reached Premiere's Events panel as a toast and surfaced in the ExtendScript console, with the ACK flowing back along the same wire. CEP panel log at the moment of first light:
 
 ```
 06:53:46  WebSocket server up
@@ -316,6 +316,45 @@ Phase 1 round-trip achieved **Friday 2026-04-17 06:54 Reykjavik**. CEP panel log
 ```
 
 Simultaneously the Premiere Events panel popped `[Intricate] Hello 👋|0|0` as a toast, node dot flipped pink, readout showed `last: ACK|TXT`. Phase 1 milestone criterion met: *"a node inside of intricate that echoes into premiere console output 'Hello 👋', just a ping to confirm its connected."*
+
+### Architecture as drawn in the original plan
+
+```
+┌──────────────────────────────┐        ┌──────────────────────────────┐
+│ Intricate (PySide6)          │        │ Premiere CEP panel           │
+│                              │        │                              │
+│  PremiereBridgeNode          │        │  index.html (Node host)      │
+│    └─ WebSocketTransport ────┼── ws:// ┼─→ ws server on 127.0.0.1    │
+│       (serial swap later)    │  9914  │   │                          │
+│                              │        │   ▼                          │
+│                              │        │  csInterface.evalScript      │
+│                              │        │   │                          │
+│                              │        │   ▼                          │
+│                              │        │  script.jsx consoleLog()     │
+│                              │        │   └→ $.writeln               │
+└──────────────────────────────┘        └──────────────────────────────┘
+```
+
+### Transport Decision — why WebSocket first, serial later
+
+Phase 1 shipped on WebSocket (`ws://127.0.0.1:9914`) rather than serial for four concrete reasons:
+
+- No admin install needed — `com0com`'s driver dance is deferred to the serial phase.
+- The CEP Node side uses pure-JS `ws` — no `@electron/rebuild` against Premiere's ABI.
+- PySide6's `QtWebSockets.QWebSocket` covers the Intricate side with nothing extra to pip install.
+- The packet format `Prop|Val|Track|Clip` is transport-agnostic, so the serial swap is a single `PacketTransport` subclass when the time comes.
+
+Serial (via a `com0com` virtual null-modem pair) is the planned future transport, aligning with Adobe's paid-SDK security posture and the physical-hardware future. Same packet format, no node-side changes required when it happens — see the roadmap entry in the **Current Phase** table.
+
+### Phase 1 exit criteria (all closed)
+
+- [x] Node.js installed
+- [x] CEP extension scaffolded, panel visible in Premiere
+- [x] `PremiereBridgeNode` renders and pings
+- [x] Ping reaches Premiere console end-to-end
+- [x] CEP 12 signature handshake resolved (self-signed under `PlayerDebugMode=1`)
+
+Phase 2a (packet cleanup) and Phase 2b (handshake + heartbeat) both closed the same day as first light. Phase 2c (keyframe injection) is where the work picks up next.
 
 ## Next Step — Phase 2c (Keyframe injection)
 
@@ -354,7 +393,6 @@ Property ID cheat sheet (from the Gemini planning session, in `_transcript.txt`)
 | `utils/premiere_transport.py` | `PacketTransport` ABC + `WebSocketTransport` + frame routing. |
 | `icons/premiere_bridge.ico` | Cream suspension-bridge silhouette. |
 | `icons/make_premiere_bridge_icon.py` | Pillow recipe that generated the icon. |
-| `Documents/Claude Plans/Premiere Bridge Phase 1.md` | Session plan + first-light + 2a/2b addendum. |
 | `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\index.html`  | CEP panel UI + WebSocket server (outside repo). |
 | `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\script.jsx`  | ExtendScript (outside repo). |
 | `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\CSXS\manifest.xml` | Panel registration (outside repo). |

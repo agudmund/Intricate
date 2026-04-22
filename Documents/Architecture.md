@@ -139,7 +139,7 @@ WarmNode writes a `.warm_bridge_{uuid}.json` to `Documents/data/`. Notepad opens
 
 ### Premiere Bridge (PremiereBridgeNode ↔ CEP Panel)
 
-PremiereBridgeNode owns a `WebSocketTransport` in `utils/premiere_transport.py` targeting `ws://127.0.0.1:9914`. A CEP extension at `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\` (self-signed, CEP 12 mandatory) runs a Node.js `ws` server inside Premiere Pro 2026 and dispatches to ExtendScript via `csInterface.evalScript`. Frames are `Prop|Val|Track|Clip` — `HELLO`/`READY`/`ERROR` handshake, `PING`/`PONG` heartbeat at 5s, three-strikes silent-wire detection. On mismatch the node spawns a chained AboutNode (same passive-messaging pattern as GitNode's offline guard). Full writeup at `Documents/Nodes/The Premiere Bridge Node.md`; phase history at `Documents/Claude Plans/Premiere Bridge Phase 1.md`.
+PremiereBridgeNode owns a `WebSocketTransport` in `utils/premiere_transport.py` targeting `ws://127.0.0.1:9914`. A CEP extension at `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\` (self-signed, CEP 12 mandatory) runs a Node.js `ws` server inside Premiere Pro 2026 and dispatches to ExtendScript via `csInterface.evalScript`. Frames are `Prop|Val|Track|Clip` — `HELLO`/`READY`/`ERROR` handshake, `PING`/`PONG` heartbeat at 5s, three-strikes silent-wire detection. On mismatch the node spawns a chained AboutNode (same passive-messaging pattern as GitNode's offline guard). Full writeup at `Documents/Nodes/The Premiere Bridge Node.md` — phase history lives in its **Phase 1 History** section.
 
 ## Design Documentation
 

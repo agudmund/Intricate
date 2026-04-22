@@ -77,7 +77,6 @@ Documents/
 ├── Compliance/              — header and docstring compliance reports
 ├── Design/                  — design briefs and specifications
 ├── Nodes/                   — per-node-type feature writeups
-├── Claude Plans/            — archived implementation plans (see below)
 └── data/                    — session persistence (not shown in menu)
 ```
 
@@ -311,7 +310,3 @@ ClaudeNode also supports a post-action chain: append **"then vaporize"** to any 
 - Python attributes/constants: `camelCase` (e.g., `windowBorderWidth`, `nodeBorderRadius`)
 - Documentation files and UI text: Title Case With Spaces (e.g., `Final Theme Report.md`)
 - Documentation files go in `./Documents/`, not project root (README.md is the exception)
-
-## Plan Archiving
-
-When you create an implementation plan (the `.md` file generated in `.claude/plans/`), always copy a clean version into `./Documents/Claude Plans/` with a descriptive Title Case name (e.g., `Documents Restructure.md`, `GitNode Offline Guard.md`). This builds a retraceable history of architectural decisions and implementation plans inside the repo, versionable alongside the code they describe. The Info sidebar menu picks these up automatically via the nested context menu system.
