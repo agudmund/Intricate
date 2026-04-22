@@ -87,15 +87,23 @@ The body rect maps document coordinates into node-local coordinates. `doc.docume
 
 ### Auto-Sizing
 
-The node measures its content and sizes itself so all text is visible without scrolling:
+The node measures its content for HEIGHT and sizes itself so every tree line is vertically visible without scrolling. WIDTH is driven by the title only — body content never widens the node, per the design rule *"resize according to the title width while keeping the default width on the body text where the tree is."*
 
-1. Set document text width to -1 (unconstrained) → get `idealWidth()`
-2. Set text width to `idealWidth()` → get `doc.size().height()`
-3. Add chrome: toolbar width, button zone height, title gap, padding
-4. Add one extra line of breathing room (`chrome_y` includes +22px instead of +8px)
-5. Account for title width so long project names don't clip
+**Width formula** (in `_auto_size`):
+```
+new_w = max(TreeNodeData.default_width, title_w + pad + right_pad)
+```
+where `title_w = self._measure_title_width()` — a `QPainterPath.addText().boundingRect()` read against the exact QFont the paint uses, and `right_pad` falls through to `BaseNode._TITLE_RIGHT_PAD` (default None → symmetric with `Theme.nodeTextPaddingLeft`). Long tree lines that exceed the body's available width clip horizontally — accepted tradeoff.
 
-The scrollbar is disabled entirely (`scrollbar=False` on the PrettyEdit).
+**Height formula**:
+```
+new_h = max(120, doc_h + chrome_y)
+```
+where `doc_h` comes from `doc.size().height()` after a constrained-width layout pass, and `chrome_y` includes the button zone, title gap, padding, and one extra line of breathing room.
+
+**Title-only width** (not body-driven) plus **scrollbar disabled** means every tree line is vertically visible, and the node's horizontal footprint is predictable for a given project name rather than growing with filename length.
+
+`_auto_fit_title_width` runs as a second pass at end-of-init to enforce the title-width minimum even if `_auto_size` decided otherwise (defensive; grow-only; no-op when the width is already sufficient).
 
 ## Lifecycle
 
@@ -167,3 +175,15 @@ Pre-scaling a pixmap to display size (e.g. 18x18) then letting Qt scale it up on
 ### Logging through the right system matters
 
 `logging.getLogger("name")` creates a bare logger with no handlers if the name doesn't match the app's logger factory. In this codebase, always use `setup_logger("name")` from `pretty_widgets.utils.logger` — it routes through the Rust ring buffer when available and falls back to the stdlib 3-slot rotation otherwise.
+
+### Measurement QFont must match paint QFont
+
+The long title-width chase on 2026-04-22 bottomed out at this lesson. `BaseNode._measure_title_width` was building its QFont at `Theme.aboutFontSize + _TITLE_FONT_BUMP` (18pt with the user's `[node.about] font_size = 12`) but `BaseNode.paint_content` renders the title at just `Theme.aboutFontSize` (12pt, no bump). That 1.5× size mismatch inflated every width computation in every auto-fit code path — `_auto_fit_title_width`, `_auto_size`'s title clause, every downstream `new_w` — by the same ratio, silently.
+
+The fix was to make `_measure_title_width` build its QFont the *same way* `paint_content` does. Contract: the measurement tracks the paint, not the other way around. Subclasses that override `paint_content` with a different title-font size must also override `_measure_title_width` to match.
+
+Diagnostic surface kept for the next round: the `[tree-fit]`, `[tree-autosize]`, and `[resize-end]` DEBUG logs. Flip the log level up to INFO on the TreeNode / basenode loggers when investigating node-sizing regressions — the round-trip (my intent → user's final resize) is captured in a single pair of lines per spawn.
+
+### QPainterPath over QFontMetrics for Chandler42
+
+`QFontMetrics.horizontalAdvance()` reads the font's advance table, which on non-monospaced display fonts (Chandler42 is the canonical case) can over-report relative to actual rendered ink — the advance includes trailing per-glyph sidebearings that never draw. `QPainterPath.addText().boundingRect()` walks the actual glyph outlines and returns honest painted bounds. Scoped swap for title sizing only; QFontMetrics stays where it's reliable (body-document height, simple ASCII measurement in common fonts).
