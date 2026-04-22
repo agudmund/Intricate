@@ -588,9 +588,36 @@ class IntricateApp(QMainWindow):
         return btn
 
     def _show_toolbar_context_menu(self, global_pos) -> None:
-        """Right-click the top toolbar — project folder lock, media cache
-        refresh, audio mute toggle, polaroid viewport snapshot."""
+        """Right-click the top toolbar — graduated utilities (restore last
+        deleted node, snip a wire), project folder lock, media cache refresh,
+        audio mute toggle, polaroid viewport snapshot.
+
+        The top group is registry-driven from the "titlebar" action category
+        in node_registry.toml — promotions from the sidebar land there by
+        flipping the entry's ``category`` field, no wiring change needed.
+        """
+        from utils.persistence import registry
+
+        self._ensure_dispatch()
         menu = self._styled_menu()
+
+        # ── Registry-driven utilities (graduated from the sidebar) ─────────
+        titlebar_actions = registry.get_actions_by_category("titlebar")
+        for key, entry in titlebar_actions:
+            icon_attr = entry.get("icon", "")
+            fallback  = entry.get("icon_fallback", "#6b5a47")
+            icon_val  = getattr(Theme, icon_attr, None)
+            pix = Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+            act = menu.addAction(QIcon(pix), entry.get("name", key))
+            tip = entry.get("tooltip", "")
+            if tip:
+                act.setToolTip(tip)
+            handler = self._action_dispatch.get(key)
+            if handler:
+                act.triggered.connect(handler)
+        if titlebar_actions:
+            menu.addSeparator()
+
         if self._folders_unlocked:
             act = menu.addAction("Lock Folders")
             act.setToolTip("Re-acquire working directory lock on the active project")

@@ -380,7 +380,7 @@ notes = "Auto-spawned by ClaudeNode only"
 [actions.restore]
 name = "The Grand Restoration"
 tooltip = "Bring back the last deleted node"
-category = "tools"
+category = "titlebar"
 icon = "iconRestore"
 icon_fallback = "#8aaa88"
 
@@ -401,6 +401,6 @@ icon_fallback = "#7a9a7a"
 [actions.snip]
 name = "There Comes A Time In Everyone's Life..."
 tooltip = "Remove an explicit wire connection"
-category = "tools"
+category = "titlebar"
 icon = "iconSnip"
 icon_fallback = "#c0a888"
