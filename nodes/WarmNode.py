@@ -409,11 +409,12 @@ class WarmNode(BaseNode):
 
     _has_depth_toggle = True
 
-    # Right-side title padding — zero-based for diagnostic purposes, so
-    # the node's right edge aligns pixel-exactly with the title's advance
-    # end. Tune upward from here in small integers if the visual result
-    # wants a hair of breathing. Left pad stays at the theme value.
-    _TITLE_RIGHT_PAD = 0
+    # _TITLE_RIGHT_PAD intentionally left at BaseNode's default (None →
+    # symmetric with Theme.nodeTextPaddingLeft), so long titles on
+    # auto-fit nodes get the same ~15px visual breathing on the right
+    # that the rest of the node chrome carries on the left. Override
+    # with a smaller int here if a specific node type wants a tighter
+    # right edge.
 
     # Class-level shared font cache for body paint (matches AboutNode /
     # TextNode pattern).  All WarmNode idle bodies use the same font, so

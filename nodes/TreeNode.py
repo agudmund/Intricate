@@ -225,11 +225,10 @@ class TreeNode(BaseNode):
 
     _has_depth_toggle = True
 
-    # Right-side title padding — zero-based for diagnostic purposes, so
-    # the node's right edge aligns pixel-exactly with the title's advance
-    # end. Tune upward from here in small integers if the visual result
-    # wants a hair of breathing. Matches WarmNode's value.
-    _TITLE_RIGHT_PAD = 0
+    # _TITLE_RIGHT_PAD left at BaseNode's default (None → symmetric with
+    # Theme.nodeTextPaddingLeft). Keeps ~15px visual breathing on the
+    # right of long project-folder titles, matching the same pad on the
+    # left. Same convention as WarmNode.
 
     def __init__(self, data: TreeNodeData | None = None):
         if data is None:
