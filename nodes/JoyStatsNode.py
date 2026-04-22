@@ -16,7 +16,7 @@ import traceback
 from nodes.ChromelessRoot import ChromelessRoot
 from data.JoyStatsNodeData import JoyStatsNodeData
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger, TRACE
 
 _log = setup_logger("joy_stats")
 
@@ -58,8 +58,8 @@ class JoyStatsNode(ChromelessRoot):
             data = JoyStatsNodeData()
         super().__init__(data)
 
-        _log.info("[joy-init] JoyStatsNode __init__ entered (uuid=%s)",
-                  getattr(data, 'uuid', '?')[:8])
+        _log.log(TRACE, "[joy-init] JoyStatsNode __init__ entered (uuid=%s)",
+                 getattr(data, 'uuid', '?')[:8])
 
         # 1-second poll — matches the happy accumulator tick rate
         self._poll_timer = QTimer()
@@ -67,8 +67,8 @@ class JoyStatsNode(ChromelessRoot):
         self._poll_timer.timeout.connect(self._refresh)
         self._poll_timer.start()
 
-        _log.info("[joy-init] JoyStatsNode __init__ complete (uuid=%s)",
-                  getattr(data, 'uuid', '?')[:8])
+        _log.log(TRACE, "[joy-init] JoyStatsNode __init__ complete (uuid=%s)",
+                 getattr(data, 'uuid', '?')[:8])
 
     # ─────────────────────────────────────────────────────────────────────────
     # COLOR + REFRESH
@@ -86,10 +86,10 @@ class JoyStatsNode(ChromelessRoot):
     def _refresh(self) -> None:
         """Timer slot — force a repaint so stats stay fresh. Orphan-timer
         guard via self.scene() probe, matching the BaseNode pattern."""
-        _log.debug("[joy-refresh] %s tick", self._log_id())
+        _log.log(TRACE, "[joy-refresh] %s tick", self._log_id())
         try:
             if self.scene() is None:
-                _log.debug("[joy-refresh] %s no scene, skipping", self._log_id())
+                _log.log(TRACE, "[joy-refresh] %s no scene, skipping", self._log_id())
                 return
         except RuntimeError:
             _log.warning("[joy-refresh] %s RuntimeError on scene() — C++ side gone, stopping timer",
@@ -125,7 +125,7 @@ class JoyStatsNode(ChromelessRoot):
         """Full paint pipeline — background rect, then title + stats
         via paint_content. ChromelessRoot's paint() is empty by design,
         so every descendant owns its own rendering."""
-        _log.debug("[joy-paint] %s paint() entered (removal_done=%s)",
+        _log.log(TRACE, "[joy-paint] %s paint() entered (removal_done=%s)",
                    self._log_id(), getattr(self, '_removal_done', '?'))
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)

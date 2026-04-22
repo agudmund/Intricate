@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem
 from data.ChromelessRootData import ChromelessRootData
 from nodes._shake_detect import ShakeDetector, arm_cooldown
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger
+from pretty_widgets.utils.logger import setup_logger, TRACE
 
 logger = setup_logger("chromeless")
 
@@ -132,9 +132,9 @@ class ChromelessRoot(QGraphicsRectItem):
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
 
-        logger.info("[chrome-init] %s CONSTRUCTED pos=(%.1f,%.1f) size=(%.1f,%.1f) pinned=%s z=%.1f",
-                    self._log_id(), data.x, data.y, data.width, data.height,
-                    data.pinned, data.z_value)
+        logger.log(TRACE, "[chrome-init] %s CONSTRUCTED pos=(%.1f,%.1f) size=(%.1f,%.1f) pinned=%s z=%.1f",
+                   self._log_id(), data.x, data.y, data.width, data.height,
+                   data.pinned, data.z_value)
 
         # Restore pin state if the data says so — deferred one tick so
         # scene/view are fully constructed by the time we ask. Critical:
@@ -167,7 +167,7 @@ class ChromelessRoot(QGraphicsRectItem):
     def sync_data(self) -> None:
         """Fold current geometry back into the dataclass — called on
         mouse-release and before serialisation."""
-        logger.debug("[chrome-sync] %s sync_data pos=(%.1f,%.1f) size=(%.1f,%.1f)",
+        logger.log(TRACE, "[chrome-sync] %s sync_data pos=(%.1f,%.1f) size=(%.1f,%.1f)",
                      self._log_id(), self.pos().x(), self.pos().y(),
                      self.rect().width(), self.rect().height())
         self.data.x = self.pos().x()
@@ -183,22 +183,22 @@ class ChromelessRoot(QGraphicsRectItem):
     def mousePressEvent(self, event):
         btn = ("right" if event.button() == Qt.RightButton
                else "left" if event.button() == Qt.LeftButton else "other")
-        logger.info("[chrome-mouse] %s PRESS button=%s pos=(%.1f,%.1f)",
-                    self._log_id(), btn, event.pos().x(), event.pos().y())
+        logger.log(TRACE, "[chrome-mouse] %s PRESS button=%s pos=(%.1f,%.1f)",
+                   self._log_id(), btn, event.pos().x(), event.pos().y())
         if event.button() == Qt.RightButton:
-            logger.debug("[chrome-mouse] %s → context menu", self._log_id())
+            logger.log(TRACE, "[chrome-mouse] %s → context menu", self._log_id())
             self._show_context_menu(event)
             event.accept()
             return
         if event.button() == Qt.LeftButton:
             # Arm the shake detector for the duration of this drag.
-            logger.debug("[chrome-mouse] %s → shake.press()", self._log_id())
+            logger.log(TRACE, "[chrome-mouse] %s → shake.press()", self._log_id())
             self._shake.press()
         super().mousePressEvent(event)
-        logger.debug("[chrome-mouse] %s PRESS returned (super called)", self._log_id())
+        logger.log(TRACE, "[chrome-mouse] %s PRESS returned (super called)", self._log_id())
 
     def mouseMoveEvent(self, event):
-        logger.debug("[chrome-mouse] %s MOVE scene_pos=(%.1f,%.1f)",
+        logger.log(TRACE, "[chrome-mouse] %s MOVE scene_pos=(%.1f,%.1f)",
                      self._log_id(), self.scenePos().x(), self.scenePos().y())
         super().mouseMoveEvent(event)
         zoom = 1.0
@@ -210,12 +210,12 @@ class ChromelessRoot(QGraphicsRectItem):
     def mouseReleaseEvent(self, event):
         btn = ("right" if event.button() == Qt.RightButton
                else "left" if event.button() == Qt.LeftButton else "other")
-        logger.info("[chrome-mouse] %s RELEASE button=%s shake_triggered=%s removal_done=%s",
-                    self._log_id(), btn, self._shake_triggered, self._removal_done)
+        logger.log(TRACE, "[chrome-mouse] %s RELEASE button=%s shake_triggered=%s removal_done=%s",
+                   self._log_id(), btn, self._shake_triggered, self._removal_done)
         self._shake.release()
         self.sync_data()
         super().mouseReleaseEvent(event)
-        logger.debug("[chrome-mouse] %s RELEASE returned (super called)", self._log_id())
+        logger.log(TRACE, "[chrome-mouse] %s RELEASE returned (super called)", self._log_id())
 
     # ─────────────────────────────────────────────────────────────────────────
     # CONTEXT MENU
@@ -224,8 +224,8 @@ class ChromelessRoot(QGraphicsRectItem):
     def _show_context_menu(self, event) -> None:
         """Right-click menu. The pin toggle is built in at the root;
         subclasses add their own entries via ``_extra_context_menu_items``."""
-        logger.info("[chrome-ctx] %s showing context menu (pinned=%s)",
-                    self._log_id(), self.data.pinned)
+        logger.log(TRACE, "[chrome-ctx] %s showing context menu (pinned=%s)",
+                   self._log_id(), self.data.pinned)
         from pretty_widgets.PrettyMenu import menu as pretty_menu
         ctx = pretty_menu()
         pin_action = ctx.addAction("Pin to Viewport")
@@ -242,7 +242,7 @@ class ChromelessRoot(QGraphicsRectItem):
         else:
             screen_pos = event.screenPos()
         ctx.exec(screen_pos)
-        logger.info("[chrome-ctx] %s context menu closed", self._log_id())
+        logger.log(TRACE, "[chrome-ctx] %s context menu closed", self._log_id())
 
     def _extra_context_menu_items(self, ctx) -> None:
         """Override hook — subclasses extend the right-click menu.
@@ -263,7 +263,7 @@ class ChromelessRoot(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _toggle_pin(self) -> None:
-        logger.info("[chrome-pin] %s TOGGLE (current=%s)", self._log_id(), self.data.pinned)
+        logger.log(TRACE, "[chrome-pin] %s TOGGLE (current=%s)", self._log_id(), self.data.pinned)
         if self.data.pinned:
             self._deactivate_pin()
         else:
@@ -290,7 +290,7 @@ class ChromelessRoot(QGraphicsRectItem):
         load, causing pinned stickers to vanish off-screen after an
         app restart. Fixed by the two-path split.
         """
-        logger.info("[chrome-pin] %s ACTIVATE from_saved_vp=%s", self._log_id(), from_saved_vp)
+        logger.log(TRACE, "[chrome-pin] %s ACTIVATE from_saved_vp=%s", self._log_id(), from_saved_vp)
         self.data.pinned = True
         self.setFlag(QGraphicsItem.ItemIsMovable, False)
         view = self._get_view()
@@ -303,33 +303,33 @@ class ChromelessRoot(QGraphicsRectItem):
             vp_pos = view.mapFromScene(self.pos())
             self.data.pin_vp_x = vp_pos.x()
             self.data.pin_vp_y = vp_pos.y()
-            logger.info("[chrome-pin] %s ACTIVATE wrote pin_vp=(%.1f,%.1f) from current pos",
-                        self._log_id(), self.data.pin_vp_x, self.data.pin_vp_y)
+            logger.log(TRACE, "[chrome-pin] %s ACTIVATE wrote pin_vp=(%.1f,%.1f) from current pos",
+                       self._log_id(), self.data.pin_vp_x, self.data.pin_vp_y)
         else:
-            logger.info("[chrome-pin] %s ACTIVATE preserving saved pin_vp=(%.1f,%.1f)",
-                        self._log_id(), self.data.pin_vp_x, self.data.pin_vp_y)
+            logger.log(TRACE, "[chrome-pin] %s ACTIVATE preserving saved pin_vp=(%.1f,%.1f)",
+                       self._log_id(), self.data.pin_vp_x, self.data.pin_vp_y)
         self._connect_viewport_tracking(view)
         if from_saved_vp:
             # Apply the saved anchor immediately — can't rely on a
             # viewTransformed emission firing after we connected, because
             # camera restore may have fired it before this call ran.
             self._on_viewport_changed()
-            logger.info("[chrome-pin] %s ACTIVATE applied saved anchor → scene_pos=(%.1f,%.1f)",
-                        self._log_id(), self.pos().x(), self.pos().y())
+            logger.log(TRACE, "[chrome-pin] %s ACTIVATE applied saved anchor → scene_pos=(%.1f,%.1f)",
+                       self._log_id(), self.pos().x(), self.pos().y())
 
     def _deactivate_pin(self) -> None:
         """Unpin — node becomes draggable again and moves with the canvas."""
-        logger.info("[chrome-pin] %s DEACTIVATE", self._log_id())
+        logger.log(TRACE, "[chrome-pin] %s DEACTIVATE", self._log_id())
         self.data.pinned = False
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self._disconnect_viewport_tracking()
 
     def _connect_viewport_tracking(self, view) -> None:
         if self._pin_connected:
-            logger.debug("[chrome-track] %s connect — already connected, skip",
+            logger.log(TRACE, "[chrome-track] %s connect — already connected, skip",
                          self._log_id())
             return
-        logger.info("[chrome-track] %s CONNECT viewport tracking", self._log_id())
+        logger.log(TRACE, "[chrome-track] %s CONNECT viewport tracking", self._log_id())
         if hasattr(view, 'viewTransformed'):
             view.viewTransformed.connect(self._on_viewport_changed)
         view.horizontalScrollBar().valueChanged.connect(self._on_viewport_changed)
@@ -338,10 +338,10 @@ class ChromelessRoot(QGraphicsRectItem):
 
     def _disconnect_viewport_tracking(self) -> None:
         if not self._pin_connected:
-            logger.debug("[chrome-track] %s disconnect — not connected, skip",
+            logger.log(TRACE, "[chrome-track] %s disconnect — not connected, skip",
                          self._log_id())
             return
-        logger.info("[chrome-track] %s DISCONNECT viewport tracking", self._log_id())
+        logger.log(TRACE, "[chrome-track] %s DISCONNECT viewport tracking", self._log_id())
         view = self._get_view()
         if view:
             if hasattr(view, 'viewTransformed'):
@@ -368,7 +368,7 @@ class ChromelessRoot(QGraphicsRectItem):
                            self._log_id())
             return
         if self._removal_done:
-            logger.debug("[chrome-track] %s viewport tick but removal_done — bail",
+            logger.log(TRACE, "[chrome-track] %s viewport tick but removal_done — bail",
                          self._log_id())
             return
         scene = self.scene()
@@ -405,7 +405,7 @@ class ChromelessRoot(QGraphicsRectItem):
                 logger.info("[chrome-SHAKE] %s   stack[%02d] %s",
                             self._log_id(), i, line)
         if self._shake_triggered:
-            logger.info("[chrome-SHAKE] %s BAIL — already triggered", self._log_id())
+            logger.log(TRACE, "[chrome-SHAKE] %s BAIL — already triggered", self._log_id())
             return
         self._shake_triggered = True
         scene = self.scene()
@@ -442,7 +442,7 @@ class ChromelessRoot(QGraphicsRectItem):
         change_name = _ITEM_CHANGE_NAMES.get(change, f"<{change}>")
         if change_name not in ("ItemPositionChange", "ItemPositionHasChanged",
                                "ItemScenePositionHasChanged"):
-            logger.debug("[chrome-itemchange] %s change=%s value=%r",
+            logger.log(TRACE, "[chrome-itemchange] %s change=%s value=%r",
                          self._log_id(), change_name, value)
 
         if (change == QGraphicsItem.ItemSceneChange and value is None
@@ -470,7 +470,7 @@ class ChromelessRoot(QGraphicsRectItem):
                 logger.exception("[chrome-DEMOLISH] %s demolish() raised!",
                                  self._log_id())
         elif change == QGraphicsItem.ItemSceneChange and value is not None:
-            logger.info("[chrome-scene] %s ENTER scene=%r", self._log_id(), value)
+            logger.log(TRACE, "[chrome-scene] %s ENTER scene=%r", self._log_id(), value)
         return super().itemChange(change, value)
 
     def _demolition_pre(self) -> None:
@@ -486,10 +486,10 @@ class ChromelessRoot(QGraphicsRectItem):
                 self._my_media_player.setSource(QUrl())
                 ...
         """
-        logger.info("[chrome-demolish-pre] %s entering (_pin_connected=%s)",
-                    self._log_id(), self._pin_connected)
+        logger.log(TRACE, "[chrome-demolish-pre] %s entering (_pin_connected=%s)",
+                   self._log_id(), self._pin_connected)
         self._disconnect_viewport_tracking()
-        logger.info("[chrome-demolish-pre] %s done", self._log_id())
+        logger.log(TRACE, "[chrome-demolish-pre] %s done", self._log_id())
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT — deliberately empty
