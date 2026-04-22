@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - nodes/ValueNode.py ValueNode class
--Transparent image-sequence node with PrettySlider scrubber, for enjoying
+-Intricate - nodes/ValueNode.py ValueNode class
+-Transparent image-sequence node with PrettySlider scrubber, chromeless for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 import re
 from pathlib import Path
 
-from PySide6.QtWidgets import QGraphicsProxyWidget
+from PySide6.QtWidgets import QGraphicsProxyWidget, QGraphicsItem
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 
-from nodes.BaseNode import BaseNode
+from nodes.ChromelessRoot import ChromelessRoot
 from data.ValueNodeData import ValueNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettySlider import slider as pretty_slider
@@ -29,26 +29,88 @@ def _natural_key(p: Path):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', p.stem)]
 
 
-class ValueNode(BaseNode):
-    """
-    Transparent image-sequence node.
+class ValueNode(ChromelessRoot):
+    """Transparent image-sequence node — third descendant of ChromelessRoot.
 
-    Fills the node body with the current frame from ./Images/Value/,
-    with a PrettySlider at the bottom for scrubbing through frames.
-    The node background is fully transparent so image alpha shines through.
-    current_frame persists across sessions via ValueNodeData.
+    Fills the node body with the current frame from ``./Images/Value/``,
+    with a PrettySlider at the bottom for scrubbing through frames. The
+    node background is fully transparent so image alpha shines through.
+    ``current_frame`` persists across sessions via ValueNodeData.
+
+    Unlike the first two chromeless descendants (StickerNode,
+    JoyStatsNode), ValueNode has **ports** — a single input on the W edge
+    and a single output on the E edge, both at a calibrated y-offset
+    relative to the cropped image rect. Ports are the only piece of
+    structural-node machinery ValueNode uses; everything else is its own.
+
+    The class was migrated off BaseNode onto ChromelessRoot on 2026-04-22
+    (Phase 3 of the chromeless-root refactor) — its previous BaseNode
+    inheritance required compensating for every chrome feature ValueNode
+    suppressed (button strip, emoji accent, title paint, hover pulse,
+    shelf animation). Chromeless root is a simpler ancestor for nodes
+    whose visual identity doesn't match BaseNode's structural-node shape.
     """
+
+    # ── Class attrs formerly inherited from BaseNode ─────────────────────────
+
+    round_radius  = Theme.nodeRoundRadius    # clip/shape radius for the rounded body
+
+    # Connection.py reads these to decide how to terminate a wire at the port:
+    #   _wire_clip     — pull the endpoint slightly INTO the node border (so the
+    #                    wire tucks under the chrome). ValueNode has no border,
+    #                    so no tucking — keep the endpoint at the port position.
+    #   _wire_at_port  — terminate exactly at the port's scenePos rather than
+    #                    projecting the endpoint further into the node.
+    _wire_clip    = False
+    _wire_at_port = True
+
+    # ── ValueNode-specific Z-floor (always in front of regular nodes) ────────
+
+    _Z_FLOOR      = 100.0
+
+    # ── Calibrated crop — baked from source image alpha padding ──────────────
+    # These trim the transparent padding in ./Images/Value/ PNGs so the
+    # node border sits flush against the visible content at any stored
+    # node size. TOML [node.value] crop_* settings add on top for fine
+    # tuning per deployment.
+    _CAL_LEFT   = 0
+    _CAL_RIGHT  = 15
+    _CAL_TOP    = 0
+    _CAL_BOTTOM = 7
+    _CAL_PORT_Y = -12   # vertical offset from rect center to the input tip
+    _CAL_PORT_X =  10   # horizontal offset added to the base -ox left-edge position
+
+    # ── Demolition manifest — crew tears down the slider proxy ───────────────
+
+    _demolition_proxies = ['_slider_proxy']
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CONSTRUCTION
+    # ─────────────────────────────────────────────────────────────────────────
 
     def __init__(self, data: ValueNodeData | None = None):
         if data is None:
             data = ValueNodeData()
-        super().__init__(data)
+        super().__init__(data)   # ChromelessRoot handles pin/shake/flags/log
 
+        # Transparent-fill contract — DeviceCoordinateCache would render
+        # to an opaque pixmap, which defeats the alpha shine-through.
+        self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+        self.setBrush(Qt.NoBrush)
+
+        # Ports — ChromelessRoot doesn't create any by default; ValueNode
+        # is the first chromeless descendant that wires into the graph.
+        self._create_ports()
+
+        # Image sequence
         self._frames: list[Path] = self._scan_frames()
         self._pixmap: QPixmap | None = None
-        self._last_crop: tuple = (self._crop_left(), self._crop_right(), self._crop_top(), self._crop_bottom())
+        self._last_crop: tuple = (
+            self._crop_left(), self._crop_right(),
+            self._crop_top(),  self._crop_bottom(),
+        )
 
-        # ── Slider ────────────────────────────────────────────────────────────
+        # Slider widget + proxy
         self._slider = pretty_slider(
             orientation=Qt.Orientation.Horizontal,
             handle_size=28,
@@ -61,18 +123,13 @@ class ValueNode(BaseNode):
         self._slider_proxy.setWidget(self._slider)
         self._slider_proxy.setGeometry(self._slider_rect())
 
-        self.setZValue(self._Z_FLOOR)
-
-        # Transparent fill, border stays visible.
-        # DeviceCoordinateCache renders to an opaque pixmap — disable it so
-        # NoBrush actually lets the scene background show through.
-        from PySide6.QtWidgets import QGraphicsItem
-        self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
-        self.setBrush(Qt.NoBrush)
-
-        # Proxy widget background must also be transparent
+        # Proxy widget background must also be transparent.
         self._slider.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._slider.setAutoFillBackground(False)
+
+        # Apply Z-floor explicitly — setZValue override enforces on every
+        # subsequent call, but the initial value must be set too.
+        self.setZValue(self._Z_FLOOR)
 
         # Restore persisted frame without triggering a second valueChanged
         frame = min(data.current_frame, max(len(self._frames) - 1, 0))
@@ -81,15 +138,14 @@ class ValueNode(BaseNode):
         self._slider.blockSignals(False)
         self._seek(frame)
 
-    # ── No button strip — deletion is via shake ───────────────────────────────
-
-    def _build_buttons(self) -> None:
-        pass
-
-    # ── Ports — single W input only ───────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # PORTS — one input (W), one output (E)
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _create_ports(self) -> None:
-        """One W input port and one E output port, both at the same calibrated Y."""
+        """Create the single W input + single E output port pair and
+        place them against the calibrated crop edges. Called explicitly
+        from __init__ since ChromelessRoot doesn't manage ports itself."""
         from nodes.Port import Port
         in_port  = Port(self, is_output=False)
         out_port = Port(self, is_output=True)
@@ -102,7 +158,7 @@ class ValueNode(BaseNode):
         out_port.hide()
 
     def _place_ports(self) -> None:
-        if not self.input_ports:
+        if not getattr(self, 'input_ports', None):
             return
         import pretty_widgets.utils.settings as _s
         r      = self.rect()
@@ -120,7 +176,9 @@ class ValueNode(BaseNode):
     def closest_output_port(self, scene_pos):
         return self.output_ports[0]
 
-    # ── Slider style ──────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # SLIDER STYLE
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _apply_slider_style(self) -> None:
         """Invisible rail and handle — interaction area only."""
@@ -143,7 +201,9 @@ class ValueNode(BaseNode):
             QSlider::sub-page:horizontal  {{ background: transparent; border: none; }}
         """)
 
-    # ── Frame scanning ────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # FRAME SCANNING + SEEK
+    # ─────────────────────────────────────────────────────────────────────────
 
     @staticmethod
     def _scan_frames() -> list[Path]:
@@ -154,18 +214,20 @@ class ValueNode(BaseNode):
             key=_natural_key,
         )
 
-    # ── Calibrated crop — baked from source image alpha padding ──────────────
-    # These trim the transparent padding in ./Images/Value/ PNGs so the node
-    # border sits flush against the visible content at any stored node size.
-    # TOML [node.value] crop_* settings add on top for additional fine-tuning.
-    _CAL_LEFT   = 0
-    _CAL_RIGHT  = 15
-    _CAL_TOP    = 0
-    _CAL_BOTTOM = 7
-    _CAL_PORT_Y = -12   # vertical offset from rect center to the input tip
-    _CAL_PORT_X =  10   # horizontal offset added to the base -ox left-edge position
+    def _seek(self, index: int) -> None:
+        if not self._frames:
+            self._pixmap = None
+            self.data.current_frame = 0
+            self.update()
+            return
+        index = max(0, min(index, len(self._frames) - 1))
+        self.data.current_frame = index
+        self._pixmap = QPixmap(str(self._frames[index]))
+        self.update()
 
-    # ── Geometry helpers ──────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # GEOMETRY HELPERS
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _crop_left(self) -> float:
         import pretty_widgets.utils.settings as _s
@@ -196,40 +258,26 @@ class ValueNode(BaseNode):
         return QRectF(r.left(), r.bottom() - _SLIDER_H, r.width(), _SLIDER_H)
 
     def _image_rect(self) -> QRectF:
-        # Full node width and height above the slider — no button-zone reservation
-        # (ValueNode has no buttons, so that 24px was dead space)
+        # Full node width and height above the slider — no button-zone
+        # reservation (ValueNode never had any).
         r = self.rect()
         return QRectF(r.left(), r.top(), r.width(), r.height() - _SLIDER_H)
 
-    # ── Frame seek ────────────────────────────────────────────────────────────
-
-    def _seek(self, index: int) -> None:
-        if not self._frames:
-            self._pixmap = None
-            self.data.current_frame = 0
-            self.update()
-            return
-        index = max(0, min(index, len(self._frames) - 1))
-        self.data.current_frame = index
-        self._pixmap = QPixmap(str(self._frames[index]))
-        self.update()
-
-    # ── Z depth ───────────────────────────────────────────────────────────────
-
-    _Z_FLOOR       = 100.0   # always in front of regular nodes
-    _wire_clip     = False   # no border to tuck into — skip endpoint wire clipping
-    _wire_at_port  = True    # wire terminates exactly at port position, no _INSIDE projection
+    # ─────────────────────────────────────────────────────────────────────────
+    # Z DEPTH + TRANSPARENCY GUARDS
+    # ─────────────────────────────────────────────────────────────────────────
 
     def setZValue(self, z: float) -> None:
         super().setZValue(max(z, self._Z_FLOOR))
 
-    # ── Transparency guard ────────────────────────────────────────────────────
-
     def setBrush(self, brush):
-        """Always transparent — NodeBehaviour bg-glow must not fill this node."""
+        """Always transparent — preserved from BaseNode days, guards
+        against any ancestor code path trying to tint the node body."""
         super().setBrush(Qt.NoBrush)
 
-    # ── Paint ─────────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # PAINT / SHAPE / BOUNDING
+    # ─────────────────────────────────────────────────────────────────────────
 
     def paint(self, painter, option, widget=None):
         painter.save()
@@ -237,20 +285,10 @@ class ValueNode(BaseNode):
         self.paint_content(painter)
         painter.restore()
 
-    def shape(self):
-        path = QPainterPath()
-        path.addRoundedRect(self._cropped_rect(), self.round_radius, self.round_radius)
-        return path
-
-    def boundingRect(self):
-        return self._cropped_rect().adjusted(
-            -Theme.nodeShadowMargin, -Theme.nodeShadowMargin,
-             Theme.nodeShadowMargin,  Theme.nodeShadowMargin,
-        )
-
     def paint_content(self, painter: QPainter) -> None:
         # Reposition slider proxy whenever the crop settings change
-        crop = (self._crop_left(), self._crop_right(), self._crop_top(), self._crop_bottom())
+        crop = (self._crop_left(), self._crop_right(),
+                self._crop_top(),  self._crop_bottom())
         if crop != self._last_crop:
             self._last_crop = crop
             if hasattr(self, '_slider_proxy') and self._slider_proxy:
@@ -263,29 +301,45 @@ class ValueNode(BaseNode):
         clip.addRoundedRect(self._cropped_rect(), self.round_radius, self.round_radius)
         painter.setClipPath(clip)
 
-        img_rect  = self._image_rect()
-        scaled    = self._pixmap.size().scaled(img_rect.size().toSize(), Qt.KeepAspectRatioByExpanding)
-        x         = img_rect.x() + (img_rect.width()  - scaled.width())  / 2
-        y         = img_rect.y() + (img_rect.height() - scaled.height()) / 2
-        dest      = QRectF(x, y, scaled.width(), scaled.height())
+        img_rect = self._image_rect()
+        scaled   = self._pixmap.size().scaled(img_rect.size().toSize(),
+                                              Qt.KeepAspectRatioByExpanding)
+        x        = img_rect.x() + (img_rect.width()  - scaled.width())  / 2
+        y        = img_rect.y() + (img_rect.height() - scaled.height()) / 2
+        dest     = QRectF(x, y, scaled.width(), scaled.height())
         painter.drawPixmap(dest.toRect(), self._pixmap)
 
-    # ── Resize ────────────────────────────────────────────────────────────────
+    def shape(self):
+        path = QPainterPath()
+        path.addRoundedRect(self._cropped_rect(), self.round_radius, self.round_radius)
+        return path
+
+    def boundingRect(self):
+        return self._cropped_rect().adjusted(
+            -Theme.nodeShadowMargin, -Theme.nodeShadowMargin,
+             Theme.nodeShadowMargin,  Theme.nodeShadowMargin,
+        )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # RESIZE
+    # ─────────────────────────────────────────────────────────────────────────
 
     def setRect(self, rect):
         super().setRect(rect)
-        # BaseNode.setRect gates _place_ports on output_ports — we have none,
-        # so re-anchor the single W port manually.
-        if self.input_ports:
+        # Re-anchor port and slider on any resize.
+        if getattr(self, 'input_ports', None):
             self._place_ports()
         if hasattr(self, '_slider_proxy') and self._slider_proxy:
             self._slider_proxy.setGeometry(self._slider_rect())
 
-    # ── Lifecycle ─────────────────────────────────────────────────────────────
-
-    _demolition_proxies = ['_slider_proxy']
+    # ─────────────────────────────────────────────────────────────────────────
+    # LIFECYCLE — extends ChromelessRoot teardown with slider cleanup
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _demolition_pre(self) -> None:
+        # Root disconnects viewport tracking first — call super so that
+        # runs before the slider proxy is torn down by the crew.
+        super()._demolition_pre()
         # Disconnect valueChanged before the proxy teardown (the slider
         # is the proxy's inner widget and the crew tears it down with
         # setParent(None) + deleteLater() during the proxy walk).
@@ -298,7 +352,9 @@ class ValueNode(BaseNode):
     def _demolition_post(self) -> None:
         self._slider = None
 
-    # ── Serialization ─────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # SERIALIZATION
+    # ─────────────────────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
         self.sync_data()
