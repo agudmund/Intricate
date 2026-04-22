@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - widgets/StickerButton.py StickerButton class
--A QPushButton that paints its icon with a dynamic radial shadow for enjoying
+-Intricate - utils/ShadowStickerButton.py ShadowStickerButton class
+-A sticker-aesthetic QPushButton that casts a dynamic radial shadow for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -18,15 +18,19 @@ SHADOW_OPACITY  = 0.55    # shadow alpha multiplier
 SHADOW_COLOR    = QColor(0, 0, 0, 90)  # tint applied to shadow copy
 
 
-class StickerButton(QPushButton):
+class ShadowStickerButton(QPushButton):
     """
-    A frameless button that paints a sticker icon with a dynamic drop shadow.
+    A frameless sticker-aesthetic button that casts a dynamic drop shadow.
 
-    The shadow radiates outward from the window centre — creating a fake 3D
-    lighting effect with a single overhead light at the centre of the screen.
+    Distinct from StickerNode (flat, chromeless) — this variant carries
+    depth. The shadow radiates outward from the window centre, giving a
+    fake 3D lighting effect with a single overhead light at the centre of
+    the screen. On press the icon shifts toward the shadow direction (into
+    the surface) and the shadow disappears, giving physical button depth.
 
-    On press the icon shifts toward centre (into the surface) and the shadow
-    disappears, giving physical button depth.
+    The feed button in Intricate's sidebar is the baseline for the whole
+    family — the reference implementation of this visual language across
+    Intricate and future companion apps.
     """
 
     def __init__(self, pixmap: QPixmap, size: int, parent=None):

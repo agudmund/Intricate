@@ -1741,9 +1741,9 @@ class IntricateApp(QMainWindow):
         joy_layout.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
 
         # Feed button — dynamic radial shadow, physical press depth
-        from utils.StickerButton import StickerButton
+        from utils.ShadowStickerButton import ShadowStickerButton
         clean_pix = Theme.icon(Theme.iconCatnipFeedClean, fallback_color="#d87a9e")
-        self._feed_btn = StickerButton(clean_pix, sz, parent=joy_container)
+        self._feed_btn = ShadowStickerButton(clean_pix, sz, parent=joy_container)
         self._feed_btn.setToolTip("Feed me")
         install_tooltip(self._feed_btn)
         self._feed_btn.pressed.connect(self._on_feed_pressed)
@@ -1832,7 +1832,7 @@ class IntricateApp(QMainWindow):
         _s.set_nested("intricate", "canvas", "blur_alpha", value)
 
     def _on_feed_pressed(self) -> None:
-        """Mouse down — StickerButton handles the depth shift visually."""
+        """Mouse down — ShadowStickerButton handles the depth shift visually."""
         pass
 
     def _on_feed_released(self) -> None:
