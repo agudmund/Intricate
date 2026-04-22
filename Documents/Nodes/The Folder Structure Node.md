@@ -72,9 +72,8 @@ Hearts are `QGraphicsPixmapItem` children of the TreeNode, positioned at each fi
 | Editor proxy | 0.0 | `QGraphicsProxyWidget` holding the `PrettyEdit` |
 | Toolbar proxy | 0.0 | `QGraphicsProxyWidget` holding the 📁 button |
 | **Heart items** | **5.0** | Above the editor, visible on top of text |
-| Name-editor proxy | 10.0 | Floating folder-name input, above everything |
 
-Hearts must be above the editor proxy (z=0) or they render behind the text and are invisible. Setting them at z=5 puts them above the editor but below the name input overlay (z=10).
+Hearts must be above the editor proxy (z=0) or they render behind the text and are invisible. Setting them at z=5 puts them cleanly on top of the editor content without competing with any other scene-layer.
 
 **Pixmap quality:** The heart pixmap is loaded at full resolution from `tree_file_icon.png` and each `QGraphicsPixmapItem` uses `setScale(HEART_SIZE / pixmap.width())` with `Qt.SmoothTransformation`. This means Qt re-rasterises from the full source at every zoom level — no pixelation when you zoom in. Pre-scaling to 18x18 and storing the small pixmap causes visible blur at higher zoom levels.
 
@@ -110,7 +109,7 @@ where `doc_h` comes from `doc.size().height()` after a constrained-width layout 
 ### Creation (sidebar button)
 
 1. `Scene.add_tree_node(pos, project_path)` creates `TreeNodeData` with the path
-2. `__init__` builds toolbar, name input, tree view editor
+2. `__init__` builds the left toolbar and the tree view editor
 3. `tree_text` is empty → `refresh()` → `_make_walker().build_text()` → `_set_text(text)`
 4. `_set_text` → `_tree_to_html` → `setHtml` → `_auto_size` → `_place_hearts`
 
@@ -123,10 +122,6 @@ where `doc_h` comes from `doc.size().height()` after a constrained-width layout 
 
 First refresh fills the node directly. Subsequent refreshes spawn a sibling node so manual edits to the current one are preserved. The offset is `bottomRight + (20, 20)`.
 
-### Refresh-in-place (after creating a new folder)
-
-Destroys the current node with a particle burst and spawns a fresh replacement at the same position and z-value. Interaction flags are severed immediately to prevent Qt from routing events to the zombie node during the deferred-removal window.
-
 ### Serialization
 
 `to_dict()` reads `self._editor.toPlainText()` — this strips all HTML back to plain text, so the saved `tree_text` is always clean. On reload, `_tree_to_html` rebuilds the formatting from scratch.
@@ -135,7 +130,14 @@ Destroys the current node with a particle burst and spawns a fresh replacement a
 
 A single 📁 button in a `QGraphicsProxyWidget` column to the left of the tree body. Sits slightly larger than the inline folder glyphs in the tree text itself, which makes it read as the **root marker** of the tree rendering — the folder icon for the project's root.
 
-Clicking it **opens the project's root folder in Windows Explorer** via `os.startfile(project_path)`. Silent no-op if the path is missing; this is a shortcut, not a load-bearing operation.
+**Click action:** open the project's root folder in Windows Explorer. Two cooperating steps:
+
+1. **Roll curtains up** if they're not already (`mw.toggle_curtains()`). Mirrors the pattern `GitNode._launch_github_desktop` uses when switching to GitHub Desktop — Intricate yields the foreground by getting smaller, not by any explicit focus dance. Best-effort, wrapped in an except so a scene-less edge case doesn't block the file-open.
+2. **`os.startfile(project_path)`** — Windows' shell-execute path for the folder. Silent no-op on missing path or OSError; this is a shortcut, not a load-bearing operation.
+
+**Why `os.startfile` and not `subprocess.Popen(["explorer", path])`** — the stdlib route wraps `ShellExecuteEx`, which tells the shell *"do what happens if the user double-clicks this folder."* Windows' default behaviour there is to **raise and focus an existing Explorer window** pointing at the same path rather than spawn a duplicate. The alternative (`Popen`-launching `explorer.exe` directly) does spawn duplicates — every click adds another Explorer instance to the taskbar. Every "open X externally" button in the app should prefer `os.startfile` for this reason.
+
+**Why the curtains-roll helps beyond cosmetics** — with Intricate as a frameless always-on-top app, the target window (Explorer, GitHub Desktop, etc.) arrives UNDERNEATH Intricate without the roll. Rolling first guarantees the user sees the target app as the top surface of their desktop when it opens, matching what happens when the user triggers the same app via any other shortcut.
 
 *(Historical note: previously clicked to create a new subfolder in the project root — repurposed 2026-04-22 since project layouts stabilised enough that folder creation from here was no longer a daily utility. The whole name-input plumbing was removed in the same pass. This slot is the foothold for future filesystem actions on the tree; it's the one node in the app that has a dedicated left sidebar for its own category of actions.)*
 
@@ -191,3 +193,7 @@ Diagnostic surface kept for the next round: the `[tree-fit]`, `[tree-autosize]`,
 ### QPainterPath over QFontMetrics for Chandler42
 
 `QFontMetrics.horizontalAdvance()` reads the font's advance table, which on non-monospaced display fonts (Chandler42 is the canonical case) can over-report relative to actual rendered ink — the advance includes trailing per-glyph sidebearings that never draw. `QPainterPath.addText().boundingRect()` walks the actual glyph outlines and returns honest painted bounds. Scoped swap for title sizing only; QFontMetrics stays where it's reliable (body-document height, simple ASCII measurement in common fonts).
+
+### Intricate-initiated shell actions inherit session context
+
+`Win+E` in Windows opens a blank Explorer window — the OS can't know which folder the user intends to browse to. The 📁 button on this node opens Explorer **with a destination**, because the session graph already carries the intent (the node's `project_path`). Every "open X externally" button the app grows going forward inherits that same property: Intricate-initiated actions are smarter than OS-initiated ones for the same operation, because Intricate knows things the shell can't. Small practical benefit: fewer duplicate Explorer windows piling up in the taskbar over a work day, because `os.startfile` consolidates onto any existing instance rather than spawning a fresh one every time.
