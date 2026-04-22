@@ -940,6 +940,7 @@ class BaseNode(QGraphicsRectItem):
         QTimer.singleShot(0, _defer_release)
 
     def mouseReleaseEvent(self, event):
+        was_resizing = self._is_resizing
         self._is_resizing = False
         self._shake_press_active = False
         # Sync geometry back to data after a resize or move
@@ -947,6 +948,15 @@ class BaseNode(QGraphicsRectItem):
         self.data.y      = self.pos().y()
         self.data.width  = self.rect().width()
         self.data.height = self.rect().height()
+        if was_resizing:
+            # Round-trip diagnostic — paired with the auto-fit logs in
+            # TreeNode/WarmNode. "I set N, user landed at M." Comparing
+            # N and M tells us the deliberate-target-vs-desired gap.
+            logger.info(
+                "[resize-end] %s title=%r final rect w=%.0f h=%.0f  data.width=%.0f",
+                type(self).__name__, getattr(self.data, 'title', ''),
+                self.rect().width(), self.rect().height(), self.data.width,
+            )
         super().mouseReleaseEvent(event)
         # Release the scene mouse grab only if THIS item still holds it.
         # ungrabMouse() is NOT a safe no-op on non-grabbers — it touches Qt's
