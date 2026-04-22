@@ -1771,10 +1771,14 @@ class IntricateApp(QMainWindow):
         # ── Joy bucket counter ─────────────────────────────────────────────
         # Bucket count has its own tiny file store (utils/joy_buckets.py) —
         # detached from settings.toml so the value can be tweaked by hand
-        # without touching the shared-braincell config surface.
+        # without touching the shared-braincell config surface. A watcher
+        # picks up external edits live so hand-tweaks don't get clobbered
+        # by the next _persist_happy tick.
         import pretty_widgets.utils.settings as _s
         from utils import joy_buckets
         self._joy_bucket_count = joy_buckets.get_buckets()
+        self._joy_buckets_watcher = joy_buckets.JoyBucketsWatcher(self)
+        self._joy_buckets_watcher.changed.connect(self._on_joy_buckets_external_change)
         self._joy_happy_secs   = float(_s.get_nested("intricate", "joy", "happy_secs", 0.0))
         self._joy_bucket_label = pretty_label(
             str(self._joy_bucket_count),
@@ -1948,7 +1952,9 @@ class IntricateApp(QMainWindow):
         # Check if we earned a bucket
         if self._joy_happy_secs >= self._JOY_BUCKET_SECS:
             self._joy_happy_secs -= self._JOY_BUCKET_SECS
-            self._joy_bucket_count += 1
+            # Bump via the store so the file is the authoritative source
+            # (no in-memory drift from any concurrent external edits).
+            self._joy_bucket_count = joy_buckets.bump_buckets(1)
             self._joy_bucket_label.setText(str(self._joy_bucket_count))
             self._persist_happy()
 
@@ -1962,14 +1968,21 @@ class IntricateApp(QMainWindow):
             self._persist_happy()
 
     def _persist_happy(self) -> None:
-        """Save happy accumulator and bucket count. happy_secs and bar_value
-        still live in settings.toml; the bucket count lives in its own
-        detached store (utils/joy_buckets.py)."""
+        """Save happy accumulator and bar value. Bucket count is NOT written
+        here — it's persisted at earn time via joy_buckets.bump_buckets, so
+        the file store is always authoritative and external hand-edits are
+        never overwritten by a later _persist_happy tick."""
         import pretty_widgets.utils.settings as _s
-        from utils import joy_buckets
         _s.set_nested("intricate", "joy", "happy_secs", round(self._joy_happy_secs, 1))
-        joy_buckets.set_buckets(self._joy_bucket_count)
         _s.set_nested("intricate", "joy", "bar_value", self.joy_bar.value())
+
+    def _on_joy_buckets_external_change(self, new_value: int) -> None:
+        """Fired when joy_buckets.txt is edited from outside the running
+        process (e.g., hand-tweak from a chat session). Sync the in-memory
+        count and the label so the UI reflects the new value immediately."""
+        self._joy_bucket_count = new_value
+        self._joy_bucket_label.setText(str(new_value))
+        self._joy_bucket_label.setToolTip(self._joy_bucket_tooltip())
 
     def _deplete_joy(self) -> None:
         """Drain 1% from the joy bucket. Meow with escalating urgency.
