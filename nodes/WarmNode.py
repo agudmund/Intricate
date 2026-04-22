@@ -1091,7 +1091,12 @@ class WarmNode(BaseNode):
         fm = QFontMetrics(font)
         title_w = fm.horizontalAdvance(self.data.title)
         pad = Theme.nodeTextPaddingLeft
-        needed = title_w + pad * 2 + 8   # 8 px trailing buffer
+        # title_w + pad*2 is the exact minimum — BaseNode's _title_rect
+        # already reserves `pad` on each side, so this gives the title
+        # precisely its own advance plus `pad` of visible breathing per
+        # edge. No extra trailing buffer; the old +8 was double-dipping
+        # on the breathing room _title_rect already provides.
+        needed = int(title_w + pad * 2)
         if needed > r.width():
             self.prepareGeometryChange()
             self.setRect(QRectF(r.x(), r.y(), needed, r.height()))

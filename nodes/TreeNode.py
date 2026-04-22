@@ -639,7 +639,13 @@ class TreeNode(BaseNode):
         widens, the body rect widens with it, but the tree text keeps
         its natural left-anchored layout and the extra width becomes
         blank padding on the right. Same pattern as WarmNode's fit so
-        long titles and narrow bodies coexist cleanly."""
+        long titles and narrow bodies coexist cleanly.
+
+        Formula: title_w + pad*2. BaseNode's _title_rect already reserves
+        `pad` on each side (see r.width() - pad*2 in the title rect), so
+        a node width of exactly title_w + pad*2 gives the title precisely
+        its own advance plus `pad` visible breathing on each edge — no
+        extra trailing buffer needed."""
         if not self.data.title:
             return
         from PySide6.QtGui import QFont, QFontMetrics
@@ -649,7 +655,7 @@ class TreeNode(BaseNode):
         fm = QFontMetrics(font)
         title_w = fm.horizontalAdvance(self.data.title)
         pad = Theme.nodeTextPaddingLeft
-        needed = title_w + pad * 2 + 8   # 8 px trailing buffer, matches WarmNode
+        needed = int(title_w + pad * 2)
         if needed > r.width():
             self.prepareGeometryChange()
             self.setRect(QRectF(r.x(), r.y(), needed, r.height()))
@@ -674,10 +680,15 @@ class TreeNode(BaseNode):
         chrome_x = PADDING * 2 + TOOLBAR_W + 12
         chrome_y = self._BUTTON_ZONE_H + TITLE_GAP + PADDING * 2 + 22
 
-        # Account for title width so long project names don't clip
+        # Title width budget — ONLY pad*2, NOT chrome_x. The title sits
+        # above the body/toolbar, not beside them, so it doesn't carry
+        # TOOLBAR_W or the 12px body gutter; only BaseNode's title_rect
+        # pad on each side. Matches _auto_fit_title_width exactly so the
+        # two paths converge on the same width for a given title.
         from PySide6.QtGui import QFont, QFontMetrics
         title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
-        title_w = QFontMetrics(title_font).horizontalAdvance(self.data.title) + chrome_x
+        title_pad = Theme.nodeTextPaddingLeft
+        title_w = QFontMetrics(title_font).horizontalAdvance(self.data.title) + title_pad * 2
 
         new_w = max(200, ideal_w + chrome_x, title_w)
         new_h = max(120, doc_h   + chrome_y)
