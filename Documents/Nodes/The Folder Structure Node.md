@@ -133,7 +133,11 @@ Destroys the current node with a particle burst and spawns a fresh replacement a
 
 ## Left Toolbar
 
-A single 📁 button in a `QGraphicsProxyWidget` column to the left of the tree body. Clicking it shows a floating `PrettyEdit` name input (at z=10, above everything) where you type a folder name. On commit, the folder is created on disk and the node refreshes in place.
+A single 📁 button in a `QGraphicsProxyWidget` column to the left of the tree body. Sits slightly larger than the inline folder glyphs in the tree text itself, which makes it read as the **root marker** of the tree rendering — the folder icon for the project's root.
+
+Clicking it **opens the project's root folder in Windows Explorer** via `os.startfile(project_path)`. Silent no-op if the path is missing; this is a shortcut, not a load-bearing operation.
+
+*(Historical note: previously clicked to create a new subfolder in the project root — repurposed 2026-04-22 since project layouts stabilised enough that folder creation from here was no longer a daily utility. The whole name-input plumbing was removed in the same pass. This slot is the foothold for future filesystem actions on the tree; it's the one node in the app that has a dedicated left sidebar for its own category of actions.)*
 
 ## Init File Compliance
 

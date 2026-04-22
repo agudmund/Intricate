@@ -250,9 +250,7 @@ class TreeNode(BaseNode):
         self._hearts: list[QGraphicsPixmapItem] = []
         self._heart_pixmap: QPixmap | None = None
         self._toolbar_proxy: QGraphicsProxyWidget | None = None
-        self._name_editor: PrettyEdit | None = None
         self._build_toolbar()
-        self._build_name_input()
         self._build_tree_view()
 
         if data.tree_text:
@@ -296,11 +294,6 @@ class TreeNode(BaseNode):
             r.height() - (top - r.y()) - PADDING,
         )
 
-    def _name_input_rect(self) -> QRectF:
-        """Floating input field — spans the body area, one line tall."""
-        br = self._body_rect()
-        return QRectF(br.x(), br.y(), br.width(), 24.0)
-
     # ─────────────────────────────────────────────────────────────────────────
     # INIT.PY COMPLIANCE
     # ─────────────────────────────────────────────────────────────────────────
@@ -338,13 +331,20 @@ class TreeNode(BaseNode):
 
     def _build_toolbar(self) -> None:
         btn_size = int(TOOLBAR_W - 4)
-        self._tb_new_folder = QPushButton("📁")
-        self._tb_new_folder.setToolTip("Plant a new folder in the project")
+        # Folder icon — sits at the visual root of the tree rendering
+        # (slightly larger than inline folder glyphs, so it reads as the
+        # root marker). Click-action: open the session's project folder
+        # in Windows Explorer. Was previously "plant a new folder" —
+        # repurposed 2026-04-22 since project layouts are stable enough
+        # now that explicit folder creation from here is no longer a
+        # daily utility.
+        self._tb_open_explorer = QPushButton("📁")
+        self._tb_open_explorer.setToolTip("Open in Windows Explorer")
         from pretty_widgets.PrettyTooltip import install_tooltip
-        install_tooltip(self._tb_new_folder)
-        self._tb_new_folder.setFixedSize(btn_size, btn_size)
-        self._tb_new_folder.setFlat(True)
-        self._tb_new_folder.setStyleSheet(f"""
+        install_tooltip(self._tb_open_explorer)
+        self._tb_open_explorer.setFixedSize(btn_size, btn_size)
+        self._tb_open_explorer.setFlat(True)
+        self._tb_open_explorer.setStyleSheet(f"""
             QPushButton {{
                 border: none; padding: 0px;
                 background: transparent;
@@ -356,7 +356,7 @@ class TreeNode(BaseNode):
                 border-radius: 4px;
             }}
         """)
-        self._tb_new_folder.clicked.connect(self._show_name_input)
+        self._tb_open_explorer.clicked.connect(self._open_in_explorer)
 
         container = QWidget()
         container.setStyleSheet("background: transparent;")
@@ -364,100 +364,31 @@ class TreeNode(BaseNode):
         tb_layout.setContentsMargins(2, 2, 2, 2)
         tb_layout.setSpacing(4)
         tb_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-        tb_layout.addWidget(self._tb_new_folder)
+        tb_layout.addWidget(self._tb_open_explorer)
 
         self._toolbar_proxy = QGraphicsProxyWidget(self)
         self._toolbar_proxy.setWidget(container)
-        self._toolbar_proxy.setToolTip("Plant a new folder in the project")
+        self._toolbar_proxy.setToolTip("Open in Windows Explorer")
         self._toolbar_proxy.setGeometry(self._toolbar_rect())
         self._toolbar_proxy.show()
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # NEW FOLDER — NAME INPUT
-    # ─────────────────────────────────────────────────────────────────────────
+    def _open_in_explorer(self) -> None:
+        """Open the session's project root in Windows Explorer.
 
-    def _build_name_input(self) -> None:
-        self._name_editor = PrettyEdit(
-            self,
-            font_family=Theme.healthFontFamily,
-            font_size=9,
-            font_color=Theme.textPrimary,
-            placeholder="folder name\u2026",
-        )
-        # Override stylesheet — this input has a visible background and border
-        self._name_editor.setStyleSheet(f"""
-            QTextEdit {{
-                background: {Theme.nodeBg};
-                color: {Theme.textPrimary};
-                font-family: {Theme.healthFontFamily};
-                font-size: 9pt;
-                border: 1px solid {Theme.primaryBorder};
-                border-radius: 4px;
-                padding: 2px 6px;
-                selection-background-color: {Theme.primaryBorder};
-            }}
-        """)
-        self._name_editor.committed.connect(self._on_name_committed)
-        self._name_editor.position(self._name_input_rect())
-        self._name_editor.proxy.setZValue(10)  # float above the tree text
-
-    def _show_name_input(self) -> None:
-        self._name_editor.start_edit("", self._name_input_rect(), select_all=False)
-
-    def _on_name_committed(self, name: str) -> None:
-        if not name or not self.data.project_path:
+        Uses os.startfile(path) — Windows resolves a directory to its
+        default handler (Explorer). Silent no-op if the path is missing
+        or the OS call fails; the feature is a shortcut, not a
+        load-bearing operation.
+        """
+        if not self.data.project_path:
             return
-
-        from utils.helpers import ensure_dir
-        target = Path(self.data.project_path) / name
-        if ensure_dir(target):
-            self._refresh_in_place()
-
-    def _refresh_in_place(self) -> None:
-        """Re-walk the tree, destroy this node (with particles), spawn a fresh one."""
         project = Path(self.data.project_path)
         if not project.is_dir():
             return
-
         try:
-            text = self._make_walker().build_text()
-        except Exception:
-            return
-
-        scene = self.scene()
-        if scene is None:
-            return
-
-        pos = self.pos()
-        z   = self.zValue()
-        w   = self.rect().width()
-        h   = self.rect().height()
-
-        # Spawn the replacement first so the canvas is never empty
-        new_data = TreeNodeData(
-            project_path = self.data.project_path,
-            tree_text    = text,
-            width        = w,
-            height       = h,
-        )
-        new_node = TreeNode(new_data)
-        new_node.setPos(pos)
-        new_node.setZValue(z)
-        scene.addItem(new_node)
-
-        # Standard particle burst + deferred removal — same path as shake-delete.
-        # Pre-clear grab, selection, and interaction flags NOW so Qt doesn't
-        # route events to this zombie node during the deferred-removal window.
-        # _prepare_for_removal() fires later via itemChange when removeItem
-        # actually runs, but the dispatch state must be severed immediately.
-        self.setSelected(False)
-        self.setFlags(QGraphicsRectItem.GraphicsItemFlags(0))
-        if scene.mouseGrabberItem() is self:
-            self.ungrabMouse()
-        from graphics.Particles import sprinkle
-        sprinkle(scene, self.mapToScene(self.rect().center()), count=8000)
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: scene.removeItem(self))
+            os.startfile(str(project))  # Windows: opens folder in Explorer
+        except OSError as e:
+            _log.debug("[tree] open-in-explorer failed: %s", e)
 
     def _build_tree_view(self) -> None:
         self._editor = PrettyEdit(
@@ -611,8 +542,6 @@ class TreeNode(BaseNode):
         _log.info("  Editor proxy           z=%s", self._editor.proxy.zValue())
         if self._toolbar_proxy:
             _log.info("  Toolbar proxy          z=%s", self._toolbar_proxy.zValue())
-        if self._name_editor:
-            _log.info("  Name-editor proxy      z=%s", self._name_editor.proxy.zValue())
         _log.info("  Hearts target          z=5")
         _log.info("  File line indices: %s", sorted(file_lines))
 
@@ -738,16 +667,6 @@ class TreeNode(BaseNode):
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
-    def keyPressEvent(self, event) -> None:
-        if self._name_editor and self._name_editor.proxy.isVisible():
-            if event.key() == Qt.Key_Escape:
-                self._name_editor.cancel()
-                event.accept()
-                return
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS
     # ─────────────────────────────────────────────────────────────────────────
@@ -780,8 +699,6 @@ class TreeNode(BaseNode):
             self._toolbar_proxy.setGeometry(self._toolbar_rect())
         if self._editor:
             self._editor.position(self._body_rect())
-        if self._name_editor:
-            self._name_editor.position(self._name_input_rect())
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
@@ -791,18 +708,15 @@ class TreeNode(BaseNode):
 
     def _demolition_pre(self) -> None:
         # Hearts are QGraphicsItem children spawned on file operations —
-        # remove each from the scene before the node goes.  Editor and
-        # name-editor are PrettyEdit widgets with their own teardowns.
+        # remove each from the scene before the node goes. The editor is
+        # a PrettyEdit widget with its own teardown contract.
         for h in self._hearts:
             if h.scene():
                 h.scene().removeItem(h)
         self._hearts.clear()
-        if self._name_editor:
-            self._name_editor.teardown()
         if self._editor:
             self._editor.teardown()
         self._editor = None
-        self._name_editor = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION
