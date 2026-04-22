@@ -1,0 +1,35 @@
+#!/bin/sh
+# pre-push — spend one joy bucket per push.
+#
+# Buckets are earned through time-at-100%-joy (care for the app); pushes
+# spend them, making every push to origin a deliberate transaction against
+# accumulated nurture rather than a free action. Aligns with the family
+# rule: rewards are positive, never punitive — here the cost is paid from
+# earned currency, not as a penalty against health.
+#
+# Runs against the running app's single-source-of-truth file store —
+# Intricate's JoyBucketsWatcher picks the new value up live via
+# QFileSystemWatcher, no restart required.
+#
+# Install (one-time per clone):
+#   git config core.hooksPath scripts/hooks
+#
+# No push-blocking — hook always exits 0. If the push itself fails after
+# this runs, the bucket is spent on the attempt; manually bump back via
+# the utility or by editing Documents/data/joy_buckets.txt.
+set -e
+
+store="Documents/data/joy_buckets.txt"
+
+if [ -f "$store" ]; then
+    current="$(tr -d '[:space:]' < "$store")"
+    # Default to 0 if the file is empty or non-numeric.
+    case "$current" in
+        ''|*[!0-9-]*) current=0 ;;
+    esac
+    new=$((current - 1))
+    printf '%s' "$new" > "$store"
+    echo "[joy] spent 1 bucket on push — $current → $new"
+fi
+
+exit 0
