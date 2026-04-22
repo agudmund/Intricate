@@ -834,38 +834,68 @@ class IntricateApp(QMainWindow):
                 except RuntimeError:
                     pass  # anim was already torn down
             self._stop_meov()
-            # Clamp so the bottom edge never drops below the screen — and
-            # keep the same _TASKBAR_TRIGGER_MARGIN that maximise reserves,
-            # so the auto-hide taskbar trigger zone stays reachable after
-            # the curtains roll back down.
+
+            # Fivefold display-resolution validation before using Qt's
+            # availableGeometry (which shrinks to shell work-area
+            # reservations — the 2026-04-22 curtains bug). If all five
+            # independent readers agree, use their physical resolution and
+            # subtract the taskbar ourselves via SHAppBarMessage, bypassing
+            # the work-area layer entirely. On any disagreement: log every
+            # layer's reading and fall back to availableGeometry (the
+            # known-behaviour baseline).
+            from utils import display_resolution
+            reading = display_resolution.authoritative_resolution()
             screen = self.screen()
-            full   = screen.geometry()
-            avail  = screen.availableGeometry()
-            effective_bottom = avail.bottom() - self._TASKBAR_TRIGGER_MARGIN
-            max_height = effective_bottom - avail.top() + 1
+            screen_geom = screen.geometry()
+
+            if reading.agreed and (
+                reading.consensus_value == (screen_geom.width(), screen_geom.height())
+            ):
+                # Five layers agree AND Qt's own monitor geometry matches
+                # — trust the physical rect, subtract taskbar by direct
+                # query (not by work-area math).
+                tb_h = display_resolution.taskbar_height_on_bottom_of(
+                    screen_geom.top(), screen_geom.bottom(),
+                    screen_geom.left(), screen_geom.right(),
+                )
+                avail_top = screen_geom.top()
+                effective_bottom = screen_geom.bottom() - tb_h - self._TASKBAR_TRIGGER_MARGIN
+                source_tag = "consensus"
+            else:
+                # Fall back to the baseline Qt path — what the code has
+                # always done. Safe default while consensus is unreachable
+                # (post driver botch, CRU-scaled resolution vs raw EDID,
+                # etc.).
+                avail = screen.availableGeometry()
+                avail_top = avail.top()
+                effective_bottom = avail.bottom() - self._TASKBAR_TRIGGER_MARGIN
+                source_tag = "fallback"
+
+            max_height = effective_bottom - avail_top + 1
             height = min(self.original_height, max_height)
             y = min(start_rect.y(), effective_bottom - height + 1)
-            y = max(avail.top(), y)
+            y = max(avail_top, y)
             end_rect = QRect(start_rect.x(), y,
                              start_rect.width(), height)
-            # Diagnostic — the curtains bug on 2026-04-22 where expansion
-            # capped at a floating Explorer window's bottom rather than the
-            # real screen bottom. Captures every input to the height
-            # calculation so the next occurrence shows exactly which value
-            # went off (avail vs full screen geometry, original_height,
-            # end_rect actually planned). Only logs on expansion — low
-            # frequency, worth the context.
+
+            # Single forensic log per expand — captures everything about
+            # the decision so the next curtain weirdness has full context.
+            full = screen_geom
+            avail_q = screen.availableGeometry()
             logger.debug(
-                "[curtains] expand → screen=%s full=%s avail=%s "
-                "reserved=%dpx original_h=%d max_h=%d → end=%s",
+                "[curtains] expand source=%s | screen=%s full=%s avail_qt=%s "
+                "reserved_by_qt=%dpx | 5-layer: %s | original_h=%d max_h=%d → end=%s",
+                source_tag,
                 screen.name(),
                 (full.x(), full.y(), full.width(), full.height()),
-                (avail.x(), avail.y(), avail.width(), avail.height()),
-                full.height() - avail.height(),
+                (avail_q.x(), avail_q.y(), avail_q.width(), avail_q.height()),
+                full.height() - avail_q.height(),
+                reading.summary(),
                 self.original_height,
                 max_height,
                 (end_rect.x(), end_rect.y(), end_rect.width(), end_rect.height()),
             )
+
             # ③ Show content AFTER animation exists but BEFORE start()
             self._sidebar_splitter.show()
 
