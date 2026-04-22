@@ -710,7 +710,15 @@ class TreeNode(BaseNode):
         title_right_pad = title_pad if self._TITLE_RIGHT_PAD is None else self._TITLE_RIGHT_PAD
         title_w = QFontMetrics(title_font).horizontalAdvance(self.data.title) + title_pad + title_right_pad
 
-        new_w = max(200, ideal_w + chrome_x, title_w)
+        # Width is title-driven only. Body content (tree lines) does NOT
+        # widen the node — the body keeps the default width, and long
+        # lines clip horizontally if they exceed the body area. Design
+        # decision from user: "resize according to the title width while
+        # keeping the default width on the body text where the tree is."
+        # ideal_w intentionally excluded from the width calculation;
+        # doc_h still drives height so every line stays vertically visible.
+        default_w = self.data.__class__().width   # TreeNodeData default
+        new_w = max(default_w, title_w)
         new_h = max(120, doc_h   + chrome_y)
 
         r = self.rect()
