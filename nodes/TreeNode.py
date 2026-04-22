@@ -248,6 +248,12 @@ class TreeNode(BaseNode):
             self._ensure_init_files()
             self._cleanup_legacy()
 
+        # Title-width fit on spawn — mirrors the WarmNode/Markdown-spawn
+        # pattern so a long project folder name doesn't clip against the
+        # default 200px width before _auto_size gets a chance to run.
+        # Grow-only; idempotent if the default already fits.
+        self._auto_fit_title_width()
+
     # ─────────────────────────────────────────────────────────────────────────
     # TREE VIEW
     # ─────────────────────────────────────────────────────────────────────────
@@ -623,6 +629,31 @@ class TreeNode(BaseNode):
 
         _log.info("  Total hearts placed: %d", len(self._hearts))
         _log.info("=== end Z-depth hierarchy ===")
+
+    def _auto_fit_title_width(self) -> None:
+        """Grow node width if the current title would clip against the
+        default. Grow-only — preserves any user corner-drag resize and
+        any width already wide enough.
+
+        Body text (the tree area) is unaffected in content: the node
+        widens, the body rect widens with it, but the tree text keeps
+        its natural left-anchored layout and the extra width becomes
+        blank padding on the right. Same pattern as WarmNode's fit so
+        long titles and narrow bodies coexist cleanly."""
+        if not self.data.title:
+            return
+        from PySide6.QtGui import QFont, QFontMetrics
+        r = self.rect()
+        font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        font.setStyleName(self._TITLE_STYLE)
+        fm = QFontMetrics(font)
+        title_w = fm.horizontalAdvance(self.data.title)
+        pad = Theme.nodeTextPaddingLeft
+        needed = title_w + pad * 2 + 8   # 8 px trailing buffer, matches WarmNode
+        if needed > r.width():
+            self.prepareGeometryChange()
+            self.setRect(QRectF(r.x(), r.y(), needed, r.height()))
+            self.data.width = needed
 
     def _auto_size(self, text: str) -> None:
         """Resize the node to fit the full tree text — no scrollbar needed."""
