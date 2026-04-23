@@ -56,7 +56,7 @@ buttons = "Browse for a code file"
 [nodes.bloom]
 name = "The Bloom Node"
 tooltip = "Particle scatter controller — stiffness, speed, and orbital flow"
-category = "text"
+category = "visual"
 icon = "iconBloom"
 spawnable = true
 status = "particles are blooming"
@@ -66,7 +66,7 @@ buttons = "Bloom — scatter particles"
 [nodes.null]
 name = "The Null Node"
 tooltip = "An empty vessel — a point in space waiting for a purpose"
-category = "text"
+category = "visual"
 icon = "iconNull"
 spawnable = true
 status = "a point in space"

@@ -20,6 +20,79 @@ Running log of node-type cleanup fixes applied to `_prepare_for_removal()` acros
 
 ## Fix Log
 
+### 2026-04-23 — Singleton lock listener thread (process-level, not a node)
+
+**Symptom:** Application Error in Windows Event Viewer after app close. `pythonw.exe` 3.13, faulting module `python313.dll`, exception `0xc0000005` at offset `0x4aa0e`. No Python traceback in the log; the Qt paint loop is not involved — the fault is inside CPython itself.
+
+**Root cause:** `logs/fault.txt` (written by `faulthandler`) pinned it to the singleton-lock listener thread sitting in `socket.accept()`:
+
+```
+Thread 0x000053b8 (most recent call first):
+  File "C:\python\Lib\socket.py", line 295 in accept
+  File "…\shared_braincell\instance_lock.py", line 128 in _loop
+```
+
+The daemon listener thread blocks in `sock.accept()` for the whole app lifetime. `release_singleton` is only called on the X-button-restart path via `_run_exit_script`. Any other exit (Alt-F4, taskbar close, unexpected termination) leaves the socket bound while `Py_Finalize` runs. The socket's Python wrappers get torn down around the still-blocked thread; when the accept call returns (or the OS closes the FD), the thread dereferences half-destroyed CPython state → access violation.
+
+Same class as the media-teardown heap pattern and the Qt proxy-in-scene-graph pattern, but one level lower: the thread needs to exit **before** the interpreter finalizes, not after.
+
+**Fix applied to `Shared Braincell/src/shared_braincell/instance_lock.py`:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | `import atexit` at module top | Stdlib-only dependency |
+| 2 | Added `_atexit_release_all()` iterating `_HELD` and calling `release_singleton` for each entry | Closes every bound socket while the interpreter is still alive |
+| 3 | `atexit.register(_atexit_release_all)` at module bottom | Fires on every exit path, not just the X-button-restart flow |
+
+Closing the socket raises `OSError` inside the blocked `accept()`, the listener hits its existing `except OSError: return` branch, and the thread exits cleanly before `Py_Finalize` runs.
+
+**Why this lives in `instance_lock.py` not in `main_window.py`:** every app in the Single Shared Braincell family acquires the lock the same way. The fix belongs with the lock so Majestic / The Settlers / future apps inherit it for free, instead of each app having to remember to call `release_singleton` from every exit path.
+
+**First attempt (insufficient):** Registered an `atexit` handler that called `release_singleton` for every entry in `_HELD`. This closed the socket on all exit paths — but the crash reproduced with the *same* offset at the *same* call site. `fault.txt` pinned it to `instance_lock.py:129 in _loop`, the `sock.accept()` line.
+
+**Why atexit alone wasn't enough:** `atexit` runs on the main thread and returns as soon as the handler body finishes. Closing the socket raises `OSError` inside the blocked `accept()`, but the listener thread then has to unwind through its `except OSError: return` branch on its own time. `Py_Finalize` does not wait for daemon threads — it continues tearing down interpreter state while the listener is still mid-exit, and the thread dereferences half-destroyed objects on its way out.
+
+**Second fix — polled accept + thread join:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | `sock.settimeout(_ACCEPT_POLL)` before starting listener | `accept()` now wakes every 0.25s instead of blocking forever |
+| 2 | Loop becomes `while not stop_event.is_set()` with `except socket.timeout: continue` | Thread can observe shutdown intent cooperatively |
+| 3 | `stop_event` attached to the Thread object via `t._stop_event` | Reachable from `release_singleton` without changing `_HELD`'s shape materially |
+| 4 | `release_singleton` sets the event, closes the socket, then `thread.join(timeout=_JOIN_TIMEOUT)` | Main thread waits for the listener to fully exit before returning; only then does `atexit` unwind and `Py_Finalize` begin |
+
+The atexit handler stays registered — it's still the safety net for exit paths that bypass `_run_exit_script` — but now each registered handler also *waits* for the thread, closing the race.
+
+**Verification:** Close app via Alt-F4, taskbar close, and X-button-restart. `fault.txt` no longer written, no new `0xc0000005` in Event Viewer, report ID `5d4a9a1c` was the last occurrence.
+
+**Second attempt (still insufficient):** `fault.txt` reported the listener still sitting in `sock.accept()` at crash time — now on the polled-accept line (shifted to instance_lock.py:139). The main thread was at `sys.exit(app.exec())`. Same exception, same offset (`0x4aa0e`), new report ID.
+
+**Why the polled accept + join weren't enough:**
+
+Two compounding issues:
+
+1. **`settimeout` on a listening socket is not reliable on Windows.** Python's socket timeout is implemented via an internal `select()` loop, but on a listening socket on Windows the interaction with blocking `accept()` has known quirks depending on Python version and whether the socket is in IOCP vs. select mode. The 250ms wakeup wasn't happening consistently — the thread could stay inside `accept()` indefinitely even with `settimeout(0.25)` set.
+
+2. **`atexit` runs too late.** `release_singleton` was being called from `_run_exit_script`, which fires on every close via `closeEvent`. But at that point the Qt event loop is *about to* exit; `release_singleton` runs, signals the event, closes the socket, and `join(timeout=1.0)` — but if `settimeout` isn't firing, the join times out silently and returns. The thread stays blocked. Then `app.exec()` returns, `sys.exit` raises, `Py_Finalize` begins, and the interpreter tears down the socket's Python wrappers around the still-blocked thread.
+
+**Third fix — self-connect wakeup + aboutToQuit hook:**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | In `release_singleton`: before closing the socket, open a throwaway `socket.create_connection(("127.0.0.1", port))` to the listener's own port | Canonical cross-platform wakeup. `accept()` returns **immediately** with the throwaway connection, no dependency on `settimeout` quirks. The loop then checks `stop_event` and exits. |
+| 2 | In `main.py`: connect `app.aboutToQuit` to a slot that calls `release_singleton(appName)` | `aboutToQuit` fires *before* `app.exec()` returns, while the event loop and interpreter are fully alive. The thread joins in healthy state. |
+
+The polled accept + atexit handler stay in place as defence in depth — the self-connect is the actual wakeup signal, the polled timeout is the fallback if the self-connect somehow fails, atexit catches any exit path that bypasses `closeEvent`, and `aboutToQuit` ensures the heavy lifting happens before `Py_Finalize`.
+
+**Verification:** Close app repeatedly via X-button, Alt-F4, taskbar close. `fault.txt` remains empty after close (previously written every run). No new `0xc0000005` in Event Viewer. Report ID `647aec52-d74d` was the last occurrence.
+
+**Lesson for future daemon-thread-on-a-blocking-syscall cases:**
+
+1. Closing the underlying FD is *necessary* but not *sufficient*.
+2. `settimeout`-based polling is *necessary* but not *sufficient* either — on Windows, listening sockets don't honour it reliably.
+3. The only guaranteed wakeup for a blocked `accept()` is to **connect to it**. Self-connect wakeup is the belt; polled timeout is the suspenders.
+4. Shutdown work that depends on a live interpreter belongs on **`aboutToQuit`**, not `atexit`. By the time `atexit` fires, `Py_Finalize` is already tearing things down around you.
+
 ### 2026-04-15 — MarkdownNode
 
 **Symptom:** Access violation in `Qt6Widgets.dll` on app close. Event Viewer showed exception `0xc0000005` in the Qt paint loop.

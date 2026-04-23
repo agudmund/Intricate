@@ -275,6 +275,20 @@ def main():
     app.setApplicationName(appName)
     app.setOrganizationName(orgName)
 
+    # Release the singleton lock BEFORE app.exec() returns, while the Qt
+    # event loop is still alive and the interpreter is fully usable.
+    # atexit runs too late: by then Py_Finalize has already begun tearing
+    # down the socket's Python wrappers around the still-blocked listener
+    # thread → 0xc0000005 in python313.dll. aboutToQuit fires before the
+    # event loop actually exits, so the join completes in healthy state.
+    def _release_singleton_early():
+        try:
+            from shared_braincell import release_singleton
+            release_singleton(appName)
+        except Exception:
+            pass
+    app.aboutToQuit.connect(_release_singleton_early)
+
     # Set the window/taskbar icon — .exe builds embed this via PyInstaller,
     # but pythonw needs it explicitly or Windows shows the default Python icon.
     from pathlib import Path
