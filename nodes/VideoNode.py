@@ -855,6 +855,40 @@ class VideoNode(BaseNode):
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _quiet_for_shake(self) -> None:
+        """Sever the media pipeline synchronously at shake-trigger time.
+
+        Why this matters on corrupted media: the particle burst + deferred
+        removeItem leaves an 8000-sprite window during which the player
+        keeps decoding. On a malformed file, WMF's async decoder thread
+        may be stuck mid-parse on bad bitstream data — leaving it running
+        during the burst gives it more opportunity to dereference
+        partially-freed pipeline state once teardown finally begins.
+
+        ``setSource(QUrl())`` is the single most important step: it tells
+        WMF to flush the decoder for *this* source while Python and Qt
+        are both fully alive. By the time ``_demolition_pre`` runs, the
+        player has no active source and ``stop`` / ``deleteLater`` are
+        quiet operations.
+
+        Kept separate from ``_demolition_pre`` because shake-delete runs
+        this immediately but the rest of teardown is deferred until
+        mouseRelease + particle animation completes.
+        """
+        for _obj in (self._player, self._sink, self._audio):
+            if _obj is not None:
+                try: _obj.blockSignals(True)
+                except (RuntimeError, AttributeError): pass
+        # Detach from the source FIRST — this is what flushes the WMF
+        # decoder thread. Without it, stop() on a corrupted stream can
+        # race the decoder's own error-handling path and crash inside
+        # WMF before Qt ever emits a signal we could catch.
+        if self._player is not None:
+            try: self._player.setSource(QUrl())
+            except (RuntimeError, AttributeError): pass
+            try: self._player.stop()
+            except (RuntimeError, AttributeError): pass
+
     # Crew sets _destroyed FIRST so background ingest/drift workers
     # bail before any Qt teardown writes to dead state.
     _demolition_thread_flag = '_destroyed'
@@ -904,6 +938,15 @@ class VideoNode(BaseNode):
         # singleShot(0) used to leave a window where the player delivered
         # a frame to a dead sink.
         if self._player is not None:
+            # Detach the source BEFORE stop(). On corrupted media,
+            # stop() can race the WMF decoder thread's error-handling
+            # path; clearing the source flushes the decoder first and
+            # makes stop() a quiet no-op. Idempotent with _quiet_for_shake,
+            # which already ran for shake-delete but not for other
+            # teardown paths (scene switch, group delete via session
+            # load, etc.).
+            try: self._player.setSource(QUrl())
+            except (RuntimeError, AttributeError): pass
             try: self._player.stop()
             except (RuntimeError, AttributeError): pass
             try: self._player.setVideoOutput(None)
