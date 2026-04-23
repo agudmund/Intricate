@@ -385,14 +385,47 @@ class IntricateView(QGraphicsView):
         self._notify_viewport_changed()
 
     # ── Scene auto-expansion ──────────────────────────────────────────────────
+    #
+    # The canvas starts tiny (1000×1000 from Scene.__init__) and grows only
+    # when a node's outer edge lands at or past the current sceneRect boundary.
+    # This keeps memory/paint cost proportional to what the user has actually
+    # built — a fresh session is near-free, and gigantic networks only pay for
+    # the space they occupy.
+    #
+    # Trimming is implicit: sessions don't persist sceneRect, so a reload
+    # starts from Scene.__init__'s default and re-expands to fit current
+    # contents only. Delete half your nodes, reload, the rect is lean again.
+    #
+    # The margin added beyond the outermost node is NOT a fixed constant —
+    # it's a viewport-aware buffer so that any edge node can be panned into
+    # the centre of the view at roughly the zoom it was placed at. Without
+    # this buffer, edge nodes can only be scrolled to the viewport edge,
+    # never centred (the historical workaround was dropping a throwaway node
+    # half a screen offscreen to force expansion, then deleting it).
+    #
+    # Zoom itself never triggers expansion — only node placement/move/drop
+    # does. So sampling the current zoom here is a one-shot read at the
+    # moment of expansion, not a per-frame cost during pan/zoom.
 
-    _EXPAND_MARGIN = 300   # breathing room (scene px) beyond the outermost node
+    _MIN_CENTER_MARGIN = 700   # floor (scene px) — ≈ half a 1080p viewport at 1.0 zoom
+
+    def _expansion_margin(self) -> float:
+        """
+        Half the viewport expressed in scene coordinates at the current zoom,
+        floored at _MIN_CENTER_MARGIN. This is how much breathing room we add
+        beyond the outermost node so that edge nodes can be centred in the
+        viewport rather than pinned to its edge.
+        """
+        zoom = self.transform().m11() or 1.0
+        half_vp_scene = (self.viewport().width() / 2.0) / zoom
+        return max(half_vp_scene, float(self._MIN_CENTER_MARGIN))
 
     def _expand_scene_rect(self) -> None:
         """
-        Grow the scene rect to encompass all nodes plus _EXPAND_MARGIN padding.
-        Only measures nodes (not wires) — wire paths overshoot into nodes and
-        would inflate the rect incorrectly.  Never shrinks; uses united().
+        Grow the scene rect to encompass all nodes plus a zoom-aware margin
+        (see _expansion_margin). Only measures nodes (not wires) — wire paths
+        overshoot into nodes and would inflate the rect incorrectly. Never
+        shrinks; uses united().
         """
         scene = self.scene()
         if not scene:
@@ -404,7 +437,7 @@ class IntricateView(QGraphicsView):
                 nodes_rect = nodes_rect.united(item.mapRectToScene(item.rect()))
         if nodes_rect.isNull():
             return
-        m = self._EXPAND_MARGIN
+        m = self._expansion_margin()
         new_rect = scene.sceneRect().united(nodes_rect.adjusted(-m, -m, m, m))
         if new_rect != scene.sceneRect():
             scene.setSceneRect(new_rect)
