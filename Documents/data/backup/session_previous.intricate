@@ -274,7 +274,7 @@
       "source_mtime": 1745506042.3926215,
       "caption": "Waving - Framed",
       "volume": 50,
-      "playback_pos": 0,
+      "playback_pos": 875,
       "looping": true,
       "muted": true,
       "show_border": true,
@@ -470,7 +470,7 @@
       "source_mtime": 1746374795.2638292,
       "caption": "The Majestic",
       "volume": 50,
-      "playback_pos": 708,
+      "playback_pos": 2083,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -2557,21 +2557,6 @@
     },
     {
       "node_id": 0,
-      "node_type": "git",
-      "title": "Git Status",
-      "uuid": "09643904e8f349d0a33f1ba192265493",
-      "x": 0.0,
-      "y": 0.0,
-      "width": 300.0,
-      "height": 212.0,
-      "z_value": 0.0,
-      "ports_visible": false,
-      "shelf_visible": true,
-      "depth_front": false,
-      "node_tint": ""
-    },
-    {
-      "node_id": 0,
       "node_type": "warm",
       "title": "Market",
       "uuid": "62da15ce78774d46a2c5147797599e0d",
@@ -4396,12 +4381,12 @@
     }
   ],
   "viewport": {
-    "camera_x": 2920.7069248631165,
-    "camera_y": 5254.886591159439,
+    "camera_x": 2073.721798932764,
+    "camera_y": 3920.7856064193775,
     "camera_zoom": 0.5029604262909216
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
-  "checksum": "2da8b40fcacac9ed"
+  "checksum": "75d43bcd75cb29b3"
 }

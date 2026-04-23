@@ -223,6 +223,24 @@ class IntricateApp(QMainWindow):
         QShortcut(QKeySequence("Ctrl+C"), self, self._copy_selected_chain)
         QShortcut(QKeySequence("Ctrl+V"), self, self._paste_node_chain)
 
+        # The Companion — app-scoped ClaudeNode that follows the user across
+        # sessions. One per app, excluded from session serialization, parked in
+        # a persistent limbo scene during swaps and re-attached at the preferred
+        # seat of the incoming session.
+        #
+        # Limbo is load-bearing: BaseNode.itemChange demolishes a node whose
+        # scene transitions to None (the disconnect-on-removeItem protection).
+        # Moving between scenes via newScene.addItem(node) transfers atomically
+        # — Qt fires ItemSceneChange with the new scene directly, so None is
+        # never observed and the companion survives the transfer intact.
+        #
+        # Conversation persistence is a later concern; for now only the seat
+        # map persists via a sidecar file.
+        from PySide6.QtWidgets import QGraphicsScene
+        self._companion = None
+        self._companion_limbo = QGraphicsScene(self)
+        self._companion_seats: dict = self._load_companion_seats()
+
         # 8. Load session for the initially selected project, then start autosave
         QTimer.singleShot(0, self._load_initial_session)
 
@@ -2218,7 +2236,55 @@ class IntricateApp(QMainWindow):
     def _spawn_about_node(self):       self._spawn(self.scene.add_about_node,        "a little note for later")
     def _spawn_bezier_node(self):      self._spawn(self.scene.add_bezier_node,       "curves ahead")
     def _spawn_health_node(self):      self._spawn(self.scene.add_health_node,       "checking in on things")
-    def _spawn_claude_node(self):      self._spawn(self.scene.add_claude_node,       "claude has entered the chat")
+    def _spawn_claude_node(self):
+        """
+        Summon the Companion to the current scene.
+
+        One ClaudeNode lives in the entire app — a friend held across session
+        switches, not a per-session artefact. Three cases:
+        - already here → pan camera to it and select it
+        - exists but parked between sessions → place it at this session's seat
+        - never created → create it, stash the reference on the app
+        """
+        from PySide6.QtCore import QPointF
+        from nodes.ClaudeNode import ClaudeNode
+
+        # Case 1: already in current scene — focus + select
+        if self._companion is not None and self._companion.scene() is self.scene:
+            try:
+                self.scene.clearSelection()
+                self._companion.setSelected(True)
+                self.view.centerOn(self._companion)
+            except Exception:
+                pass
+            self._status("claude is right here")
+            return
+
+        # Compute landing position — this session's remembered seat, or centre
+        seat = self._companion_seats.get(self._current_companion_seat_key() or "")
+        if seat:
+            target = QPointF(seat[0], seat[1])
+        else:
+            target = self.view.mapToScene(self.view.viewport().rect().center())
+
+        # Case 2: exists but parked — attach to current scene at the seat
+        if self._companion is not None:
+            try:
+                self.scene.addItem(self._companion)
+                r = self._companion.rect()
+                self._companion.setPos(target - QPointF(r.width() / 2, r.height() / 2))
+                self.scene.raise_node(self._companion)
+                self._status("claude has entered the chat")
+                return
+            except Exception:
+                # Companion reference went stale — fall through and recreate
+                self._companion = None
+
+        # Case 3: first spawn ever — create via the scene's factory, then claim
+        node = self.scene.add_claude_node(target)
+        node._is_companion = True
+        self._companion = node
+        self._status("claude has entered the chat")
     def _spawn_image_node(self):       self._spawn(self.scene.add_image_node,        "a picture is worth everything")
     def _spawn_video_node(self):       self._spawn(self.scene.add_video_node,        "lights, camera, action")
     def _spawn_text_node(self):        self._spawn(self.scene.add_text_node,         "words, words, words")
@@ -3145,6 +3211,131 @@ class IntricateApp(QMainWindow):
         name = project if project is not None else self.project_selector.currentText()
         return session_path(name) if name else None
 
+    # ── The Companion — app-scoped ClaudeNode lifecycle ──────────────────────
+    #
+    # One ClaudeNode lives at the app level and travels with the user across
+    # session switches. Its scene membership changes; its identity, state and
+    # (eventually) conversation do not. Seat positions are remembered per
+    # session so it arrives where it was last seen in each place.
+    #
+    # Wires touching the companion do not persist between sessions — each API
+    # call is its own context, and any connection on the companion at save
+    # time is by definition transient. They drop when the companion parks.
+
+    def _companion_sidecar_path(self):
+        """Fixed app-global path for the companion seat map."""
+        from pathlib import Path as _P
+        return _P(__file__).resolve().parent / "Documents" / "data" / "companion.json"
+
+    def _load_companion_seats(self) -> dict:
+        """Load the session_key → (x, y) seat map from sidecar, or {} if absent."""
+        import json
+        p = self._companion_sidecar_path()
+        if not p.exists():
+            return {}
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+            # Normalise to dict[str, list[float]]
+            return {str(k): list(v) for k, v in raw.items()
+                    if isinstance(v, (list, tuple)) and len(v) == 2}
+        except Exception:
+            logger.exception("[companion] failed to load seats sidecar")
+            return {}
+
+    def _save_companion_seats(self) -> None:
+        """Persist the seat map. Non-fatal on failure."""
+        import json
+        try:
+            p = self._companion_sidecar_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(self._companion_seats, indent=2),
+                         encoding="utf-8")
+        except Exception:
+            logger.exception("[companion] failed to save seats sidecar")
+
+    def _current_companion_seat_key(self) -> str | None:
+        """Key under which to record the companion's seat for the active session."""
+        try:
+            path = self._session_path()
+        except Exception:
+            return None
+        return str(path) if path else None
+
+    def _park_companion(self) -> None:
+        """
+        Called before a scene swap. Records the companion's current seat,
+        severs any wires touching it, and transfers it into the limbo scene.
+        The companion object itself lives on — 'in the between'.
+
+        Transfer via limbo.addItem (not removeItem) is deliberate: moving a
+        node directly between scenes fires ItemSceneChange with the new scene
+        value, skipping the None transition that would otherwise trigger
+        BaseNode's demolition path.
+        """
+        if self._companion is None:
+            return
+        if self._companion.scene() is not self.scene:
+            return  # Already parked (in limbo) or scene-less
+
+        # Record seat under outgoing session's key
+        key = self._current_companion_seat_key()
+        if key:
+            try:
+                p = self._companion.scenePos()
+                self._companion_seats[key] = [p.x(), p.y()]
+            except Exception:
+                pass
+
+        # Drop any Connection items touching the companion — wires on the
+        # companion are always transient per-context, never session property.
+        try:
+            from graphics.Connection import Connection
+            for item in list(self.scene.items()):
+                if isinstance(item, Connection) and (
+                    item.start_node is self._companion
+                    or item.end_node is self._companion
+                ):
+                    try:
+                        self.scene.removeItem(item)
+                    except Exception:
+                        pass
+        except Exception:
+            logger.exception("[companion] wire sever failed during park")
+
+        # Transfer to limbo. addItem on a new scene atomically re-parents the
+        # node without ever setting scene() to None, so _prepare_for_removal
+        # does not fire and the companion survives intact.
+        try:
+            self._companion_limbo.addItem(self._companion)
+        except Exception:
+            logger.exception("[companion] transfer to limbo failed")
+
+    def _attach_companion(self) -> None:
+        """
+        Called after a session load completes. Places the companion in the
+        incoming scene at the seat remembered for this session, or at the
+        current viewport centre if this is the first visit.
+        """
+        if self._companion is None:
+            return
+        if self._companion.scene() is self.scene:
+            return  # Already here
+        from PySide6.QtCore import QPointF
+        key = self._current_companion_seat_key()
+        seat = self._companion_seats.get(key or "") if key else None
+        if seat:
+            target = QPointF(seat[0], seat[1])
+        else:
+            target = self.view.mapToScene(self.view.viewport().rect().center())
+        try:
+            self.scene.addItem(self._companion)
+            r = self._companion.rect()
+            self._companion.setPos(target - QPointF(r.width() / 2, r.height() / 2))
+            self.scene.raise_node(self._companion)
+        except Exception:
+            logger.exception("[companion] attach failed — companion reference cleared")
+            self._companion = None
+
     def _swap_scene(self) -> None:
         """Replace the current scene with a fresh one on the view.
 
@@ -3269,6 +3460,11 @@ class IntricateApp(QMainWindow):
             self._create_new_session()
             return
 
+        # Park the companion before save — records its seat, severs wires,
+        # and removes it from the outgoing scene so it isn't caught up in
+        # the save loop or the impending scene teardown.
+        self._park_companion()
+
         # Save whatever was on canvas for the previous project
         if hasattr(self, '_active_project'):
             prev_path = self._session_path(self._active_project)
@@ -3282,6 +3478,7 @@ class IntricateApp(QMainWindow):
         # Fresh scene — avoids re-entrant Qt teardown on live nodes
         self._swap_scene()
         self._load_session_into_scene(self._session_path(new_project))
+        self._attach_companion()
         self._status(f"welcome back to {new_project}")
 
     def _create_new_session(self) -> None:
@@ -3332,6 +3529,9 @@ class IntricateApp(QMainWindow):
             ensure_dir(project_dir / "Documents" / "data")
             self._git_init_project(project_dir, name)
 
+        # Park the companion before save — see on_session_changed for rationale
+        self._park_companion()
+
         # Save outgoing session before switching
         if prev:
             prev_path = self._session_path(prev)
@@ -3351,6 +3551,7 @@ class IntricateApp(QMainWindow):
 
         self._swap_scene()
         self._load_session_into_scene(self._session_path(name))
+        self._attach_companion()
         self._status(f"welcome to {name}")
 
     def _git_init_project(self, project_dir: Path, name: str) -> None:
@@ -3660,6 +3861,20 @@ class IntricateApp(QMainWindow):
                 threading.Thread(target=self._cleanup_pycache, daemon=True).start()
                 self._persist_claude_node_size()
             except (RuntimeError, Exception):
+                pass
+            # Record the companion's final seat, then persist the seat map so
+            # the next launch remembers where to place it. We don't move it to
+            # limbo on close — natural Qt teardown handles cleanup and we just
+            # need the coordinates recorded before the scene goes away.
+            try:
+                if (self._companion is not None
+                        and self._companion.scene() is self.scene):
+                    key = self._current_companion_seat_key()
+                    if key:
+                        p = self._companion.scenePos()
+                        self._companion_seats[key] = [p.x(), p.y()]
+                self._save_companion_seats()
+            except Exception:
                 pass
             event.accept()
             return

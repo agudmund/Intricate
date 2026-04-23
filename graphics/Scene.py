@@ -816,6 +816,12 @@ class IntricateScene(QGraphicsScene):
             # logging the skip makes the data loss visible instead of
             # silent.
             if hasattr(item, 'to_dict') and hasattr(item, 'data'):
+                # The Companion (app-scoped ClaudeNode) opts out of session
+                # serialization — it lives on IntricateApp and follows the
+                # user across sessions. See main_window.py _park_companion /
+                # _attach_companion for the full lifecycle.
+                if getattr(item, '_is_companion', False):
+                    continue
                 try:
                     d = item.to_dict()
                     if d:
@@ -1354,9 +1360,17 @@ class IntricateScene(QGraphicsScene):
             node = HealthNode(HealthNodeData.from_dict(d))
 
         elif node_type == "claude":
-            from nodes.ClaudeNode import ClaudeNode
-            from data.ClaudeNodeData import ClaudeNodeData
-            node = ClaudeNode(ClaudeNodeData.from_dict(d))
+            # Legacy-drop: ClaudeNodes are no longer per-session entities —
+            # one companion lives on IntricateApp and is summoned via the
+            # sidebar menu. Any claude node found in an old session dict is
+            # a redundant legacy artefact from the pre-companion era.
+            # Skipping here is non-destructive: the session dict still
+            # contains the entry, and only fades when this session next
+            # saves fresh (companion is excluded from save in save_session).
+            # Orphan response-wires are handled gracefully by the
+            # `if start and end` guard in the connections loop below.
+            logger.info("[load] legacy claude node skipped (companion is app-scoped)")
+            return None
 
         elif node_type == "claude_response":
             from nodes.ClaudeResponseNode import ClaudeResponseNode

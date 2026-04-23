@@ -76,12 +76,15 @@ def get_nodes_by_category(category: str) -> list[tuple[str, dict]]:
     """Return [(type_key, entry_dict), ...] for all nodes in a category.
 
     Preserves TOML file order (insertion order) so the menu reads
-    in the same sequence as the registry file.
+    in the same sequence as the registry file. Includes non-spawnable
+    entries so menus can render them as educational hints ("ah, that
+    one is auto-created by X") — the caller is responsible for disabling
+    them via `spawnable = false`, which _show_category_menu honours.
     """
     return [
         (key, dict(entry))
         for key, entry in _nodes.items()
-        if entry.get("category") == category and entry.get("spawnable", True)
+        if entry.get("category") == category
     ]
 
 

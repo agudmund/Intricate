@@ -274,7 +274,7 @@
       "source_mtime": 1745506042.3926215,
       "caption": "Waving - Framed",
       "volume": 50,
-      "playback_pos": 875,
+      "playback_pos": 3666,
       "looping": true,
       "muted": true,
       "show_border": true,
@@ -399,7 +399,7 @@
       "source_mtime": 1761485120.8856592,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a (1)",
       "volume": 50,
-      "playback_pos": 2252,
+      "playback_pos": 1068,
       "looping": true,
       "muted": true,
       "show_border": true,
@@ -470,7 +470,7 @@
       "source_mtime": 1746374795.2638292,
       "caption": "The Majestic",
       "volume": 50,
-      "playback_pos": 2083,
+      "playback_pos": 4208,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -526,7 +526,7 @@
       "source_mtime": 1761485120.9001687,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a",
       "volume": 50,
-      "playback_pos": 375,
+      "playback_pos": 4597,
       "looping": true,
       "muted": true,
       "show_border": true,
@@ -682,14 +682,14 @@
       "z_value": 100.0,
       "ports_visible": false,
       "shelf_visible": true,
+      "pinned": false,
+      "pin_vp_x": 0.0,
+      "pin_vp_y": 0.0,
       "cache_key": "cc231cdd8c7cc4619881aec7800c1a6a7a64e626cbdd1c65d2a9640231d2d567.png",
       "source_path": "C:\\Users\\thisg\\Desktop\\Intricate\\Images\\Stickers\\Return.png",
       "source_size": 445340,
       "source_mtime": 1776842767.2947605,
-      "image_b64": "",
-      "pinned": false,
-      "pin_vp_x": 0.0,
-      "pin_vp_y": 0.0
+      "image_b64": ""
     },
     {
       "node_id": 0,
@@ -1396,7 +1396,7 @@
       "x": 18961.37497586153,
       "y": 188.7532139111745,
       "width": 919.2271637424415,
-      "height": 145.0,
+      "height": 148.0,
       "z_value": 10.0,
       "ports_visible": false,
       "shelf_visible": true,
@@ -3728,6 +3728,198 @@
       "label": "source drifted \u2014 cache no longer matches\n08 - The Only force greater.png",
       "depth_front": false,
       "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "TinkerBells Twin",
+      "uuid": "0061d3db3ba14c1b93d1dd333f606a63",
+      "x": 2337.71988057633,
+      "y": 4628.451761750619,
+      "width": 182.40146751728616,
+      "height": 34.01006415383142,
+      "z_value": -10.0,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "TinkerBells Twin",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "TinkerBells Tail",
+      "uuid": "9935bf46242049c0afa0b92f4e1a32b9",
+      "x": 2187.4349224202015,
+      "y": 4553.853534666758,
+      "width": 186.14751166070118,
+      "height": 31.09218685593453,
+      "z_value": -10.0,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "TinkerBells Tail",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Everything else just showed up to the party",
+      "uuid": "aeeab63b3c094a92bff0007619094ad8",
+      "x": 2351.7724941988035,
+      "y": 4881.328406512546,
+      "width": 459.0625,
+      "height": 31.0,
+      "z_value": -9.671000000000182,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Everything else just showed up to the party",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "TinkerBells Tantrum",
+      "uuid": "a0d7b9bc4df6464dbb2cc230deb0d6e3",
+      "x": 2482.933170461556,
+      "y": 4704.634405620041,
+      "width": 216.5717832120913,
+      "height": 30.910431814109472,
+      "z_value": -10.0,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "TinkerBells Tantrum",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The Three slot rotation was yours",
+      "uuid": "aa27b139fa4a4aaca0dcacac3c14e293",
+      "x": 1852.341235813149,
+      "y": 4875.776922780275,
+      "width": 356.1038681303544,
+      "height": 33.96372844781209,
+      "z_value": -9.672000000000182,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The Three slot rotation was yours",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "And Thinkerbells Time",
+      "uuid": "4dd569457ffd4717bd4296e71df55d93",
+      "x": 2169.406954634098,
+      "y": 4764.399399954005,
+      "width": 235.3334275046559,
+      "height": 34.10446012395363,
+      "z_value": -10.0,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "And Thinkerbells Time",
+      "depth_front": false,
+      "node_tint": "#1e1e1e"
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The self healing just gave it an immune system",
+      "uuid": "6918b6d59f834db3bf85a6034d3f3898",
+      "x": 2049.2534726139074,
+      "y": 5101.5821393284805,
+      "width": 488.5625,
+      "height": 31.0,
+      "z_value": -9.668000000000184,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The self healing just gave it an immune system",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "TinkerBell Turbo",
+      "uuid": "d6426978197745ae86a0016987eb612a",
+      "x": 2009.9812704095575,
+      "y": 4461.97055479767,
+      "width": 185.07948340884013,
+      "height": 31.551279246122704,
+      "z_value": -10.0,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "TinkerBell Turbo",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Tinkerbells Tail is my favorite of the session so far",
+      "uuid": "d471bd6a6a5242ad86faea5a602d3ef9",
+      "x": 2132.708375142547,
+      "y": 4399.094841555014,
+      "width": 559.7375210634304,
+      "height": 32.91653140046992,
+      "z_value": -9.673000000000181,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Tinkerbells Tail is my favorite of the session so far",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The defensive view safety net",
+      "uuid": "de7a5a54aec34b3e92bccebf8881363f",
+      "x": 1947.6285292134708,
+      "y": 5009.3862798307255,
+      "width": 318.0,
+      "height": 31.0,
+      "z_value": -9.670000000000183,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The defensive view safety net",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The node behavior was always the heartbeat",
+      "uuid": "85a7ea7e5efa4e0fa736c56ec8ae603c",
+      "x": 2295.007752206511,
+      "y": 5008.1304054735465,
+      "width": 448.0,
+      "height": 31.0,
+      "z_value": -9.669000000000183,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The node behavior was always the heartbeat",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "All Five have been updated",
+      "uuid": "f9459db3e1c645a298d7e5f7d08f524a",
+      "x": 2567.639921371516,
+      "y": 4332.296125768686,
+      "width": 288.5,
+      "height": 31.0,
+      "z_value": -9.67400000000018,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "All Five have been updated",
+      "depth_front": false,
+      "node_tint": ""
     }
   ],
   "connections": [
@@ -4378,15 +4570,63 @@
     {
       "start_uuid": "82ea9358724345f4b89f7b35d9bac577",
       "end_uuid": "d9edec674be7445893f32fc8a6cbca42"
+    },
+    {
+      "start_uuid": "9935bf46242049c0afa0b92f4e1a32b9",
+      "end_uuid": "0061d3db3ba14c1b93d1dd333f606a63"
+    },
+    {
+      "start_uuid": "0061d3db3ba14c1b93d1dd333f606a63",
+      "end_uuid": "a0d7b9bc4df6464dbb2cc230deb0d6e3"
+    },
+    {
+      "start_uuid": "d6426978197745ae86a0016987eb612a",
+      "end_uuid": "9935bf46242049c0afa0b92f4e1a32b9"
+    },
+    {
+      "start_uuid": "4dd569457ffd4717bd4296e71df55d93",
+      "end_uuid": "aeeab63b3c094a92bff0007619094ad8"
+    },
+    {
+      "start_uuid": "aeeab63b3c094a92bff0007619094ad8",
+      "end_uuid": "85a7ea7e5efa4e0fa736c56ec8ae603c"
+    },
+    {
+      "start_uuid": "a0d7b9bc4df6464dbb2cc230deb0d6e3",
+      "end_uuid": "4dd569457ffd4717bd4296e71df55d93"
+    },
+    {
+      "start_uuid": "4dd569457ffd4717bd4296e71df55d93",
+      "end_uuid": "aa27b139fa4a4aaca0dcacac3c14e293"
+    },
+    {
+      "start_uuid": "aa27b139fa4a4aaca0dcacac3c14e293",
+      "end_uuid": "de7a5a54aec34b3e92bccebf8881363f"
+    },
+    {
+      "start_uuid": "de7a5a54aec34b3e92bccebf8881363f",
+      "end_uuid": "6918b6d59f834db3bf85a6034d3f3898"
+    },
+    {
+      "start_uuid": "85a7ea7e5efa4e0fa736c56ec8ae603c",
+      "end_uuid": "6918b6d59f834db3bf85a6034d3f3898"
+    },
+    {
+      "start_uuid": "d471bd6a6a5242ad86faea5a602d3ef9",
+      "end_uuid": "d6426978197745ae86a0016987eb612a"
+    },
+    {
+      "start_uuid": "f9459db3e1c645a298d7e5f7d08f524a",
+      "end_uuid": "d471bd6a6a5242ad86faea5a602d3ef9"
     }
   ],
   "viewport": {
-    "camera_x": 2073.721798932764,
-    "camera_y": 3920.7856064193775,
-    "camera_zoom": 0.5029604262909216
+    "camera_x": 2404.9730511774837,
+    "camera_y": 4198.982971570849,
+    "camera_zoom": 0.36008719497958747
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
-  "checksum": "75d43bcd75cb29b3"
+  "checksum": "233e994b56ab6264"
 }
