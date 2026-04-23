@@ -228,11 +228,18 @@ class IntricateApp(QMainWindow):
         # a persistent limbo scene during swaps and re-attached at the preferred
         # seat of the incoming session.
         #
-        # Limbo is load-bearing: BaseNode.itemChange demolishes a node whose
-        # scene transitions to None (the disconnect-on-removeItem protection).
-        # Moving between scenes via newScene.addItem(node) transfers atomically
-        # — Qt fires ItemSceneChange with the new scene directly, so None is
-        # never observed and the companion survives the transfer intact.
+        # Two protections are required for the transfer to survive intact:
+        #
+        # 1. Limbo scene. When the companion leaves the current scene, it must
+        #    land somewhere — not scene()==None, or else BaseNode's scene-change
+        #    demolition path fires. A persistent QGraphicsScene on the app is
+        #    the "in between", held alive across the whole app lifetime.
+        #
+        # 2. _pinned_across_scenes flag. Qt's cross-scene move is NOT atomic —
+        #    the item briefly sees scene()==None during the transfer (internally
+        #    Qt does remove-then-add). BaseNode.itemChange honours the pin flag
+        #    and skips _prepare_for_removal when it's set, so the companion's
+        #    proxies, signals, and demolition crew don't wake up mid-flight.
         #
         # Conversation persistence is a later concern; for now only the seat
         # map persists via a sidecar file.
@@ -2283,6 +2290,14 @@ class IntricateApp(QMainWindow):
         # Case 3: first spawn ever — create via the scene's factory, then claim
         node = self.scene.add_claude_node(target)
         node._is_companion = True
+        # _pinned_across_scenes opts this node out of BaseNode.itemChange's
+        # scene→None demolition trigger so cross-scene moves (to limbo and
+        # back) don't tear it down mid-flight. Read the warning block in
+        # BaseNode.itemChange before adding this flag to any other node —
+        # it disables the safety net that prevents inner-widget signal
+        # crashes (see Documents/Compliance/Node Cleanup Compliance.md,
+        # 2026-04-18 ClaudeNode inner-widget signal-destructor race).
+        node._pinned_across_scenes = True
         self._companion = node
         self._status("claude has entered the chat")
     def _spawn_image_node(self):       self._spawn(self.scene.add_image_node,        "a picture is worth everything")
@@ -3302,9 +3317,11 @@ class IntricateApp(QMainWindow):
         except Exception:
             logger.exception("[companion] wire sever failed during park")
 
-        # Transfer to limbo. addItem on a new scene atomically re-parents the
-        # node without ever setting scene() to None, so _prepare_for_removal
-        # does not fire and the companion survives intact.
+        # Transfer to limbo. Qt's cross-scene addItem is NOT atomic: it fires
+        # ItemSceneChange with value=None mid-flight, which would normally
+        # trip BaseNode's demolition path. The companion's
+        # _pinned_across_scenes flag opts out of that trigger so the transfer
+        # survives intact. See BaseNode.itemChange for the full warning.
         try:
             self._companion_limbo.addItem(self._companion)
         except Exception:

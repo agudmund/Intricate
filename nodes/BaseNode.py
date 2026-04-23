@@ -224,8 +224,46 @@ class BaseNode(QGraphicsRectItem):
         return super().sceneEventFilter(watched, event)
 
     def itemChange(self, change, value):
+        # ── Scene-change demolition trigger ──────────────────────────────────
+        #
+        # This is the load-bearing hook that guarantees every node leaving a
+        # scene gets its demolition crew phase — disconnects, timer stops,
+        # proxy teardown, behaviour disconnect_all. Without it, signal
+        # connections on inner QWidgets outlive their Python host and crash
+        # the C++ side (see Documents/Compliance/Node Cleanup Compliance.md,
+        # "ClaudeNode inner-widget signal-destructor race" — 0xc0000409 /
+        # STATUS_STACK_BUFFER_OVERRUN, 2026-04-18). This hook must stay
+        # aggressive. Do not weaken its conditions.
+        #
+        # The `_pinned_across_scenes` opt-out exists for exactly ONE case:
+        # the app-scoped Companion (main_window.py _park_companion), which
+        # transfers between a live session scene and a limbo holder scene
+        # so it can follow the user across session switches. Qt's cross-
+        # scene move is not atomic — it fires this event with value=None
+        # mid-flight (internally remove-then-add), which without the pin
+        # would tear the companion down between scenes.
+        #
+        # ⚠  Before adding any other node type to the pin list:
+        #     1. Confirm the node genuinely survives across scenes — it
+        #        holds identity beyond a single session (e.g. a HUD node
+        #        that belongs to the app, not the canvas).
+        #     2. Confirm it has a legitimate home during the transition —
+        #        a persistent limbo scene on the app, not scene()==None.
+        #        A pinned node whose scene is never set again will never
+        #        demolish and will leak on app shutdown.
+        #     3. Understand the failure mode: if you pin a node that
+        #        should have been demolished, its inner-widget signal
+        #        connections outlive the C++ widget and the app crashes
+        #        on the NEXT unrelated thing that touches those widgets.
+        #        The crash will look nothing like "I pinned something";
+        #        it will look like a random Qt fastfail in ucrtbase.dll.
+        #     4. Add the new node type to the list below, so future
+        #        greppers find every pinned node from one place.
+        #
+        # Currently pinned: ClaudeNode (the Companion, one per app).
         if (change == QGraphicsRectItem.GraphicsItemChange.ItemSceneChange
-                and value is None and not self._removal_done):
+                and value is None and not self._removal_done
+                and not getattr(self, '_pinned_across_scenes', False)):
             logger.log(5, "[REMOVE] %s %s leaving scene — _prepare_for_removal starting",
                         self.data.node_type, self.data.uuid[:8])
             self._prepare_for_removal()
