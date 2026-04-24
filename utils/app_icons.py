@@ -31,6 +31,19 @@ _APP_ICON_MAP: dict[str, str] = {
     # ".prproj": "premiere_app.ico",
 }
 
+# Link-based map: Desktop-relative path to a .lnk shortcut → cached filename.
+# Used for apps that don't register a distinct file extension but do ship
+# Desktop shortcuts — Intricate, The Settlers, other braincell-family tools.
+# Windows resolves the shortcut to its target's embedded icon resource, and
+# QFileIconProvider returns what Explorer would render for the .lnk itself.
+#
+# Extraction is once-per-missing; user's own apps don't re-skin often enough
+# to justify a staleness check.  Delete the cached .ico to force a refresh.
+_LINK_ICON_MAP: dict[str, str] = {
+    "Intricate/Intricate.lnk":        "intricate_app.ico",
+    "The Settlers/The Settlers.lnk":  "the_settlers_app.ico",
+}
+
 # Sizes baked into each multi-resolution .ico.  Qt renders each size
 # individually via Windows' shell icon cache so small sizes benefit from
 # the hand-tuned variants Windows ships, when available.
@@ -108,28 +121,28 @@ def _is_stale(cached: Path, extension: str) -> bool:
 # EXTRACTION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def extract_app_icon(extension: str, dest: Path) -> bool:
-    """Ask Windows what icon is registered for *extension*, collect it at
-    every size in _ICO_SIZES via Qt's QFileIconProvider, and save the pack
-    as a multi-resolution .ico at *dest*.
+def _extract_via_qt(target: QFileInfo, dest: Path, label: str) -> bool:
+    """Shared extraction core — takes a QFileInfo pointing at either a
+    dummy path with a known extension or a real file path (e.g. a .lnk
+    shortcut), pulls the icon via QFileIconProvider, and saves it as a
+    multi-resolution .ico at *dest*.
 
-    QFileIconProvider is the cross-platform Qt wrapper around the OS file-
-    type icon lookup; on Windows it routes through SHGetFileInfoW under
-    the hood, returning whatever Explorer would render for a file with
-    that extension.  No subprocess, no brand-pack download — the app's
-    own installer put the icons on this machine already; we just ask.
+    QFileIconProvider is the cross-platform Qt wrapper around the OS
+    file-type icon lookup; on Windows it routes through SHGetFileInfoW
+    under the hood, returning whatever Explorer would render.  No
+    subprocess, no brand-pack download — the app's own installer put
+    the icon on this machine already; we just ask.
 
-    Returns True on success. Per-failure warnings go to the logger so a
-    broken lookup doesn't cascade into a launch-blocking error.
+    *label* is a human-readable tag for log lines (the extension or the
+    shortcut path), surfaced only on warning/info messages.
     """
     from PIL import Image
     from io import BytesIO
 
     provider = QFileIconProvider()
-    # The path doesn't need to exist — Qt only consults the extension.
-    icon = provider.icon(QFileInfo(f"dummy{extension}"))
+    icon = provider.icon(target)
     if icon.isNull():
-        _log.warning(f"[app_icons] no OS icon registered for {extension}")
+        _log.warning(f"[app_icons] no OS icon for {label}")
         return False
 
     # Convert each size via PNG roundtrip — cleanest QPixmap→PIL path,
@@ -146,7 +159,7 @@ def extract_app_icon(extension: str, dest: Path) -> bool:
         frames.append(Image.open(BytesIO(png_bytes)).convert("RGBA"))
 
     if not frames:
-        _log.warning(f"[app_icons] no pixmaps produced for {extension}")
+        _log.warning(f"[app_icons] no pixmaps produced for {label}")
         return False
 
     try:
@@ -160,11 +173,27 @@ def extract_app_icon(extension: str, dest: Path) -> bool:
             sizes=[(f.width, f.height) for f in frames],
             append_images=frames[1:],
         )
-        _log.info(f"[app_icons] cached {extension} → {dest.name}")
+        _log.info(f"[app_icons] cached {label} → {dest.name}")
         return True
     except OSError as e:
-        _log.warning(f"[app_icons] save failed for {extension}: {e}")
+        _log.warning(f"[app_icons] save failed for {label}: {e}")
         return False
+
+
+def extract_app_icon(extension: str, dest: Path) -> bool:
+    """Extract the default-handler icon for *extension* via the OS lookup.
+    The dummy path doesn't need to exist — Qt only consults the extension."""
+    return _extract_via_qt(QFileInfo(f"dummy{extension}"), dest, extension)
+
+
+def extract_link_icon(lnk_path: Path, dest: Path) -> bool:
+    """Extract the icon displayed for a .lnk shortcut at *lnk_path*.
+    The shortcut must exist on disk; Qt follows its target to reach
+    the embedded icon resource."""
+    if not lnk_path.exists():
+        _log.debug(f"[app_icons] shortcut not present, skipping: {lnk_path}")
+        return False
+    return _extract_via_qt(QFileInfo(str(lnk_path)), dest, lnk_path.name)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +201,7 @@ def extract_app_icon(extension: str, dest: Path) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def ensure_app_icons() -> None:
-    """Check every registered extension; extract or refresh as needed.
+    """Check every registered extension and link; extract or refresh as needed.
 
     Call after QApplication exists (QFileIconProvider needs it).  Cost is
     negligible on subsequent boots — if nothing is stale, just a handful
@@ -180,7 +209,14 @@ def ensure_app_icons() -> None:
     extraction work, which takes milliseconds per icon.
     """
     d = icons_dir()
+    # Extension-based: Adobe apps, third-party tools we don't own
     for ext, filename in _APP_ICON_MAP.items():
         cached = d / filename
         if _is_stale(cached, ext):
             extract_app_icon(ext, cached)
+    # Link-based: our own braincell-family apps via their Desktop shortcuts
+    desktop = Path.home() / "Desktop"
+    for rel, filename in _LINK_ICON_MAP.items():
+        cached = d / filename
+        if not cached.exists():
+            extract_link_icon(desktop / rel, cached)
