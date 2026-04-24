@@ -1691,6 +1691,10 @@ class IntricateApp(QMainWindow):
         _cat_btn(Theme.iconHealthGroup,  "Health", self._show_health_menu)
         _cat_btn(Theme.iconToolsGroup,   "Tools",  self._show_tools_menu)
         _cat_btn(Theme.iconInfoGroup,    "Info",   self._show_info_menu)
+        # Adobe category sits between Info and Claude so the letterform trio
+        # at the bottom of the sidebar reads cleanly top→down: A (Adobe) →
+        # i (Info, just above) → Ai (Anthropic, just below).
+        _cat_btn(Theme.iconAdobeGroup,   "Adobe",  self._show_adobe_menu)
         # Anthropic logo fills its bounding box closer to 100% than the
         # circular family, so scale=1.0 keeps it visually comparable in
         # size to the circular icons without clipping the sidebar edge.
@@ -2527,6 +2531,7 @@ class IntricateApp(QMainWindow):
     def _show_visual_menu(self, btn):  self._show_category_menu("visual", btn)
     def _show_health_menu(self, btn):  self._show_category_menu("health", btn)
     def _show_tools_menu(self, btn):   self._show_category_menu("tools", btn)
+    def _show_adobe_menu(self, btn):   self._show_category_menu("adobe", btn)
     def _show_info_menu(self, btn):
         """Info menu: registry entries + dynamic Documents/*.md files."""
         from pathlib import Path

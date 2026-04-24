@@ -272,10 +272,17 @@ status = "ready for a session file"
 notes = ""
 buttons = "Import session nodes onto canvas"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ADOBE CATEGORY
+# ═══════════════════════════════════════════════════════════════════════════
+# Nodes that bridge Intricate to Adobe applications. Each one holds a live
+# wire into a different Adobe surface — Premiere's CEP panel, eventually
+# InDesign, potentially others as the integration grows.
+
 [nodes.premiere_bridge]
 name = "The Premiere Bridge"
 tooltip = "Live wire to Premiere's CEP panel — press 👋 to ping across the bridge"
-category = "tools"
+category = "adobe"
 icon = "iconPremiereBridge"
 icon_fallback = "#d87a9e"
 spawnable = true
