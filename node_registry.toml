@@ -275,9 +275,17 @@ buttons = "Import session nodes onto canvas"
 # ═══════════════════════════════════════════════════════════════════════════
 # ADOBE CATEGORY
 # ═══════════════════════════════════════════════════════════════════════════
-# Nodes that bridge Intricate to Adobe applications. Each one holds a live
-# wire into a different Adobe surface — Premiere's CEP panel, eventually
-# InDesign, potentially others as the integration grows.
+# Nodes and actions that bridge Intricate to Adobe applications. Each one
+# holds a live wire into a different Adobe surface — Premiere's CEP panel,
+# InDesign's default-launcher convention, potentially others as the
+# integration grows.
+
+[actions.open_indesign]
+name = "Open Session's InDesign File"
+tooltip = "Launch ./Adobe/{project}.indd via the OS default handler"
+category = "adobe"
+icon = "iconIndesign"
+icon_fallback = "#d87a9e"
 
 [nodes.premiere_bridge]
 name = "The Premiere Bridge"

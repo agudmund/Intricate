@@ -2445,6 +2445,7 @@ class IntricateApp(QMainWindow):
             "snip":              self._start_wire_snip,
             "launch_claude":     self._launch_claude_app,
             "launch_claude_code": self._launch_claude_code,
+            "open_indesign":     self._open_session_indesign,
         }
 
     def _show_sidebar_menu(self, menu, btn) -> None:
@@ -2862,6 +2863,54 @@ class IntricateApp(QMainWindow):
         # and braces: poll+maximize the window like Launch Claude does.
         user32 = ctypes.windll.user32
         self._poll_maximize_window("Claude", user32)
+
+    def _open_session_indesign(self) -> None:
+        """Open the current session's default InDesign file via the OS handler.
+
+        Convention: each project folder keeps its Adobe sources in a sibling
+        ./Adobe/ directory next to ./Documents/, with the default InDesign
+        file named after the project itself —
+
+            ~/Desktop/{project}/Adobe/{project}.indd
+
+        So the Adulting session → Adulting.indd in its own Adobe folder.
+        Opening via os.startfile lets Windows route the .indd through
+        whichever InDesign install is registered as the default handler;
+        we don't care which version, just that one exists.
+
+        If the file isn't there, open the Adobe folder instead so the user
+        can drop the file in or see what's present.  Missing Adobe folder
+        itself surfaces as an info-bar message rather than an error — this
+        is a convenience launcher, not a contract violation.
+        """
+        import os
+
+        project = self.project_selector.currentText()
+        if not project or project == self._NEW_SESSION_SENTINEL:
+            self.show_info("No session selected — can't resolve an InDesign file.")
+            return
+
+        adobe_dir = Path.home() / "Desktop" / project / "Adobe"
+        indd_file = adobe_dir / f"{project}.indd"
+
+        if indd_file.exists():
+            try:
+                os.startfile(str(indd_file))
+                self.show_info(f"Opening {indd_file.name}")
+            except OSError as e:
+                self.show_info(f"Couldn't open {indd_file.name}: {e}")
+            return
+
+        # Fall back: reveal the Adobe folder in Explorer so the user can see
+        # what's actually there (and drop in the expected file if missing).
+        if adobe_dir.exists():
+            try:
+                os.startfile(str(adobe_dir))
+                self.show_info(f"{indd_file.name} not found — opened the Adobe folder")
+            except OSError as e:
+                self.show_info(f"Couldn't open Adobe folder: {e}")
+        else:
+            self.show_info(f"No ./Adobe/ folder in {project} yet")
 
     def _poll_maximize_window(self, title_substring: str, user32) -> None:
         """Poll for a window matching *title_substring* to appear, then maximize it."""
