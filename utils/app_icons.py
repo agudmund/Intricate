@@ -31,18 +31,36 @@ _APP_ICON_MAP: dict[str, str] = {
     # ".prproj": "premiere_app.ico",
 }
 
-# Link-based map: Desktop-relative path to a .lnk shortcut → cached filename.
-# Used for apps that don't register a distinct file extension but do ship
-# Desktop shortcuts — Intricate, The Settlers, other braincell-family tools.
-# Windows resolves the shortcut to its target's embedded icon resource, and
-# QFileIconProvider returns what Explorer would render for the .lnk itself.
+# Launcher-based map: any target QFileIconProvider can resolve → cached
+# filename.  Used for apps that don't register a distinct file extension —
+# our own braincell tools (via Desktop .lnk), Claude Desktop (MSIX, via the
+# shell:AppsFolder virtual path), Claude Code CLI (direct exe), anything
+# else that has a launcher identity but no file-type claim.
 #
-# Extraction is once-per-missing; user's own apps don't re-skin often enough
-# to justify a staleness check.  Delete the cached .ico to force a refresh.
-_LINK_ICON_MAP: dict[str, str] = {
-    "Intricate/Intricate.lnk":        "intricate_app.ico",
-    "The Settlers/The Settlers.lnk":  "the_settlers_app.ico",
+# Key resolution:
+#   "~/..."      → Path.expanduser()
+#   "shell:..."  → passed through for MSIX AppsFolder targets
+#   absolute     → used as-is
+#
+# Extraction is once-per-missing; these apps don't re-skin often enough to
+# justify a staleness check.  Delete the cached .ico to force a refresh.
+_LAUNCHER_ICON_MAP: dict[str, str] = {
+    # Our own braincell-family apps via their Desktop shortcuts
+    "~/Desktop/Intricate/Intricate.lnk":             "intricate_app.ico",
+    "~/Desktop/The Settlers/The Settlers.lnk":       "the_settlers_app.ico",
+    # Anthropic's Claude Desktop — MSIX app, identified by its AppUserModelID
+    "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude": "claude_desktop.ico",
+    # Claude Code CLI — direct executable in the user's local bin
+    "~/.local/bin/claude.exe":                       "claude_cli.ico",
 }
+
+
+def _resolve_launcher_target(key: str) -> str:
+    """Expand ~ for filesystem paths; pass shell: paths through unchanged.
+    Qt's QFileIconProvider accepts both forms."""
+    if key.startswith("shell:"):
+        return key
+    return str(Path(key).expanduser())
 
 # Sizes baked into each multi-resolution .ico.  Qt renders each size
 # individually via Windows' shell icon cache so small sizes benefit from
@@ -186,14 +204,22 @@ def extract_app_icon(extension: str, dest: Path) -> bool:
     return _extract_via_qt(QFileInfo(f"dummy{extension}"), dest, extension)
 
 
-def extract_link_icon(lnk_path: Path, dest: Path) -> bool:
-    """Extract the icon displayed for a .lnk shortcut at *lnk_path*.
-    The shortcut must exist on disk; Qt follows its target to reach
-    the embedded icon resource."""
-    if not lnk_path.exists():
-        _log.debug(f"[app_icons] shortcut not present, skipping: {lnk_path}")
+def extract_launcher_icon(target: str, dest: Path) -> bool:
+    """Extract the icon displayed for a launcher target — a filesystem
+    path (.lnk, .exe) or a shell: URI (MSIX AppsFolder entries).
+
+    Filesystem targets must exist; shell: targets are passed through and
+    resolved by Windows at extraction time.  Failure is non-fatal — the
+    caller keeps whatever cached .ico is already in place.
+    """
+    if target.startswith("shell:"):
+        # Pass-through; Windows resolves the AppsFolder virtual path
+        return _extract_via_qt(QFileInfo(target), dest, target)
+    path = Path(target)
+    if not path.exists():
+        _log.debug(f"[app_icons] launcher not present, skipping: {path}")
         return False
-    return _extract_via_qt(QFileInfo(str(lnk_path)), dest, lnk_path.name)
+    return _extract_via_qt(QFileInfo(str(path)), dest, path.name)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -201,7 +227,7 @@ def extract_link_icon(lnk_path: Path, dest: Path) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def ensure_app_icons() -> None:
-    """Check every registered extension and link; extract or refresh as needed.
+    """Check every registered extension and launcher; extract or refresh as needed.
 
     Call after QApplication exists (QFileIconProvider needs it).  Cost is
     negligible on subsequent boots — if nothing is stale, just a handful
@@ -214,9 +240,8 @@ def ensure_app_icons() -> None:
         cached = d / filename
         if _is_stale(cached, ext):
             extract_app_icon(ext, cached)
-    # Link-based: our own braincell-family apps via their Desktop shortcuts
-    desktop = Path.home() / "Desktop"
-    for rel, filename in _LINK_ICON_MAP.items():
+    # Launcher-based: our own apps, Claude Desktop (MSIX), Claude CLI
+    for key, filename in _LAUNCHER_ICON_MAP.items():
         cached = d / filename
         if not cached.exists():
-            extract_link_icon(desktop / rel, cached)
+            extract_launcher_icon(_resolve_launcher_target(key), cached)

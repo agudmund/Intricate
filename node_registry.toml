@@ -309,7 +309,10 @@ buttons = "Ping 👋"
 name = "Intricate"
 tooltip = "General Info"
 category = "info"
-icon = "iconInfo"
+# Real app icon, extracted from Intricate.lnk at boot via utils/app_icons.py
+# so the Info menu's Intricate entry renders with the finalized app lock-up
+# rather than the generic 'i' glyph.
+icon_file = "intricate_app.ico"
 icon_fallback = "#9a9aaa"
 spawnable = true
 status = "version 0.6.0 — The Housekeeping before paradise arrives Era"
@@ -406,14 +409,19 @@ icon_fallback = "#8aaa88"
 name = "Launch Claude"
 tooltip = "Open the Claude desktop app (maximized)"
 category = "claude"
-icon = "iconClaude"
+# Icon refreshed at boot from the MSIX AppsFolder entry via utils/app_icons.py
+# (key = shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude).  Stays current with
+# whatever version Anthropic's auto-updater has installed.
+icon_file = "claude_desktop.ico"
 icon_fallback = "#7a9a7a"
 
 [actions.launch_claude_code]
 name = "Resume Claude Code"
 tooltip = "Resume this project's Claude Code session in the terminal"
 category = "claude"
-icon = "iconClaudeCode"
+# Icon refreshed at boot from the CLI executable via utils/app_icons.py
+# (key = ~/.local/bin/claude.exe).  Auto-updates alongside CLI releases.
+icon_file = "claude_cli.ico"
 icon_fallback = "#7a9a7a"
 
 [actions.snip]
