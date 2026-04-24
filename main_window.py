@@ -3619,13 +3619,23 @@ class IntricateApp(QMainWindow):
 
     _NEW_SESSION_SENTINEL = "+ New Session"
 
+    @staticmethod
+    def _project_sort_key(name: str) -> str:
+        """Sort 'The Foo' as if it were 'Foo' — honours the 'The …' naming
+        habit without piling everything into the T of the alphabet. Falls
+        through to the actual name when there's no 'The ' prefix. Casefold
+        keeps mixed casing from jumbling order across OS filesystems."""
+        stripped = name[4:] if name[:4].lower() == "the " else name
+        return stripped.casefold()
+
     def populate_sessions(self) -> None:
         desktop = Path.home() / "Desktop"
         desktop_folders = sorted(
-            p.name for p in desktop.iterdir()
-            if p.is_dir() and not p.name.startswith(".")
-            and p.name != self._NEW_SESSION_SENTINEL
-            and p.name != "_runtime"
+            (p.name for p in desktop.iterdir()
+             if p.is_dir() and not p.name.startswith(".")
+             and p.name != self._NEW_SESSION_SENTINEL
+             and p.name != "_runtime"),
+            key=self._project_sort_key,
         ) if desktop.exists() else []
         self.project_selector.addItems(desktop_folders)
         self.project_selector.addItem(self._NEW_SESSION_SENTINEL)
