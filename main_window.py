@@ -629,10 +629,7 @@ class IntricateApp(QMainWindow):
         # ── Registry-driven utilities (graduated from the sidebar) ─────────
         titlebar_actions = registry.get_actions_by_category("titlebar")
         for key, entry in titlebar_actions:
-            icon_attr = entry.get("icon", "")
-            fallback  = entry.get("icon_fallback", "#6b5a47")
-            icon_val  = getattr(Theme, icon_attr, None)
-            pix = Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+            pix = self._resolve_registry_icon(entry)
             act = menu.addAction(QIcon(pix), entry.get("name", key))
             tip = entry.get("tooltip", "")
             if tip:
@@ -2489,6 +2486,26 @@ class IntricateApp(QMainWindow):
 
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
+    def _resolve_registry_icon(self, entry: dict) -> "QPixmap":
+        """Resolve a registry entry's icon via either field:
+
+          icon_file = "xxx.ico"      — direct filename, used for OS-extracted
+                                       app icons that sidestep the Theme
+                                       metaclass indirection entirely.
+          icon      = "iconXxx"      — logical name resolved via Theme's
+                                       metaclass lookup into settings.toml.
+
+        icon_file wins when both are present.  Either way, icon_fallback
+        controls the sentinel color shown when the file is missing.
+        """
+        fallback = entry.get("icon_fallback", "#6b5a47")
+        icon_file = entry.get("icon_file")
+        if icon_file:
+            return Theme.icon(icon_file, fallback_color=fallback)
+        icon_attr = entry.get("icon", "")
+        icon_val = getattr(Theme, icon_attr, None)
+        return Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+
     def _show_category_menu(self, category: str, btn: QPushButton) -> None:
         """Build a category menu from node_registry.toml entries."""
         from utils.persistence import registry
@@ -2498,10 +2515,7 @@ class IntricateApp(QMainWindow):
 
         # Non-node actions first (e.g. Restore, Snip in tools)
         for key, entry in registry.get_actions_by_category(category):
-            icon_attr = entry.get("icon", "")
-            fallback = entry.get("icon_fallback", "#6b5a47")
-            icon_val = getattr(Theme, icon_attr, None)
-            pix = Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+            pix = self._resolve_registry_icon(entry)
             act = menu.addAction(QIcon(pix), entry.get("name", key))
             tip = entry.get("tooltip", "")
             if tip:
@@ -2512,10 +2526,7 @@ class IntricateApp(QMainWindow):
 
         # Node entries
         for key, entry in registry.get_nodes_by_category(category):
-            icon_attr = entry.get("icon", "")
-            fallback = entry.get("icon_fallback", "#6b5a47")
-            icon_val = getattr(Theme, icon_attr, None)
-            pix = Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+            pix = self._resolve_registry_icon(entry)
             act = menu.addAction(QIcon(pix), entry.get("name", key))
             tip = entry.get("tooltip", "")
             if tip:
@@ -2546,10 +2557,7 @@ class IntricateApp(QMainWindow):
 
         # Registry-driven entries (same as _show_category_menu)
         for key, entry in registry.get_nodes_by_category("info"):
-            icon_attr = entry.get("icon", "")
-            fallback = entry.get("icon_fallback", "#6b5a47")
-            icon_val = getattr(Theme, icon_attr, None)
-            pix = Theme.icon(icon_val, fallback_color=fallback) if icon_val else Theme.icon(None)
+            pix = self._resolve_registry_icon(entry)
             act = menu.addAction(QIcon(pix), entry.get("name", key))
             tip = entry.get("tooltip", "")
             if tip:

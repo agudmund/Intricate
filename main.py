@@ -386,6 +386,17 @@ def main():
     )
     logger.debug(f"[boot] Color palette loaded: {len(color_registry.get_all())} colors")
 
+    logger.log(TRACE, "[boot:12c] extracting OS-registered app icons")
+    # Pulls InDesign / Photoshop / etc. icons from the Windows shell handler
+    # registry so the Adobe category menu stays visually current with whatever
+    # versions the user has installed. Stale-if-newer-exe check means an
+    # Adobe update automatically refreshes the cached .ico on next boot.
+    from utils.app_icons import ensure_app_icons
+    try:
+        ensure_app_icons()
+    except Exception:
+        logger.warning("[boot:12c] app-icon extraction raised; continuing", exc_info=True)
+
     logger.log(TRACE, "[boot:13] constructing IntricateApp window")
     logger.log(TRACE, f"[boot:13a] Theme.icon at window construction = {getattr(Theme, 'icon', 'MISSING')}")
     window = IntricateApp()
