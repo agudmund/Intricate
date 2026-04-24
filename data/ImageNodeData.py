@@ -30,7 +30,7 @@ class ImageNodeData(NodeData):
     height:    float = field(default=220.0)
 
     image_b64:    str   = field(default="")    # Legacy base64-encoded PNG — replaced by cache_key
-    cache_key:    str   = field(default="")    # SHA-256 hash key into Documents/data/cache/
+    cache_key:    str   = field(default="")    # SHA-256 hash key into Documents/Data/Cache/
     caption:      str   = field(default="")    # Editable label shown on the node
     source_path:  str   = field(default="")    # Absolute path to the source file on disk (provenance)
     source_size:  int   = field(default=0)     # Cheap drift fingerprint — source size in bytes at last check

@@ -104,7 +104,7 @@ Per-chunk AES-GCM encryption. Nonce unique per chunk. Key derived from a session
 
 ## Migration Path from Current Cache
 
-The current cache (`Documents/data/cache/<sha256>.<ext>`) is the authoritative runtime substrate and will remain so through any long transition. The migration shape that seems right:
+The current cache (`Documents/Data/Cache/<sha256>.<ext>`) is the authoritative runtime substrate and will remain so through any long transition. The migration shape that seems right:
 
 **Phase 0 (now)**: verbatim per-file cache, documented canonically in `Media Cache.md`. The audit I shipped earlier today validates its integrity against the stamp workflow.
 

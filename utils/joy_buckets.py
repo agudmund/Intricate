@@ -14,7 +14,7 @@ from PySide6.QtCore import QObject, QFileSystemWatcher, Signal
 # One line, one integer, at a predictable path. Lives outside version control
 # (see .gitignore) — it's runtime state, not source. Chosen to be trivially
 # editable by hand (or from a chat session) without touching settings.toml.
-_STORE = Path(__file__).resolve().parent.parent / "Documents" / "data" / "joy_buckets.txt"
+_STORE = Path(__file__).resolve().parent.parent / "Documents" / "Data" / "joy_buckets.txt"
 
 
 def _ensure_parent() -> None:

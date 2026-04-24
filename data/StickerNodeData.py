@@ -32,7 +32,7 @@ class StickerNodeData(ChromelessRootData):
     width:        float = field(default=200.0)
     height:       float = field(default=200.0)
     image_b64:    str   = field(default="")    # Legacy base64 — replaced by cache_key
-    cache_key:    str   = field(default="")    # SHA-256 key into Documents/data/cache/
+    cache_key:    str   = field(default="")    # SHA-256 key into Documents/Data/Cache/
     source_path:  str   = field(default="")    # Absolute path to source on disk (provenance)
     source_size:  int   = field(default=0)     # Cheap drift fingerprint — size in bytes at last check
     source_mtime: float = field(default=0.0)   # Cheap drift fingerprint — mtime at last check

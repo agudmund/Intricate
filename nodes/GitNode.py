@@ -93,7 +93,7 @@ _SESSION_FILENAMES = {
     # Legacy .json names — still classify as session-only until fully migrated
     "session.json", "session_previous.json", "session_archive.json",
 }
-_SESSION_DIRS      = {"backup", "Documents", "data", "cache"}
+_SESSION_DIRS      = {"backup", "Documents", "data", "cache", "Data", "Cache"}
 
 
 def _is_session_path(raw: str) -> bool:
@@ -101,8 +101,8 @@ def _is_session_path(raw: str) -> bool:
 
     Matches:
       - Session save files (session.intricate, backups)
-      - The Documents/data/ tree (backup/, cache/)
-      - Image node cache PNGs (Documents/data/cache/*.png)
+      - The Documents/Data/ tree (backup/, Cache/)
+      - Image node cache PNGs (Documents/Data/Cache/*.png)
       - Warm bridge files (.warm_bridge_*.json)
       - Timestamped session backups (session_archive_*.intricate)
     """
@@ -110,8 +110,10 @@ def _is_session_path(raw: str) -> bool:
     name = Path(p).name
     if name in _SESSION_FILENAMES or name in _SESSION_DIRS:
         return True
-    # Image cache PNGs inside Documents/data/cache/
-    if "Documents/data/cache/" in p or "Documents\\data\\cache\\" in p:
+    # Image cache PNGs inside Documents/Data/Cache/ (case-insensitive match
+    # so legacy lowercase layouts pre-2026-04-24 still classify correctly).
+    pl = p.lower()
+    if "documents/data/cache/" in pl or "documents\\data\\cache\\" in pl:
         return True
     # Warm bridge temp files
     if name.startswith(".warm_bridge_") and name.endswith(".json"):

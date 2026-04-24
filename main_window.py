@@ -2555,7 +2555,7 @@ class IntricateApp(QMainWindow):
         # Dynamic Documents/ entries — top-level .md files + nested subfolders
         docs_dir = Path(__file__).resolve().parent / "Documents"
         _DEDICATED = {"Architecture.md", "Node Type Schema.md"}
-        _SKIP_DIRS = {"data"}
+        _SKIP_DIRS = {"data", "Data"}
         if docs_dir.is_dir():
             fallback_pix = Theme.icon(Theme.iconSession, fallback_color="#8a9aaa")
 
@@ -2888,7 +2888,7 @@ class IntricateApp(QMainWindow):
 
     def _spawn_tree_node(self):
         path = self._session_path()
-        # session lives in {project}/Documents/data/ — project root is three levels up
+        # session lives in {project}/Documents/Data/ — project root is three levels up
         project_root = path.parent.parent.parent if path else None
         self._spawn(self.scene.add_tree_node, "mapping the territory",
                     project_path=str(project_root) if project_root else "")
@@ -3240,7 +3240,7 @@ class IntricateApp(QMainWindow):
     def _companion_sidecar_path(self):
         """Fixed app-global path for the companion seat map."""
         from pathlib import Path as _P
-        return _P(__file__).resolve().parent / "Documents" / "data" / "companion.json"
+        return _P(__file__).resolve().parent / "Documents" / "Data" / "companion.json"
 
     def _load_companion_seats(self) -> dict:
         """Load the session_key → (x, y) seat map from sidecar, or {} if absent."""
@@ -3409,7 +3409,7 @@ class IntricateApp(QMainWindow):
             return
         enter_project(path)
         # Ensure git repo exists — session file may predate git init
-        project_dir = path.parent.parent.parent  # Documents/data/session → project root
+        project_dir = path.parent.parent.parent  # Documents/Data/session → project root
         if project_dir.exists() and not (project_dir / ".git").exists():
             self._git_init_project(project_dir, project_dir.name)
         try:
@@ -3543,7 +3543,7 @@ class IntricateApp(QMainWindow):
         if project_dir.exists():
             self._status(f"{name} already exists — switching to it")
         else:
-            ensure_dir(project_dir / "Documents" / "data")
+            ensure_dir(project_dir / "Documents" / "Data")
             self._git_init_project(project_dir, name)
 
         # Park the companion before save — see on_session_changed for rationale

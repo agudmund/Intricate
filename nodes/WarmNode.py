@@ -47,7 +47,7 @@ BODY_TOP        = PADDING + EMOJI_SIZE + 16.0   # Body text starts below title +
 WARM_SPLIT_SAFETY_CEILING = 20_000
 
 # Bridge file lives alongside session data
-_BRIDGE_DIR = Path(__file__).resolve().parent.parent / "Documents" / "data"
+_BRIDGE_DIR = Path(__file__).resolve().parent.parent / "Documents" / "Data"
 
 
 def _html_to_plain(body: str) -> str:

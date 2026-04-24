@@ -207,4 +207,4 @@ The session JSON contains `cache_key` and `source_path`, not the image itself. T
 - The LOD cache is quantized to 0.5-step zoom levels intentionally — continuous-zoom regeneration would pin a CPU core.
 - `_scaled_cache_size` is keyed on target pixel dimensions, not image rect dimensions. This is what makes zoom-in stay crisp: the cache regenerates at screen-pixel resolution, not node-local coords.
 - `_pending_drift` is the Qt-thread-safe way to hand a drift warning from the worker to the main thread. The worker stores a string; the delivery timer reads it and spawns the AboutNode under the GIL.
-- The cache directory is per-project (`set_cache_root` points it at `Documents/data/cache/` under the active project root). Different sessions don't share caches.
+- The cache directory is per-project (`set_cache_root` points it at `Documents/Data/Cache/` under the active project root). Different sessions don't share caches.

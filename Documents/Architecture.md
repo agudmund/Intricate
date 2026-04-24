@@ -135,7 +135,7 @@ Canonical catalogue with per-node detail lives in `Documents/Node Type Schema.md
 
 ### Text Bridge (WarmNode ↔ Notepad)
 
-WarmNode writes a `.warm_bridge_{uuid}.json` to `Documents/data/`. Notepad opens with `--bridge <path>`. Both sides use QFileSystemWatcher + debounce timers. `writer` field prevents echo loops. Bridge file deleted on close or node removal.
+WarmNode writes a `.warm_bridge_{uuid}.json` to `Documents/Data/`. Notepad opens with `--bridge <path>`. Both sides use QFileSystemWatcher + debounce timers. `writer` field prevents echo loops. Bridge file deleted on close or node removal.
 
 ### Premiere Bridge (PremiereBridgeNode ↔ CEP Panel)
 

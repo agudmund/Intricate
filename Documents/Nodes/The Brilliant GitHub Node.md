@@ -13,9 +13,9 @@ Four states, each with its own dot colour in the repo list:
 - **Blue dot** — Dirty. Uncommitted changes that are not session files.
 - **Green dot** — Session. Only session-managed files have changed — safe to bulk-commit without review. This includes:
   - Session save files (`.intricate`, backups, timestamped archives)
-  - Image node cache PNGs (`Documents/data/cache/`)
+  - Image node cache PNGs (`Documents/Data/Cache/`)
   - Warm bridge temporaries (`.warm_bridge_*.json`)
-  - The `Documents/data/` tree (backup/, cache/)
+  - The `Documents/Data/` tree (backup/, Cache/)
 - **Amber dot** — Unpushed. Working tree is clean but local commits have not been pushed to the remote. Detected via `git rev-list --count @{u}..HEAD`.
 - **No dot** — Clean. Nothing to commit, nothing to push. Everything is in sync.
 

@@ -28,20 +28,20 @@ def set_cache_root(project_data_dir: Path) -> None:
     Called by main_window when a project is selected/loaded.
     """
     global _cache_root
-    _cache_root = project_data_dir / "cache"
+    _cache_root = project_data_dir / "Cache"
     _cache_root.mkdir(parents=True, exist_ok=True)
 
 
 def cache_dir() -> Path:
     """Return (and create) the image cache directory.
-    Falls back to Intricate's own Documents/data/cache if no project root is set.
+    Falls back to Intricate's own Documents/Data/Cache if no project root is set.
     """
     if _cache_root is not None:
         _cache_root.mkdir(parents=True, exist_ok=True)
         return _cache_root
     # This file lives at utils/persistence/media_cache.py — repo root is
     # three parents up (2026-04-18 utils regrouping).
-    d = Path(__file__).resolve().parent.parent.parent / "Documents" / "data" / "cache"
+    d = Path(__file__).resolve().parent.parent.parent / "Documents" / "Data" / "Cache"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

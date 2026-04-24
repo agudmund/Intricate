@@ -22,7 +22,7 @@ The cache is not a speed feature. It is the load-bearing contract that says *onc
 
 ### The Cache — Byte-Preserving, Content-Addressed, Shared
 
-The media cache lives at `Documents/data/cache/` under the active project. Videos are keyed as `<sha256>.<ext>` exactly like images. Keys are globally unique by SHA; image and video files coexist in the same directory with no collision risk and no subfolders.
+The media cache lives at `Documents/Data/Cache/` under the active project. Videos are keyed as `<sha256>.<ext>` exactly like images. Keys are globally unique by SHA; image and video files coexist in the same directory with no collision risk and no subfolders.
 
 Large files use `cache_source_file(path)` which streams through 1 MiB chunks: one pass for the SHA, one pass for a `shutil.copyfile`. Already-cached files short-circuit to hash-only. A 2 GB video hashes in ~6 s on local NVMe and is written verbatim — no transcode, no re-encode, nothing that could change a byte.
 
@@ -153,7 +153,7 @@ Cache files are **not** removed here — the user may undo the delete, or the re
 
 - The paint-time LOD cache is the **second** of two tiers — the ingest-time size is already screen-aware, so the `_scaled_cache` at paint time is only a light aspect-fit to `vr_size`. `SmoothPixmapTransform` is enabled so any painter-side residual is bilinear.
 - The `_frame_pending` throttle is unchanged by the cache rewrite — if the paint loop hasn't caught up to the previous frame, the next one is dropped. This keeps decoder pressure bounded even under heavy paint load.
-- The cache is shared across projects only to the extent that projects share a `Documents/data/cache/` root. Different `set_cache_root()` targets give isolated caches.
+- The cache is shared across projects only to the extent that projects share a `Documents/Data/Cache/` root. Different `set_cache_root()` targets give isolated caches.
 - `cache_source_file` is idempotent. Re-dropping the same video from the same path is a no-op after the first hash pass.
 - The drift worker uses a 1-second tolerance on mtime comparison — some networked filesystems round mtime to the nearest second, and exact-equality tripped false positives during testing.
 - Playing videos refresh their LOD automatically on the next decoded frame. Paused videos refresh via a `QMediaPlayer.setPosition()` nudge gated on an LOD delta past the quantized step; this avoids decoder thrash during continuous pan/hover.

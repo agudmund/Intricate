@@ -63,7 +63,7 @@ All exported from `utils/media_cache.py`:
 | Function | Purpose | When to use |
 |---|---|---|
 | `set_cache_root(project_data_dir)` | Point the cache at the active project's data directory. Called once per project load. | `main_window` on project switch. |
-| `cache_dir()` | Return the absolute cache directory path. Creates it if missing. Falls back to Intricate's own `Documents/data/cache` if no project is set. | Internal; rarely called by consumers. |
+| `cache_dir()` | Return the absolute cache directory path. Creates it if missing. Falls back to Intricate's own `Documents/Data/Cache` if no project is set. | Internal; rarely called by consumers. |
 | `cache_source_bytes(raw, ext)` → key | Hash + write raw bytes. Verbatim, dedup. | Any node reading a file and wanting the cache to mirror those exact bytes (ImageNode, StickerNode drop path). |
 | `cache_source_file(src_path)` → key | Stream-hash and stream-copy a source file in 1 MiB chunks. Avoids loading the whole file into memory. | VideoNode — video files are large enough that `read_bytes()` is wasteful. |
 | `cache_pixmap(pixmap)` → key | Fallback for pasted or generated images with no file origin. PNG-encodes the in-memory pixmap. | ImageNode paste path, StickerNode `to_dict` fallback for never-cached stickers. |
@@ -109,7 +109,7 @@ Cost of the drift check: one `stat()` per node on restore (fingerprint path, hot
 
 ## Per-Project Cache Directories
 
-`set_cache_root(project_data_dir)` points the cache at `<project>/Documents/data/cache/`. Different sessions under different project folders do not share cache contents.
+`set_cache_root(project_data_dir)` points the cache at `<project>/Documents/Data/Cache/`. Different sessions under different project folders do not share cache contents.
 
 Rationale:
 

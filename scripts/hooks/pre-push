@@ -16,10 +16,10 @@
 #
 # No push-blocking — hook always exits 0. If the push itself fails after
 # this runs, the bucket is spent on the attempt; manually bump back via
-# the utility or by editing Documents/data/joy_buckets.txt.
+# the utility or by editing Documents/Data/joy_buckets.txt.
 set -e
 
-store="Documents/data/joy_buckets.txt"
+store="Documents/Data/joy_buckets.txt"
 
 if [ -f "$store" ]; then
     current="$(tr -d '[:space:]' < "$store")"

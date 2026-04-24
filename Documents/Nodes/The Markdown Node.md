@@ -30,7 +30,7 @@ Generic MarkdownNodes are spawned for everything else — any `.md` file picked 
 
 The Info sidebar menu scans `Documents/` recursively. Subdirectories become submenus, `.md` files become menu entries. Clicking an entry reads the file's text and passes it as the `label` field to `Scene.add_markdown_node(pos, label=text)`. Two files have dedicated entries and spawn their own subclass: `Architecture.md` → `ArchitectureNode`, `Node Type Schema.md` → `NodeSchemaNode`.
 
-The `Documents/data/` subfolder is excluded from the menu scan (`_SKIP_DIRS = {"data"}`).
+The `Documents/Data/` subfolder is excluded from the menu scan (`_SKIP_DIRS = {"data", "Data"}`).
 
 ### Async Rendering
 

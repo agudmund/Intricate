@@ -36,7 +36,7 @@ def session_path(project_name: str) -> Path | None:
     """Return the session file path for a project folder name, or None if empty."""
     if not project_name:
         return None
-    return Path.home() / "Desktop" / project_name / "Documents" / "data" / f"session{SESSION_EXT}"
+    return Path.home() / "Desktop" / project_name / "Documents" / "Data" / f"session{SESSION_EXT}"
 
 
 def project_root_from_session(path: Path) -> Path:
@@ -44,14 +44,59 @@ def project_root_from_session(path: Path) -> Path:
     return path.parent.parent.parent
 
 
+def _case_flip_rename(parent: Path, old_name: str, new_name: str) -> bool:
+    """Rename a child directory to change case on case-insensitive filesystems (NTFS).
+
+    A plain `rename()` is a no-op when the only difference is case, so we go
+    via a temporary intermediate name. Returns True if the rename landed.
+    """
+    old_path = parent / old_name
+    new_path = parent / new_name
+    if not old_path.exists() or not old_path.is_dir():
+        return False
+    # If the casing is already what we want, check via actual on-disk spelling.
+    try:
+        actual = next((c.name for c in parent.iterdir() if c.name.lower() == old_name.lower()), None)
+    except OSError:
+        actual = None
+    if actual == new_name:
+        return False
+    tmp = parent / f".__case_flip_{old_name}__"
+    try:
+        old_path.rename(tmp)
+        tmp.rename(new_path)
+        logger.info(f"case-flipped {parent.name}/{old_name} -> {new_name}")
+        return True
+    except OSError as e:
+        logger.warning(f"case-flip {old_name}->{new_name} failed: {e}")
+        # Best-effort rollback if the first step landed
+        if tmp.exists() and not old_path.exists():
+            try:
+                tmp.rename(old_path)
+            except OSError:
+                pass
+        return False
+
+
 def migrate_legacy_session(path: Path, project_root: Path) -> None:
     """Migrate old session layouts to the current convention.
 
-    Handles two legacy layouts:
-      1. session.json at project root  → Documents/data/session.intricate
-      2. session.json in Documents/data → session.intricate  (extension rename)
+    Handles three legacy layouts:
+      1. session.json at project root         → Documents/Data/session.intricate
+      2. session.json in Documents/data       → session.intricate  (extension rename)
+      3. Documents/data + Documents/data/cache → Documents/Data + Documents/Data/Cache
+         (case-flip — NTFS is case-insensitive, so done via a temporary name)
     """
-    # Legacy layout 1: root-level session.json → Documents/data/
+    # Layout 3 first — flip case on Documents/data → Documents/Data (and nested cache)
+    # so the rest of the migration sees the current canonical layout.
+    docs_dir = project_root / "Documents"
+    if docs_dir.is_dir():
+        _case_flip_rename(docs_dir, "data", "Data")
+        data_dir = docs_dir / "Data"
+        if data_dir.is_dir():
+            _case_flip_rename(data_dir, "cache", "Cache")
+
+    # Legacy layout 1: root-level session.json → Documents/Data/
     old_root = project_root / "session.json"
     if old_root.exists() and not path.exists():
         ensure_dir(path.parent)
@@ -66,11 +111,11 @@ def migrate_legacy_session(path: Path, project_root: Path) -> None:
         if old_backup.exists() and old_backup.is_dir() and not new_backup.exists():
             try:
                 old_backup.rename(new_backup)
-                logger.info("migrated backup/ -> Documents/data/backup/")
+                logger.info("migrated backup/ -> Documents/Data/backup/")
             except OSError as e:
                 logger.warning(f"backup migration failed: {e}")
 
-    # Legacy layout 2: session.json in Documents/data/ → .intricate extension
+    # Legacy layout 2: session.json in Documents/Data/ → .intricate extension
     old_json = path.with_suffix(".json")
     if old_json.exists() and not path.exists():
         try:
