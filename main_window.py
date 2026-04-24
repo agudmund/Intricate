@@ -1694,7 +1694,10 @@ class IntricateApp(QMainWindow):
         # Adobe category sits between Info and Claude so the letterform trio
         # at the bottom of the sidebar reads cleanly top→down: A (Adobe) →
         # i (Info, just above) → Ai (Anthropic, just below).
-        _cat_btn(Theme.iconAdobeGroup,   "Adobe",  self._show_adobe_menu)
+        # scale=1.0 matches the Anthropic treatment — brand silhouettes fill
+        # their bounding box natively and don't need the 1.28× padding
+        # compensation the ringed line-art family uses.
+        _cat_btn(Theme.iconAdobeGroup,   "Adobe",  self._show_adobe_menu, scale=1.0)
         # Anthropic logo fills its bounding box closer to 100% than the
         # circular family, so scale=1.0 keeps it visually comparable in
         # size to the circular icons without clipping the sidebar edge.
