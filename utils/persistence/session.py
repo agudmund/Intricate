@@ -27,7 +27,7 @@ logger = setup_logger("session")
 # extension sidesteps autotools and .gitignore rules that blanket-exclude *.json.
 SESSION_EXT = ".intricate"
 
-# Retention for timestamped session backups in Documents/Data/backup/.
+# Retention for timestamped session backups in Documents/Data/Backup/.
 # Matches the logger's retain_runs convention — save-heavy debug days churn
 # through this faster than you'd think; 20 covers a morning of rapid restarts
 # with the autosave neurotically copying everything.
@@ -99,20 +99,22 @@ def _case_flip_rename(parent: Path, old_name: str, new_name: str) -> bool:
 def migrate_legacy_session(path: Path, project_root: Path) -> None:
     """Migrate old session layouts to the current convention.
 
-    Handles three legacy layouts:
+    Handles four legacy layouts:
       1. session.json at project root         → Documents/Data/session.intricate
       2. session.json in Documents/data       → session.intricate  (extension rename)
       3. Documents/data + Documents/data/cache → Documents/Data + Documents/Data/Cache
          (case-flip — NTFS is case-insensitive, so done via a temporary name)
+      4. Documents/Data/backup → Documents/Data/Backup  (missed in round 3)
     """
-    # Layout 3 first — flip case on Documents/data → Documents/Data (and nested cache)
-    # so the rest of the migration sees the current canonical layout.
+    # Layout 3 first — flip case on Documents/data → Documents/Data (and nested cache
+    # + backup) so the rest of the migration sees the current canonical layout.
     docs_dir = project_root / "Documents"
     if docs_dir.is_dir():
         _case_flip_rename(docs_dir, "data", "Data")
         data_dir = docs_dir / "Data"
         if data_dir.is_dir():
             _case_flip_rename(data_dir, "cache", "Cache")
+            _case_flip_rename(data_dir, "backup", "Backup")
 
     # Legacy layout 1: root-level session.json → Documents/Data/
     old_root = project_root / "session.json"
@@ -125,11 +127,11 @@ def migrate_legacy_session(path: Path, project_root: Path) -> None:
             logger.warning(f"session migration failed: {e}")
 
         old_backup = project_root / "backup"
-        new_backup = path.parent / "backup"
+        new_backup = path.parent / "Backup"
         if old_backup.exists() and old_backup.is_dir() and not new_backup.exists():
             try:
                 old_backup.rename(new_backup)
-                logger.info("migrated backup/ -> Documents/Data/backup/")
+                logger.info("migrated backup/ -> Documents/Data/Backup/")
             except OSError as e:
                 logger.warning(f"backup migration failed: {e}")
 
@@ -144,7 +146,7 @@ def migrate_legacy_session(path: Path, project_root: Path) -> None:
         except OSError as e:
             logger.warning(f"extension migration failed: {e}")
         # Also rename backup files
-        backup_dir = path.parent / "backup"
+        backup_dir = path.parent / "Backup"
         if backup_dir.exists():
             for old_bak in backup_dir.glob("session*_*.json"):
                 new_bak = old_bak.with_suffix(SESSION_EXT)
@@ -166,10 +168,10 @@ def migrate_legacy_session(path: Path, project_root: Path) -> None:
         except OSError as e:
             logger.warning(f"session stem migration failed: {e}")
 
-    # Legacy layout 4b: backup/session_*.intricate → timestamped scheme.
+    # Legacy layout 4b: Backup/session_*.intricate → timestamped scheme.
     # session_previous / session_archive / session_archive_<ts> all fold into
     # the new {project}_<mtime-stamp>.intricate form so retention sees them.
-    backup_dir = path.parent / "backup"
+    backup_dir = path.parent / "Backup"
     if backup_dir.exists() and backup_dir.is_dir():
         from datetime import datetime
         for old_bak in list(backup_dir.glob("session*" + SESSION_EXT)):
@@ -262,7 +264,7 @@ def _rotate_session(filepath: str):
     from datetime import datetime
 
     current    = Path(filepath)
-    backup_dir = current.parent / "backup"
+    backup_dir = current.parent / "Backup"
     ensure_dir(backup_dir)
 
     def _trash(path: Path):

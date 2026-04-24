@@ -15,7 +15,7 @@ Four states, each with its own dot colour in the repo list:
   - Session save files (`.intricate`, backups, timestamped archives)
   - Image node cache PNGs (`Documents/Data/Cache/`)
   - Warm bridge temporaries (`.warm_bridge_*.json`)
-  - The `Documents/Data/` tree (backup/, Cache/)
+  - The `Documents/Data/` tree (Backup/, Cache/)
 - **Amber dot** — Unpushed. Working tree is clean but local commits have not been pushed to the remote. Detected via `git rev-list --count @{u}..HEAD`.
 - **No dot** — Clean. Nothing to commit, nothing to push. Everything is in sync.
 

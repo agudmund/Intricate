@@ -2,6 +2,9 @@ notes.txt
 Documents/Data/Cache/
 Documents/data/cache/
 Documents/Data/Logs/
+Documents/Data/Backup/
+Documents/Data/backup/
+Documents/data/backup/
 
 # Claude Code harness — per-machine permission allowlist, not project state
 .claude/settings.local.json

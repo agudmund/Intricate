@@ -94,7 +94,7 @@ from utils.persistence.session import SESSION_EXT
 _LEGACY_SESSION_FILENAMES = {
     "session.json", "session_previous.json", "session_archive.json",
 }
-_SESSION_DIRS      = {"backup", "Documents", "data", "cache", "Data", "Cache"}
+_SESSION_DIRS      = {"backup", "Backup", "Documents", "data", "cache", "Data", "Cache"}
 
 
 def _is_session_path(raw: str) -> bool:
@@ -102,7 +102,7 @@ def _is_session_path(raw: str) -> bool:
 
     Matches:
       - Any *.intricate file (live session, timestamped backups, legacy names)
-      - The Documents/Data/ tree (backup/, Cache/)
+      - The Documents/Data/ tree (Backup/, Cache/)
       - Image node cache PNGs (Documents/Data/Cache/*.png)
       - Warm bridge files (.warm_bridge_*.json)
     """
@@ -111,7 +111,7 @@ def _is_session_path(raw: str) -> bool:
     if name in _LEGACY_SESSION_FILENAMES or name in _SESSION_DIRS:
         return True
     # Any .intricate file — covers {project}.intricate and all timestamped
-    # backups under backup/ without needing a pattern list
+    # backups under Backup/ without needing a pattern list
     if name.endswith(SESSION_EXT):
         return True
     # Image cache PNGs inside Documents/Data/Cache/ (case-insensitive match
