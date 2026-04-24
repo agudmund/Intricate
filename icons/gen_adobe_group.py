@@ -30,19 +30,19 @@ draw = ImageDraw.Draw(img)
 # that's narrow at the top and widens toward the bottom — each leg is
 # effectively a trapezoid.
 
-peak_y        = cy - 640     # sharp point at top
+top_y         = cy - 640     # flat top of the A sits on this line
 bottom_y      = cy + 580     # flat feet sit on this line
 foot_outer    = 540          # how far each foot extends from centre
-peak_offset   = 36           # peak is a sharp point, but give it a hair of
-                             # width at the very top so the ICO rasterizer
-                             # doesn't wash the apex out at 16 px
-leg_inner_top = 26           # how wide each leg starts at the top
+top_half_w    = 80           # half-width of the flat top — gently trimmed
+                             # rather than a sharp peak, matching the
+                             # intentional typographic choice the brand-
+                             # designer at Anthropic made for the 'Ai' mark
 foot_inner    = 210          # inside edge of each foot at the bottom
 
-# Outer outline, clockwise from peak
+# Outer outline, clockwise from top-left of the flat top
 outer = [
-    (cx - peak_offset,   peak_y),         # peak left
-    (cx + peak_offset,   peak_y),         # peak right
+    (cx - top_half_w,    top_y),          # flat top — left end
+    (cx + top_half_w,    top_y),          # flat top — right end
     (cx + foot_outer,    bottom_y),       # right foot outer corner
     (cx + foot_inner,    bottom_y),       # right foot inner corner
     (cx - foot_inner,    bottom_y),       # left foot inner corner
@@ -53,10 +53,12 @@ draw.polygon(outer, fill=C)
 # ── Triangular cutout (the signature negative space) ─────────────────────
 # Build the cutout on a separate greyscale mask, then paste transparent
 # pixels through that mask to subtract the triangle from the A's alpha.
+# The cutout's apex sits below the midline so the cutout reads as the
+# bottom-anchored wedge from the reference, not a full-height split.
 
-cutout_apex_y   = cy - 150   # where the cutout triangle's peak sits
+cutout_apex_y   = cy + 100   # apex of the cutout sits in the lower half
 cutout_bottom_y = bottom_y   # cutout reaches the bottom edge of the feet
-cutout_half_w   = 200        # half-width of the triangle at the bottom
+cutout_half_w   = 210        # half-width of the triangle at the bottom
 
 cutout = [
     (cx,                    cutout_apex_y),       # apex pointing up
