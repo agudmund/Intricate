@@ -375,6 +375,17 @@ def main():
     _reg_watcher = registry.init_watcher()
     logger.debug(f"[boot] Node registry loaded: {len(registry.get_all_nodes())} types")
 
+    logger.log(TRACE, "[boot:12b] initialising color registry")
+    from utils.persistence import color_registry
+    _color_watcher = color_registry.init_watcher()
+    # On Settlers-side edits to color_registry.toml, repaint the active window
+    # so any currently-visible tinted node re-reads its tint (the palette
+    # itself is pulled live by ColorPicker; the repaint just nudges the view).
+    _color_watcher.changed.connect(
+        lambda: app.activeWindow() and app.activeWindow().update()
+    )
+    logger.debug(f"[boot] Color palette loaded: {len(color_registry.get_all())} colors")
+
     logger.log(TRACE, "[boot:13] constructing IntricateApp window")
     logger.log(TRACE, f"[boot:13a] Theme.icon at window construction = {getattr(Theme, 'icon', 'MISSING')}")
     window = IntricateApp()

@@ -1,0 +1,23 @@
+# Color Registry — the live palette for Intricate's node tint cycle.
+#
+# Intricate writes here when a custom color enters rotation (via the tint
+# toggle on a node, or when a session loads a node whose data.node_tint
+# is not yet in the palette).  The Settlers reads this file and its Color
+# Picker category lets you curate the list — × a color to remove it from
+# future rotations.  Both apps watch this file so edits from either side
+# land live.
+#
+# Role split, for reference:
+#   settings.toml         — The Settlers writes (control-board output)
+#   color_registry.toml   — shared stage-state; Intricate reports, The
+#                           Settlers curates, both watch for changes.
+#
+# Order matters — the tint toggle rotates in the order listed here.
+
+[palette]
+colors = [
+    "#2a2f3a",
+    "#b05f5f",
+    "#4a3a5a",
+    "#1e1e1e",
+]

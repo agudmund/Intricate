@@ -150,11 +150,11 @@ class BaseNode(QGraphicsRectItem):
         self._untinted_brush = None
         _saved_tint = getattr(self.data, 'node_tint', '')
         if _saved_tint:
-            from utils.pickers.ColorPicker import all_colors as _ac
-            try:
-                self._color_index = _ac().index(_saved_tint)
-            except ValueError:
-                self._color_index = 0
+            # register() is idempotent: seed colors resolve to their existing
+            # index, custom colors get appended so the toggle button can
+            # rotate back to them instead of silently snapping to palette[0].
+            from utils.pickers.ColorPicker import register as _register
+            self._color_index = _register(_saved_tint)
 
         self.setFlags(
             QGraphicsRectItem.ItemIsMovable      |
@@ -487,9 +487,24 @@ class BaseNode(QGraphicsRectItem):
 
     def _toggle_node_tint(self) -> None:
         """Cycle through ColorPicker palette colors as a temporary node highlight.
-        Pressing through all colors returns to the natural default."""
-        from utils.pickers.ColorPicker import get as _pick, all_colors as _ac
+        Pressing through all colors returns to the natural default.
+
+        If the node carries a custom node_tint that isn't yet reflected in
+        _color_index (e.g. the tint was set externally after init, or the
+        palette was wiped and the node's saved color is out of sync), we
+        re-register it first so the cycle advances from the actual current
+        color rather than snapping away and losing it.
+        """
+        from utils.pickers.ColorPicker import get as _pick, all_colors as _ac, register as _register
         from PySide6.QtGui import QBrush
+
+        # Resync from data.node_tint if index fell out of sync (externally
+        # set tint, palette reset, etc.) — keeps the cycle from forgetting
+        # a color the node currently wears.
+        saved = getattr(self.data, 'node_tint', '')
+        if self._color_index == -1 and saved:
+            self._color_index = _register(saved)
+
         colors = _ac()
 
         beh = getattr(self, 'behaviour', None)
