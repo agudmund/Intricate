@@ -6,7 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsDropShadowEffect
+from PySide6.QtWidgets import QGraphicsEllipseItem
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QPen, QColor
 
@@ -20,8 +20,6 @@ _COLOR_OUT   = QColor("#a07a5a")            # Output — warm amber
 _COLOR_HOVER = QColor("#d2d1cf")            # Either port on hover
 _BORDER      = QColor(Theme.primaryBorder)
 _BORDER_W    = 1.0
-_GLOW_BLUR   = 12
-_GLOW_COLOR  = QColor(Theme.primaryBorder)
 
 
 class Port(QGraphicsEllipseItem):
@@ -68,11 +66,10 @@ class Port(QGraphicsEllipseItem):
         self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsMovable, False)
         self.setAcceptHoverEvents(True)
 
-        glow = QGraphicsDropShadowEffect()
-        glow.setBlurRadius(_GLOW_BLUR)
-        glow.setColor(_GLOW_COLOR)
-        glow.setOffset(0, 0)
-        self.setGraphicsEffect(glow)
+        # No drop-shadow glow — ports are invisible in normal operation and
+        # only surface during wire-connection debug (v0.0.3 Interlinking Era
+        # legacy). Removing the per-port QGraphicsDropShadowEffect skips a
+        # blur pass per port per repaint.
 
     # ─────────────────────────────────────────────────────────────────────────
     # HOVER

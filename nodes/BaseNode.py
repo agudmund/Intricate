@@ -37,6 +37,10 @@ _SHADOW_MARGIN   = Theme.nodeShadowMargin
 _MIN_WIDTH       = Theme.nodeMinWidth
 _MIN_HEIGHT      = Theme.nodeMinHeight
 _RESIZE_GRIP     = Theme.nodeResizeGrip
+# How far the resize hit zone extends past the bottom-right corner so the
+# grip is still catchable when the cursor lands a few pixels outside the
+# visible border (the common miss case for nearly-on-edge grabs).
+_RESIZE_OVERREACH = 6
 
 
 class BaseNode(QGraphicsRectItem):
@@ -670,11 +674,13 @@ class BaseNode(QGraphicsRectItem):
             return
 
         if event.button() == Qt.LeftButton:
-            # Resize handle — bottom-right corner
+            # Resize handle — bottom-right corner, straddling the border so
+            # the cursor still catches it when it drifts a few pixels past.
             rect = self.rect()
             handle = QRectF(rect.right() - _RESIZE_GRIP,
                             rect.bottom() - _RESIZE_GRIP,
-                            _RESIZE_GRIP, _RESIZE_GRIP)
+                            _RESIZE_GRIP + _RESIZE_OVERREACH,
+                            _RESIZE_GRIP + _RESIZE_OVERREACH)
             if handle.contains(event.pos()):
                 self._is_resizing      = True
                 self._resize_start_pos  = event.pos()
@@ -1253,9 +1259,18 @@ class BaseNode(QGraphicsRectItem):
         )
 
     def shape(self):
-        """Hit-test shape matches the visible node border, not the shadow margin."""
+        """Hit-test shape matches the visible node border, plus a small lobe
+        at the bottom-right corner so the resize grip remains catchable when
+        the cursor drifts a few pixels past the visible edge."""
         path = QPainterPath()
         path.addRoundedRect(self.rect(), self.round_radius, self.round_radius)
+        r = self.rect()
+        path.addRect(QRectF(
+            r.right() - _RESIZE_GRIP,
+            r.bottom() - _RESIZE_GRIP,
+            _RESIZE_GRIP + _RESIZE_OVERREACH,
+            _RESIZE_GRIP + _RESIZE_OVERREACH,
+        ))
         return path
 
     def paint(self, painter, option, widget=None):
