@@ -88,9 +88,10 @@ def _get_status_colors() -> dict:
 
 
 from utils.persistence.session import SESSION_EXT
-_SESSION_FILENAMES = {
-    f"session{SESSION_EXT}", f"session_previous{SESSION_EXT}", f"session_archive{SESSION_EXT}",
-    # Legacy .json names — still classify as session-only until fully migrated
+# Legacy session filenames still classify as session-only during migration.
+# Current scheme uses {project}.intricate with timestamped backups, both
+# caught by the suffix + path checks below.
+_LEGACY_SESSION_FILENAMES = {
     "session.json", "session_previous.json", "session_archive.json",
 }
 _SESSION_DIRS      = {"backup", "Documents", "data", "cache", "Data", "Cache"}
@@ -100,15 +101,18 @@ def _is_session_path(raw: str) -> bool:
     """Check if a porcelain path is session-related (files or directories).
 
     Matches:
-      - Session save files (session.intricate, backups)
+      - Any *.intricate file (live session, timestamped backups, legacy names)
       - The Documents/Data/ tree (backup/, Cache/)
       - Image node cache PNGs (Documents/Data/Cache/*.png)
       - Warm bridge files (.warm_bridge_*.json)
-      - Timestamped session backups (session_archive_*.intricate)
     """
     p = raw.strip().strip('"').rstrip("/")
     name = Path(p).name
-    if name in _SESSION_FILENAMES or name in _SESSION_DIRS:
+    if name in _LEGACY_SESSION_FILENAMES or name in _SESSION_DIRS:
+        return True
+    # Any .intricate file — covers {project}.intricate and all timestamped
+    # backups under backup/ without needing a pattern list
+    if name.endswith(SESSION_EXT):
         return True
     # Image cache PNGs inside Documents/Data/Cache/ (case-insensitive match
     # so legacy lowercase layouts pre-2026-04-24 still classify correctly).
@@ -117,9 +121,6 @@ def _is_session_path(raw: str) -> bool:
         return True
     # Warm bridge temp files
     if name.startswith(".warm_bridge_") and name.endswith(".json"):
-        return True
-    # Timestamped session backups (e.g. session_archive_20260416_065232.intricate)
-    if name.startswith("session_archive_") and name.endswith(SESSION_EXT):
         return True
     return False
 

@@ -28,7 +28,7 @@ from pretty_widgets.utils.logger import setup_logger
 from utils.pickers.PhrasePicker import motivationalMessages
 from pretty_widgets.utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
-from utils.persistence.session import session_path, enter_project
+from utils.persistence.session import session_path, enter_project, session_residue
 from pretty_widgets.PrettyCombo import combo as pretty_combo
 from pretty_widgets.PrettyLabel import label as pretty_label
 from pretty_widgets.PrettySlider import slider as pretty_slider
@@ -3425,10 +3425,32 @@ class IntricateApp(QMainWindow):
             vp = self.scene.load_session(path)
             if vp:
                 QTimer.singleShot(0, lambda: self._apply_viewport(vp))
+        # Residue indicator — stray *.intricate siblings (debug copies,
+        # ctrl-c/ctrl-v leftovers) get a sticky note at view focus so the
+        # user can inspect and manually sweep. Never auto-deleted.
+        residue = session_residue(path)
+        if residue:
+            QTimer.singleShot(50, lambda r=residue: self._spawn_residue_notice(r))
         # Unblock autosave after the initial scene.changed burst settles
         def _unblock():
             self._autosave_blocked = False
         QTimer.singleShot(3000, _unblock)
+
+    def _spawn_residue_notice(self, residue: list) -> None:
+        """Spawn an AboutNode at view centre listing residue *.intricate files."""
+        try:
+            names = "\n".join(f"• {p.name}" for p in residue)
+            label = (
+                "session residue detected\n"
+                "(stray .intricate files alongside the live session — "
+                "left in place for manual review)\n\n"
+                f"{names}"
+            )
+            center_scene = self.view.mapToScene(self.view.viewport().rect().center())
+            self.scene.add_about_node(pos=center_scene, label=label)
+        except Exception as e:
+            from pretty_widgets.utils.logger import setup_logger
+            setup_logger("session").warning(f"residue notice spawn failed: {e}")
 
     def _autosave(self) -> None:
         """Save the current canvas to the active project's session.json."""

@@ -27,16 +27,34 @@ logger = setup_logger("session")
 # extension sidesteps autotools and .gitignore rules that blanket-exclude *.json.
 SESSION_EXT = ".intricate"
 
+# Retention for timestamped session backups in Documents/Data/backup/.
+# Matches the logger's retain_runs convention — save-heavy debug days churn
+# through this faster than you'd think; 20 covers a morning of rapid restarts
+# with the autosave neurotically copying everything.
+SESSION_BACKUP_RETENTION = 20
+
+# Timestamp format for both session backups and Rust logger filenames.
+# Windows filenames cannot contain ':' — dots separate the time components
+# so the HH.MM.SS chunk still scans fast when the folder has many entries.
+SESSION_STAMP_FMT = "%Y%m%d-%H.%M.%S"
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Path helpers
 # ═════════════════════════════════════════════════════════════════════════════
 
 def session_path(project_name: str) -> Path | None:
-    """Return the session file path for a project folder name, or None if empty."""
+    """Return the session file path for a project folder name, or None if empty.
+
+    File stem matches the project folder name (spaces preserved), so a session
+    for ~/Desktop/Cozy Animator/ lives at Documents/Data/Cozy Animator.intricate.
+    """
     if not project_name:
         return None
-    return Path.home() / "Desktop" / project_name / "Documents" / "Data" / f"session{SESSION_EXT}"
+    return (
+        Path.home() / "Desktop" / project_name / "Documents" / "Data"
+        / f"{project_name}{SESSION_EXT}"
+    )
 
 
 def project_root_from_session(path: Path) -> Path:
@@ -115,12 +133,14 @@ def migrate_legacy_session(path: Path, project_root: Path) -> None:
             except OSError as e:
                 logger.warning(f"backup migration failed: {e}")
 
-    # Legacy layout 2: session.json in Documents/Data/ → .intricate extension
-    old_json = path.with_suffix(".json")
-    if old_json.exists() and not path.exists():
+    # Legacy layout 2: session.json in Documents/Data/ → .intricate extension.
+    # Target stem is whatever the current convention resolves to (the project
+    # name), so rename chases the new location.
+    old_json_generic = path.parent / "session.json"
+    if old_json_generic.exists() and not path.exists():
         try:
-            old_json.rename(path)
-            logger.info(f"migrated {old_json.name} -> {path.name}")
+            old_json_generic.rename(path)
+            logger.info(f"migrated {old_json_generic.name} -> {path.name}")
         except OSError as e:
             logger.warning(f"extension migration failed: {e}")
         # Also rename backup files
@@ -132,6 +152,59 @@ def migrate_legacy_session(path: Path, project_root: Path) -> None:
                     old_bak.rename(new_bak)
                 except OSError:
                     pass
+
+    # Legacy layout 4 (2026-04-24): generic session.intricate → {project}.intricate.
+    # We rename session.intricate to the project stem if it exists and the
+    # project-stem file does not. Any additional residue (debug copies,
+    # ctrl-c/ctrl-v leftovers etc.) is left in place and returned via the
+    # session_residue() scan so the caller can surface a sticky note.
+    legacy_live = path.parent / f"session{SESSION_EXT}"
+    if legacy_live.exists() and not path.exists():
+        try:
+            legacy_live.rename(path)
+            logger.info(f"migrated session{SESSION_EXT} -> {path.name}")
+        except OSError as e:
+            logger.warning(f"session stem migration failed: {e}")
+
+    # Legacy layout 4b: backup/session_*.intricate → timestamped scheme.
+    # session_previous / session_archive / session_archive_<ts> all fold into
+    # the new {project}_<mtime-stamp>.intricate form so retention sees them.
+    backup_dir = path.parent / "backup"
+    if backup_dir.exists() and backup_dir.is_dir():
+        from datetime import datetime
+        for old_bak in list(backup_dir.glob("session*" + SESSION_EXT)):
+            try:
+                ts = datetime.fromtimestamp(old_bak.stat().st_mtime)
+            except OSError:
+                continue
+            stamp = ts.strftime(SESSION_STAMP_FMT)
+            new_name = f"{path.stem}_{stamp}{SESSION_EXT}"
+            new_bak = backup_dir / new_name
+            # Dodge collisions by appending a counter
+            n = 1
+            while new_bak.exists():
+                new_bak = backup_dir / f"{path.stem}_{stamp}_{n}{SESSION_EXT}"
+                n += 1
+            try:
+                old_bak.rename(new_bak)
+            except OSError:
+                pass
+
+
+def session_residue(path: Path) -> list[Path]:
+    """Return any stray *.intricate files at the top of Documents/Data/ that
+    aren't the live session file. Residue is never deleted automatically —
+    the caller surfaces it as a passive sticky-note indicator on load.
+    """
+    data_dir = path.parent
+    if not data_dir.is_dir():
+        return []
+    try:
+        candidates = [p for p in data_dir.iterdir()
+                      if p.is_file() and p.suffix == SESSION_EXT and p != path]
+    except OSError:
+        return []
+    return sorted(candidates)
 
 
 def enter_project(path: Path) -> Path:
@@ -180,17 +253,17 @@ def _get_sessions_dir() -> Path:
 
 
 def _rotate_session(filepath: str):
+    """Timestamped save rotation matching the Rust logger's retention scheme.
+
+    On each save: move the live file to backup/{stem}_YYYYMMDD-HH.MM.SS.intricate,
+    then prune older entries beyond SESSION_BACKUP_RETENTION to the recycle bin.
+    Autosave + manual save + debug churn all share this one ring.
     """
-    3-slot save rotation — mirrors build.py's rotateAndArchive and logger.py's _rotate_logs.
-    On each save: archive → recycle bin, previous → archive, current → previous.
-    Backup slots are kept in ./sessions/backup/ — only the live file stays in ./sessions/.
-    """
+    from datetime import datetime
+
     current    = Path(filepath)
     backup_dir = current.parent / "backup"
     ensure_dir(backup_dir)
-
-    previous = backup_dir / (current.stem + "_previous" + SESSION_EXT)
-    archive  = backup_dir / (current.stem + "_archive" + SESSION_EXT)
 
     def _trash(path: Path):
         """Send to recycle bin; fall back to permanent delete if send2trash is unavailable."""
@@ -203,19 +276,29 @@ def _rotate_session(filepath: str):
         path.unlink(missing_ok=True)
 
     try:
-        if archive.exists():
-            # Timestamp before trashing so each recycle bin entry has a unique name
-            from datetime import datetime
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            stamped = backup_dir / f"{current.stem}_archive_{stamp}{SESSION_EXT}"
-            archive.rename(stamped)
-            _trash(stamped)
-        if previous.exists():
-            previous.rename(archive)
         if current.exists():
-            current.rename(previous)
+            stamp = datetime.now().strftime(SESSION_STAMP_FMT)
+            stamped = backup_dir / f"{current.stem}_{stamp}{SESSION_EXT}"
+            # Handle sub-second collisions from rapid autosave bursts
+            n = 1
+            while stamped.exists():
+                stamped = backup_dir / f"{current.stem}_{stamp}_{n}{SESSION_EXT}"
+                n += 1
+            current.rename(stamped)
     except Exception:
         pass  # Rotation failure is non-fatal — save continues regardless
+
+    # Prune — keep the newest SESSION_BACKUP_RETENTION entries for this stem.
+    # Lexicographic sort is chronological because the timestamp format sorts cleanly.
+    try:
+        pattern = f"{current.stem}_*{SESSION_EXT}"
+        entries = sorted(backup_dir.glob(pattern))
+        excess = len(entries) - SESSION_BACKUP_RETENTION
+        if excess > 0:
+            for old in entries[:excess]:
+                _trash(old)
+    except Exception:
+        pass
 
 
 # ═════════════════════════════════════════════════════════════════════════════
