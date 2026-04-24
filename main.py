@@ -308,13 +308,29 @@ def main():
         except Exception:
             pass
 
-    # Rotate stale crash.txt — keep it for 24 hours for forensics, then discard
-    _crash_file = _root / "logs" / "crash.txt"
-    if _crash_file.exists():
-        import time
-        age_hours = (time.time() - _crash_file.stat().st_mtime) / 3600
-        if age_hours > 24:
-            _crash_file.unlink(missing_ok=True)
+    # Resolve the log directory once — used by crash/fault paths below so
+    # forensic files sit next to the session logs (Documents/Data/Logs by
+    # default, overridable via [shared] log_dir in settings.toml).
+    from pretty_widgets.utils.logger import _resolve_log_dir
+    _logs_dir = _resolve_log_dir()
+
+    # Rotate stale forensic files — keep them for 24 hours for post-mortem,
+    # then discard. Sweeps both crash.txt (traceback dump) and fault.txt
+    # (C-level stack dump from faulthandler) in both the current log
+    # directory and the legacy ./logs/ path so stale files from before the
+    # 2026-04-24 relocation get cleaned up too.
+    import time
+    _forensic_candidates = [
+        _logs_dir / "crash.txt",
+        _logs_dir / "fault.txt",
+        _root / "logs" / "crash.txt",
+        _root / "logs" / "fault.txt",
+    ]
+    for _forensic in _forensic_candidates:
+        if _forensic.exists():
+            age_hours = (time.time() - _forensic.stat().st_mtime) / 3600
+            if age_hours > 24:
+                _forensic.unlink(missing_ok=True)
 
     logger.log(TRACE, "[boot:2] QApplication created — Qt event loop ready")
 
@@ -377,7 +393,7 @@ def main():
         tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         logger.critical("Unhandled exception in event loop\n%s", tb_text)
         try:
-            crash_path = Path(__file__).resolve().parent / "logs" / "crash.txt"
+            crash_path = _logs_dir / "crash.txt"
             crash_path.write_text(tb_text, encoding="utf-8")
         except Exception:
             pass
@@ -406,7 +422,7 @@ def main():
             except Exception: pass
         logger.critical("%s\n%s", context, tb_text)
         try:
-            crash_path = Path(__file__).resolve().parent / "logs" / "crash.txt"
+            crash_path = _logs_dir / "crash.txt"
             crash_path.write_text(f"{context}\n\n{tb_text}", encoding="utf-8")
         except Exception:
             pass
@@ -426,10 +442,10 @@ def main():
     # don't leave a Python traceback in crash.txt.
     try:
         import faulthandler
-        _fault_path = Path(__file__).resolve().parent / "logs" / "fault.txt"
+        _fault_path = _logs_dir / "fault.txt"
         _fault_file = open(_fault_path, "w", encoding="utf-8", buffering=1)
         faulthandler.enable(file=_fault_file, all_threads=True)
-        logger.log(TRACE, "[boot:15a] faulthandler armed → logs/fault.txt")
+        logger.log(TRACE, f"[boot:15a] faulthandler armed → {_fault_path}")
     except Exception as _fh_exc:
         logger.warning("faulthandler install failed: %s", _fh_exc)
 

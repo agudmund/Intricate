@@ -37,4 +37,4 @@
 - Always use PowerShell commands exclusively. Do not use Unix/bash commands. The development environment is Windows-based with PowerShell as the shell.
 
 ## Logging
-- Log directory is set via `[shared] log_dir` in `settings.toml`; falls back to `./logs/` when not set.
+- Log directory is set via `[shared] log_dir` in `settings.toml`; falls back to `./Documents/Data/Logs/` when not set.

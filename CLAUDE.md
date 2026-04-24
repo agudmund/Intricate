@@ -240,7 +240,7 @@ All three families use `NodeButton` for rendering on the button strip. `NodeButt
 
 ### Logging
 
-Logs go to the directory set in `[shared] log_dir` in `settings.toml`, falling back to `./logs/intricate.log`. Three-slot rotation (current → previous → archive → recycle bin). TRACE (5) is the lowest level — used for per-frame diagnostics in file only.
+Logs go to the directory set in `[shared] log_dir` in `settings.toml`, falling back to `./Documents/Data/Logs/`. The Rust `intricate_log` module writes a fresh timestamped file per run (`intricate_YYYYMMDD-HH.MM.SS.log`) and retains the most recent N runs; the Python stdlib fallback uses a 3-slot rotation (current → previous → archive → recycle bin). TRACE (5) is the lowest level — used for per-frame diagnostics in file only. `crash.txt` and `fault.txt` land in the same directory; both are swept at startup if older than 24 hours.
 
 ## Settings File Structure
 

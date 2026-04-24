@@ -28,7 +28,7 @@ class LogNode(BaseNode):
     Displays a live tail of the current session log file (intricate.log).
 
     The log path is resolved from [shared] log_dir in settings.toml,
-    falling back to ./logs/intricate.log.
+    falling back to Documents/Data/Logs/intricate.log.
 
     A QFileSystemWatcher fires on every write to the file; a 1.5s poll
     timer backs it up in case the watcher loses track after rotation.
@@ -107,17 +107,17 @@ class LogNode(BaseNode):
 
     @staticmethod
     def _resolve_log_path() -> Path:
+        # Reuse the logger's resolver so LogNode sees the same directory the
+        # Rust/Python logger writes into — settings.toml override, then the
+        # Documents/Data/Logs default.
         try:
-            from pretty_widgets.utils.settings import get as _get
-            log_dir = _get("shared", "log_dir", default=None)
-            if log_dir:
-                logs_dir = Path(log_dir)
-            else:
-                logs_dir = Path(__file__).resolve().parent.parent / "logs"
+            from pretty_widgets.utils.logger import _resolve_log_dir
+            logs_dir = _resolve_log_dir()
         except Exception:
-            logs_dir = Path(__file__).resolve().parent.parent / "logs"
+            logs_dir = Path(__file__).resolve().parent.parent / "Documents" / "Data" / "Logs"
 
-        # Most recent timestamped log (Rust logger: intricate_YYYY-MM-DD_HHMMSS.log)
+        # Most recent timestamped log (Rust logger: intricate_YYYYMMDD-HH.MM.SS.log
+        # on current builds, legacy intricate_YYYY-MM-DD_HHMMSS.log on older ones)
         candidates = sorted(logs_dir.glob("intricate_*.log"), key=lambda p: p.stat().st_mtime)
         if candidates:
             return candidates[-1]
