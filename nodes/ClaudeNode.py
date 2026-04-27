@@ -710,7 +710,11 @@ class ClaudeNode(BaseNode):
         worker = VisionWorker(
             image_b64=image_b64,
             prompt=prompt,
-            model="claude-sonnet-4-6",
+            # Opus 4.7 is the first Claude model with high-resolution image
+            # support — long-edge ceiling raised from 1568 px to 2576 px,
+            # ~3x more visual context per image.  Vision in Intricate is
+            # rare and per-image (never bulk), so capability > cost here.
+            model="claude-opus-4-7",
             max_tokens=1024,
             timeout=60,
             parent=self,
