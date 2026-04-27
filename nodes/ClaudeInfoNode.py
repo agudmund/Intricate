@@ -18,7 +18,10 @@ from pretty_widgets.graphics.Theme import Theme
 
 
 # ── Pricing (per million tokens, April 2026) ──────────────────────────────
+# Opus 4.7 became the global default late April 2026 and is now the post-
+# upgrade everyday workhorse. Pricing for 4.7 matches the prior 4.6 tier.
 _PRICING = {
+    "claude-opus-4-7":   {"input":  5.00, "output": 25.00},
     "claude-opus-4-6":   {"input":  5.00, "output": 25.00},
     "claude-opus-4-5":   {"input":  5.00, "output": 25.00},
     "claude-sonnet-4-6": {"input":  3.00, "output": 15.00},
@@ -38,11 +41,11 @@ def _get_pricing(model: str) -> dict | None:
             return _PRICING[key]
     m = model.lower()
     if "opus" in m:
-        return _PRICING["claude-opus-4-6"]
+        return _PRICING["claude-opus-4-7"]
     if "sonnet" in m:
         return _PRICING["claude-sonnet-4-6"]
     if "haiku" in m:
-        return _PRICING["claude-haiku-4-5"]
+        return _PRICING["claude-haiku-4-6"]
     return None
 
 
