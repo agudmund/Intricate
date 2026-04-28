@@ -77,21 +77,16 @@ class VideoNode(BaseNode):
 
     _show_ports_btn = False   # ports toggle hidden — re-enable for debug
     _has_depth_toggle = True
-    _resize_grip = 64         # bigger grip — VideoNode is often resized,
-                              # and the rest of the node is a busy click
-                              # target (frame, progress, buttons), so the
-                              # grip earns its space in the corner.
-    _resize_overreach = 6     # Match the shadow margin so the hit zone
-                              # extends past the rect by exactly as much
-                              # as the rendered shadow. Gives a uniform
-                              # "edge feel" — clicks on the visible rim,
-                              # the rendered shadow, and just inside the
-                              # body all land in the same resize zone
-                              # rather than the outer half being a few
-                              # pixels short. (The original concern was
-                              # the BR port at (right+10, bottom+10), but
-                              # ports are never visible in normal use —
-                              # they're a v0.0.3 debug-overlay artefact.)
+    # Resize zone is a 128×128 square centered exactly on the bottom-right
+    # corner — 64 px inward into the body and 64 px outward past the rect.
+    # The symmetry is the point: when working fast, the cursor lands
+    # "approximately at the corner" with high tolerance in either direction,
+    # and either side of the literal corner edge feels equally responsive.
+    # Ports at (right+10, bottom+10) are inside this zone but ports are
+    # never visible in normal use (v0.0.3 debug-overlay artefact), so the
+    # spatial overlap is theoretical only.
+    _resize_grip = 64
+    _resize_overreach = 64
     _user_paused = False      # set False at class level so _build_buttons
                               # (called from BaseNode.__init__) can read it
                               # before the per-instance assignment
