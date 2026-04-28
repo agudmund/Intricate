@@ -77,7 +77,10 @@ class VideoNode(BaseNode):
 
     _show_ports_btn = False   # ports toggle hidden — re-enable for debug
     _has_depth_toggle = True
-    _resize_grip = 32         # bigger grip — VideoNode is often resized
+    _resize_grip = 64         # bigger grip — VideoNode is often resized,
+                              # and the rest of the node is a busy click
+                              # target (frame, progress, buttons), so the
+                              # grip earns its space in the corner.
     _user_paused = False      # set False at class level so _build_buttons
                               # (called from BaseNode.__init__) can read it
                               # before the per-instance assignment
