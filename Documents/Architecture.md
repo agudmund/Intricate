@@ -163,7 +163,7 @@ Frameless, always-on-top creative writing editor. Main class: `Eddie(QMainWindow
 | `main.py` | Bootstrap, `--bridge` arg parsing |
 | `utils/chat.py` | Claude chat worker + history persistence |
 | `utils/vision.py` | Image-to-text Vision API + DropImageTextEdit |
-| `utils/spellchecker.py` | Debounced spell highlighting via Windows COM |
+| `pretty_widgets/utils/spellchecker.py` | Debounced spell highlighting via Windows COM ISpellChecker2 — lives in Pretty Widgets so every host of PrettyEdit gets it |
 
 Features: title field, body editor with spell check, Chat tab (Claude haiku), Preview tab (typewriter rendering), Polaroid PNG export, WPM tracking.
 
