@@ -476,7 +476,11 @@ class MergeNode(BaseNode):
             if not p or not Path(p).exists():
                 continue
 
-            vol = node.data.volume / 100.0
+            # VideoNode lost its per-node volume in the PyAV migration
+            # (audio is now AudioNode's domain). Fall through to full
+            # volume in the extracted track; the user can chain through
+            # an AudioNode if they want a mix-time gain.
+            vol = getattr(node.data, "volume", 100) / 100.0
 
             if isinstance(node, VideoNode):
                 # Extract audio track to a temp wav

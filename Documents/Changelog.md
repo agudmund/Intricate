@@ -12,6 +12,18 @@
 
 ---
 
+## 2026-04-28
+
+### VideoNode swapped to PyAV — A/V Transport Engine Stage 1 + Stage 3 landed
+
+QMediaPlayer is gone from VideoNode. The new backend is `utils/video_decoder.py` — PyAV (libav* via Python), one decoder thread per node, LOD-aware ingest at decode time via libswscale, frames delivered to the GUI thread via Qt signals. This is Stage 3 of `Documents/Design/A-V Transport Engine — Forward Design Exploration.md` landed standalone (Stage 2 Transport seat, Stage 1's auto-spawn AudioNode + ConductorNode chain, and Stage 4 audio sample-server still pending). Ping-pong is now a real loop mode — bounded ring buffer captures decoded frames on the forward pass and replays them in reverse, no seek-restart artifact at the loop boundary. Loop became tri-state (`off | loop | pingpong`) with back-compat read of the legacy `looping` bool.
+
+### VideoNode amputated audio entirely (Stage 1 of the same doc)
+
+`volume`, `muted`, the volume slider, the mute toggle button, the 1-second cull-fade, the `is_muted()` consultation, and the QAudioOutput pipeline are all gone. Audio is AudioNode's exclusive domain in the Transport architecture. Old session files still loadable — back-compat reads silently drop the audio fields. `MergeNode._overlay_to_file` updated to fall through to full volume on VideoNode-extracted tracks (was reading `node.data.volume`). Roughly 200 lines of complexity left the file. The auto-spawn-sister-AudioNode + ConductorNode chain that completes Stage 1 is deferred to its own pass; for now, audio for video clips is a manual AudioNode add.
+
+---
+
 ## 2026-04-21
 
 ### Version bump: 0.6.0, "The Housekeeping before paradise arrives Era"

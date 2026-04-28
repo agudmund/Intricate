@@ -1708,7 +1708,7 @@ class IntricateApp(QMainWindow):
         # Target layout is 3 sticker sliders above, 3 pink progress bars below.
         # Each row is a 3-column grid at sz // 3 per column so columns align
         # vertically between the two rows. Current population:
-        #   sliders row   → blur (col 1), zoom (col 2), reserved (col 3)
+        #   sliders row   → reserved (col 1), zoom (col 2), blur (col 3)
         #   progress row  → reserved (col 1), reserved (col 2), joy (col 3)
         # Reserved slots use fixed-size spacers so column alignment is
         # preserved before the future peers land.
@@ -1753,26 +1753,32 @@ class IntricateApp(QMainWindow):
         # No alignment flag — a Qt alignment on addWidget disables expansion,
         # so the slider would stay pinned at minimumHeight. Letting it fill
         # the row is the whole point of the Expanding sizePolicy above.
-        sliders_row_layout.addWidget(self.blur_slider)
+        # Reserved column to the LEFT of the zoom slider keeps zoom centred.
+        sliders_row_layout.addSpacerItem(_reserved_slot())
 
         # Zoom slider — moved from the bottom toolbar to live with its peers.
+        # Slider position 0-1000 maps to zoom 0.03-5.0 via a two-segment
+        # cubic Hermite curve stitched at the pivot (1.0× zoom). Slope is
+        # continuous at the join — Bezier-smooth, no piecewise kinks.
+        # See _slider_pos_to_zoom for the curve knobs.
         self._zoom_slider = pretty_slider(
             Qt.Vertical,
             handle_icon="slider_handle_vertical.png",
             handle_size=28,
-            range=(3, 500),
-            value=100,
+            range=(0, 1000),
+            value=600,
             invertedAppearance=False,
             fixedWidth=bar_width,
             minimumHeight=bar_min_height,
-            singleStep=5,
-            pageStep=25,
+            singleStep=10,
+            pageStep=50,
             valueChanged=self._on_zoom_slider,
         )
         sliders_row_layout.addWidget(self._zoom_slider)
 
-        # Reserved column for a future 3rd slider
-        sliders_row_layout.addSpacerItem(_reserved_slot())
+        # Blur slider — drives the backdrop opacity layer. Now to the RIGHT
+        # of the zoom slider so the zoom stays in the centre column.
+        sliders_row_layout.addWidget(self.blur_slider)
 
         # No alignment on the outer addWidget either — same reason. The
         # inner sliders_row_layout already handles horizontal centering
@@ -3094,6 +3100,56 @@ class IntricateApp(QMainWindow):
         # Restore saved bottom bar height
         QTimer.singleShot(0, self._restore_bottom_height)
 
+    # Zoom-slider curve knobs — two cubic Hermite segments meeting at the
+    # pivot with shared tangent (C¹ smooth). Tweak to taste.
+    _ZOOM_MIN = 0.03
+    _ZOOM_MAX = 5.0
+    _ZOOM_PIVOT = 1.0      # zoom value at the pivot
+    _PIVOT_T = 0.6         # where the pivot sits on the slider (0..1)
+    _PIVOT_SLOPE = 0.4     # zoom per unit slider at the pivot — small = flat
+    _END_SLOPE_LOW = 2.5   # zoom per unit slider at slider=0
+    _END_SLOPE_HIGH = 12.0 # zoom per unit slider at slider=1
+
+    @classmethod
+    def _slider_pos_to_zoom(cls, pos: int) -> float:
+        """Map slider position 0-1000 → zoom via two C¹-stitched Hermites."""
+        s = max(0.0, min(1.0, pos / 1000.0))
+        if s <= cls._PIVOT_T:
+            dt = cls._PIVOT_T
+            u = s / dt
+            y0, y1 = cls._ZOOM_MIN, cls._ZOOM_PIVOT
+            m0, m1 = cls._END_SLOPE_LOW * dt, cls._PIVOT_SLOPE * dt
+        else:
+            dt = 1.0 - cls._PIVOT_T
+            u = (s - cls._PIVOT_T) / dt
+            y0, y1 = cls._ZOOM_PIVOT, cls._ZOOM_MAX
+            m0, m1 = cls._PIVOT_SLOPE * dt, cls._END_SLOPE_HIGH * dt
+        u2 = u * u
+        u3 = u2 * u
+        h00 = 2 * u3 - 3 * u2 + 1
+        h10 = u3 - 2 * u2 + u
+        h01 = -2 * u3 + 3 * u2
+        h11 = u3 - u2
+        return h00 * y0 + h10 * m0 + h01 * y1 + h11 * m1
+
+    @classmethod
+    def _zoom_to_slider_pos(cls, zoom: float) -> int:
+        """Inverse via bisection on the (monotonic) Hermite curve."""
+        zoom = max(cls._ZOOM_MIN, min(cls._ZOOM_MAX, zoom))
+        if zoom <= cls._ZOOM_PIVOT:
+            lo, hi = 0, int(cls._PIVOT_T * 1000)
+        else:
+            lo, hi = int(cls._PIVOT_T * 1000), 1000
+        for _ in range(24):
+            mid = (lo + hi) // 2
+            if cls._slider_pos_to_zoom(mid) < zoom:
+                lo = mid
+            else:
+                hi = mid
+            if hi - lo <= 1:
+                break
+        return lo if abs(cls._slider_pos_to_zoom(lo) - zoom) < abs(cls._slider_pos_to_zoom(hi) - zoom) else hi
+
     def _on_zoom_slider(self, value: int) -> None:
         """Slider dragged — set the view zoom to the slider's value.
 
@@ -3104,7 +3160,7 @@ class IntricateApp(QMainWindow):
         """
         if not hasattr(self, 'view'):
             return
-        target = value / 100.0
+        target = self._slider_pos_to_zoom(value)
         current = self.view.current_zoom
         if abs(target - current) < 0.001:
             return
@@ -3256,9 +3312,9 @@ class IntricateApp(QMainWindow):
 
     def _sync_zoom_slider(self) -> None:
         """Called after wheel-zoom to keep the slider in sync with the view."""
-        value = int(round(self.view.current_zoom * 100))
+        pos = self._zoom_to_slider_pos(self.view.current_zoom)
         self._zoom_slider.blockSignals(True)
-        self._zoom_slider.setValue(max(3, min(500, value)))
+        self._zoom_slider.setValue(pos)
         self._zoom_slider.blockSignals(False)
 
     def _open_settings_dialog(self):

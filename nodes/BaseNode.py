@@ -70,6 +70,10 @@ class BaseNode(QGraphicsRectItem):
         Sessions are independent. No node reference survives a session switch.
     """
 
+    # Subclasses can enlarge the resize grip by overriding this class attr.
+    # Default tracks the theme value; VideoNode etc. set their own.
+    _resize_grip = _RESIZE_GRIP
+
     def __init__(self, data: NodeData):
         """
         Construct a BaseNode from a NodeData instance.
@@ -692,10 +696,11 @@ class BaseNode(QGraphicsRectItem):
             # Resize handle — bottom-right corner, straddling the border so
             # the cursor still catches it when it drifts a few pixels past.
             rect = self.rect()
-            handle = QRectF(rect.right() - _RESIZE_GRIP,
-                            rect.bottom() - _RESIZE_GRIP,
-                            _RESIZE_GRIP + _RESIZE_OVERREACH,
-                            _RESIZE_GRIP + _RESIZE_OVERREACH)
+            grip = self._resize_grip
+            handle = QRectF(rect.right() - grip,
+                            rect.bottom() - grip,
+                            grip + _RESIZE_OVERREACH,
+                            grip + _RESIZE_OVERREACH)
             if handle.contains(event.pos()):
                 self._is_resizing      = True
                 self._resize_start_pos  = event.pos()
@@ -1280,11 +1285,12 @@ class BaseNode(QGraphicsRectItem):
         path = QPainterPath()
         path.addRoundedRect(self.rect(), self.round_radius, self.round_radius)
         r = self.rect()
+        grip = self._resize_grip
         path.addRect(QRectF(
-            r.right() - _RESIZE_GRIP,
-            r.bottom() - _RESIZE_GRIP,
-            _RESIZE_GRIP + _RESIZE_OVERREACH,
-            _RESIZE_GRIP + _RESIZE_OVERREACH,
+            r.right() - grip,
+            r.bottom() - grip,
+            grip + _RESIZE_OVERREACH,
+            grip + _RESIZE_OVERREACH,
         ))
         return path
 

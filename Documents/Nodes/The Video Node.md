@@ -1,6 +1,6 @@
 # The Video Node
 
-The video playback node. Drag-and-drop a file from Explorer, or double-click to browse — VideoNode handles it and puts a live player on the canvas. Behind the frame sit two pieces of infrastructure that were absent in the first-pass implementation and now mirror the ImageNode pipeline: a **shared byte-preserving media cache** (permanence for the graph) and **LOD-adaptive rendering** (crisp at extreme zoom without blowing the memory budget in an animatic of hundreds of clips).
+The video playback node. Drag-and-drop a file from Explorer, or double-click to browse — VideoNode handles it and puts a live player on the canvas. Behind the frame sit two pieces of infrastructure: a **shared byte-preserving media cache** (permanence for the graph) and **LOD-adaptive rendering** (crisp at extreme zoom without blowing the memory budget in an animatic of hundreds of clips). The decoder beneath is **PyAV** (libav* directly via ffmpeg's Python bindings), not QMediaPlayer.
 
 The cache is not a speed feature. It is the load-bearing contract that says *once a video has been bound to this graph, it is a permanent fixture of that graph* — regardless of what happens to the source on disk. Drives can dismount, hands can tidy, network shares can flap; the graph still plays.
 
@@ -8,9 +8,10 @@ The cache is not a speed feature. It is the load-bearing contract that says *onc
 
 | File | Purpose |
 |---|---|
-| `nodes/VideoNode.py` | The node — paint, playback controls, drift worker, cache ingest |
-| `data/VideoNodeData.py` | Pure Python dataclass — `cache_key`, `source_path`, size/mtime fingerprints, playback state |
-| `utils/media_cache.py` | SHA-256 content-addressed byte-preserving cache (shared with ImageNode) |
+| `nodes/VideoNode.py` | The node — paint, playback controls, drift worker, cache ingest, decoder lifecycle |
+| `data/VideoNodeData.py` | Pure Python dataclass — `cache_key`, `source_path`, size/mtime fingerprints, `loop_mode`, playback state |
+| `utils/video_decoder.py` | PyAV-backed decoder thread; LOD-aware ingest, loop / ping-pong / off modes |
+| `utils/persistence/media_cache.py` | SHA-256 content-addressed byte-preserving cache (shared with ImageNode) |
 
 ## How It Works
 
@@ -19,6 +20,18 @@ The cache is not a speed feature. It is the load-bearing contract that says *onc
 1. **Drag-and-drop from Explorer** — `IntricateView.dropEvent` creates the node and calls `load_from_path`
 2. **Double-click an empty video area** — opens a file browser at the last used directory
 3. **Session restore** — `_restore_from_session` picks source first, falls back to cache second, placeholder third
+
+### The Decode Backend — PyAV
+
+VideoNode's decode path is `utils.video_decoder.VideoDecoder`, a thin wrapper around PyAV. One worker thread per node owns the `av.container`, decodes packets, sizes each frame to LOD via libswscale, and emits Qt signals back to the main GUI thread. The previous QMediaPlayer + QVideoSink path is gone — see `Documents/Design/A-V Transport Engine — Forward Design Exploration.md` for the staged plan this is part of (Stage 3 of that doc, landed standalone).
+
+What this swap bought:
+- **No more codec-roulette.** PyAV uses ffmpeg's libav* directly. Same code path on every machine; no WMF / DirectShow surprises.
+- **Native ping-pong.** A bounded in-memory ring buffer captures decoded frames on the forward pass; the reverse pass replays from RAM with no further decode work. See `loop_mode` below.
+- **Frame-accurate seek** without the QMediaPlayer "scrub then catch up" lag. Seek hits libav directly.
+- **No heap-corruption class.** The 0xc0000374 incident the six-step teardown was built to dodge was a WMF artifact. PyAV teardown is `decoder.close()` — set the stop flag, join the worker thread (bounded), close the container.
+
+Audio is gone from VideoNode entirely (Stage 1 of the design doc). Audio is AudioNode's domain. Old session files carrying `volume` / `muted` / `looping` keys are read back-compat (looping → loop_mode) and the audio fields are silently ignored.
 
 ### The Cache — Byte-Preserving, Content-Addressed, Shared
 
@@ -40,6 +53,8 @@ Three background workers, one main-thread delivery timer:
 
 A `QTimer` at 100 ms on the main thread (`_check_cache_delivery`) atomically folds pending fields into `data.*` under the GIL and spawns an AboutNode for any pending drift message.
 
+Plus the PyAV decoder worker (one per VideoNode), which is a different beast — see *Decode Backend* above.
+
 ### Session Restore Preference Order
 
 `_restore_from_session()` walks three cases:
@@ -55,24 +70,22 @@ Full SHA-256 of a multi-gigabyte video on every session open would be an IO stor
 1. `os.stat()` — compare `size` and `mtime` to the values stored on the data class. If both match within 1 s of mtime, the file is clean. **Session open for 200 clean videos costs 200 stat calls, sub-second total.**
 2. Only if a fingerprint mismatched do we spend a full streaming SHA to confirm real content drift. If the live hash disagrees with the `cache_key`'s hash portion, spawn an AboutNode on the canvas: *"source drifted — cache no longer matches"* plus the filename.
 
-We **never auto-heal.** If the source on disk has changed, the user sees the drift signal and decides what to do: refresh the cache (accept the new version), investigate the source, or revert the change externally. The cache remains pointing at the version it was bound to.
+We **never auto-heal.** If the source on disk has changed, the user sees the drift signal and decides what to do: refresh the cache (accept the new version), investigate the source, or revert the change externally.
 
 ### Cache Refresh
 
 Right-click the empty space on the titlebar → **Refresh Media Cache**. Unified action for images and videos — purges the cache directory (`send2trash`, recycle bin not hard delete), then walks every live `ImageNode` and `VideoNode`. For videos:
 
-1. If `source_path` exists: hash it, compare to prior `cache_key` (counts drift for the report), re-ingest via `cache_source_file()` synchronously (menu action is user-driven, worth the wait for confirmation), stamp new size/mtime.
+1. If `source_path` exists: hash it, compare to prior `cache_key` (counts drift for the report), re-ingest via `cache_source_file()` synchronously, stamp new size/mtime.
 2. If no source: the cached key is gone (just purged) — the node will need a fresh binding.
 
 Report: `Media cache refreshed — N item(s) (M had drifted)`.
 
 ### LOD-Adaptive Rendering
 
-The previous implementation scaled every incoming frame down to node-rect size at ingest time (memory-light) and then re-scaled to the same size at paint time. At high canvas zoom the painter upsampled a small bitmap → pixelation. The fix cannot be "keep the full-resolution frame around" because a 4K clip at 33 MB per frame across 200 simultaneous videos is 6.6 GB of buffers.
+Each frame is sized at decode time to **video_rect × current view LOD**, capped at source resolution, by libswscale inside the decoder thread. Memory becomes proportional to *what is on screen*, not to what was decoded.
 
-The resolution is to size each incoming frame at ingest time to **video_rect × current view LOD**, capped at source resolution. Memory becomes proportional to *what is on screen*, not to what was decoded.
-
-**Reading the LOD from outside `paint_content`.** `_on_frame` has no painter, so LOD is read from `scene().views()[0].transform().m11()`, quantized to 0.5 zoom steps. One-view assumption matches Intricate today; falls back to 1.0 if no view has attached yet (early restore). `paint_content` reads LOD the normal way from `painter.worldTransform().m11()`.
+**Reading the LOD from outside `paint_content`.** `paint_content` reads LOD via `painter.worldTransform().m11()`, quantizes to 0.5 zoom steps, and pushes any change to the decoder via `decoder.set_lod_size(w, h)`. The decoder picks up the new size on the next decoded frame. For paused videos the decoder reformats the stored `av.VideoFrame` at the new size on the spot — no re-decode needed, just one swscale pass. This is the PyAV-era replacement for the previous `setPosition(position)` nudge.
 
 **Memory profile under this model:**
 
@@ -84,15 +97,17 @@ The resolution is to size each incoming frame at ingest time to **video_rect × 
 
 The cap is an overlay effect — as zoom exceeds what the source can provide, Qt's `SmoothPixmapTransform` handles the residual gracefully rather than nearest-neighbour blocking.
 
-**Paused videos + zoom-in.** Playing videos pick up a new LOD on the next frame within 16–33 ms (imperceptible). Paused videos won't receive a new frame until asked, so `paint_content` detects an LOD delta past the quantized step and fires `QTimer.singleShot(0, setPosition(position))` to nudge the decoder into re-emitting the current frame at the new size. The `_last_lod` latch prevents thrash.
+### Playback State and Loop Modes
 
-### Playback State
+`data.loop_mode` is a tri-state string: **`"off"`** (play once, stop on EOF), **`"loop"`** (seamlessly restart), **`"pingpong"`** (forward to end, then reverse to start, then forward again — a back-and-forth oscillation). The loop button on the node's button strip cycles through the three states.
 
-Standard QMediaPlayer wiring — `setVideoOutput(QVideoSink)` → `videoFrameChanged` → `_on_frame`. Persisted across session save/load: volume, mute, looping, playback position, and was-playing flag. On restore with an extant source (or cache), the player resumes at `playback_pos`.
+**Ping-pong implementation.** The decoder thread captures decoded frames into a bounded ring buffer (~256 MiB cap by default — see `PING_PONG_BUFFER_CAP_BYTES` in `utils/video_decoder.py`) on the forward pass. At end-of-stream it stops decoding and walks the buffer in reverse with the same per-frame display durations, then flips to forward and re-decodes from the source. Clips that exceed the buffer cap fall back to `"loop"` semantics with a warning log; the libav-rendered reversed-file fallback for very long clips is left as a future refinement.
+
+The buffer is invalidated whenever the LOD size changes — the captured QImages are now the wrong resolution for the new view zoom — and rebuilds on the next forward pass.
 
 ### Viewport Culling
 
-`_viewport_visible` tracks whether the node is inside the visible scene rect. When a video leaves the viewport, playback pauses (fades volume first); when it returns, it resumes if it was previously playing. In an animatic view with 200 clips, this keeps decoder load proportional to what the user can actually see.
+`_viewport_visible` tracks whether the node is inside the visible scene rect. When a video leaves the viewport, the decoder is paused; when it returns, it resumes if the user hadn't explicitly paused. With audio gone from VideoNode the previous fade-to-silence handshake is gone too — cull/uncull is a clean play/pause swap on the decoder. `Scene.update_video_visibility` also handles altitude culling at zoom < `_MEDIA_TINY_RENDER_PX`.
 
 ## Data Class
 
@@ -103,14 +118,14 @@ Standard QMediaPlayer wiring — `setVideoOutput(QVideoSink)` → `videoFrameCha
 - `source_size: int` — cheap drift fingerprint (bytes at cache time)
 - `source_mtime: float` — cheap drift fingerprint (mtime at cache time)
 - `caption: str` — editable label shown at the bottom
-- `volume: int` — 0–100, persisted
 - `playback_pos: int` — milliseconds into the video at save time
-- `looping: bool` — whether playback loops
-- `muted: bool` — audio mute state
+- `loop_mode: str` — `"off" | "loop" | "pingpong"`
 - `show_border: bool` — ivory border overlay toggle
 - `was_playing: bool` — whether the node was playing at save time
 
 Default size: 360 × 280.
+
+**Removed in the PyAV migration:** `volume`, `muted`, `looping`. The first two never had a runtime owner in VideoNode any more (audio is gone); `looping` was widened into the tri-state `loop_mode`. `from_dict` reads old session files: a `looping=True` value back-compats into `loop_mode="loop"`; `volume` and `muted` keys are silently ignored.
 
 ## Lifecycle
 
@@ -120,7 +135,7 @@ Default size: 360 × 280.
 
 ### Drop
 
-1. `load_from_path(path)` sets source, player plays immediately
+1. `load_from_path(path)` → decoder opens the source via PyAV; first frame arrives within tens of milliseconds
 2. Caption AboutNode spawns if the node had no existing caption
 3. Daemon thread runs `cache_source_file(path)` — hash + copy
 4. Delivery timer folds `cache_key`, `source_size`, `source_mtime` into the data class
@@ -132,28 +147,32 @@ See **Session Restore Preference Order** above. Source takes precedence (fast pl
 
 ### Removal
 
-`_prepare_for_removal()`:
+`_prepare_for_removal()` (via the demolition crew):
 
 1. Sets `_destroyed` flag — background workers check this before writing
 2. Stops `_cache_poll` timer and disconnects its `timeout` signal
 3. Nulls `_pending_*` fields
-4. Stops and disconnects the volume animation if running
-5. Disconnects all QMediaPlayer signals (`videoFrameChanged`, `durationChanged`, `positionChanged`, `mediaStatusChanged`)
-6. Stops the player synchronously, severs `setVideoOutput(None)` / `setAudioOutput(None)`, schedules C++ `deleteLater()` on player/sink/audio in the correct order
-7. Nulls frame pixmap and scaled cache
-8. Calls `super()._prepare_for_removal()`
+4. Disconnects every decoder signal (`frame`, `position`, `duration`, `state`, `error`)
+5. `decoder.close()` — sets the stop flag, joins the worker thread (bounded 1 s), closes the av.container
+6. Nulls frame pixmap and scaled cache; nulls the decoder reference
+
+`_quiet_for_shake` runs the same close path synchronously at shake-trigger time so the particle burst window has nothing live to dereference. With PyAV the heap-corruption class the old WMF teardown defended against is gone, but the close sequence is still the cleanest bow on a node.
 
 Cache files are **not** removed here — the user may undo the delete, or the removed node's cache entry may have been referenced by the undo snapshot. Orphan cleanup happens on session save via `gc_cache()`.
 
 ### Cache Garbage Collection
 
-`gc_cache(live_keys)` runs on every session save from `graphics/Scene.py`. The live-keys set now draws from both image **and** video nodes — unified cache, unified GC. Any file in the cache directory whose name doesn't match a live key gets removed silently.
+`gc_cache(live_keys)` runs on every session save from `graphics/Scene.py`. The live-keys set draws from both image **and** video nodes — unified cache, unified GC. Any file in the cache directory whose name doesn't match a live key gets removed silently.
+
+## Build / Bundling Notes
+
+PyAV ships its libav DLLs in `av.libs/` next to the package directory. `build.py` invokes PyInstaller with `--collect-all=av` so the frozen build carries the `av/` package, its `.pyd` extensions, and the `av.libs/*.dll` set together. No system ffmpeg dependency for end-user builds.
 
 ## Technical Notes
 
-- The paint-time LOD cache is the **second** of two tiers — the ingest-time size is already screen-aware, so the `_scaled_cache` at paint time is only a light aspect-fit to `vr_size`. `SmoothPixmapTransform` is enabled so any painter-side residual is bilinear.
-- The `_frame_pending` throttle is unchanged by the cache rewrite — if the paint loop hasn't caught up to the previous frame, the next one is dropped. This keeps decoder pressure bounded even under heavy paint load.
-- The cache is shared across projects only to the extent that projects share a `Documents/Data/Cache/` root. Different `set_cache_root()` targets give isolated caches.
-- `cache_source_file` is idempotent. Re-dropping the same video from the same path is a no-op after the first hash pass.
+- The paint-time scaled cache is the **second** of two tiers — the decoder already produces an LOD-sized QImage, so paint-time `_scaled_cache` is just an aspect-fit to `vr_size`. `SmoothPixmapTransform` is enabled so any painter-side residual is bilinear.
+- The PyAV decoder thread paces itself against `time.monotonic()` using stream PTS — frames are emitted at their real-time intervals. Dropping a frame in the queue path is a manual operation; today we don't bound the queue (Qt's queued-connection delivery handles backpressure naturally — slow GUI = slow signal delivery).
+- `decoder.set_lod_size()` is the public-facing LOD knob. It's a hint; the decoder caps at source resolution so up-zoom past native res doesn't allocate beyond the original frame. Down-zoom always honoured.
 - The drift worker uses a 1-second tolerance on mtime comparison — some networked filesystems round mtime to the nearest second, and exact-equality tripped false positives during testing.
-- Playing videos refresh their LOD automatically on the next decoded frame. Paused videos refresh via a `QMediaPlayer.setPosition()` nudge gated on an LOD delta past the quantized step; this avoids decoder thrash during continuous pan/hover.
+- Ping-pong's bounded buffer trades RAM for the absence of seek-restart artifacts at the loop boundary. The 256 MiB cap is conservative; can be raised for users who routinely ping-pong long clips.
+- The previous QMediaPlayer-era six-step teardown lives on in spirit as `_quiet_for_shake` + `_demolition_pre`, even though the heap-corruption pressure that motivated it (WMF) is gone with the backend swap. The pattern is cheap and the discipline is good.

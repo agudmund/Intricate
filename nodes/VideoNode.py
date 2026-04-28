@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - nodes/VideoNode.py VideoNode class
--Renders video with full playback inside the canvas via QMediaPlayer for enjoying
+-Intricate - nodes/VideoNode.py VideoNode class
+-the picture moves on its own now, sized to the room as the room changes
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -10,14 +10,14 @@ import math
 from pathlib import Path
 
 from PySide6.QtWidgets import QFileDialog
-from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QPropertyAnimation, QEasingCurve, QTimer
+from PySide6.QtCore import Qt, QRectF, QPointF, QTimer
 from PySide6.QtGui import (
     QPainter, QPixmap, QImage, QColor, QPen, QPainterPath, QLinearGradient
 )
-from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink, QVideoFrame
 
 from nodes.BaseNode import BaseNode
-from data.VideoNodeData import VideoNodeData
+from data.VideoNodeData import VideoNodeData, LOOP_MODES
+from utils.video_decoder import VideoDecoder
 from pretty_widgets.graphics.Theme import Theme
 import pretty_widgets.utils.settings as settings
 from pretty_widgets.utils.logger import setup_logger
@@ -42,7 +42,15 @@ def _fmt_time(ms: int) -> str:
 
 class VideoNode(BaseNode):
     """
-    Renders video with full playback inside the node body.
+    Renders video with frame-accurate playback inside the node body.
+
+    Backend: PyAV (ffmpeg Python bindings) via utils.video_decoder.VideoDecoder.
+    See Documents/Design/A-V Transport Engine — Forward Design Exploration.md
+    for the staging plan this slots into. This is Stage 3 of that plan landed
+    standalone — the Transport seat (Stage 2) and the AudioNode swap (Stage 4)
+    arrive in their own passes. VideoNode no longer carries audio at all
+    (Stage 1 amputation): audio is AudioNode's exclusive domain in the
+    Transport architecture.
 
     Layout (top to bottom inside the node body):
         ┌─────────────────────────────────┐
@@ -56,8 +64,8 @@ class VideoNode(BaseNode):
         │  caption band                   │
         └─────────────────────────────────┘
 
-    Interaction zones (routed in mouseDoubleClickEvent):
-        Caption band  → activate inline QLineEdit editor
+    Interaction zones:
+        Caption band  → activate inline QLineEdit editor (BaseNode handles)
         Video area    → open file browser (when empty) or toggle play/pause
         Progress bar  → scrub to position
 
@@ -69,6 +77,10 @@ class VideoNode(BaseNode):
 
     _show_ports_btn = False   # ports toggle hidden — re-enable for debug
     _has_depth_toggle = True
+    _resize_grip = 32         # bigger grip — VideoNode is often resized
+    _user_paused = False      # set False at class level so _build_buttons
+                              # (called from BaseNode.__init__) can read it
+                              # before the per-instance assignment
 
     def __init__(self, data: VideoNodeData | None = None):
         if data is None:
@@ -80,42 +92,31 @@ class VideoNode(BaseNode):
         self._aspect_fitted = False  # True once we've auto-sized to the video's aspect ratio
 
         # ── Current frame pixmap ──────────────────────────────────────────────
-        # Frame pixmap is sized at ingest to match the current view LOD so we
-        # never upscale a proxy-sized bitmap at extreme zoom (pixelation) nor
-        # keep a full source-resolution frame per video (memory blow-up when
-        # hundreds of clips play simultaneously in an animatic view).
+        # The decoder sizes each frame at decode time to the LOD-bounded
+        # target — so the pixmap that lands here is already screen-resolution.
+        # Paint draws it aspect-fit and centred in the video rect.
         self._frame_pixmap: QPixmap | None = None
         self._scaled_cache: QPixmap | None = None
         self._scaled_cache_size: tuple[int, int] | None = None
-        self._frame_pending: bool = False          # throttle: skip if paint hasn't caught up
-        self._last_lod: float = 1.0                # quantized LOD the current frame was sized for
+        self._last_lod: float = 1.0
 
-        # ── Media player ──────────────────────────────────────────────────────
-        self._player = QMediaPlayer()
-        self._audio  = QAudioOutput()
-        self._sink   = QVideoSink()
-
-        self._player.setAudioOutput(self._audio)
-        self._player.setVideoOutput(self._sink)
-        self._audio.setVolume(data.volume / 100.0)
-        from utils.audio import audio as _audio_mgr
-        self._audio.setMuted(data.muted or _audio_mgr.is_muted())
-
-        self._sink.videoFrameChanged.connect(self._on_frame)
-        self._player.durationChanged.connect(self._on_duration_changed)
-        self._player.positionChanged.connect(self._on_position_changed)
-        self._player.mediaStatusChanged.connect(self._on_media_status)
+        # ── PyAV decoder ──────────────────────────────────────────────────────
+        # One decoder per node, single worker thread, signal-based delivery
+        # back to the main GUI thread. See utils/video_decoder.py.
+        self._decoder = VideoDecoder()
+        self._decoder.signals.frame.connect(self._on_decoder_frame)
+        self._decoder.signals.position.connect(self._on_decoder_position)
+        self._decoder.signals.duration.connect(self._on_decoder_duration)
+        self._decoder.signals.state.connect(self._on_decoder_state)
+        self._decoder.signals.error.connect(self._on_decoder_error)
 
         self._duration_ms: int = 0
         self._position_ms: int = 0
-        self._was_playing: bool = False   # track state across scrub
-        self._scrubbing: bool = False     # progress bar drag in progress
-        self._volume_scrubbing: bool = False  # volume slider drag in progress
+        self._scrubbing: bool = False        # progress bar drag in progress
+        self._was_playing: bool = False      # remember play state across scrub
 
-        self._viewport_visible: bool = True   # assume visible until told otherwise
+        self._viewport_visible: bool = True  # assume visible until told otherwise
         self._was_playing_before_cull: bool = False
-        self._volume_anim: QPropertyAnimation | None = None
-        self._target_volume: float = data.volume / 100.0  # user's intended volume
 
         # Button row starts hidden — double-click the top strip to reveal
         self._buttons_visible = False
@@ -135,15 +136,13 @@ class VideoNode(BaseNode):
         self._cache_poll.start()
 
         # ── Restore from session ──────────────────────────────────────────────
-        # Permanence contract: the graph remembers every video it has ever
-        # been given. Prefer the live source (drift-checked in background);
-        # fall back to the cached copy if the source has moved, been lost,
-        # or is mid-network-mount. A drift AboutNode is spawned on mismatch —
-        # we surface the signal, never auto-heal.
+        # Permanence contract: prefer live source (drift-checked async); fall
+        # back to cached copy; placeholder if both gone. Drift AboutNode on
+        # mismatch — surface the signal, never auto-heal.
         self._restore_from_session()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # CAPTION → ABOUT NODE
+    # GEOMETRY HELPERS
     # ─────────────────────────────────────────────────────────────────────────
 
     def _top_offset(self) -> float:
@@ -152,34 +151,21 @@ class VideoNode(BaseNode):
 
     def _progress_rect(self) -> QRectF:
         r = self.rect()
-        vol_reserve = PROGRESS_HEIGHT + VIDEO_PADDING if self._buttons_visible else 0.0
         return QRectF(
-            r.x() + VIDEO_PADDING + vol_reserve,
+            r.x() + VIDEO_PADDING,
             r.bottom() - PROGRESS_HEIGHT - VIDEO_PADDING,
-            r.width() - VIDEO_PADDING * 2 - vol_reserve,
+            r.width() - VIDEO_PADDING * 2,
             PROGRESS_HEIGHT,
-        )
-
-    def _volume_rect(self) -> QRectF:
-        """Vertical volume slider — left edge of the video area, same width as
-        the progress bar height so they feel like siblings."""
-        vr = self._video_rect()
-        return QRectF(
-            self.rect().x() + VIDEO_PADDING,
-            vr.y(),
-            PROGRESS_HEIGHT,
-            vr.height() + PROGRESS_HEIGHT + VIDEO_PADDING,
         )
 
     def _video_rect(self) -> QRectF:
         r = self.rect()
         top = r.y() + self._top_offset() + VIDEO_PADDING
         bottom_reserve = (PROGRESS_HEIGHT + VIDEO_PADDING) if self._buttons_visible else 0.0
-        vol_reserve = (PROGRESS_HEIGHT + VIDEO_PADDING) if self._buttons_visible else 0.0
         return QRectF(
-            r.x()     + VIDEO_PADDING + vol_reserve,
+            r.x()     + VIDEO_PADDING,
             top,
-            r.width() - VIDEO_PADDING * 2 - vol_reserve,
+            r.width() - VIDEO_PADDING * 2,
             r.height() - (top - r.y()) - VIDEO_PADDING - bottom_reserve,
         )
 
@@ -198,16 +184,16 @@ class VideoNode(BaseNode):
         conn.update_path()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEDIA PLAYER
+    # SOURCE / DECODER WIRING
     # ─────────────────────────────────────────────────────────────────────────
 
     def load_from_path(self, path: str | Path) -> None:
         """Load a video from a file path. Public — called by file browser and View.dropEvent.
 
         Playback starts immediately from the source path so the user never waits
-        on the cache. A background worker hashes + copies the source bytes
-        into the media cache and stamps data.cache_key on completion. From
-        that moment on the graph knows about the video and can restore it
+        on the cache. A background worker hashes + copies the source bytes into
+        the media cache and stamps data.cache_key on completion. From that
+        moment forward the graph knows about the video and can restore it
         even if the source file later moves or disappears.
         """
         path = Path(path)
@@ -222,13 +208,44 @@ class VideoNode(BaseNode):
         self._start_cache_ingest(path)
 
     def _set_source(self, path: Path, restore_pos: int = 0) -> None:
+        """Tell the decoder to open `path`. The initial LOD size is a sensible
+        guess derived from the current video rect; the decoder honours
+        set_lod_size() updates as the view zooms in/out."""
         self.data.source_path = str(path.resolve())
-        self._player.setSource(QUrl.fromLocalFile(str(path.resolve())))
+        target_w, target_h = self._target_lod_size()
+        self._decoder.set_source(
+            path,
+            lod_size=(target_w, target_h),
+            loop_mode=self.data.loop_mode,
+            start_paused=self._user_paused,
+        )
         if restore_pos > 0:
-            # Seek after media is loaded — deferred via mediaStatusChanged
-            self._restore_pos = restore_pos
-        else:
-            self._restore_pos = 0
+            self._decoder.set_position(restore_pos)
+
+    def _target_lod_size(self) -> tuple[int, int]:
+        """Compute (target_w, target_h) for decoder LOD sizing — video_rect
+        × current view zoom. Used at load time and on every viewport change.
+        Falls back to a 1.0× sizing when no view has attached yet."""
+        try:
+            vr = self._video_rect()
+            lod = self._current_view_lod()
+            return max(1, int(vr.width() * lod) + 1), max(1, int(vr.height() * lod) + 1)
+        except RuntimeError:
+            return 320, 240
+
+    def _current_view_lod(self) -> float:
+        """Return the current view's zoom factor (quantized to 0.5 steps).
+        One-view assumption matches the app today; falls back to 1.0 if
+        the scene has not yet attached a view (early session restore)."""
+        try:
+            sc = self.scene()
+            views = sc.views() if sc else []
+            if not views:
+                return 1.0
+            raw = max(1.0, abs(views[0].transform().m11()))
+        except RuntimeError:
+            return 1.0
+        return max(1.0, math.ceil(raw * 2.0) / 2.0)
 
     def _restore_from_session(self) -> None:
         """Session restore with permanence contract.
@@ -246,8 +263,6 @@ class VideoNode(BaseNode):
         if src_path and src_path.exists():
             self._set_source(src_path, restore_pos=self.data.playback_pos)
             if self.data.cache_key:
-                # Drift check is deferred to a background worker — cheap
-                # fingerprint (size + mtime) first, full rehash only on mismatch.
                 self._start_drift_check(src_path)
             else:
                 # Pre-cache session: ingest now so future restores are safe.
@@ -256,7 +271,6 @@ class VideoNode(BaseNode):
 
         if cache_path is not None:
             self._set_source(cache_path, restore_pos=self.data.playback_pos)
-            # Flag that the live source is gone — the graph self-served from cache.
             missing = self.data.source_path or "(unknown)"
             self._pending_drift = f"source missing — playing from cache\n{Path(missing).name}"
             return
@@ -264,13 +278,13 @@ class VideoNode(BaseNode):
         # Nothing to load — empty placeholder node.
 
     # ─────────────────────────────────────────────────────────────────────────
-    # CACHE — background ingestion and drift detection
+    # CACHE — background ingestion and drift detection (preserved from
+    # pre-PyAV; the cache contract is backend-agnostic, only the playback
+    # path changed)
     # ─────────────────────────────────────────────────────────────────────────
 
     def _start_cache_ingest(self, src_path: Path) -> None:
-        """Hash + copy the source into the media cache on a daemon thread.
-        Delivers cache_key / size / mtime via _pending_* fields. Safe to call
-        multiple times — cache_source_file short-circuits if the hash exists."""
+        """Hash + copy the source into the media cache on a daemon thread."""
         import threading
         def _worker(node=self, path=src_path):
             try:
@@ -283,8 +297,6 @@ class VideoNode(BaseNode):
                     size, mtime = st.st_size, st.st_mtime
                 except OSError:
                     size, mtime = 0, 0.0
-                # Write pending fields last — delivery timer treats the key
-                # as the "ready" signal.
                 node._pending_size  = size
                 node._pending_mtime = mtime
                 node._pending_cache_key = key
@@ -305,8 +317,7 @@ class VideoNode(BaseNode):
                     return
                 if (st.st_size == node.data.source_size
                         and abs(st.st_mtime - node.data.source_mtime) < 1.0):
-                    return   # clean — no change since last bind
-                # Fingerprint mismatch — spend the full hash to confirm drift.
+                    return
                 from utils.persistence.media_cache import hash_file, key_hash
                 live_hash = hash_file(path)
                 if live_hash is None:
@@ -322,8 +333,6 @@ class VideoNode(BaseNode):
 
     def _check_cache_delivery(self) -> None:
         """Main-thread pickup of background cache / drift workers."""
-        # Orphan-timer guard (see BaseNode._timer_slot_alive) — supersedes
-        # the narrower _destroyed probe that previously lived here.
         if not self._timer_slot_alive('_cache_poll'):
             return
         if self._destroyed:
@@ -348,76 +357,26 @@ class VideoNode(BaseNode):
             except Exception:
                 pass
 
-    def _on_media_status(self, status) -> None:
-        try:
-            if self._destroyed:
-                return
-        except RuntimeError:
-            return
-        if status == QMediaPlayer.MediaStatus.LoadedMedia:
-            if hasattr(self, '_restore_pos') and self._restore_pos > 0:
-                self._player.setPosition(self._restore_pos)
-                self._restore_pos = 0
-            # Always autoplay on load
-            self._player.play()
-        elif status == QMediaPlayer.MediaStatus.EndOfMedia:
-            if self.data.looping:
-                self._player.setPosition(0)
-                if self._viewport_visible:
-                    self._player.play()
-                else:
-                    self._was_playing_before_cull = True
+    # ─────────────────────────────────────────────────────────────────────────
+    # DECODER SLOTS (signals fire on the worker thread; Qt queues them onto
+    # the main thread, so these run with the GUI lock)
+    # ─────────────────────────────────────────────────────────────────────────
 
-    def _current_view_lod(self) -> float:
-        """Return the current view's zoom factor (quantized to 0.5 steps).
-
-        Ingest-time LOD lookup — paint sees it through the painter's world
-        transform, but _on_frame has no painter so we read it from the view.
-        One-view assumption matches the app today; falls back to 1.0 if the
-        scene has not yet attached a view (early session restore)."""
-        try:
-            sc = self.scene()
-            views = sc.views() if sc else []
-            if not views:
-                return 1.0
-            raw = max(1.0, abs(views[0].transform().m11()))
-        except RuntimeError:
-            return 1.0
-        return max(1.0, math.ceil(raw * 2.0) / 2.0)
-
-    def _on_frame(self, frame: QVideoFrame) -> None:
-        """Convert each video frame to a LOD-sized QPixmap for painting.
-
-        The incoming frame is scaled at ingest to (video_rect × current LOD),
-        capped at source resolution. This keeps memory proportional to the
-        on-screen size per node — hundreds of tiny clips in an animatic view
-        cost little; one zoomed-in clip gets up to source-res for that one
-        alone. When zoom changes, playing videos pick up the new LOD on the
-        next arrival (16–33ms); paused videos are re-emitted from paint().
-
-        Frame-skip: if the previous frame hasn't been painted yet we drop
-        this one entirely (_frame_pending throttle).
-        """
-        try:
-            if self._destroyed or self._frame_pending:
-                return
-        except RuntimeError:
-            return
-        if not frame.isValid():
-            return
-        img = frame.toImage()
-        if img.isNull():
+    def _on_decoder_frame(self, qimg: QImage) -> None:
+        """Receive a decoded frame from the worker thread. The image is
+        already sized to LOD (decoder honours set_lod_size). Convert to
+        QPixmap and trigger a repaint."""
+        if self._destroyed or qimg.isNull():
             return
 
-        # Auto-fit node width to video aspect ratio on first frame
-        if not self._aspect_fitted and img.width() > 0 and img.height() > 0:
+        # Auto-fit node width to the source video's aspect ratio on first
+        # frame received. Subsequent frames keep the fit.
+        if not self._aspect_fitted and qimg.width() > 0 and qimg.height() > 0:
             self._aspect_fitted = True
-            vid_aspect = img.width() / img.height()
+            vid_aspect = qimg.width() / qimg.height()
             r = self.rect()
             vr = self._video_rect()
-            # Derive the ideal video-rect width from current video-rect height
             ideal_vr_w = vr.height() * vid_aspect
-            # Add back horizontal padding to get the node width
             h_pad = r.width() - vr.width()
             ideal_node_w = ideal_vr_w + h_pad
             if abs(ideal_node_w - r.width()) > 2.0:
@@ -425,76 +384,82 @@ class VideoNode(BaseNode):
                 self.setRect(QRectF(r.x(), r.y(), ideal_node_w, r.height()))
                 self.data.width = ideal_node_w
 
-        # Size the frame pixmap to (video_rect × LOD), capped at source
-        try:
-            vr = self._video_rect()
-        except RuntimeError:
-            return
-        lod = self._current_view_lod()
-        tw = max(1, min(img.width(),  int(vr.width()  * lod) + 1))
-        th = max(1, min(img.height(), int(vr.height() * lod) + 1))
-        small = img.scaled(tw, th, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self._frame_pixmap = QPixmap.fromImage(small)
-        self._scaled_cache = None       # invalidate
-        self._frame_pending = True
-        self._last_lod = lod
+        self._frame_pixmap = QPixmap.fromImage(qimg)
+        self._scaled_cache = None       # invalidate aspect-fit cache
         self.update()
 
-    def _on_duration_changed(self, duration: int) -> None:
-        self._duration_ms = duration
-
-    def _on_position_changed(self, position: int) -> None:
-        try:
-            if self._destroyed:
-                return
-            self._position_ms = position
-            # Sync play/pause sticker to actual player state
-            playing = self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-            if hasattr(self, '_play_btn') and self._play_btn._in_confirm != playing:
-                self._play_btn._in_confirm = playing
-                self._play_btn.update()
-            self.update()
-        except RuntimeError:
+    def _on_decoder_position(self, ms: int) -> None:
+        if self._destroyed:
             return
+        self._position_ms = ms
+
+    def _on_decoder_duration(self, ms: int) -> None:
+        if self._destroyed:
+            return
+        self._duration_ms = ms
+
+    def _on_decoder_state(self, state: str) -> None:
+        # Reserved for future hooks — e.g. surfacing a "ended" overlay when
+        # loop_mode == "off" and the clip finishes. No-op for now.
+        pass
+
+    def _on_decoder_error(self, msg: str) -> None:
+        logger.warning("decoder error on %s: %s", self.data.source_path, msg)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # PLAYBACK CONTROL
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _toggle_playback(self) -> None:
-        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self._player.pause()
-        elif self._viewport_visible:
-            self._player.play()
+        # NodeButton has already flipped _in_confirm before invoking us:
+        #   _in_confirm True  → pause icon shown → user wants playback.
+        #   _in_confirm False → play  icon shown → user wants paused.
+        # Single source of truth; no recomputation.
+        want_play = bool(self._play_btn._in_confirm)
+        self._user_paused = not want_play
+        if want_play:
+            if self._viewport_visible:
+                self._decoder.play()
+        else:
+            self._decoder.pause()
         self.update()
 
-    def _toggle_loop(self) -> None:
-        self.data.looping = not self.data.looping
-
-    def _toggle_mute(self) -> None:
-        self.data.muted = not self.data.muted
-        self._audio.setMuted(self.data.muted)
-
-    def _toggle_border(self) -> None:
-        self.data.show_border = not self.data.show_border
+    def _cycle_loop_mode(self) -> None:
+        """Cycle off → loop → pingpong → off → ..."""
+        try:
+            idx = LOOP_MODES.index(self.data.loop_mode)
+        except ValueError:
+            idx = 0
+        self.data.loop_mode = LOOP_MODES[(idx + 1) % len(LOOP_MODES)]
+        self._decoder.set_loop_mode(self.data.loop_mode)
+        # Refresh button visual + tooltip
+        self._refresh_loop_button_visual()
         self.update()
 
-    def _stop(self) -> None:
-        self._player.stop()
-        self.update()
+    def _refresh_loop_button_visual(self) -> None:
+        """Sync the loop button's pixmap and tooltip to data.loop_mode."""
+        btn = getattr(self, "_loop_btn", None)
+        if btn is None:
+            return
+        mode = self.data.loop_mode
+        # The three icons are stored on the button itself at construction.
+        pix = self._loop_pix_off
+        if   mode == "loop":     pix = self._loop_pix_loop
+        elif mode == "pingpong": pix = self._loop_pix_pingpong
+        # NodeButton renders from `_pix` (set by the constructor as the
+        # "main" pixmap). Reassigning it and triggering update() is enough.
+        btn._pix = pix
+        btn._in_confirm = False  # we manage state ourselves; stay on main face
+        btn.setToolTip(f"Loop: {mode}")
+        btn.update()
 
     def _scrub_to(self, x: float) -> None:
-        """Seek to position based on x coordinate within the progress bar."""
+        """Seek the decoder to the position represented by *x* on the
+        progress bar. The decoder picks up the seek on its next iteration."""
         pr = self._progress_rect()
         ratio = max(0.0, min(1.0, (x - pr.left()) / max(1.0, pr.width())))
         target = int(ratio * self._duration_ms)
-        self._player.setPosition(target)
-
-    def _volume_scrub_to(self, y: float) -> None:
-        """Set volume based on y coordinate within the volume slider.
-        Bottom = 0 (silent), top = 1 (full) — gradient flows upward."""
-        vr = self._volume_rect()
-        ratio = 1.0 - max(0.0, min(1.0, (y - vr.top()) / max(1.0, vr.height())))
-        self._target_volume = ratio
-        self._audio.setVolume(ratio)
-        self.data.volume = int(ratio * 100)
-        self.update()
+        self._decoder.set_position(target)
 
     # ─────────────────────────────────────────────────────────────────────────
     # FILE BROWSER
@@ -522,16 +487,8 @@ class VideoNode(BaseNode):
         from nodes.NodeButton import NodeButton, EmojiButton
         super()._build_buttons()
 
-        # Mute toggle — emoji faces, matches AudioNode
-        self._mute_btn = EmojiButton(
-            self,
-            get_emoji=lambda: "\U0001fae2" if self.data.muted else "\U0001f60a",  # 🫢 / 😊
-            set_emoji=lambda _: self._toggle_mute(),
-        )
-        self._mute_btn.setToolTip("Mute" if not self.data.muted else "Unmute")
-        self._buttons.append(self._mute_btn)
-
-        # Play/pause — sticker toggle
+        # Play/pause — sticker toggle. NodeButton flips _in_confirm itself
+        # on click; _toggle_playback reads it as the source of truth.
         play_pix  = Theme.icon(Theme.iconPlayIconic,  fallback_color="#9a7abf")
         pause_pix = Theme.icon(Theme.iconPauseIconic, fallback_color="#9a7abf")
         self._play_btn = NodeButton(
@@ -539,29 +496,36 @@ class VideoNode(BaseNode):
             pixmap_confirm=pause_pix, toggle=True,
         )
         self._play_btn._sticker_shadow = True
+        self._play_btn._in_confirm = not self._user_paused
         self._play_btn.setToolTip("Play / Pause")
         self._buttons.append(self._play_btn)
 
-        # Loop toggle — sticker icons: return arrow (off / direct playback) / loop arrow (on)
-        loop_off_pix = Theme.icon(Theme.iconReturnIconic, fallback_color="#9a7abf")
-        loop_on_pix  = Theme.icon(Theme.iconLoopAudio,    fallback_color="#9a7abf")
+        # Loop — three states cycled by a single button. NodeButton's
+        # built-in toggle is binary, so we run in single-stage mode and
+        # swap the displayed pixmap manually in _refresh_loop_button_visual.
+        self._loop_pix_off      = Theme.icon(Theme.iconReturnIconic,  fallback_color="#9a7abf")
+        self._loop_pix_loop     = Theme.icon(Theme.iconLoopAudio,     fallback_color="#9a7abf")
+        self._loop_pix_pingpong = Theme.icon(Theme.iconPingpong,      fallback_color="#9a7abf")
         self._loop_btn = NodeButton(
-            self, loop_off_pix, self._toggle_loop,
-            pixmap_confirm=loop_on_pix, toggle=True,
+            self, self._loop_pix_off, self._cycle_loop_mode,
         )
         self._loop_btn._sticker_shadow = True
-        self._loop_btn._in_confirm = self.data.looping
-        self._loop_btn.setToolTip("Loop: on" if self.data.looping else "Loop: off")
         self._buttons.append(self._loop_btn)
+        # Sync icon to current mode (handles session restore).
+        self._refresh_loop_button_visual()
 
         # Border toggle — simple circle, state is visible on the node itself
         self._border_btn = EmojiButton(
             self,
-            get_emoji=lambda: "\u25cb",  # ○
+            get_emoji=lambda: "○",  # ○
             set_emoji=lambda _: self._toggle_border(),
         )
         self._border_btn.setToolTip("Toggle ivory border")
         self._buttons.append(self._border_btn)
+
+    def _toggle_border(self) -> None:
+        self.data.show_border = not self.data.show_border
+        self.update()
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERACTION
@@ -575,6 +539,11 @@ class VideoNode(BaseNode):
             return
         if self._video_rect().contains(event.pos()):
             if self.data.source_path:
+                # Double-click on video toggles playback by mirroring a
+                # play-button click — keep _in_confirm in sync with the
+                # intended new state, then dispatch.
+                if hasattr(self, "_play_btn"):
+                    self._play_btn._in_confirm = self._user_paused  # flip
                 self._toggle_playback()
             else:
                 self._open_file_browser()
@@ -585,28 +554,17 @@ class VideoNode(BaseNode):
     def mousePressEvent(self, event) -> None:
         pos = event.pos()
         if self._buttons_visible and event.button() == Qt.LeftButton:
-            if self._volume_rect().contains(pos):
-                self._volume_scrubbing = True
-                self._volume_scrub_to(pos.y())
-                event.accept()
-                return
             if self._progress_rect().contains(pos):
                 self._scrubbing = True
-                self._was_playing = (
-                    self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-                )
+                self._was_playing = not self._user_paused
                 if self._was_playing:
-                    self._player.pause()
+                    self._decoder.pause()
                 self._scrub_to(pos.x())
                 event.accept()
                 return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        if self._volume_scrubbing and event.buttons() & Qt.LeftButton:
-            self._volume_scrub_to(event.pos().y())
-            event.accept()
-            return
         if self._scrubbing and event.buttons() & Qt.LeftButton:
             self._scrub_to(event.pos().x())
             event.accept()
@@ -614,14 +572,10 @@ class VideoNode(BaseNode):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
-        if self._volume_scrubbing and event.button() == Qt.LeftButton:
-            self._volume_scrubbing = False
-            event.accept()
-            return
         if self._scrubbing and event.button() == Qt.LeftButton:
             self._scrubbing = False
             if self._was_playing and self._viewport_visible:
-                self._player.play()
+                self._decoder.play()
                 self._was_playing = False
             event.accept()
             return
@@ -630,6 +584,8 @@ class VideoNode(BaseNode):
     def keyPressEvent(self, event) -> None:
         # Space toggles playback when node is selected
         if event.key() == Qt.Key_Space and self.data.source_path:
+            if hasattr(self, "_play_btn"):
+                self._play_btn._in_confirm = self._user_paused
             self._toggle_playback()
             event.accept()
             return
@@ -641,55 +597,34 @@ class VideoNode(BaseNode):
 
     def paint_content(self, painter: QPainter) -> None:
         """
-        LOD-aware content tier — ingest-time sizing, not paint-time.
-
-        Unlike ImageNode (static source, resized per paint), video frames
-        are ephemeral: each one is already sized to screen-pixel resolution
-        by _on_frame using the current view LOD, capped at source res.
-        Paint therefore only aspect-fits and draws — no heavy rescale.
-
-        Paused videos are the one case the ingest path cannot cover on its
-        own: no new frame arrives to pick up a zoom change. So a detected
-        LOD delta past a quantized 0.5 step fires a setPosition nudge to
-        re-emit the current frame at the new size. Playing videos catch
-        up naturally on the next decoded frame.
+        LOD-aware content tier. The decoder sizes each frame at decode time,
+        so paint just aspect-fits the current pixmap into the video rect
+        and draws. Zoom changes propagate to the decoder via set_lod_size().
         """
         painter.save()
 
         vr = self._video_rect()
         pr = self._progress_rect()
 
-        self._frame_pending = False          # allow next frame to be accepted
-
-        # ── Paused-video LOD refresh ─────────────────────────────────────────
-        # Playing videos pick up zoom changes automatically on the next frame
-        # (16-33ms). Paused videos must be asked — re-emit the current frame
-        # via a zero-distance setPosition so _on_frame fires with the new LOD.
-        # Guarded on a meaningful LOD delta so ordinary panning/hover doesn't
-        # thrash the decoder.
+        # ── LOD update — push to decoder if the view zoom moved past a step
         try:
             raw_lod = max(1.0, abs(painter.worldTransform().m11()))
             cur_lod = max(1.0, math.ceil(raw_lod * 2.0) / 2.0)
-            if (cur_lod != self._last_lod
-                    and self._frame_pixmap is not None
-                    and self._player.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
-                self._last_lod = cur_lod   # latch immediately so we don't re-fire
-                QTimer.singleShot(0, lambda: self._player.setPosition(self._player.position()))
+            if cur_lod != self._last_lod:
+                self._last_lod = cur_lod
+                tw = max(1, int(vr.width()  * cur_lod) + 1)
+                th = max(1, int(vr.height() * cur_lod) + 1)
+                self._decoder.set_lod_size(tw, th)
         except RuntimeError:
             pass
 
         if self._frame_pixmap and not self._frame_pixmap.isNull():
-            # ── Clip to rounded rect ─────────────────────────────────────────
+            # Clip to rounded rect
             clip_radius = max(CLIP_RADIUS_MIN, self.round_radius - VIDEO_PADDING)
             clip_path   = QPainterPath()
             clip_path.addRoundedRect(vr, clip_radius, clip_radius)
             painter.setClipPath(clip_path)
 
-            # ── Scale + centre ───────────────────────────────────────────────
-            # _frame_pixmap is already LOD-sized from _on_frame; scaled_cache
-            # just aspect-fits it to vr for draw. Enable SmoothPixmapTransform
-            # so any residual painter-side upsample (between zoom steps) is
-            # bilinear, not nearest-neighbour.
             painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
             vr_size = (int(vr.width()), int(vr.height()))
             if self._scaled_cache is None or self._scaled_cache_size != vr_size:
@@ -705,17 +640,15 @@ class VideoNode(BaseNode):
             painter.drawPixmap(QPointF(draw_x, draw_y), scaled)
             painter.setClipping(False)
 
-            # ── Border ────────────────────────────────────────────────────────
+            # Border
             bevel_r = max(CLIP_RADIUS_MIN, self.round_radius - VIDEO_PADDING)
             painter.setBrush(Qt.NoBrush)
             if self.data.show_border:
-                # Ivory white border — sits inside the video rect
                 painter.setPen(QPen(QColor(225, 213, 198, 255), 3))
                 painter.drawRoundedRect(
                     vr.adjusted(1, 1, -1, -1), bevel_r, bevel_r,
                 )
             else:
-                # Default subtle bevel
                 painter.setPen(QPen(QColor(0, 0, 0, 80), 1))
                 painter.drawRoundedRect(vr, bevel_r, bevel_r)
                 painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
@@ -725,14 +658,14 @@ class VideoNode(BaseNode):
                     max(CLIP_RADIUS_MIN, bevel_r - 1),
                 )
         else:
-            # ── Placeholder ──────────────────────────────────────────────────
+            # Placeholder
             painter.setPen(QPen(QColor(Theme.primaryBorder), 1, Qt.DashLine))
             painter.setBrush(Qt.NoBrush)
             painter.drawRoundedRect(vr, CLIP_RADIUS_MIN, CLIP_RADIUS_MIN)
             painter.setPen(QColor(Theme.healthColorLabel))
             painter.drawText(vr, Qt.AlignCenter, "double-click\nto load video")
 
-        # ── Progress bar + volume slider (only when button row is visible) ────
+        # Progress bar (only when button row is visible)
         if self._buttons_visible:
             bar_bg = QColor(Theme.nodeBg).lighter(130)
             painter.setPen(Qt.NoPen)
@@ -751,46 +684,20 @@ class VideoNode(BaseNode):
                 painter.setBrush(grad)
                 painter.drawRoundedRect(fill_rect, 3, 3)
 
-            # ── Volume slider (vertical, left of video) ──────────────────────
-            vol_r = self._volume_rect()
-            painter.setBrush(bar_bg)
-            painter.drawRoundedRect(vol_r, 3, 3)
-
-            vol_ratio = self._target_volume
-            fill_h = vol_r.height() * vol_ratio
-            if fill_h > 0:
-                fill_rect_v = QRectF(
-                    vol_r.left(), vol_r.bottom() - fill_h,
-                    vol_r.width(), fill_h,
-                )
-                vgrad = QLinearGradient(0, fill_rect_v.bottom(), 0, fill_rect_v.top())
-                vgrad.setColorAt(0.0, QColor("#1e1e1e"))
-                vgrad.setColorAt(0.4, QColor("#5c3e4f"))
-                vgrad.setColorAt(0.7, QColor("#a56a85"))
-                vgrad.setColorAt(1.0, QColor("#d87a9e"))
-                painter.setBrush(vgrad)
-                painter.drawRoundedRect(fill_rect_v, 3, 3)
-
-
-        # ── Play state indicator ─────────────────────────────────────────────
-        if self.data.source_path and self._frame_pixmap:
-            is_playing = (
-                self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-            )
-            if not is_playing:
-                # Draw a subtle play triangle in the centre of the video area
-                cx = vr.center().x()
-                cy = vr.center().y()
-                tri_size = min(vr.width(), vr.height()) * 0.15
-                tri_size = max(12, min(tri_size, 36))
-                painter.setBrush(QColor(255, 255, 255, 120))
-                painter.setPen(Qt.NoPen)
-                path = QPainterPath()
-                path.moveTo(cx - tri_size * 0.4, cy - tri_size * 0.5)
-                path.lineTo(cx + tri_size * 0.5, cy)
-                path.lineTo(cx - tri_size * 0.4, cy + tri_size * 0.5)
-                path.closeSubpath()
-                painter.drawPath(path)
+        # Centre play-state indicator — visible whenever paused on a loaded clip
+        if self.data.source_path and self._frame_pixmap and self._user_paused:
+            cx = vr.center().x()
+            cy = vr.center().y()
+            tri_size = min(vr.width(), vr.height()) * 0.15
+            tri_size = max(12, min(tri_size, 36))
+            painter.setBrush(QColor(255, 255, 255, 120))
+            painter.setPen(Qt.NoPen)
+            path = QPainterPath()
+            path.moveTo(cx - tri_size * 0.4, cy - tri_size * 0.5)
+            path.lineTo(cx + tri_size * 0.5, cy)
+            path.lineTo(cx - tri_size * 0.4, cy + tri_size * 0.5)
+            path.closeSubpath()
+            painter.drawPath(path)
 
         painter.restore()
 
@@ -799,104 +706,52 @@ class VideoNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _set_viewport_visible(self, visible: bool) -> None:
-        """Fade audio and pause/resume playback on visibility change.
-
-        Fade-out (1 s) → pause when leaving view.
-        Resume → fade-in (1 s) when entering view.
-        Video pauses only after the fade completes so the audio tail
-        never cuts mid-tone.
-        """
+        """Pause when the node leaves the viewport, resume when it returns.
+        With audio gone there's no fade to manage — the cull/uncull pair is
+        a clean play/pause swap on the decoder."""
         if visible == self._viewport_visible:
             return
         self._viewport_visible = visible
         if not self.data.source_path:
             return
-
-        # Kill any in-flight fade before starting a new one
-        if self._volume_anim:
-            self._volume_anim.stop()
-            self._volume_anim = None
-
         if visible:
-            if self._was_playing_before_cull:
-                self._audio.setVolume(0.0)
-                self._player.play()
+            if self._was_playing_before_cull and not self._user_paused:
+                self._decoder.play()
                 self._was_playing_before_cull = False
-                from utils.audio import audio as _audio_mgr
-                if not _audio_mgr.is_muted():
-                    self._fade_volume(0.0, self._target_volume)
         else:
-            playing = (
-                self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-            )
-            if playing:
+            if not self._user_paused:
+                # Track that the user wanted playback so we resume on uncull
                 self._was_playing_before_cull = True
-                self._fade_volume(self._audio.volume(), 0.0, pause_after=True)
-
-    def _fade_volume(self, start: float, end: float, pause_after: bool = False) -> None:
-        """Animate QAudioOutput.volume over 1 second, optionally pausing when done."""
-        self._volume_anim = QPropertyAnimation(self._audio, b"volume")
-        self._volume_anim.setDuration(1000)
-        self._volume_anim.setStartValue(start)
-        self._volume_anim.setEndValue(end)
-        self._volume_anim.setEasingCurve(QEasingCurve.InOutQuad)
-        if pause_after:
-            self._volume_anim.finished.connect(self._pause_after_fade)
-        self._volume_anim.start()
-
-    def _pause_after_fade(self) -> None:
-        """Called when the fade-out finishes — now safe to pause the player."""
-        if self._destroyed:
-            return
-        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self._player.pause()
+                self._decoder.pause()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # LIFECYCLE
+    # LIFECYCLE / TEARDOWN
     # ─────────────────────────────────────────────────────────────────────────
 
     def _quiet_for_shake(self) -> None:
         """Sever the media pipeline synchronously at shake-trigger time.
 
-        Why this matters on corrupted media: the particle burst + deferred
-        removeItem leaves an 8000-sprite window during which the player
-        keeps decoding. On a malformed file, WMF's async decoder thread
-        may be stuck mid-parse on bad bitstream data — leaving it running
-        during the burst gives it more opportunity to dereference
-        partially-freed pipeline state once teardown finally begins.
-
-        ``setSource(QUrl())`` is the single most important step: it tells
-        WMF to flush the decoder for *this* source while Python and Qt
-        are both fully alive. By the time ``_demolition_pre`` runs, the
-        player has no active source and ``stop`` / ``deleteLater`` are
-        quiet operations.
-
-        Kept separate from ``_demolition_pre`` because shake-delete runs
-        this immediately but the rest of teardown is deferred until
-        mouseRelease + particle animation completes.
+        Carried over from the QMediaPlayer era: shake-delete leaves an
+        8000-sprite particle window during which the decoder would keep
+        running. With PyAV the consequences are gentler — there is no
+        WMF heap to corrupt — but we still want clean shutdown and a
+        responsive shake animation. close() blocks decoder signals and
+        joins the worker thread (bounded), so any late frame events that
+        sneak through are dropped harmlessly.
         """
-        for _obj in (self._player, self._sink, self._audio):
-            if _obj is not None:
-                try: _obj.blockSignals(True)
-                except (RuntimeError, AttributeError): pass
-        # Detach from the source FIRST — this is what flushes the WMF
-        # decoder thread. Without it, stop() on a corrupted stream can
-        # race the decoder's own error-handling path and crash inside
-        # WMF before Qt ever emits a signal we could catch.
-        if self._player is not None:
-            try: self._player.setSource(QUrl())
-            except (RuntimeError, AttributeError): pass
-            try: self._player.stop()
-            except (RuntimeError, AttributeError): pass
+        try:
+            self._decoder.signals.frame.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self._decoder.close()
+        except Exception:
+            pass
 
     # Crew sets _destroyed FIRST so background ingest/drift workers
-    # bail before any Qt teardown writes to dead state.
+    # bail before any teardown writes to dead state.
     _demolition_thread_flag = '_destroyed'
     _demolition_timers = [('_cache_poll', '_check_cache_delivery')]
-    _demolition_animations = [('_volume_anim', ['finished'])]
-    # Media-player linkage is bespoke (we also need to null the sink
-    # and audio deleteLater), so we don't use _demolition_media_players
-    # directly — keep the sequence in _demolition_pre for clarity.
 
     def _demolition_pre(self) -> None:
         # Null pending fields — the background thread has already bailed
@@ -907,114 +762,54 @@ class VideoNode(BaseNode):
         self._pending_size      = None
         self._pending_mtime     = None
 
-        # ── Block signals on all three Qt objects FIRST ──────────────────
-        # Nothing can queue a new event during teardown regardless of
-        # whether we know about the signal. This covers QMediaPlayer's
-        # internal emissions (playbackStateChanged, errorOccurred,
-        # bufferProgress, sourceChanged, etc.) that we never connected to
-        # but Qt / the WMF backend might still fire — those queued events
-        # processed after deleteLater would land on freed memory and
-        # trigger STATUS_HEAP_CORRUPTION (0xc0000374) in ntdll.
-        for _obj in (self._player, self._sink, self._audio):
-            if _obj is not None:
-                try: _obj.blockSignals(True)
-                except (RuntimeError, AttributeError): pass
+        # Disconnect every decoder signal — Qt's queued connections
+        # could otherwise deliver to a half-demolished node after the
+        # worker thread emits one last frame.
+        for sig_name in ("frame", "position", "duration", "state", "error"):
+            try:
+                getattr(self._decoder.signals, sig_name).disconnect()
+            except (RuntimeError, TypeError, AttributeError):
+                pass
 
-        # Fade volume to zero before the player stop so the audio sink
-        # drains cleanly. Signals are blocked so no slot fires.
-        if self._audio is not None:
-            try: self._audio.setVolume(0.0)
-            except (RuntimeError, AttributeError): pass
-
-        # Nuke ALL signal connections on each object — belt-and-suspenders
-        # alongside blockSignals above. .disconnect() with no args drops
-        # every outgoing connection in one call, no need to enumerate.
-        for _obj in (self._player, self._sink, self._audio):
-            if _obj is not None:
-                try: _obj.disconnect()
-                except (RuntimeError, TypeError): pass
-
-        # Sever the media pipeline synchronously — the deferred
-        # singleShot(0) used to leave a window where the player delivered
-        # a frame to a dead sink.
-        if self._player is not None:
-            # Detach the source BEFORE stop(). On corrupted media,
-            # stop() can race the WMF decoder thread's error-handling
-            # path; clearing the source flushes the decoder first and
-            # makes stop() a quiet no-op. Idempotent with _quiet_for_shake,
-            # which already ran for shake-delete but not for other
-            # teardown paths (scene switch, group delete via session
-            # load, etc.).
-            try: self._player.setSource(QUrl())
-            except (RuntimeError, AttributeError): pass
-            try: self._player.stop()
-            except (RuntimeError, AttributeError): pass
-            try: self._player.setVideoOutput(None)
-            except (RuntimeError, AttributeError): pass
-            try: self._player.setAudioOutput(None)
-            except (RuntimeError, AttributeError): pass
-
-        # Schedule C++ deletion — survives beyond the Python ref drop below.
-        for _obj in (self._player, self._sink, self._audio):
-            if _obj is not None:
-                try: _obj.deleteLater()
-                except (RuntimeError, AttributeError): pass
-
-        # Drop Python wrapper refs so any code on the main thread that
-        # references self._player post-teardown gets a clean AttributeError
-        # instead of dereferencing a dangling pointer into freed memory.
-        # Order matters: null refs AFTER deleteLater so Qt still has a
-        # valid pointer when scheduling the cleanup.
-        self._player = None
-        self._sink = None
-        self._audio = None
-
-        self._volume_anim = None
+        # Stop the worker thread (joined inside close()) and release the
+        # av.container. Idempotent — _quiet_for_shake may have called this
+        # already on the shake path.
+        try:
+            self._decoder.close()
+        except Exception:
+            pass
 
     def _demolition_post(self) -> None:
         self._frame_pixmap = None
         self._scaled_cache = None
+        # Drop the decoder reference so any stale slot calls hit
+        # AttributeError rather than the dead QObject behind it.
+        self._decoder = None
 
     # ─────────────────────────────────────────────────────────────────────────
     # SERIALIZATION
     # ─────────────────────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
-        # Every read here uses getattr-with-default so to_dict can never raise,
-        # even on a partially-initialised node. Swallowing here caused videos
-        # to silently drop from the clipboard copy on at least one first
-        # attempt (2026-04-21) — non-reproducible race, but the class of "one
-        # missing attribute makes the whole serialize fail" is closed now.
-        # self.data.* fields fall through to whatever was loaded from session
-        # or set earlier, which is always preferable to raising.
+        # Every read here uses getattr-with-default so to_dict can never
+        # raise, even on a partially-initialised or partially-demolished
+        # node. See [to_dict never raises contract] in project memory.
         pos_ms = getattr(self, '_position_ms', None)
         if pos_ms is not None:
             self.data.playback_pos = int(pos_ms)
-        vol = getattr(self, '_target_volume', None)
-        if vol is not None:
-            try: self.data.volume = int(vol * 100)
-            except (TypeError, ValueError): pass
-        # Guard Qt probes — post-teardown these are None (see _demolition_pre),
-        # and session save can still hit to_dict on a removed-but-not-yet-GC'd
-        # node. Fall through to the existing data values in that case.
-        audio = getattr(self, '_audio', None)
-        if audio is not None:
-            try: self.data.muted = audio.isMuted()
-            except (RuntimeError, AttributeError): pass
-        player = getattr(self, '_player', None)
-        if player is not None:
+        dec = getattr(self, '_decoder', None)
+        if dec is not None:
             try:
+                # was_playing := the user's intent (not a transient cull).
                 self.data.was_playing = (
-                    player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+                    not dec.is_paused()
                     or getattr(self, '_was_playing_before_cull', False)
                 )
-            except (RuntimeError, AttributeError): pass
+            except (RuntimeError, AttributeError):
+                pass
         try:
             self.sync_data()
         except Exception:
-            # Partial-init catch — don't let sync_data failure drop the node
-            # from a clipboard copy; the data fields already carry the saved
-            # session values which are good enough to reconstruct elsewhere.
             pass
         return self.data.to_dict()
 

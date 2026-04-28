@@ -214,6 +214,12 @@ def buildApp():
         "--hidden-import=pretty_widgets.graphics.Theme",
         "--hidden-import=pretty_widgets.utils.settings",
         "--hidden-import=pretty_widgets.utils.logger",
+        # PyAV — VideoNode's decode backend. Some submodules are imported
+        # dynamically by PyAV at runtime; --collect-all pulls every
+        # extension and DLL (the libav .dll set lives in av.libs/ alongside
+        # the package). Without this, frozen builds hit ModuleNotFoundError
+        # on av.video.frame or fail to load avcodec at runtime.
+        "--collect-all=av",
         "--exclude-module=pygame",
     ]
 

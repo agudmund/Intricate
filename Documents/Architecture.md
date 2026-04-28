@@ -71,7 +71,8 @@ pretty_widgets/
 | `graphics/Scene.py` | Canvas — node factory, session save/load, drag-drop, `_clear_all` quiescence, altitude-aware media culling |
 | `nodes/BaseNode.py` | Base class — chrome, ports, resize, shelf animation, depth toggle, shake detection, bulk-remove quiescence (delegates teardown to the demolition crew) |
 | `nodes/ClaudeNode.py` | Claude CLI integration — JSONL watcher, streaming response |
-| `nodes/VideoNode.py` | Video playback with LOD-adaptive ingest, shared media cache, tiny-render pause at aerial zoom |
+| `nodes/VideoNode.py` | Video playback (PyAV decoder, no audio) with LOD-adaptive ingest, shared media cache, tri-state loop / ping-pong, tiny-render pause at aerial zoom |
+| `utils/video_decoder.py` | PyAV-backed decoder thread for VideoNode — LOD-aware ingest, loop / ping-pong / off, ring-buffered reverse playback |
 | `nodes/WarmNode.py` | Main content node — plain-text storage, bidirectional bridge to Notepad |
 | `nodes/MergeNode.py` | DAW merge node — stages audio/hold nodes, emits ffmpeg concat |
 | `graphics/View.py` | Pan/zoom, cursor-anchored zoom, fog layer, `viewTransformed` signal |
