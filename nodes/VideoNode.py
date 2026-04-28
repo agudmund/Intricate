@@ -572,7 +572,18 @@ class VideoNode(BaseNode):
     def mousePressEvent(self, event) -> None:
         pos = event.pos()
         if self._buttons_visible and event.button() == Qt.LeftButton:
-            if self._progress_rect().contains(pos):
+            # The resize handle lives in the bottom-right corner, which the
+            # progress bar's full-width span also covers. Skip our own
+            # interaction handling inside the resize zone so super() (i.e.
+            # BaseNode) gets the click and starts a resize. Without this,
+            # the progress scrub eats every corner click and resize is dead.
+            rect = self.rect()
+            grip = self._resize_grip
+            in_resize_zone = (
+                pos.x() >= rect.right()  - grip
+                and pos.y() >= rect.bottom() - grip
+            )
+            if not in_resize_zone and self._progress_rect().contains(pos):
                 self._scrubbing = True
                 self._was_playing = not self._user_paused
                 if self._was_playing:
