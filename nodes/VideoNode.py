@@ -128,11 +128,17 @@ class VideoNode(BaseNode):
         self._viewport_visible: bool = True  # assume visible until told otherwise
         self._was_playing_before_cull: bool = False
 
-        # Button row starts hidden — double-click the top strip to reveal
+        # Button row starts hidden. Reveal is bound to the resize gesture
+        # (mirrors AboutNode): drag the bottom-right corner downward past
+        # the reveal threshold to surface the shelf, drag back upward past
+        # the hide threshold to tuck it away. The top strip's previous
+        # double-click toggle is gone — see _RESIZE_SHELF_*_THRESHOLD and
+        # mouseMoveEvent below.
         self._buttons_visible = False
         self._anim_top_offset = 8.0
         for btn in self._buttons:
             btn.hide()
+        self._shelf_anchor_h: float | None = None
 
         # Background cache/drift delivery flags — polled by main-thread timer.
         # Same pattern as ImageNode's _pending_pixmap / _pending_cache_key.
@@ -564,12 +570,15 @@ class VideoNode(BaseNode):
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Resize-driven shelf reveal (mirrors AboutNode) ───────────────────────
+    # Asymmetric thresholds: reveal demands a deliberate yank so a casual
+    # height nudge doesn't surface the shelf by accident; hide is lighter so
+    # the user can dial the final height down without the shelf clinging.
+    # Same values AboutNode uses — the gesture feels the same on both nodes.
+    _RESIZE_SHELF_REVEAL_THRESHOLD = 75.0
+    _RESIZE_SHELF_HIDE_THRESHOLD   = 30.0
+
     def mouseDoubleClickEvent(self, event) -> None:
-        # Top strip above the video area — animated shelf toggle
-        if event.pos().y() < self.rect().top() + self._top_offset():
-            self._toggle_shelf()
-            event.accept()
-            return
         if self._video_rect().contains(event.pos()):
             if self.data.source_path:
                 # Double-click on video toggles playback by mirroring a
@@ -585,13 +594,16 @@ class VideoNode(BaseNode):
         super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event) -> None:
+        # Seed the shelf anchor at the start of any drag so the resize-driven
+        # threshold check measures from press-time height. Done unconditionally
+        # so a press anywhere on the node primes the gesture.
+        self._shelf_anchor_h = self.rect().height()
+
         pos = event.pos()
         if self._buttons_visible and event.button() == Qt.LeftButton:
-            # The resize handle lives in the bottom-right corner, which the
-            # progress bar's full-width span also covers. Skip our own
-            # interaction handling inside the resize zone so super() (i.e.
-            # BaseNode) gets the click and starts a resize. Without this,
-            # the progress scrub eats every corner click and resize is dead.
+            # The resize handle lives in the bottom-right corner. Skip our
+            # own interaction handling inside the resize zone so super()
+            # (BaseNode) gets the click and starts a resize.
             rect = self.rect()
             grip = self._resize_grip
             in_resize_zone = (
@@ -613,7 +625,28 @@ class VideoNode(BaseNode):
             self._scrub_to(event.pos().x())
             event.accept()
             return
+
+        # Defer to BaseNode first so the resize actually happens and
+        # self.rect() reflects the updated geometry before we inspect it.
         super().mouseMoveEvent(event)
+
+        # ── Bidirectional shelf coupling via resize ───────────────────────
+        # Resize direction drives shelf state:
+        #   • growing taller past the reveal threshold → reveal
+        #   • shrinking shorter past the hide threshold → hide
+        # Anchor is re-seeded after every toggle so a single continuous
+        # drag can flip the shelf multiple times.
+        if not self._is_resizing:
+            return
+        if self._shelf_anchor_h is None:
+            self._shelf_anchor_h = self.rect().height()
+        delta_h = self.rect().height() - self._shelf_anchor_h
+        if not self._buttons_visible and delta_h > self._RESIZE_SHELF_REVEAL_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
+        elif self._buttons_visible and delta_h < -self._RESIZE_SHELF_HIDE_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
 
     def mouseReleaseEvent(self, event) -> None:
         if self._scrubbing and event.button() == Qt.LeftButton:
