@@ -327,11 +327,16 @@ class GitNode(BaseNode):
         from nodes.VideoNode import VideoNode
         video_node = VideoNode()
         video_node._spawn_label = False
-        video_node.data.looping = True
+        # Progress-bar exception to VideoNode's default contract: this clip
+        # exists to show progress, so it must loop and start playing right
+        # away. Default VideoNode behaviour (single play, paused on load)
+        # would leave the user staring at frame zero with no indication
+        # that anything is happening.
+        video_node.data.loop_mode = "loop"
         if spawn_pos is not None:
             video_node.setPos(spawn_pos)
         scene.addItem(video_node)
-        video_node.load_from_path(video_path)
+        video_node.load_from_path(video_path, autoplay=True)
         # Wire them together
         from graphics.Connection import Connection
         wire = Connection(self, video_node)

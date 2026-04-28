@@ -207,18 +207,24 @@ class VideoNode(BaseNode):
     # SOURCE / DECODER WIRING
     # ─────────────────────────────────────────────────────────────────────────
 
-    def load_from_path(self, path: str | Path) -> None:
+    def load_from_path(self, path: str | Path, *, autoplay: bool = False) -> None:
         """Load a video from a file path. Public — called by file browser and View.dropEvent.
 
         First touch on a node: open the file, decode the first frame so the
         node has something to show, then sit paused. The user starts playback
         explicitly. (Session restore is the *other* entry point and follows
         the saved was_playing intent — see `_restore_from_session`.)
+
+        `autoplay=True` overrides the default paused-on-load behaviour for
+        callers that need an immediately-rolling clip (e.g. GitNode's
+        progress-bar plushie, where a paused progress bar would be silly).
+        Loop semantics are still driven by `data.loop_mode` set before this
+        call.
         """
         path = Path(path)
         if not path.exists():
             return
-        self._set_source(path, start_paused=True)
+        self._set_source(path, start_paused=not autoplay)
         if not self.data.caption and self._spawn_label:
             self.data.caption = path.stem
             self._spawn_caption_node(path.stem)
