@@ -16,3 +16,16 @@ Documents/data/.warm_bridge_*.json
 # Joy bucket counter — runtime state, not source (see utils/joy_buckets.py)
 Documents/Data/joy_buckets.txt
 Documents/data/joy_buckets.txt
+
+# ── Adobe CEP carbon copy — keep only the Intricate-specific source ──────
+# Premiere loads the LIVE extension from %APPDATA%\Adobe\CEP\... ; the tree
+# under ./Adobe/CEP/ is a filing-only copy. Anything that's a build
+# artefact, a third-party dependency rehydratable via npm, an Adobe-shipped
+# helper, or a secret never lives in the repo.
+Adobe/CEP/extensions/com.intricate.bridge/node_modules/
+Adobe/CEP/extensions/com.intricate.bridge/META-INF/
+Adobe/CEP/extensions/com.intricate.bridge/lib/
+Adobe/CEP/extensions/com.intricate.bridge/mimetype
+Adobe/CEP/_intricate_signing/*.p12
+Adobe/CEP/_intricate_signing/*.zxp
+Adobe/CEP/_intricate_signing/ZXPSignCmd.exe

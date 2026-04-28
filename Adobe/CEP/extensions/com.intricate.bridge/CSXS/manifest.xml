@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Intricate Bridge — Premiere Pro CEP extension
+  Receives packets from Intricate (PySide6) over localhost WebSocket
+  and injects into Premiere via ExtendScript.
+
+  Phase 1: echo-only. Logs "[Intricate] <text>" to ExtendScript console
+  and the Premiere Events panel.
+-->
+<ExtensionManifest Version="11.0" ExtensionBundleId="com.intricate.bridge"
+                   ExtensionBundleVersion="1.0.0" ExtensionBundleName="Intricate Bridge"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <ExtensionList>
+        <Extension Id="com.intricate.bridge.panel" Version="1.0.0" />
+    </ExtensionList>
+    <ExecutionEnvironment>
+        <HostList>
+            <!-- PPRO = Premiere Pro. 26.0 = Premiere 2026, range gives headroom. -->
+            <Host Name="PPRO" Version="[24.0,99.9]" />
+        </HostList>
+        <LocaleList>
+            <Locale Code="All" />
+        </LocaleList>
+        <RequiredRuntimeList>
+            <!-- CSXS 11.0 is the floor; Premiere 2026 ships CEP 12 which satisfies it. -->
+            <RequiredRuntime Name="CSXS" Version="11.0" />
+        </RequiredRuntimeList>
+    </ExecutionEnvironment>
+    <DispatchInfoList>
+        <Extension Id="com.intricate.bridge.panel">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./index.html</MainPath>
+                    <ScriptPath>./script.jsx</ScriptPath>
+                    <!-- Node.js + mixed-context + no-sandbox unlocks hardware/network access. -->
+                    <CEFCommandLine>
+                        <Parameter>--enable-nodejs</Parameter>
+                        <Parameter>--mixed-context</Parameter>
+                        <Parameter>--no-sandbox</Parameter>
+                        <Parameter>--allow-file-access-from-files</Parameter>
+                    </CEFCommandLine>
+                </Resources>
+                <Lifecycle>
+                    <AutoVisible>true</AutoVisible>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Menu>Intricate Bridge</Menu>
+                    <Geometry>
+                        <Size>
+                            <Width>420</Width>
+                            <Height>320</Height>
+                        </Size>
+                        <MinSize>
+                            <Width>320</Width>
+                            <Height>220</Height>
+                        </MinSize>
+                    </Geometry>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+    </DispatchInfoList>
+</ExtensionManifest>

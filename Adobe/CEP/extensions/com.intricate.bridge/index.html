@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Intricate Bridge</title>
+    <style>
+        html, body {
+            margin: 0; padding: 0;
+            background: #1e1e1e; color: #e1d5c6;
+            font-family: Segoe UI, sans-serif; font-size: 12px;
+            height: 100%; overflow: hidden;
+        }
+        #root { padding: 12px; display: flex; flex-direction: column; height: calc(100vh - 24px); gap: 8px; }
+        h1 { font-size: 14px; margin: 0 0 4px 0; font-weight: 500; letter-spacing: 0.5px; color: #d87a9e; }
+        .row { display: flex; align-items: center; gap: 8px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #5c3e4f; transition: background 0.25s; box-shadow: 0 0 6px #5c3e4f; }
+        .dot.listening { background: #a56a85; box-shadow: 0 0 6px #a56a85; }
+        .dot.connected { background: #d87a9e; box-shadow: 0 0 8px #d87a9e; }
+        .dot.ready     { background: #b8e0b0; box-shadow: 0 0 10px #b8e0b0; }
+        #status { font-size: 11px; color: #a8a8a8; }
+        #census { font-size: 10px; color: #8a9a8a; margin-top: -2px; min-height: 14px; }
+        #lastText {
+            padding: 14px 10px;
+            background: #2a2a2a; border-radius: 6px;
+            font-size: 20px; font-weight: 500;
+            min-height: 24px;
+            text-align: center;
+            border: 1px solid #3a3a3a;
+            color: #f0e6d6;
+        }
+        #log {
+            flex: 1; overflow-y: auto;
+            background: #141414; border-radius: 4px;
+            padding: 8px; font-family: Consolas, monospace; font-size: 10px;
+            color: #888;
+            border: 1px solid #2a2a2a;
+        }
+        #log .line { padding: 1px 0; }
+        #log .in  { color: #d87a9e; }
+        #log .err { color: #e27c7c; }
+        #log .sys { color: #7ca8d8; }
+        #log .hb  { color: #4a5a4a; }  /* dim for heartbeat — frequent, low-signal */
+        .footer { font-size: 10px; color: #555; text-align: right; }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <h1>Intricate Bridge</h1>
+        <div class="row">
+            <span class="dot" id="dot"></span>
+            <span id="status">Starting…</span>
+        </div>
+        <div id="census">—</div>
+        <div id="lastText">—</div>
+        <div id="log"></div>
+        <div class="footer">Phase 2 · ws://127.0.0.1:9914</div>
+    </div>
+
+    <script src="./lib/CSInterface.js"></script>
+    <script>
+    (function () {
+        const csInterface = new CSInterface();
+        const dot = document.getElementById('dot');
+        const statusEl = document.getElementById('status');
+        const censusEl = document.getElementById('census');
+        const lastEl = document.getElementById('lastText');
+        const logEl = document.getElementById('log');
+
+        // ─── UI helpers ──────────────────────────────────────────────────
+        function log(msg, cls) {
+            const d = document.createElement('div');
+            d.className = 'line ' + (cls || '');
+            const ts = new Date().toISOString().slice(11, 19);
+            d.textContent = ts + '  ' + msg;
+            logEl.appendChild(d);
+            logEl.scrollTop = logEl.scrollHeight;
+            // Cap log length so a long-running session doesn't balloon the DOM.
+            while (logEl.childNodes.length > 500) {
+                logEl.removeChild(logEl.firstChild);
+            }
+        }
+
+        function setStatus(text, klass) {
+            statusEl.textContent = text;
+            dot.className = 'dot ' + (klass || '');
+        }
+
+        function setCensus(text) {
+            censusEl.textContent = text || '—';
+        }
+
+        // ─── Escape helpers ──────────────────────────────────────────────
+        // escForJsx: backslash + double-quote, for literal interpolation
+        // into an evalScript string. Newlines we leave alone — they'd only
+        // appear inside a project/sequence name in pathological cases.
+        function escForJsx(s) {
+            return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        }
+
+        // ─── Packet parsing ──────────────────────────────────────────────
+        // Packet format:  Prop|Val|Track|Clip
+        //
+        // Track and Clip are always the last two fields and must parse as
+        // integers. Val is everything between Prop and Track — rejoined
+        // with '|' so payloads may safely contain literal pipe characters
+        // (including embedded JSON) without escaping. Returns null for
+        // malformed frames (< 4 fields or non-int track/clip).
+        function parsePacket(line) {
+            const parts = line.split('|');
+            if (parts.length < 4) return null;
+            const clip  = parseInt(parts[parts.length - 1], 10);
+            const track = parseInt(parts[parts.length - 2], 10);
+            if (Number.isNaN(clip) || Number.isNaN(track)) return null;
+            const val = parts.slice(1, parts.length - 2).join('|');
+            return { prop: parts[0], val: val, track: track, clip: clip, raw: line };
+        }
+
+        // ─── Handshake — HELLO → READY | ERROR ───────────────────────────
+        // Val carries a JSON blob of Intricate-side expectations:
+        //   { expectedProject, expectedSequence, intricateVersion,
+        //     protocolVersion, clientId, timestamp }
+        // Track/Clip come from the frame position.
+        function handleHello(line, p, socket) {
+            let expected = { expectedProject: '', expectedSequence: '' };
+            try { expected = JSON.parse(p.val) || expected; } catch (e) {}
+
+            const projEsc = escForJsx(expected.expectedProject || '');
+            const seqEsc  = escForJsx(expected.expectedSequence || '');
+            const call = 'handshakeReport("' + projEsc + '","' + seqEsc +
+                         '","' + p.track + '","' + p.clip + '")';
+
+            csInterface.evalScript(call, function (result) {
+                let ok = false;
+                let parsed = null;
+                try { parsed = JSON.parse(result); ok = parsed && parsed.ok === true; } catch (e) {}
+
+                const kind = ok ? 'READY' : 'ERROR';
+                try { socket.send(kind + '|' + result + '|0|0'); } catch (e) {}
+
+                // Connection summary — same shape on success and on the
+                // setup-state "errors" (no_project_open, no_active_sequence)
+                // because in both cases the wire is up; the user just hasn't
+                // finished setting Premiere up yet. Replaces the old triple
+                // (raw HELLO frame, "HELLO expected=*/*", "→ READY/ERROR")
+                // with one tidy intro block.
+                log('Intricate Bridge connected', 'sys');
+                if (expected.intricateVersion) {
+                    log('  intricate version : ' + expected.intricateVersion, 'sys');
+                }
+                if (expected.clientId) {
+                    log('  client id         : ' + expected.clientId, 'sys');
+                }
+
+                if (ok && parsed) {
+                    setStatus('Ready — handshake complete', 'ready');
+                    const s = parsed.sequence || {};
+                    const p2 = parsed.project || {};
+                    setCensus(p2.name + ' · ' + s.name + ' · ' +
+                              (s.fps ? s.fps.toFixed(2) + 'fps' : '?fps') +
+                              ' · ' + (s.width || '?') + '×' + (s.height || '?'));
+                } else {
+                    const reason = (parsed && parsed.reason) || 'unknown';
+                    // Setup-state reasons aren't errors — Premiere is awake
+                    // and the wire is up, the user just hasn't created the
+                    // thing the bridge needs to paint on yet. Log as info
+                    // with a hint, not as a red ERROR line.
+                    if (reason === 'no_active_sequence') {
+                        setStatus('Connected — waiting for an active sequence', 'connected');
+                        log('  waiting for a sequence — create one in Premiere to begin', 'sys');
+                    } else if (reason === 'no_project_open') {
+                        setStatus('Connected — waiting for a project', 'connected');
+                        log('  waiting for a project — open one in Premiere to begin', 'sys');
+                    } else {
+                        setStatus('Error — ' + reason, '');
+                        log('  → ERROR ' + reason, 'err');
+                    }
+                }
+            });
+        }
+
+        // ─── Heartbeat — PING → PONG ─────────────────────────────────────
+        // Intentionally cheap. Called every 5s from Intricate once handshake
+        // is complete. Val slot carries a tiny JSON census (projectOpen,
+        // sequenceOpen, projectName) so Intricate can detect silent state
+        // drift — e.g. the user closed the project while the wire stayed up.
+        function handleHeartbeat(line, p, socket) {
+            csInterface.evalScript('heartbeatReport()', function (result) {
+                try { socket.send('PONG|' + result + '|0|0'); } catch (e) {}
+            });
+            // Log heartbeat at dim severity so it doesn't drown the interesting
+            // traffic. No per-tick UI updates — would just flicker.
+            log('♥ ping / pong', 'hb');
+        }
+
+        // ─── Text echo — TXT (Phase 1 behaviour, preserved) ──────────────
+        // Routes a TXT packet into Premiere's Events toast. Returns 'TXT'
+        // on success (used for the ACK reply), null on failure.
+        function routeText(p) {
+            lastEl.textContent = p.val;
+            csInterface.evalScript('consoleLog("' + escForJsx(p.val) + '")', function (r) {
+                log('  jsx → ' + r, 'sys');
+            });
+            return 'TXT';
+        }
+
+        // ─── WebSocket server ────────────────────────────────────────────
+        // Node.js is enabled via --enable-nodejs in manifest.xml.
+        // We listen on 127.0.0.1:9914; Intricate connects as a client.
+        let wss = null;
+        try {
+            // CEP exposes a path-aware require. Resolve ws from the
+            // extension's own node_modules so this works regardless of
+            // cwd at panel startup.
+            const path = require('path');
+            const extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+            const wsPath = path.join(extRoot, 'node_modules', 'ws');
+            const WebSocketServer = require(wsPath).WebSocketServer;
+
+            wss = new WebSocketServer({ host: '127.0.0.1', port: 9914 });
+            setStatus('Listening on 127.0.0.1:9914', 'listening');
+            log('WebSocket server up', 'sys');
+
+            wss.on('connection', (socket, req) => {
+                setStatus('Connected — ' + req.socket.remoteAddress, 'connected');
+                log('client connected', 'sys');
+
+                socket.on('message', (data) => {
+                    const text = data.toString('utf8').trim();
+                    if (!text) return;
+
+                    const p = parsePacket(text);
+                    if (!p) {
+                        log('← ' + text + '   — malformed', 'err');
+                        try { socket.send('NACK|?'); } catch (e) {}
+                        return;
+                    }
+
+                    // Log everything except heartbeats and HELLO at normal
+                    // severity; heartbeats get their own dim line via
+                    // handleHeartbeat, and HELLO emits its own tidy intro
+                    // block (Intricate Bridge connected + version + client
+                    // id) instead of the raw JSON frame.
+                    if (p.prop !== 'PING' && p.prop !== 'HELLO') {
+                        log('← ' + text, 'in');
+                    }
+
+                    // Route by prop. HELLO and PING own their own reply
+                    // formats (READY/ERROR and PONG respectively); TXT
+                    // keeps the Phase 1 ACK|TXT / NACK|TXT contract.
+                    if (p.prop === 'HELLO') { handleHello(text, p, socket); return; }
+                    if (p.prop === 'PING')  { handleHeartbeat(text, p, socket); return; }
+
+                    if (p.prop === 'TXT') {
+                        const prop = routeText(p);
+                        try { socket.send('ACK|' + prop); } catch (e) {}
+                        return;
+                    }
+
+                    log('  (unknown prop: ' + p.prop + ')', 'err');
+                    try { socket.send('NACK|' + p.prop); } catch (e) {}
+                });
+
+                socket.on('close', () => {
+                    setStatus('Listening on 127.0.0.1:9914', 'listening');
+                    setCensus('—');
+                    log('client disconnected', 'sys');
+                });
+
+                socket.on('error', (err) => log('socket error: ' + err.message, 'err'));
+            });
+
+            wss.on('error', (err) => {
+                setStatus('Error: ' + err.message, '');
+                log('wss error: ' + err.message, 'err');
+            });
+
+        } catch (e) {
+            setStatus('Failed to start: ' + e.message, '');
+            log('startup error: ' + e.message, 'err');
+            log('(did you run `npm install ws` in the extension folder?)', 'err');
+        }
+    })();
+    </script>
+</body>
+</html>

@@ -211,6 +211,37 @@ And helpers: `send_packet(prop, val, track, clip)`, `send_hello(project, sequenc
 
 ## The CEP Receiver (Premiere side)
 
+> **Two copies exist — only one runs.** Premiere loads the extension from
+> `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\` (the path below).
+> A **carbon copy** of the same tree also lives in the repo at
+> `./Adobe/CEP/extensions/com.intricate.bridge/` for version-control and
+> filing purposes only — Premiere never reads it. Edits intended to take
+> effect must be made to the `%APPDATA%` copy, then re-signed via
+> `resign.ps1`. After verifying the change works, mirror it back into
+> `./Adobe/CEP/` so the repo stays in sync. The same applies to the
+> signing folder: `%APPDATA%\Adobe\CEP\_intricate_signing\` is the live
+> tooling; `./Adobe/CEP/_intricate_signing/` is the filing copy.
+>
+> **What lives in the repo carbon copy.** Only Intricate-authored source
+> — `index.html`, `script.jsx`, `CSXS/manifest.xml`, `package.json`,
+> `package-lock.json`, plus `_intricate_signing/resign.ps1`. Everything
+> else is `.gitignore`'d:
+>
+> - `node_modules/` — rehydrate with `npm install` inside the extension dir.
+> - `lib/CSInterface.js` — Adobe-shipped helper, downloadable from
+>   [Adobe-CEP/CEP-Resources](https://github.com/Adobe-CEP/CEP-Resources).
+> - `mimetype` — boilerplate one-liner (`application/vnd.adobe.cep-extension`).
+> - `META-INF/signatures.xml` — regenerated on every `resign.ps1` run.
+> - `*.p12`, `*.zxp`, `ZXPSignCmd.exe` — cert, build artefact, and Adobe
+>   binary. Treated as secrets / rebuildables and stay out of the repo.
+>
+> **Cert password lives in an environment variable.** `resign.ps1` reads
+> the `.p12` password from `$env:Intricate_BridgeCertPw` rather than a
+> hardcoded literal. Set it once per user with `setx Intricate_BridgeCertPw
+> <password>` and open a fresh terminal. The script throws a clear error
+> if the variable isn't set. This is the policy regardless of repo
+> visibility — private repos leak too.
+
 Lives at `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\`:
 
 ```
@@ -254,13 +285,18 @@ Then close and re-open the Intricate Bridge panel from `Window → Extensions` �
 
 **Critical:** keep the `.p12`, the `.zxp`, and `ZXPSignCmd.exe` **outside** the `extensions/` folder — otherwise CEP hashes them as part of the extension and rejects the signature. The current dev-machine tooling lives at `%APPDATA%\Adobe\CEP\_intricate_signing\`.
 
-**Full from-scratch rebuild** (only needed if the .p12 is lost):
+**Full from-scratch rebuild** (needed on a fresh machine, or if the .p12
+is lost — easy enough that the cert is treated as rebuildable rather than
+backed up in source control):
 
-1. Download `ZXPSignCmd.exe` from `Adobe-CEP/CEP-Resources/ZXPSignCMD/4.1.1/win64/`.
-2. Generate self-signed cert: `ZXPSignCmd -selfSignedCert US CA "Intricate" "Aevar" <pw> intricate_dev.p12`.
-3. Sign: `ZXPSignCmd -sign <extensionDir> intricate_bridge.zxp intricate_dev.p12 <pw>`.
-4. Extract the `.zxp` (signed zip) back over the extension directory to add `META-INF/signatures.xml`.
-5. Verify: `ZXPSignCmd -verify <extensionDir>` → `Signature verified successfully`.
+1. Download `ZXPSignCmd.exe` from `Adobe-CEP/CEP-Resources/ZXPSignCMD/4.1.1/win64/` into `%APPDATA%\Adobe\CEP\_intricate_signing\`.
+2. Pick a cert password and stash it in the env var: `setx Intricate_BridgeCertPw <password>` (open a fresh terminal afterwards).
+3. Generate self-signed cert: `ZXPSignCmd -selfSignedCert US CA "Intricate" "Aevar" %Intricate_BridgeCertPw% intricate_dev.p12`.
+4. Sign: `ZXPSignCmd -sign <extensionDir> intricate_bridge.zxp intricate_dev.p12 %Intricate_BridgeCertPw%`.
+5. Extract the `.zxp` (signed zip) back over the extension directory to add `META-INF/signatures.xml`.
+6. Verify: `ZXPSignCmd -verify <extensionDir>` → `Signature verified successfully`.
+
+After step 2 — and after the cert exists in `%APPDATA%\Adobe\CEP\_intricate_signing\` — `resign.ps1` handles steps 4–6 in one pass on every subsequent edit cycle. Steps 3 and 5 also rehydrate `node_modules/`: run `npm install` inside the extension directory to pull `ws` from npm.
 
 `resign.ps1` automates steps 3–5. Self-contained — manually iterates zip entries (PS5 / .NET Framework 4.x lacks the `ExtractToDirectory(overwrite)` overload) and uses `--` ASCII separators throughout (PS5 reads UTF-8 without BOM as CP-1252, so em-dashes corrupt).
 
@@ -393,8 +429,10 @@ Property ID cheat sheet (from the Gemini planning session, in `_transcript.txt`)
 | `utils/premiere_transport.py` | `PacketTransport` ABC + `WebSocketTransport` + frame routing. |
 | `icons/premiere_bridge.ico` | Cream suspension-bridge silhouette. |
 | `icons/make_premiere_bridge_icon.py` | Pillow recipe that generated the icon. |
-| `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\index.html`  | CEP panel UI + WebSocket server (outside repo). |
-| `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\script.jsx`  | ExtendScript (outside repo). |
-| `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\CSXS\manifest.xml` | Panel registration (outside repo). |
-| `%APPDATA%\Adobe\CEP\_intricate_signing\resign.ps1` | One-command re-sign after CEP edits (outside repo). |
-| `%APPDATA%\Adobe\CEP\_intricate_signing\intricate_dev.p12` | Self-signed cert (outside repo, do not lose). |
+| `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\index.html`  | CEP panel UI + WebSocket server. **Live runtime copy.** |
+| `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\script.jsx`  | ExtendScript. **Live runtime copy.** |
+| `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\CSXS\manifest.xml` | Panel registration. **Live runtime copy.** |
+| `%APPDATA%\Adobe\CEP\_intricate_signing\resign.ps1` | One-command re-sign after CEP edits. **Live tooling.** |
+| `%APPDATA%\Adobe\CEP\_intricate_signing\intricate_dev.p12` | Self-signed cert (do not lose). **Live tooling.** |
+| `./Adobe/CEP/extensions/com.intricate.bridge/` | Carbon copy of the live extension, for repo filing only — Premiere does not read this path. |
+| `./Adobe/CEP/_intricate_signing/` | Carbon copy of the live signing tooling, for repo filing only. |
