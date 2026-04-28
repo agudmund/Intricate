@@ -81,6 +81,13 @@ class VideoNode(BaseNode):
                               # and the rest of the node is a busy click
                               # target (frame, progress, buttons), so the
                               # grip earns its space in the corner.
+    _resize_overreach = 0     # No outward flap — the BR port lives just
+                              # past the corner at (right+10, bottom+10)
+                              # with an 8px hit radius. Keeping the resize
+                              # zone strictly inside the rect avoids any
+                              # spatial overlap with the port when wiring
+                              # mode shows the ports. The 64px grip is
+                              # plenty grabbable without the overreach.
     _user_paused = False      # set False at class level so _build_buttons
                               # (called from BaseNode.__init__) can read it
                               # before the per-instance assignment

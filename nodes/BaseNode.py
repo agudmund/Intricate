@@ -73,6 +73,11 @@ class BaseNode(QGraphicsRectItem):
     # Subclasses can enlarge the resize grip by overriding this class attr.
     # Default tracks the theme value; VideoNode etc. set their own.
     _resize_grip = _RESIZE_GRIP
+    # How far past the bottom-right corner the resize hit zone extends.
+    # Default 6 — catches nearly-on-edge grabs. Subclasses with a roomy
+    # grip and a child item near the corner (e.g. VideoNode's BR port)
+    # can drop this to 0 to keep the resize zone strictly inside the rect.
+    _resize_overreach = _RESIZE_OVERREACH
 
     def __init__(self, data: NodeData):
         """
@@ -697,10 +702,11 @@ class BaseNode(QGraphicsRectItem):
             # the cursor still catches it when it drifts a few pixels past.
             rect = self.rect()
             grip = self._resize_grip
+            over = self._resize_overreach
             handle = QRectF(rect.right() - grip,
                             rect.bottom() - grip,
-                            grip + _RESIZE_OVERREACH,
-                            grip + _RESIZE_OVERREACH)
+                            grip + over,
+                            grip + over)
             if handle.contains(event.pos()):
                 self._is_resizing      = True
                 self._resize_start_pos  = event.pos()
@@ -1286,11 +1292,12 @@ class BaseNode(QGraphicsRectItem):
         path.addRoundedRect(self.rect(), self.round_radius, self.round_radius)
         r = self.rect()
         grip = self._resize_grip
+        over = self._resize_overreach
         path.addRect(QRectF(
             r.right() - grip,
             r.bottom() - grip,
-            grip + _RESIZE_OVERREACH,
-            grip + _RESIZE_OVERREACH,
+            grip + over,
+            grip + over,
         ))
         return path
 
