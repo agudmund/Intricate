@@ -133,13 +133,17 @@ Default size: 360 × 280.
 
 `Scene.add_video_node(pos)` → empty VideoNode. Double-click to browse, or drop a file from Explorer.
 
-### Drop
+### Drop / browse — initial load
 
-1. `load_from_path(path)` → decoder opens the source via PyAV; first frame arrives within tens of milliseconds
+1. `load_from_path(path)` → decoder opens the source via PyAV; first frame arrives within tens of milliseconds and the node sits **paused** on that frame. Initial loads do not autoplay — the user starts playback explicitly.
 2. Caption AboutNode spawns if the node had no existing caption
 3. Daemon thread runs `cache_source_file(path)` — hash + copy
 4. Delivery timer folds `cache_key`, `source_size`, `source_mtime` into the data class
 5. From this point forward the graph knows the video permanently
+
+### Session restore — autoplay-on-intent
+
+Session restore is a separate entry point and respects the saved `data.was_playing` flag. Clips that were rolling when the session was saved resume rolling at their saved `playback_pos`; clips that were paused stay paused. The two contracts are intentionally distinct: a freshly-dropped file is a quiet new arrival; a session reopens its own state of motion.
 
 ### Session Restore
 

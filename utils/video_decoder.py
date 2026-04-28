@@ -142,10 +142,18 @@ class VideoDecoder:
     def set_source(self, path: str | Path,
                    lod_size: tuple[int, int] = (1, 1),
                    loop_mode: str = "off",
-                   start_paused: bool = False) -> None:
+                   start_paused: bool = False,
+                   start_position_ms: int = 0) -> None:
         """Open a source file and start the decoder thread. Replaces any
         currently-loaded source — the previous worker is joined before the
-        new one starts."""
+        new one starts.
+
+        `start_position_ms` is honoured atomically with the worker handoff:
+        the seek is queued under the same lock as the thread-start, so the
+        worker sees it on its very first iteration. Callers that pass it
+        get a session-restore-style "open paused on frame at 12.3s" with
+        no race against PTS=0 frames slipping through.
+        """
         path = Path(path)
         if not path.exists():
             self.signals.error.emit(f"source not found: {path}")
@@ -157,7 +165,7 @@ class VideoDecoder:
             self._loop_mode = loop_mode if loop_mode in ("off", "loop", "pingpong") else "off"
             self._user_paused = start_paused
             self._stop = False
-            self._seek_to_ms = None
+            self._seek_to_ms = max(0, int(start_position_ms)) if start_position_ms else None
             self._thread = threading.Thread(
                 target=self._run, name=f"video-decoder-{path.name}", daemon=True
             )
@@ -289,6 +297,11 @@ class VideoDecoder:
         # re-decode, just one swscale pass.
         last_emitted_lod: tuple[int, int] = self._lod_size
 
+        # Initial-frame contract: even when the caller asks us to start
+        # paused, decode and emit one frame first so the node has something
+        # to display. The pause kicks in after that first frame lands.
+        first_frame_emitted: bool = False
+
         self.signals.state.emit("paused" if self._user_paused else "playing")
 
         # ── The decode loop ──────────────────────────────────────────────
@@ -311,7 +324,14 @@ class VideoDecoder:
                 # Honour pause — wait on cv until unpaused or stopped. While
                 # paused, watch for LOD changes and redeliver the cached
                 # frame at the new size (zoom-on-paused stays crisp).
-                while self._user_paused and not self._stop and self._seek_to_ms is None:
+                # The first-frame contract overrides this: we always decode
+                # at least one frame before the pause-wait can engage, so a
+                # paused-on-load node has something to display.
+                was_paused = first_frame_emitted and self._user_paused
+                while (first_frame_emitted
+                       and self._user_paused
+                       and not self._stop
+                       and self._seek_to_ms is None):
                     self._cv.wait()
                     if (self._lod_size != last_emitted_lod
                             and self._last_av_frame is not None
@@ -329,6 +349,14 @@ class VideoDecoder:
                                 self._cv.acquire()
                 if self._stop:
                     return
+                # Re-anchor the pacing clock when waking from a pause so
+                # the next frame plays at real-time relative to "now",
+                # not relative to the wall-clock at the start of the pause.
+                # Without this, a long pause makes the worker burn through
+                # buffered frames trying to "catch up" to a stale clock.
+                if was_paused and not self._user_paused:
+                    wall_clock_anchor = time.monotonic()
+                    pts_anchor = self._position_ms / 1000.0
                 # Snapshot the current target size and loop mode for this frame.
                 target_w, target_h = self._lod_size
                 loop_mode = self._loop_mode
@@ -450,6 +478,7 @@ class VideoDecoder:
             self._position_ms = int(pts_s * 1000)
             self.signals.frame.emit(qimg)
             self.signals.position.emit(self._position_ms)
+            first_frame_emitted = True
 
     # ── Helpers ──────────────────────────────────────────────────────────
 

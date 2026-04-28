@@ -190,16 +190,15 @@ class VideoNode(BaseNode):
     def load_from_path(self, path: str | Path) -> None:
         """Load a video from a file path. Public — called by file browser and View.dropEvent.
 
-        Playback starts immediately from the source path so the user never waits
-        on the cache. A background worker hashes + copies the source bytes into
-        the media cache and stamps data.cache_key on completion. From that
-        moment forward the graph knows about the video and can restore it
-        even if the source file later moves or disappears.
+        First touch on a node: open the file, decode the first frame so the
+        node has something to show, then sit paused. The user starts playback
+        explicitly. (Session restore is the *other* entry point and follows
+        the saved was_playing intent — see `_restore_from_session`.)
         """
         path = Path(path)
         if not path.exists():
             return
-        self._set_source(path)
+        self._set_source(path, start_paused=True)
         if not self.data.caption and self._spawn_label:
             self.data.caption = path.stem
             self._spawn_caption_node(path.stem)
@@ -207,20 +206,31 @@ class VideoNode(BaseNode):
         # Fire-and-forget cache ingestion. See _check_cache_delivery for pickup.
         self._start_cache_ingest(path)
 
-    def _set_source(self, path: Path, restore_pos: int = 0) -> None:
+    def _set_source(self, path: Path, restore_pos: int = 0,
+                    start_paused: bool = True) -> None:
         """Tell the decoder to open `path`. The initial LOD size is a sensible
         guess derived from the current video rect; the decoder honours
-        set_lod_size() updates as the view zooms in/out."""
+        set_lod_size() updates as the view zooms in/out.
+
+        `start_paused` defaults to True — initial drag/browse loads should
+        not autoplay. Session restore overrides this based on the saved
+        was_playing flag.
+        """
         self.data.source_path = str(path.resolve())
         target_w, target_h = self._target_lod_size()
+        self._user_paused = bool(start_paused)
         self._decoder.set_source(
             path,
             lod_size=(target_w, target_h),
             loop_mode=self.data.loop_mode,
             start_paused=self._user_paused,
+            start_position_ms=int(restore_pos) if restore_pos > 0 else 0,
         )
-        if restore_pos > 0:
-            self._decoder.set_position(restore_pos)
+        # Keep the play sticker in sync with the actual starting state.
+        btn = getattr(self, "_play_btn", None)
+        if btn is not None:
+            btn._in_confirm = not self._user_paused
+            btn.update()
 
     def _target_lod_size(self) -> tuple[int, int]:
         """Compute (target_w, target_h) for decoder LOD sizing — video_rect
@@ -254,14 +264,21 @@ class VideoNode(BaseNode):
             1. Source file on disk exists → play from source, drift-check async
             2. Cache key resolves         → play from cache, flag source missing
             3. Neither                    → placeholder, node remains empty
+
+        Restore honours `data.was_playing` — clips that were rolling when
+        the session was saved resume rolling, clips that were paused stay
+        paused. (Initial drag/browse loads always start paused; that's
+        `load_from_path`'s contract, distinct from this one.)
         """
         from utils.persistence.media_cache import cached_path
 
         src_path = Path(self.data.source_path) if self.data.source_path else None
         cache_path = cached_path(self.data.cache_key) if self.data.cache_key else None
+        start_paused = not bool(self.data.was_playing)
 
         if src_path and src_path.exists():
-            self._set_source(src_path, restore_pos=self.data.playback_pos)
+            self._set_source(src_path, restore_pos=self.data.playback_pos,
+                             start_paused=start_paused)
             if self.data.cache_key:
                 self._start_drift_check(src_path)
             else:
@@ -270,7 +287,8 @@ class VideoNode(BaseNode):
             return
 
         if cache_path is not None:
-            self._set_source(cache_path, restore_pos=self.data.playback_pos)
+            self._set_source(cache_path, restore_pos=self.data.playback_pos,
+                             start_paused=start_paused)
             missing = self.data.source_path or "(unknown)"
             self._pending_drift = f"source missing — playing from cache\n{Path(missing).name}"
             return
