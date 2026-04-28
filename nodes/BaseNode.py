@@ -1278,17 +1278,37 @@ class BaseNode(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     def boundingRect(self):
-        """Extend bounding rect to include shadow margin so repaints are clean."""
+        """Extend bounding rect to include shadow margin AND the resize
+        overreach on the bottom-right. Qt uses boundingRect as a fast-cull
+        check before consulting shape(), so any zone of shape() that lives
+        outside boundingRect is unreachable by clicks. The right/bottom
+        extension is the larger of shadow margin and resize overreach so
+        the resize hit zone past the corner actually fires."""
+        over = self._resize_overreach
+        right_bottom_pad = max(_SHADOW_MARGIN, over)
         return self.rect().adjusted(
             -_SHADOW_MARGIN, -_SHADOW_MARGIN,
-             _SHADOW_MARGIN,  _SHADOW_MARGIN
+             right_bottom_pad,  right_bottom_pad,
         )
 
     def shape(self):
-        """Hit-test shape matches the visible node border, plus a small lobe
-        at the bottom-right corner so the resize grip remains catchable when
-        the cursor drifts a few pixels past the visible edge."""
+        """Hit-test shape matches the visible node border, plus a lobe at
+        the bottom-right corner so the resize grip remains catchable when
+        the cursor drifts a few pixels past the visible edge.
+
+        Fill rule MUST be WindingFill. The default OddEvenFill treats the
+        overlap between the rounded body and the corner lobe as a *hole*
+        — points inside both regions cancel to "outside" under odd-even
+        crossings. With a small lobe (e.g. grip=16, over=6) the hole is
+        a sliver in the corner-radius cut-off and goes unnoticed; with a
+        VideoNode-sized 128×128 lobe centered on the corner, the hole
+        eats the entire inside-the-body resize zone and clicks there
+        route to nothing. WindingFill counts each clockwise crossing
+        positively, so overlapping clockwise sub-paths add up rather
+        than cancel.
+        """
         path = QPainterPath()
+        path.setFillRule(Qt.WindingFill)
         path.addRoundedRect(self.rect(), self.round_radius, self.round_radius)
         r = self.rect()
         grip = self._resize_grip
