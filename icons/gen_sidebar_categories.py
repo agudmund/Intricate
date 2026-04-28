@@ -9,7 +9,7 @@ Run from the Intricate root:  python icons/gen_sidebar_categories.py
 Icons produced
 --------------
   text_node.ico      — Text   (four paragraph lines + end cursor)
-  images_group.ico   — Images (2x2 picture frames with mountain + sun)
+  polaroid.ico   — Images (2x2 picture frames with mountain + sun)
   audio_group.ico    — Audio  (speaker cone + radiating arcs)
   tools_group.ico    — Tools  (wrench + hex nut)
 """
@@ -152,7 +152,7 @@ _tip_on_edge(-hw + 120, -hh, 150)   # index — biggest, closest to corner
 _tip_on_edge(-hw + 280, -hh, 130)   # middle
 _tip_on_edge(-hw + 420, -hh, 100)   # ring finger hint
 
-_save(img, 'images_group')
+_save(img, 'polaroid')
 
 
 # ── 3. Audio — speaker cone + three radiating arcs ──────────────────────────

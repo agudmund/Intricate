@@ -664,6 +664,7 @@ class IntricateApp(QMainWindow):
         mute_act.triggered.connect(self._toggle_global_mute)
 
         snap = menu.addAction("Polaroid Snapshot")
+        snap.setIcon(QIcon(Theme.icon(Theme.iconPolaroid)))
         snap.setToolTip("Capture the current viewport with transparent background (alpha)")
         snap.triggered.connect(self._snapshot_viewport)
 
@@ -1682,7 +1683,7 @@ class IntricateApp(QMainWindow):
             layout.addWidget(b, alignment=Qt.AlignHCenter)
 
         _cat_btn(Theme.iconText,        "Text",   self._show_text_menu)
-        _cat_btn(Theme.iconImagesGroup,  "Images", self._show_images_menu)
+        _cat_btn(Theme.iconPolaroid,     "Images", self._show_images_menu)
         _cat_btn(Theme.iconAudioGroup,   "Audio",  self._show_audio_menu)
         _cat_btn(Theme.iconVisualGroup,  "Visual", self._show_visual_menu)
         _cat_btn(Theme.iconHealthGroup,  "Health", self._show_health_menu)

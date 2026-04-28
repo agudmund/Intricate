@@ -23,7 +23,7 @@ ICONS = [
     "visual_group",
     "health_group",
     "tools_group",
-    "images_group",
+    "polaroid",
     "text_node",
     "tree_node",
     "log_node",

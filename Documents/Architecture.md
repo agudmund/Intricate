@@ -190,7 +190,7 @@ App.exe (5MB) → _internal/ (junction) → _runtime/ (96MB, shared)
 - Python attributes/constants: `camelCase` (e.g., `windowBorderWidth`, `nodeBorderRadius`)
 - Files: PascalCase for classes (e.g., `BaseNode.py`), lowercase for utils (e.g., `settings.py`)
 - Infrastructure helpers prefixed `_` in `nodes/` (e.g., `_demolition.py`, `_shake_detect.py`) to mark them as non-node-type modules.
-- TOML sections: `[intricate]`, `[notepadplusplusduplexplusturbo]`, `[theme.colors]`, `[theme.icons]`
+- TOML sections: `[intricate]`, `[themajestic]`, `[theme.colors]`, `[theme.icons]` (`[notepadplusplusduplexplusturbo]` retired 2026-04-28 — keys never read after the predecessor was abandoned)
 
 ## Linguistic Conventions
 

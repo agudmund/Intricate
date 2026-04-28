@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Process the hand-painted 'Iconic Polaroid.png' into the images_group
+Process the hand-painted 'Iconic Polaroid.png' into the polaroid
 icon family (1024 PNG + multi-resolution ICO).
 
 The source is 1920x1080 RGB with a solid (40, 40, 40) dark background
@@ -11,7 +11,7 @@ and cream (225, 213, 198) line art.  This script:
   2. Reverse-composites the flat-background render into cream+alpha,
      so anti-aliased edges get correct partial transparency.
   3. Downscales to 1024x1024 with LANCZOS.
-  4. Saves as icons/images_group.png and multi-resolution .ico.
+  4. Saves as icons/polaroid.png and multi-resolution .ico.
 """
 
 import numpy as np
@@ -20,8 +20,8 @@ from pathlib import Path
 
 HERE   = Path(__file__).resolve().parent
 SRC    = HERE / 'Iconic Polaroid.png'
-OUT_PNG = HERE / 'images_group.png'
-OUT_ICO = HERE / 'images_group.ico'
+OUT_PNG = HERE / 'polaroid.png'
+OUT_ICO = HERE / 'polaroid.ico'
 
 BG    = np.array([40, 40, 40],   dtype=np.float32)
 CREAM = np.array([225, 213, 198], dtype=np.float32)
