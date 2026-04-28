@@ -476,19 +476,24 @@ class VideoNode(BaseNode):
         self.update()
 
     def _refresh_loop_button_visual(self) -> None:
-        """Sync the loop button's pixmap and tooltip to data.loop_mode."""
+        """Sync the loop button's pixmap and tooltip to data.loop_mode.
+
+        NodeButton renders from `_pix_normal` (single-stage mode — we left
+        `_pix_confirm` None at construction). Reassigning `_pix_normal` and
+        invalidating the scaled cache lets the next paint pick up the new
+        face. The `btn._pix` attribute set by an earlier version of this
+        method was an orphan — NodeButton never reads from it — which left
+        the button stuck on the off-state icon regardless of mode.
+        """
         btn = getattr(self, "_loop_btn", None)
         if btn is None:
             return
         mode = self.data.loop_mode
-        # The three icons are stored on the button itself at construction.
         pix = self._loop_pix_off
         if   mode == "loop":     pix = self._loop_pix_loop
         elif mode == "pingpong": pix = self._loop_pix_pingpong
-        # NodeButton renders from `_pix` (set by the constructor as the
-        # "main" pixmap). Reassigning it and triggering update() is enough.
-        btn._pix = pix
-        btn._in_confirm = False  # we manage state ourselves; stay on main face
+        btn._pix_normal = pix
+        btn._scaled_normal = None  # invalidate cache so next paint rescales
         btn.setToolTip(f"Loop: {mode}")
         btn.update()
 
