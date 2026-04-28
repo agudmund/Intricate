@@ -160,11 +160,16 @@ class VideoNode(BaseNode):
         return _BUTTON_ZONE_H if self._buttons_visible else 15.0
 
     def _progress_rect(self) -> QRectF:
+        # Progress bar ends short of the resize zone so a quick resize-grab
+        # doesn't snag the scrub. Mirrors AudioNode's "right-side breathing
+        # room" pattern. The end-of-bar marker is painted at this right
+        # edge in paint_content so the truncation is legible to the user.
         r = self.rect()
+        right_margin = self._resize_grip + VIDEO_PADDING
         return QRectF(
             r.x() + VIDEO_PADDING,
             r.bottom() - PROGRESS_HEIGHT - VIDEO_PADDING,
-            r.width() - VIDEO_PADDING * 2,
+            r.width() - VIDEO_PADDING - right_margin,
             PROGRESS_HEIGHT,
         )
 
@@ -722,6 +727,19 @@ class VideoNode(BaseNode):
                 grad.setColorAt(1.0, QColor("#d87a9e"))
                 painter.setBrush(grad)
                 painter.drawRoundedRect(fill_rect, 3, 3)
+
+            # End-of-bar marker — short vertical tick at the right edge of
+            # the progress bar so the truncation (made room for resize) is
+            # legible. Same shape as AudioNode's marker; placeholder visual
+            # until a finer cue is authored.
+            marker_pen = QPen(QColor(Theme.textPrimary), 3)
+            painter.setPen(marker_pen)
+            painter.setBrush(Qt.NoBrush)
+            end_x = pr.right()
+            painter.drawLine(
+                int(end_x), int(pr.top()    - 4),
+                int(end_x), int(pr.bottom() + 4),
+            )
 
         # Centre play-state indicator — visible whenever paused on a loaded clip
         if self.data.source_path and self._frame_pixmap and self._user_paused:
