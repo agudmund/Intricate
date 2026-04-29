@@ -16,6 +16,9 @@ Documents/data/.warm_bridge_*.json
 # Joy bucket counter — runtime state, not source (see utils/joy_buckets.py)
 Documents/Data/joy_buckets.txt
 Documents/data/joy_buckets.txt
+# Joy live pulse (happy_secs + bar_value) — runtime state (see utils/joy_state.py)
+Documents/Data/joy_state.json
+Documents/data/joy_state.json
 
 # ── Adobe CEP carbon copy — keep only the Intricate-specific source ──────
 # Premiere loads the LIVE extension from %APPDATA%\Adobe\CEP\... ; the tree

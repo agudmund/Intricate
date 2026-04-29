@@ -1812,7 +1812,8 @@ class IntricateApp(QMainWindow):
         self.joy_bar = QProgressBar()
         self.joy_bar.setOrientation(Qt.Vertical)
         self.joy_bar.setRange(0, 100)
-        self.joy_bar.setValue(int(_s.get_nested("intricate", "joy", "bar_value", 100)))
+        from utils import joy_state as _joy_state
+        self.joy_bar.setValue(_joy_state.load()["bar_value"])
         self.joy_bar.setTextVisible(False)
         self.joy_bar.setFixedWidth(bar_width)
         self.joy_bar.setMinimumHeight(bar_min_height)
@@ -1878,12 +1879,12 @@ class IntricateApp(QMainWindow):
         # without touching the shared-braincell config surface. A watcher
         # picks up external edits live so hand-tweaks don't get clobbered
         # by the next _persist_happy tick.
-        import pretty_widgets.utils.settings as _s
         from utils import joy_buckets
+        from utils import joy_state as _joy_state
         self._joy_bucket_count = joy_buckets.get_buckets()
         self._joy_buckets_watcher = joy_buckets.JoyBucketsWatcher(self)
         self._joy_buckets_watcher.changed.connect(self._on_joy_buckets_external_change)
-        self._joy_happy_secs   = float(_s.get_nested("intricate", "joy", "happy_secs", 0.0))
+        self._joy_happy_secs   = _joy_state.load()["happy_secs"]
         self._joy_bucket_label = pretty_label(
             str(self._joy_bucket_count),
             alignment=Qt.AlignCenter,
@@ -2072,13 +2073,16 @@ class IntricateApp(QMainWindow):
             self._persist_happy()
 
     def _persist_happy(self) -> None:
-        """Save happy accumulator and bar value. Bucket count is NOT written
-        here — it's persisted at earn time via joy_buckets.bump_buckets, so
-        the file store is always authoritative and external hand-edits are
-        never overwritten by a later _persist_happy tick."""
-        import pretty_widgets.utils.settings as _s
-        _s.set_nested("intricate", "joy", "happy_secs", round(self._joy_happy_secs, 1))
-        _s.set_nested("intricate", "joy", "bar_value", self.joy_bar.value())
+        """Save happy accumulator and bar value to the joy_state sidecar.
+        Bucket count is NOT written here — it's persisted at earn time via
+        joy_buckets.bump_buckets, so the file store is always authoritative
+        and external hand-edits are never overwritten by a later
+        _persist_happy tick. Same isolation principle for the sidecar pair
+        as for the bucket file: runtime persistence lives outside
+        settings.toml so The Settlers' user-tunable surface never has to
+        wrestle with values the app writes to itself."""
+        from utils import joy_state as _joy_state
+        _joy_state.save(self._joy_happy_secs, self.joy_bar.value())
 
     def _on_joy_buckets_external_change(self, new_value: int) -> None:
         """Fired when joy_buckets.txt is edited from outside the running
