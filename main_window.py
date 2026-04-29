@@ -1908,25 +1908,24 @@ class IntricateApp(QMainWindow):
         self._FEED_WINDOW   = 600.0       # 10 minutes in seconds
         self._FEED_MAX      = 3           # meals allowed per window
 
-        # Depletion timer — drains 1% every 36 seconds (100% over 1 hour)
-        # Sleep mode slows to 360 seconds per tick (10 hours full drain)
+        # Depletion timer + happy accumulator. The four tunable knobs
+        # below — drain durations, grace window, bucket earn rate — are
+        # read from [intricate.joy] in settings.toml at startup AND on
+        # every settings change (live-reload through The Settlers).
+        # _apply_joy_settings() is the single source of truth for both
+        # the initial seed and runtime updates.
         self._joy_hungry = False          # dirty flag — cleared by any feed click
         self._joy_sleeping = False        # sleep mode — slower depletion
-        self._JOY_AWAKE_INTERVAL  = 36000   # 36s per tick  → 1 hour
-        self._JOY_SLEEP_INTERVAL  = 360000  # 360s per tick → 10 hours
         self._joy_timer = QTimer(self)
-        self._joy_timer.setInterval(self._JOY_AWAKE_INTERVAL)
         self._joy_timer.timeout.connect(self._deplete_joy)
-        self._joy_timer.start()
-
-        # Grace + happy accumulator — ticks every second while at 100%
-        self._JOY_GRACE_SECS      = 600     # 10 minutes of grace before depletion
-        self._JOY_BUCKET_SECS     = 3600    # 1 hour of total happy time = +1 bucket
-        self._joy_grace_remaining = 0.0     # seconds left in current grace window
-        self._joy_in_grace        = False   # True while bar is 100% and grace active
+        self._joy_grace_remaining = 0.0   # seconds left in current grace window
+        self._joy_in_grace        = False  # True while bar is 100% and grace active
         self._happy_timer = QTimer(self)
         self._happy_timer.setInterval(1000)  # 1-second resolution
         self._happy_timer.timeout.connect(self._tick_happy)
+        # Seed _JOY_* constants + timer interval from settings.toml.
+        self._apply_joy_settings()
+        self._joy_timer.start()
 
         # If we launch at 100%, start the grace immediately
         if self.joy_bar.value() == 100:
@@ -2071,6 +2070,65 @@ class IntricateApp(QMainWindow):
         # Persist happy progress periodically (every 30 seconds)
         if int(self._joy_happy_secs) % 30 == 0:
             self._persist_happy()
+
+    # ── Joy mechanic tunables ─────────────────────────────────────────────
+    # Defaults match the original hardcoded constants — preserved as fall-
+    # backs so a missing or malformed TOML key never breaks the mechanic.
+    _JOY_DEFAULTS = {
+        "awake_drain_minutes": 60,    # bar 100→0 over 1 hour awake
+        "sleep_drain_minutes": 600,   # bar 100→0 over 10 hours asleep
+        "grace_secs":          600,   # 10 min grace at 100% before drain starts
+        "bucket_minutes":      60,    # 1 hour of happy time earns 1 bucket
+    }
+
+    def _apply_joy_settings(self) -> None:
+        """Read [intricate.joy] tunables from settings.toml and apply them
+        live. Called on init and again every time settings.toml changes
+        (Settlers writes through, watcher fires, this re-reads).
+
+        The Settlers exposes the values in user-friendly units; we convert
+        to internal ms-per-tick / seconds here so the rest of the joy code
+        stays unaware of the user-facing unit choice.
+
+        Idempotent: calling this with unchanged TOML produces no behavioural
+        change. Calling with new values updates the depletion timer's
+        interval (via setInterval, which Qt handles cleanly even mid-run).
+        """
+        import pretty_widgets.utils.settings as _s
+
+        d = self._JOY_DEFAULTS
+        awake_min = int(_s.get_nested("intricate", "joy", "awake_drain_minutes", d["awake_drain_minutes"]))
+        sleep_min = int(_s.get_nested("intricate", "joy", "sleep_drain_minutes", d["sleep_drain_minutes"]))
+        grace_s   = int(_s.get_nested("intricate", "joy", "grace_secs",          d["grace_secs"]))
+        bucket_m  = int(_s.get_nested("intricate", "joy", "bucket_minutes",      d["bucket_minutes"]))
+
+        # Bar drains in 100 ticks of 1 unit each; total drain time = ticks ×
+        # interval. interval_ms = (minutes * 60 * 1000) / 100 = minutes * 600.
+        self._JOY_AWAKE_INTERVAL = max(1, awake_min) * 600
+        self._JOY_SLEEP_INTERVAL = max(1, sleep_min) * 600
+        self._JOY_GRACE_SECS     = max(0, grace_s)
+        self._JOY_BUCKET_SECS    = max(60, bucket_m * 60)   # floor of 1 minute
+
+        # Apply to the running depletion timer. setInterval is safe mid-run
+        # — Qt re-arms on the next tick. Pick the right interval for the
+        # current sleep/awake mode so live-tuning the awake timer takes
+        # effect even while sleeping (and vice versa).
+        if hasattr(self, '_joy_timer'):
+            target_interval = (
+                self._JOY_SLEEP_INTERVAL if self._joy_sleeping
+                else self._JOY_AWAKE_INTERVAL
+            )
+            if self._joy_timer.interval() != target_interval:
+                self._joy_timer.setInterval(target_interval)
+                logger.debug(
+                    "[joy-tune] timer interval re-applied → %d ms (%s)",
+                    target_interval, "sleep" if self._joy_sleeping else "awake"
+                )
+
+        logger.debug(
+            "[joy-tune] applied: awake_drain=%dm sleep_drain=%dm grace=%ds bucket=%dm",
+            awake_min, sleep_min, grace_s, bucket_m,
+        )
 
     def _persist_happy(self) -> None:
         """Save happy accumulator and bar value to the joy_state sidecar.

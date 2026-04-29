@@ -367,6 +367,11 @@ def main():
     _watcher = settings.init_watcher()
     _watcher.changed.connect(Theme.reload)
     _watcher.changed.connect(lambda: app.activeWindow() and app.activeWindow().update())
+    # Live-reload joy mechanic tunables — Settlers writes through to TOML,
+    # watcher fires, IntricateApp re-reads and re-applies on the fly.
+    _watcher.changed.connect(
+        lambda: app.activeWindow() and getattr(app.activeWindow(), '_apply_joy_settings', lambda: None)()
+    )
     logger.debug(f"[boot] File watcher active on: {settings._SETTINGS_PATH}")
     logger.log(TRACE, "[boot:12] file watcher active")
 
