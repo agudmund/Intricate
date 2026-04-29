@@ -415,10 +415,22 @@ class ImageNode(BaseNode):
                     was_collapsed = True
         except Exception:
             pass
+        # Reassert focus on the main window before the dialog spawns. The
+        # WindowStaysOnTopHint flip in _lower_window() briefly hide+reshows
+        # the window on Windows, which can drift focus to another desktop
+        # window. A parentless QFileDialog then spawns behind that window
+        # and the user has to alt-tab to find it. Activating mw + parenting
+        # the dialog to it gives the OS file picker a proper owner HWND.
+        if mw is not None:
+            try:
+                mw.activateWindow()
+                mw.raise_()
+            except Exception:
+                pass
         scene = self.scene()
         start_dir = scene.get_browse_dir("image") if scene else ""
         path, _ = QFileDialog.getOpenFileName(
-            None,
+            mw,
             "Select Image",
             start_dir,
             "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tif *.tiff)"
