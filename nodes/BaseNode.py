@@ -134,6 +134,20 @@ class BaseNode(QGraphicsRectItem):
         self._pending_shake_delete: bool = False
         self._removal_done: bool = False
 
+        # ── Drag-commit dead zone — Wacom phantom-motion guard ───────────────
+        # Stationary Wacom-pen taps generate a stream of synthesized mouse-
+        # move events as Windows transitions the OS cursor to the pen contact
+        # point. Without this gate, default ItemIsMovable translates the node
+        # along the synthesized path and the shake detector samples that path
+        # — manifesting as "node propelled offscreen on touch" or
+        # "node deleted on touch". Diagnosis closed 2026-04-29 from forensic
+        # logs at 14:59:39 (ChromelessRoot family); same fix applied here.
+        # See ChromelessRoot._DRAG_COMMIT_THRESHOLD_PX for the rationale.
+        self._drag_press_screen_pos = QPointF()
+        self._drag_committed        = False
+        self._drag_suppressed_count = 0
+        self._drag_suppressed_max_travel_px = 0.0
+
         # ── Behaviour ─────────────────────────────────────────────────────────
         # disconnect_all() is called in _prepare_for_removal — not optional.
         self.behaviour = NodeBehaviour(self)
@@ -718,6 +732,16 @@ class BaseNode(QGraphicsRectItem):
         self._shake_samples.clear()
         self._shake_triggered = False
         self._shake_press_active = True
+        # Arm the drag-commit dead-zone — phantom-motion suppression.
+        if event.button() == Qt.LeftButton:
+            self._drag_press_screen_pos = QPointF(event.screenPos())
+            self._drag_committed        = False
+            self._drag_suppressed_count = 0
+            self._drag_suppressed_max_travel_px = 0.0
+            logger.log(5, "[base-drag-gate] %s ARM screen=(%.1f,%.1f) threshold=%.1fpx",
+                       getattr(self.data, 'node_type', '?'),
+                       event.screenPos().x(), event.screenPos().y(),
+                       self._DRAG_COMMIT_THRESHOLD_PX)
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -733,6 +757,38 @@ class BaseNode(QGraphicsRectItem):
             self.update()
             event.accept()
             return
+
+        # Drag-commit dead zone — Wacom phantom-motion suppression. See
+        # _DRAG_COMMIT_THRESHOLD_PX. Until cumulative cursor travel from
+        # press exceeds the threshold, eat the event without translating
+        # the item or feeding the shake detector.
+        if not self._drag_committed:
+            cur = event.screenPos()
+            dx = cur.x() - self._drag_press_screen_pos.x()
+            dy = cur.y() - self._drag_press_screen_pos.y()
+            travel_px = (dx * dx + dy * dy) ** 0.5
+            if travel_px < self._DRAG_COMMIT_THRESHOLD_PX:
+                self._drag_suppressed_count += 1
+                if travel_px > self._drag_suppressed_max_travel_px:
+                    self._drag_suppressed_max_travel_px = travel_px
+                logger.log(5,
+                    "[base-drag-gate] %s SUPPRESS #%d travel=%.2fpx (threshold=%.1f) "
+                    "screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f)",
+                    getattr(self.data, 'node_type', '?'),
+                    self._drag_suppressed_count, travel_px,
+                    self._DRAG_COMMIT_THRESHOLD_PX,
+                    cur.x(), cur.y(),
+                    self.scenePos().x(), self.scenePos().y())
+                event.accept()
+                return
+            self._drag_committed = True
+            logger.info(
+                "[base-drag-gate] %s COMMIT after %d suppressed events "
+                "(max travel during suppression=%.2fpx, commit travel=%.2fpx) — drag begins",
+                getattr(self.data, 'node_type', '?'),
+                self._drag_suppressed_count,
+                self._drag_suppressed_max_travel_px, travel_px)
+
         super().mouseMoveEvent(event)
         if not self._is_resizing:
             self._track_shake()
@@ -745,6 +801,13 @@ class BaseNode(QGraphicsRectItem):
     _SHAKE_WINDOW          = 0.40   # seconds of history to keep
     _SHAKE_MIN_DELTA       = 8.0    # screen-px — ignore jitter smaller than this
     _SHAKE_REVERSALS       = 3      # direction changes needed to trigger
+
+    # Drag-commit dead zone — Wacom phantom-motion suppression. Cumulative
+    # cursor travel from press must exceed this threshold (in screen-px)
+    # before mouseMoveEvent translates the node and feeds shake samples.
+    # Real human drags blow past 12 screen-px in a single event; phantom
+    # synthesized cursor settling stays under it. See __init__ note.
+    _DRAG_COMMIT_THRESHOLD_PX = 12.0
 
     def _track_shake(self) -> None:
         """Sample position during drag at ~30ms intervals and check for shake.
@@ -1014,6 +1077,24 @@ class BaseNode(QGraphicsRectItem):
         was_resizing = self._is_resizing
         self._is_resizing = False
         self._shake_press_active = False
+        # Drag-gate post-mortem — see ChromelessRoot.mouseReleaseEvent.
+        if event.button() == Qt.LeftButton:
+            if not self._drag_committed and self._drag_suppressed_count > 0:
+                logger.info(
+                    "[base-drag-gate] %s RELEASE without commit — gate suppressed "
+                    "%d phantom motion events (max travel=%.2fpx, threshold=%.1fpx). "
+                    "If this happened on a stationary touch, the gate did its job.",
+                    getattr(self.data, 'node_type', '?'),
+                    self._drag_suppressed_count,
+                    self._drag_suppressed_max_travel_px,
+                    self._DRAG_COMMIT_THRESHOLD_PX)
+            else:
+                logger.log(5,
+                    "[base-drag-gate] %s RELEASE committed=%s suppressed=%d max_travel=%.2fpx",
+                    getattr(self.data, 'node_type', '?'),
+                    self._drag_committed,
+                    self._drag_suppressed_count,
+                    self._drag_suppressed_max_travel_px)
         # Sync geometry back to data after a resize or move
         self.data.x      = self.pos().x()
         self.data.y      = self.pos().y()
