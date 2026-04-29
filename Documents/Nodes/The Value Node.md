@@ -55,16 +55,18 @@ _CAL_TOP    = 0
 _CAL_BOTTOM = 7
 ```
 
-These trim the baked-in padding so the node's clipping path and slider geometry align with the visible pixels, not the file bounds. The TOML keys `[node.value] crop_left/right/top/bottom` add on top — a second adjustment layer for fine-tuning without touching code.
+These trim the baked-in padding so the node's clipping path and slider geometry align with the visible pixels, not the file bounds.
 
 Two more calibration constants live alongside the crop:
 
 ```python
 _CAL_PORT_Y = -12   # port Y offset from rect center
 _CAL_PORT_X =  10   # port X offset from the base -ox left-edge
+_CAL_PORT_X_OFFSET = 0.0   # additional port nudge — pinned in code
+_CAL_PORT_Y_OFFSET = 0.0
 ```
 
-These anchor the single input port to the tip of the bar graphic rather than the rect centre. TOML keys `input_port_x_offset` / `input_port_y_offset` stack on top for further tuning.
+These anchor the single input port to the tip of the bar graphic rather than the rect centre. The pre-ChromelessRoot `[node.value]` TOML section that used to layer crop and port offsets on top of these constants has been retired — the framework owns those concerns now, and any further nudge lives directly on the class as a small named constant rather than as a runtime-tunable setting.
 
 ### Ports
 

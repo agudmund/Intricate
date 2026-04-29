@@ -71,14 +71,22 @@ class ValueNode(ChromelessRoot):
     # ── Calibrated crop — baked from source image alpha padding ──────────────
     # These trim the transparent padding in ./Images/Value/ PNGs so the
     # node border sits flush against the visible content at any stored
-    # node size. TOML [node.value] crop_* settings add on top for fine
-    # tuning per deployment.
+    # node size. Pre-ChromelessRoot there was a [node.value] crop_* TOML
+    # section that layered runtime offsets on top; that's been retired,
+    # and any further trim now lives here as a code edit.
     _CAL_LEFT   = 0
     _CAL_RIGHT  = 15
     _CAL_TOP    = 0
     _CAL_BOTTOM = 7
     _CAL_PORT_Y = -12   # vertical offset from rect center to the input tip
     _CAL_PORT_X =  10   # horizontal offset added to the base -ox left-edge position
+    # Permanent input/output port offsets — pinned here as class constants
+    # after the [node.value] TOML section was retired (ChromelessRoot now
+    # owns node positioning fundamentals). Adjust here if a port needs
+    # nudging; both default to zero, which preserves the prior runtime
+    # behaviour since the TOML keys were always zero in practice.
+    _CAL_PORT_X_OFFSET = 0.0
+    _CAL_PORT_Y_OFFSET = 0.0
 
     # ── Generic unpinned resize — opt in to ChromelessRoot's corner grip ────
     # Bottom-right grip sets the frozen screen size before pin. Works with
@@ -111,10 +119,6 @@ class ValueNode(ChromelessRoot):
         # Image sequence
         self._frames: list[Path] = self._scan_frames()
         self._pixmap: QPixmap | None = None
-        self._last_crop: tuple = (
-            self._crop_left(), self._crop_right(),
-            self._crop_top(),  self._crop_bottom(),
-        )
 
         # Slider widget + proxy
         self._slider = pretty_slider(
@@ -166,12 +170,10 @@ class ValueNode(ChromelessRoot):
     def _place_ports(self) -> None:
         if not getattr(self, 'input_ports', None):
             return
-        import pretty_widgets.utils.settings as _s
         r      = self.rect()
         ox     = 10
-        y_off  = float(_s.get_nested("node", "value", "input_port_y_offset", 0))
-        x_off  = float(_s.get_nested("node", "value", "input_port_x_offset", 0))
-        port_y = r.height() / 2 + self._CAL_PORT_Y + y_off
+        x_off  = self._CAL_PORT_X_OFFSET
+        port_y = r.height() / 2 + self._CAL_PORT_Y + self._CAL_PORT_Y_OFFSET
         self.input_ports[0].setPos(-ox + self._CAL_PORT_X + x_off, port_y)
         if self.output_ports:
             self.output_ports[0].setPos(r.width() + ox - self._CAL_PORT_X - x_off, port_y)
@@ -235,29 +237,14 @@ class ValueNode(ChromelessRoot):
     # GEOMETRY HELPERS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _crop_left(self) -> float:
-        import pretty_widgets.utils.settings as _s
-        return float(_s.get_nested("node", "value", "crop_left", 0))
-
-    def _crop_right(self) -> float:
-        import pretty_widgets.utils.settings as _s
-        return float(_s.get_nested("node", "value", "crop_right", 0))
-
-    def _crop_top(self) -> float:
-        import pretty_widgets.utils.settings as _s
-        return float(_s.get_nested("node", "value", "crop_top", 0))
-
-    def _crop_bottom(self) -> float:
-        import pretty_widgets.utils.settings as _s
-        return float(_s.get_nested("node", "value", "crop_bottom", 0))
-
     def _cropped_rect(self) -> QRectF:
-        r  = self.rect()
-        cl = self._CAL_LEFT   + self._crop_left()
-        cr = self._CAL_RIGHT  + self._crop_right()
-        ct = self._CAL_TOP    + self._crop_top()
-        cb = self._CAL_BOTTOM + self._crop_bottom()
-        return QRectF(r.left() + cl, r.top() + ct, r.width() - cl - cr, r.height() - ct - cb)
+        r = self.rect()
+        return QRectF(
+            r.left() + self._CAL_LEFT,
+            r.top()  + self._CAL_TOP,
+            r.width()  - self._CAL_LEFT - self._CAL_RIGHT,
+            r.height() - self._CAL_TOP  - self._CAL_BOTTOM,
+        )
 
     def _slider_rect(self) -> QRectF:
         r = self._cropped_rect()
@@ -292,14 +279,6 @@ class ValueNode(ChromelessRoot):
         painter.restore()
 
     def paint_content(self, painter: QPainter) -> None:
-        # Reposition slider proxy whenever the crop settings change
-        crop = (self._crop_left(), self._crop_right(),
-                self._crop_top(),  self._crop_bottom())
-        if crop != self._last_crop:
-            self._last_crop = crop
-            if hasattr(self, '_slider_proxy') and self._slider_proxy:
-                self._slider_proxy.setGeometry(self._slider_rect())
-
         if not self._pixmap or self._pixmap.isNull():
             return
 
