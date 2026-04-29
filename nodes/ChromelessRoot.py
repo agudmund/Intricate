@@ -390,6 +390,11 @@ class ChromelessRoot(QGraphicsRectItem):
                                            cur.height() * zoom)))
                 logger.log(TRACE, "[chrome-pin] %s ACTIVATE rescaled rect ×%.3f (zoom) → (%.1f,%.1f)",
                            self._log_id(), zoom, self.rect().width(), self.rect().height())
+            # Capture pin_scale so paint_content can compensate hardcoded
+            # font sizes (which IIT renders at full pt regardless of zoom).
+            # Without this, pinning at zoom != 1 visibly grows or shrinks
+            # text relative to the rect — see ChromelessRootData.pin_scale.
+            self.data.pin_scale = zoom
             # Anchor to the current on-screen position. mapFromScene
             # reports viewport-pixel coords regardless of IIT state.
             vp_pos = view.mapFromScene(self.pos())
@@ -446,6 +451,9 @@ class ChromelessRoot(QGraphicsRectItem):
             logger.log(TRACE, "[chrome-pin] %s DEACTIVATE rescaled rect ÷%.3f (zoom) → (%.1f,%.1f)",
                        self._log_id(), zoom, self.rect().width(), self.rect().height())
         self.setFlag(QGraphicsItem.ItemIgnoresTransformations, False)
+        # Reset paint-time font compensation — under IIT off the view
+        # transform handles scaling, so paint_content runs at native pt.
+        self.data.pin_scale = 1.0
         self._disconnect_viewport_tracking()
 
     def _connect_viewport_tracking(self, view) -> None:
@@ -570,7 +578,8 @@ class ChromelessRoot(QGraphicsRectItem):
                          self._log_id(), change_name, value)
 
         if (change == QGraphicsItem.ItemSceneChange and value is None
-                and not self._removal_done):
+                and not self._removal_done
+                and not getattr(self, '_pinned_across_scenes', False)):
             # THIS is the destructive path — log it loudly with a stack
             # trace so the next cross-node-destruction incident shows
             # exactly what called Qt into telling us we're leaving.

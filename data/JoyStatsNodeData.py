@@ -48,4 +48,5 @@ class JoyStatsNodeData(ChromelessRootData):
             pinned        = bool(data.get("pinned",   False)),
             pin_vp_x      = float(data.get("pin_vp_x", 0.0)),
             pin_vp_y      = float(data.get("pin_vp_y", 0.0)),
+            pin_scale     = float(data.get("pin_scale", 1.0)),
         )

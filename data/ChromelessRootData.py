@@ -33,10 +33,19 @@ class ChromelessRootData(NodeData):
     pinned:   bool  = field(default=False)
     pin_vp_x: float = field(default=0.0)
     pin_vp_y: float = field(default=0.0)
+    # Canvas zoom captured at the moment the node was pinned. Used by
+    # paint_content to scale fonts / line heights so the visible text size
+    # stays continuous across the pin/unpin toggle at any zoom: under
+    # ItemIgnoresTransformations the painter renders text at full pt size
+    # regardless of zoom, but unpinned (IIT off) the view transform shrinks
+    # the same font by the zoom factor — multiplying by pin_scale at paint
+    # time bridges the gap. 1.0 when unpinned (no compensation needed).
+    pin_scale: float = field(default=1.0)
 
     def to_dict(self) -> dict:
         data = super().to_dict()
-        data["pinned"]   = self.pinned
-        data["pin_vp_x"] = self.pin_vp_x
-        data["pin_vp_y"] = self.pin_vp_y
+        data["pinned"]    = self.pinned
+        data["pin_vp_x"]  = self.pin_vp_x
+        data["pin_vp_y"]  = self.pin_vp_y
+        data["pin_scale"] = self.pin_scale
         return data

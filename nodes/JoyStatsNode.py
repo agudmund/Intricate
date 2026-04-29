@@ -42,8 +42,10 @@ class JoyStatsNode(ChromelessRoot):
     _ROUND_RADIUS    = 12.0
     _CONTENT_PAD     = 15.0   # horizontal padding for title/body text
     _TITLE_TOP_PAD   = 10.0   # px from node top to title baseline area
-    _TITLE_HEIGHT    = 30.0   # vertical allowance for title text
-    _BODY_TOP_PAD    = 44.0   # px from node top to first body line
+    _TITLE_HEIGHT    = 40.0   # vertical allowance for title text — must fit
+                              # Chandler42 MediumOblique +6 ascender + descender
+                              # ('J' top bearing and 'y' descender both clip at 30)
+    _BODY_TOP_PAD    = 54.0   # px from node top to first body line
     _LINE_HEIGHT     = 17
 
     # ── Font family / size bumps (formerly inherited from BaseNode) ─────────
@@ -145,26 +147,39 @@ class JoyStatsNode(ChromelessRoot):
 
     def paint_content(self, painter: QPainter) -> None:
         r   = self.rect()
-        pad = self._CONTENT_PAD
+        # pin_scale = 1.0 unpinned, = zoom-at-pin-time pinned. Multiplies
+        # every hardcoded font / pad / line-height so visible layout stays
+        # continuous across the IIT toggle: under IIT off the view transform
+        # scales scene-unit values by zoom; under IIT on it doesn't, and the
+        # rect itself was multiplied by zoom in _activate_pin. See
+        # ChromelessRootData.pin_scale.
+        s         = float(getattr(self.data, 'pin_scale', 1.0)) or 1.0
+        pad       = self._CONTENT_PAD   * s
+        title_top = self._TITLE_TOP_PAD * s
+        title_h   = self._TITLE_HEIGHT  * s
+        body_top  = self._BODY_TOP_PAD  * s
+        line_h    = self._LINE_HEIGHT   * s
 
         # Title
-        title_font = QFont(self._TITLE_FONT, max(1, Theme.aboutFontSize + self._TITLE_FONT_BUMP))
+        title_font = QFont(self._TITLE_FONT,
+                           max(1, int(round((Theme.aboutFontSize + self._TITLE_FONT_BUMP) * s))))
         title_font.setStyleName(self._TITLE_STYLE)
         painter.setFont(title_font)
         painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
         painter.drawText(
-            QRectF(r.left() + pad, r.top() + self._TITLE_TOP_PAD,
-                   r.width() - pad * 2, self._TITLE_HEIGHT),
+            QRectF(r.left() + pad, r.top() + title_top,
+                   r.width() - pad * 2, title_h),
             Qt.AlignLeft | Qt.AlignTop,
             "Joy Stats",
         )
 
         # Body — live stats
-        body_font = QFont(self._BODY_FONT, max(1, Theme.aboutFontSize + self._BODY_FONT_BUMP))
+        body_font = QFont(self._BODY_FONT,
+                          max(1, int(round((Theme.aboutFontSize + self._BODY_FONT_BUMP) * s))))
         painter.setFont(body_font)
         painter.setPen(QColor(Theme.nodeFontColor))
         painter.setOpacity(0.85)
-        y = r.top() + self._BODY_TOP_PAD
+        y = r.top() + body_top
 
         win = self._get_window()
         if win is None:
@@ -230,16 +245,16 @@ class JoyStatsNode(ChromelessRoot):
 
         for text, color in lines:
             if not text:
-                y += self._LINE_HEIGHT * 0.4
+                y += line_h * 0.4
                 continue
             if color:
                 painter.setPen(QColor(color))
             else:
                 painter.setPen(QColor(Theme.nodeFontColor))
             painter.drawText(
-                QRectF(r.left() + pad, y, r.width() - pad * 2, 20),
+                QRectF(r.left() + pad, y, r.width() - pad * 2, 20 * s),
                 Qt.AlignLeft | Qt.AlignTop, text)
-            y += self._LINE_HEIGHT
+            y += line_h
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE

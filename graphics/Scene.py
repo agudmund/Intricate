@@ -822,6 +822,14 @@ class IntricateScene(QGraphicsScene):
                 # _attach_companion for the full lifecycle.
                 if getattr(item, '_is_companion', False):
                     continue
+                # JoyStats: app-scoped singleton when pinned. Pinned →
+                # excluded from session save (lives in sidecar instead).
+                # Unpinned → saved normally; the singleton ref is dropped
+                # at park time and the next session reclaims it via
+                # _attach_joy_stats. See main_window._park_joy_stats.
+                if (getattr(item, '_is_joy_stats', False)
+                        and getattr(getattr(item, 'data', None), 'pinned', False)):
+                    continue
                 try:
                     d = item.to_dict()
                     if d:

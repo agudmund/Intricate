@@ -248,6 +248,15 @@ class IntricateApp(QMainWindow):
         self._companion_limbo = QGraphicsScene(self)
         self._companion_seats: dict = self._load_companion_seats()
 
+        # JoyStats HUD — singleton at app level, like the companion. Pin state
+        # gates cross-session persistence: pinned travels via limbo, unpinned
+        # dies with the outgoing scene. Same two-layer protection (limbo scene
+        # + _pinned_across_scenes flag) — see the companion block above for
+        # the full rationale.
+        self._joy_stats = None
+        self._joy_stats_limbo = QGraphicsScene(self)
+        self._joy_stats_seats: dict = self._load_joy_stats_seats()
+
         # 8. Load session for the initially selected project, then start autosave
         QTimer.singleShot(0, self._load_initial_session)
 
@@ -2955,7 +2964,59 @@ class IntricateApp(QMainWindow):
         timer.timeout.connect(_check)
         timer.start()
     def _spawn_perf_node(self):        self._spawn(self.scene.add_perf_node,         "watching the paint loop")
-    def _spawn_joy_stats_node(self):   self._spawn(self.scene.add_joy_stats_node,    "inspecting the joy bucket")
+    def _spawn_joy_stats_node(self):
+        """
+        Summon the singleton JoyStatsNode HUD.
+
+        One JoyStats lives in the entire app. Three cases mirror the
+        Companion:
+        - already here → pan camera and select
+        - parked in limbo (was pinned at last session swap) → re-attach
+          at this session's seat
+        - never created → spawn fresh and claim as the singleton
+
+        Cross-session persistence is gated by the node's pin state at
+        the moment of session swap (see _park_joy_stats). Pinned →
+        survives via limbo. Unpinned → dies with its scene.
+        """
+        from PySide6.QtCore import QPointF
+
+        # Case 1: already in current scene — focus + select
+        if self._joy_stats_alive() and self._joy_stats.scene() is self.scene:
+            try:
+                self.scene.clearSelection()
+                self._joy_stats.setSelected(True)
+                self.view.centerOn(self._joy_stats)
+            except Exception:
+                pass
+            self._status("the joy stats are right here")
+            return
+
+        # Compute landing position — this session's seat or viewport centre
+        seat = self._joy_stats_seats.get(self._current_joy_stats_seat_key() or "")
+        if seat:
+            target = QPointF(seat[0], seat[1])
+        else:
+            target = self.view.mapToScene(self.view.viewport().rect().center())
+
+        # Case 2: exists in limbo — attach to current scene at the seat
+        if self._joy_stats_alive():
+            try:
+                self.scene.addItem(self._joy_stats)
+                r = self._joy_stats.rect()
+                self._joy_stats.setPos(target - QPointF(r.width() / 2, r.height() / 2))
+                self.scene.raise_node(self._joy_stats)
+                self._status("the joy stats are back")
+                return
+            except Exception:
+                self._joy_stats = None  # stale ref, fall through
+
+        # Case 3: first spawn ever
+        node = self._spawn(self.scene.add_joy_stats_node, "inspecting the joy bucket")
+        if node is None:
+            return
+        node._is_joy_stats = True
+        self._joy_stats = node
     def _spawn_claude_info_node(self): self._spawn(self.scene.add_claude_info_node,  "counting every token with pride")
 
     def _spawn_tree_node(self):
@@ -3475,6 +3536,178 @@ class IntricateApp(QMainWindow):
             logger.exception("[companion] attach failed — companion reference cleared")
             self._companion = None
 
+    # ── JoyStats — app-scoped singleton, pin-gated cross-session travel ─────
+    #
+    # Mirrors the Companion lifecycle but with one twist: only PINNED
+    # JoyStats nodes traverse session swaps. An unpinned JoyStats lives in
+    # the current session's saved data like any other node and dies with
+    # the scene on swap. A pinned JoyStats is excluded from session save,
+    # parked in a persistent limbo scene during the swap, and reattached at
+    # this session's remembered seat.
+
+    def _joy_stats_alive(self) -> bool:
+        """True if self._joy_stats holds a living QGraphicsItem."""
+        if self._joy_stats is None:
+            return False
+        try:
+            self._joy_stats.scene()  # raises RuntimeError if C++ side gone
+            return True
+        except RuntimeError:
+            self._joy_stats = None
+            return False
+
+    def _joy_stats_sidecar_path(self):
+        """Fixed app-global path for the JoyStats seat map."""
+        from pathlib import Path as _P
+        return _P(__file__).resolve().parent / "Documents" / "Data" / "joy_stats.json"
+
+    def _load_joy_stats_seats(self) -> dict:
+        """Load session_key → (x, y) seat map, or {} if absent."""
+        import json
+        p = self._joy_stats_sidecar_path()
+        if not p.exists():
+            return {}
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+            return {str(k): list(v) for k, v in raw.items()
+                    if isinstance(v, (list, tuple)) and len(v) == 2}
+        except Exception:
+            logger.exception("[joy-stats] failed to load seats sidecar")
+            return {}
+
+    def _save_joy_stats_seats(self) -> None:
+        """Persist the seat map. Non-fatal on failure."""
+        import json
+        try:
+            p = self._joy_stats_sidecar_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(self._joy_stats_seats, indent=2),
+                         encoding="utf-8")
+        except Exception:
+            logger.exception("[joy-stats] failed to save seats sidecar")
+
+    def _current_joy_stats_seat_key(self) -> str | None:
+        try:
+            path = self._session_path()
+        except Exception:
+            return None
+        return str(path) if path else None
+
+    def _park_joy_stats(self) -> None:
+        """
+        Pre-swap park. PINNED → record seat, transfer to limbo so it
+        survives the scene swap. UNPINNED → leave it in the outgoing
+        scene to be saved/destroyed normally and clear the singleton ref.
+        """
+        if not self._joy_stats_alive():
+            return
+        if self._joy_stats.scene() is not self.scene:
+            return  # already parked
+
+        key = self._current_joy_stats_seat_key()
+        if key:
+            try:
+                p = self._joy_stats.scenePos()
+                self._joy_stats_seats[key] = [p.x(), p.y()]
+            except Exception:
+                pass
+
+        pinned = bool(getattr(self._joy_stats.data, 'pinned', False))
+        if not pinned:
+            # Unpinned — let it ride the outgoing scene out. It'll be saved
+            # to session.json by the normal save path and torn down with the
+            # scene on _swap_scene. The singleton ref is cleared so the next
+            # session's spawn / load path can claim a fresh one.
+            self._joy_stats = None
+            return
+
+        # Set _pinned_across_scenes transiently around the cross-scene move:
+        # Qt's addItem internally does removeItem-then-addItem, briefly firing
+        # ItemSceneChange with value=None. Both BaseNode and ChromelessRoot
+        # would otherwise interpret that as a destruction signal and run the
+        # demolition crew — which severs viewport-tracking signals, breaking
+        # the pin after re-attach. Scoped to the transfer so shake-delete and
+        # other genuine scene-leave paths still demolish normally.
+        try:
+            self._joy_stats._pinned_across_scenes = True
+            self._joy_stats_limbo.addItem(self._joy_stats)
+        except Exception:
+            logger.exception("[joy-stats] transfer to limbo failed")
+            self._joy_stats = None
+        finally:
+            try:
+                if self._joy_stats is not None:
+                    self._joy_stats._pinned_across_scenes = False
+            except Exception:
+                pass
+
+    def _attach_joy_stats(self) -> None:
+        """
+        Post-load attach. If we're holding a pinned singleton in limbo,
+        place it in the new scene and drop any duplicate that came in via
+        session load. If we're not, capture any session-loaded JoyStats
+        as the new singleton.
+        """
+        from nodes.JoyStatsNode import JoyStatsNode
+        from PySide6.QtCore import QPointF
+
+        if self._joy_stats_alive():
+            # Drop any duplicate that arrived through session load — our
+            # limbo instance is canonical.
+            for item in list(self.scene.items()):
+                if (isinstance(item, JoyStatsNode)
+                        and item is not self._joy_stats):
+                    try:
+                        self.scene.removeItem(item)
+                    except Exception:
+                        pass
+            if self._joy_stats.scene() is self.scene:
+                return  # already there
+            key = self._current_joy_stats_seat_key()
+            seat = self._joy_stats_seats.get(key or "") if key else None
+            if seat:
+                target = QPointF(seat[0], seat[1])
+            else:
+                target = self.view.mapToScene(self.view.viewport().rect().center())
+            try:
+                # Same transient guard as in _park_joy_stats — suppresses
+                # demolition during the cross-scene addItem race.
+                self._joy_stats._pinned_across_scenes = True
+                self.scene.addItem(self._joy_stats)
+                r = self._joy_stats.rect()
+                self._joy_stats.setPos(target - QPointF(r.width() / 2, r.height() / 2))
+                self.scene.raise_node(self._joy_stats)
+            except Exception:
+                logger.exception("[joy-stats] attach failed — ref cleared")
+                self._joy_stats = None
+            finally:
+                try:
+                    if self._joy_stats is not None:
+                        self._joy_stats._pinned_across_scenes = False
+                except Exception:
+                    pass
+            # Re-arm viewport tracking if the node is pinned. _connect has
+            # an "already connected, skip" guard so this is a no-op when
+            # tracking survived the round-trip; when it didn't (legacy
+            # break, demolition fired before the flag was honoured), this
+            # reattaches signals to the live view and snaps the node back
+            # to its saved pin_vp.
+            try:
+                if (self._joy_stats is not None
+                        and getattr(self._joy_stats.data, 'pinned', False)):
+                    self._joy_stats._activate_pin(from_saved_vp=True)
+            except Exception:
+                logger.exception("[joy-stats] pin re-arm failed")
+            return
+
+        # No singleton held — capture the first JoyStats from the loaded
+        # session (if any) and stamp it as the singleton.
+        for item in self.scene.items():
+            if isinstance(item, JoyStatsNode):
+                self._joy_stats = item
+                item._is_joy_stats = True
+                break
+
     def _swap_scene(self) -> None:
         """Replace the current scene with a fresh one on the view.
 
@@ -3609,6 +3842,9 @@ class IntricateApp(QMainWindow):
         self._autosave_blocked = True
         self._init_autosave()
         self._load_session_into_scene(self._session_path())
+        # Claim any session-saved JoyStats as the app-scoped singleton so
+        # the spawn button focuses it instead of creating a duplicate.
+        self._attach_joy_stats()
         QTimer.singleShot(0, self._restore_camera)
         QTimer.singleShot(0, self._restore_pinned_preview)
 
@@ -3625,6 +3861,7 @@ class IntricateApp(QMainWindow):
         # and removes it from the outgoing scene so it isn't caught up in
         # the save loop or the impending scene teardown.
         self._park_companion()
+        self._park_joy_stats()
 
         # Save whatever was on canvas for the previous project
         if hasattr(self, '_active_project'):
@@ -3640,6 +3877,7 @@ class IntricateApp(QMainWindow):
         self._swap_scene()
         self._load_session_into_scene(self._session_path(new_project))
         self._attach_companion()
+        self._attach_joy_stats()
         self._status(f"welcome back to {new_project}")
 
     def _create_new_session(self) -> None:
@@ -3692,6 +3930,7 @@ class IntricateApp(QMainWindow):
 
         # Park the companion before save — see on_session_changed for rationale
         self._park_companion()
+        self._park_joy_stats()
 
         # Save outgoing session before switching
         if prev:
@@ -3713,6 +3952,7 @@ class IntricateApp(QMainWindow):
         self._swap_scene()
         self._load_session_into_scene(self._session_path(name))
         self._attach_companion()
+        self._attach_joy_stats()
         self._status(f"welcome to {name}")
 
     def _git_init_project(self, project_dir: Path, name: str) -> None:
@@ -4045,6 +4285,18 @@ class IntricateApp(QMainWindow):
                         p = self._companion.scenePos()
                         self._companion_seats[key] = [p.x(), p.y()]
                 self._save_companion_seats()
+            except Exception:
+                pass
+            # Same dance for the JoyStats HUD — record final seat (if it's
+            # currently on canvas) before scene teardown, then flush sidecar.
+            try:
+                if (self._joy_stats_alive()
+                        and self._joy_stats.scene() is self.scene):
+                    key = self._current_joy_stats_seat_key()
+                    if key:
+                        p = self._joy_stats.scenePos()
+                        self._joy_stats_seats[key] = [p.x(), p.y()]
+                self._save_joy_stats_seats()
             except Exception:
                 pass
             event.accept()
