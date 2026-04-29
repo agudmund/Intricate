@@ -519,14 +519,36 @@ class VideoNode(BaseNode):
 
     def _open_file_browser(self) -> None:
         win = self._lower_window()
+        was_collapsed = False
+        mw = None
+        try:
+            views = self.scene().views() if self.scene() else []
+            if views:
+                mw = views[0].window()
+                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
+                    mw.toggle_curtains()
+                    was_collapsed = True
+        except Exception:
+            pass
+        if mw is not None:
+            try:
+                mw.activateWindow()
+                mw.raise_()
+            except Exception:
+                pass
         scene = self.scene()
         start_dir = scene.get_browse_dir("video") if scene else ""
         path, _ = QFileDialog.getOpenFileName(
-            None,
+            mw,
             "Select Video",
             start_dir,
             "Videos (*.mp4 *.avi *.mov *.mkv *.webm *.wmv *.flv *.m4v)"
         )
+        if was_collapsed and mw is not None:
+            try:
+                mw.toggle_curtains()
+            except Exception:
+                pass
         self._raise_window(win)
         if path:
             if scene:
