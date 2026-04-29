@@ -396,8 +396,26 @@ class ImageNode(BaseNode):
         self.data.image_b64 = base64.b64encode(buf.data().data()).decode("utf-8")
 
     def _open_file_browser(self) -> None:
-        """Open a file dialog to pick an image, starting from the last used directory."""
+        """Open a file dialog to pick an image, starting from the last used directory.
+
+        Mirrors GitNode's commit-dialog choreography — roll up the curtains
+        to reveal the desktop while the explorer dialog is on screen, then
+        roll them back down on close. Same lower/raise dance ensures the
+        always-on-top window doesn't fight the dialog for focus.
+        """
         win = self._lower_window()
+        # Roll curtains up if currently down — restore on dialog close
+        was_collapsed = False
+        mw = None
+        try:
+            views = self.scene().views() if self.scene() else []
+            if views:
+                mw = views[0].window()
+                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
+                    mw.toggle_curtains()
+                    was_collapsed = True
+        except Exception:
+            pass
         start_dir = settings.get_nested("node", "image", "last_dir", "")
         path, _ = QFileDialog.getOpenFileName(
             None,
@@ -405,6 +423,11 @@ class ImageNode(BaseNode):
             start_dir,
             "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tif *.tiff)"
         )
+        if was_collapsed and mw is not None:
+            try:
+                mw.toggle_curtains()
+            except Exception:
+                pass
         self._raise_window(win)
         if path:
             settings.set_nested("node", "image", "last_dir", str(Path(path).parent))
