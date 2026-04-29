@@ -8,7 +8,7 @@
 
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
 from PySide6.QtCore import Qt, QPointF, Signal
-from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QCursor
+from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QCursor, QGuiApplication
 
 
 _IMAGE_EXTENSIONS   = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
@@ -287,8 +287,17 @@ class IntricateView(QGraphicsView):
                 or not grabber.flags()
             ):
                 grabber.ungrabMouse()
-        # Alt+Right-click → Photoshop-style drag zoom
-        if event.button() == Qt.RightButton and event.modifiers() & Qt.AltModifier:
+        # Alt+Right-click → Photoshop-style drag zoom.
+        # `event.modifiers()` is the modifier state Qt cached with the event;
+        # on Windows it sometimes drops the Alt bit (focus changes, IME swaps,
+        # global hooks all interfere). `QGuiApplication.queryKeyboardModifiers()`
+        # polls the OS keyboard state live, so it stays honest. OR them so the
+        # check fires whenever Alt is genuinely held — whichever path Qt
+        # remembered it through. (2026-04-29: alt-zoom regressed because
+        # event.modifiers() started reporting alt:False against a held Alt key;
+        # the live-poll fallback closes that class of failure permanently.)
+        mods = event.modifiers() | QGuiApplication.queryKeyboardModifiers()
+        if event.button() == Qt.RightButton and mods & Qt.AltModifier:
             self._alt_zooming = True
             self._alt_zoom_start_y = event.position().y()
             self.setCursor(Qt.ArrowCursor)
