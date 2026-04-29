@@ -184,35 +184,12 @@ class SequenceNode(BaseNode):
         self.update()
 
     def _open_folder_browser(self) -> None:
-        win = self._lower_window()
-        was_collapsed = False
-        mw = None
-        try:
-            views = self.scene().views() if self.scene() else []
-            if views:
-                mw = views[0].window()
-                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
-                    mw.toggle_curtains()
-                    was_collapsed = True
-        except Exception:
-            pass
-        if mw is not None:
-            try:
-                mw.activateWindow()
-                mw.raise_()
-            except Exception:
-                pass
         scene = self.scene()
         start_dir = scene.get_browse_dir("sequence") if scene else ""
-        folder = QFileDialog.getExistingDirectory(
-            mw, "Select Sequence Folder", start_dir,
-        )
-        if was_collapsed and mw is not None:
-            try:
-                mw.toggle_curtains()
-            except Exception:
-                pass
-        self._raise_window(win)
+        with self._dialog_choreography() as mw:
+            folder = QFileDialog.getExistingDirectory(
+                mw, "Select Sequence Folder", start_dir,
+            )
         if folder:
             if scene:
                 scene.remember_browse_dir("sequence", folder)

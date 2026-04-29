@@ -8,6 +8,7 @@
 
 import time as _time
 import uuid as _uuid
+from contextlib import contextmanager
 from PySide6.QtWidgets import QGraphicsRectItem
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
@@ -1256,6 +1257,50 @@ class BaseNode(QGraphicsRectItem):
             win.setWindowFlags(self._saved_flags)
             win.show()
             win.raise_()
+
+    @contextmanager
+    def _dialog_choreography(self):
+        """Run a modal dialog with Intricate's standard choreography.
+
+        Drops always-on-top, rolls curtains up if currently down, focuses
+        the main window so the dialog spawns with a real owner HWND in
+        front, then restores curtains and always-on-top on exit. Yields
+        the main window (or None if there is no scene/view) so the caller
+        can pass it as the dialog's parent — important on Windows so the
+        native file picker doesn't drift behind another desktop window.
+
+        Usage:
+            with self._dialog_choreography() as mw:
+                path, _ = QFileDialog.getOpenFileName(mw, "Title", start, filter)
+                # use path...
+        """
+        win = self._lower_window()
+        was_collapsed = False
+        mw = None
+        try:
+            views = self.scene().views() if self.scene() else []
+            if views:
+                mw = views[0].window()
+                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
+                    mw.toggle_curtains()
+                    was_collapsed = True
+        except Exception:
+            pass
+        if mw is not None:
+            try:
+                mw.activateWindow()
+                mw.raise_()
+            except Exception:
+                pass
+        try:
+            yield mw
+        finally:
+            if was_collapsed and mw is not None:
+                try:
+                    mw.toggle_curtains()
+                except Exception:
+                    pass
+            self._raise_window(win)
 
     def hoverEnterEvent(self, event):
         if self.behaviour:

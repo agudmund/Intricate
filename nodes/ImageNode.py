@@ -402,45 +402,15 @@ class ImageNode(BaseNode):
         roll them back down on close. Same lower/raise dance ensures the
         always-on-top window doesn't fight the dialog for focus.
         """
-        win = self._lower_window()
-        # Roll curtains up if currently down — restore on dialog close
-        was_collapsed = False
-        mw = None
-        try:
-            views = self.scene().views() if self.scene() else []
-            if views:
-                mw = views[0].window()
-                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
-                    mw.toggle_curtains()
-                    was_collapsed = True
-        except Exception:
-            pass
-        # Reassert focus on the main window before the dialog spawns. The
-        # WindowStaysOnTopHint flip in _lower_window() briefly hide+reshows
-        # the window on Windows, which can drift focus to another desktop
-        # window. A parentless QFileDialog then spawns behind that window
-        # and the user has to alt-tab to find it. Activating mw + parenting
-        # the dialog to it gives the OS file picker a proper owner HWND.
-        if mw is not None:
-            try:
-                mw.activateWindow()
-                mw.raise_()
-            except Exception:
-                pass
         scene = self.scene()
         start_dir = scene.get_browse_dir("image") if scene else ""
-        path, _ = QFileDialog.getOpenFileName(
-            mw,
-            "Select Image",
-            start_dir,
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tif *.tiff)"
-        )
-        if was_collapsed and mw is not None:
-            try:
-                mw.toggle_curtains()
-            except Exception:
-                pass
-        self._raise_window(win)
+        with self._dialog_choreography() as mw:
+            path, _ = QFileDialog.getOpenFileName(
+                mw,
+                "Select Image",
+                start_dir,
+                "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tif *.tiff)"
+            )
         if path:
             if scene:
                 scene.remember_browse_dir("image", str(Path(path).parent))
