@@ -34,7 +34,17 @@ Each category occupies a scrollable tab page built by `_ensure_tab()`.
 - **Scrollbar:** 8px wide, transparent background, handle uses `Theme.primaryBorder` with 4px border radius
 - **Inner widget:** `QWidget`, transparent background
 - **Layout:** `QVBoxLayout` with 20px horizontal margins, 16px vertical margins, 1px item spacing
-- **Tail anchoring:** A stretch item and optional description label are pinned to the bottom via `_tail_count` tracking. New field rows are inserted above the tail so the description always stays at the bottom
+- **Tail anchoring:** A stretch item and the description label are pinned to the bottom via `_tail_count` tracking. New field rows are inserted above the tail so the description always stays at the bottom
+
+## Vertical Rhythm Between Rows
+
+Adjacent rows of the **same control type** sit at the layout's base 1 px spacing — the rhythm reads as a single uniform stride. **Chunk spacers (12 px) are reserved for control-type transitions only**: slider → swatch row, slider → chip row, slider → boolean toggle, etc.
+
+Practical consequence for `_SECTION_FIELD_ORDER`: do not split a homogeneous run of sliders across multiple chunks just to express semantic groups — the chunks would introduce uneven gaps that read as a layout bug. Group all sliders into one chunk and let row order carry the grouping. Reach for chunk spacers only where the control type actually changes.
+
+## Section Description (required)
+
+Every category has a description. It's the small italic note at the bottom that explains what the category does and why a setting might want adjusting. The brief treats descriptions as standard furniture, not an optional flourish — register a string in `_SECTION_DESCRIPTIONS` for every section that ships. Style is covered under **Section Description** below; this section establishes that the entry is **required by default**.
 
 ## Slider Row
 
@@ -91,7 +101,7 @@ Each node type that participates in the depth-toggle feedback pattern exposes a 
 
 ## Section Description
 
-Optional poetic/explanatory text below all fields in a category.
+The required poetic/explanatory text below all fields in a category. See **Section Description (required)** above for the requirement; this section covers the visual style.
 
 - **Widget:** `pretty_label`, 9pt font size
 - **Opacity:** 0.55 (applied via `QGraphicsOpacityEffect`)
