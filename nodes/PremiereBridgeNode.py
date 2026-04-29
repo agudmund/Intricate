@@ -41,6 +41,20 @@ _HANDSHAKE_PENDING = "pending"
 _HANDSHAKE_READY   = "ready"
 _HANDSHAKE_ERROR   = "error"
 
+# Setup-state reasons aren't really errors — the wire is up, Premiere is
+# awake, the user just hasn't yet created the thing the bridge needs to
+# paint on. Treat them as friendly hints (bright-pink "connected" dot,
+# friendlier status line, no scary "ERROR" prefix in the readout) rather
+# than the warm-red error path used for genuine mismatches and exceptions.
+_SETUP_STATE_REASONS = frozenset({"no_project_open", "no_active_sequence"})
+
+# Friendly status-line wording for each setup state — short enough to fit
+# the "connected — …" status pill without truncation.
+_SETUP_STATE_STATUS = {
+    "no_project_open":    "open a project to begin",
+    "no_active_sequence": "create a sequence to begin",
+}
+
 # Heartbeat cadence. 5s is slow enough that it doesn't flood CEP's jsx
 # engine, fast enough that a dead wire is caught inside 15s (3 strikes).
 _HEARTBEAT_MS       = 5000
@@ -258,10 +272,20 @@ class PremiereBridgeNode(BaseNode):
         self.update()
 
     def _on_handshake_error(self, reason: str, details: dict) -> None:
-        """ERROR received — paint red, and chain a poetic AboutNode."""
+        """ERROR received — paint red and chain a poetic AboutNode.
+
+        Setup-state reasons (no_project_open / no_active_sequence) skip
+        the red-error treatment — they're friendly setup hints, not
+        failures. The dot stays bright-pink "connected" and the readout
+        uses encouraging wording.
+        """
         self._handshake_state = _HANDSHAKE_ERROR
         self._heartbeat_timer.stop()
-        logger.info("ERROR — %s (%s)", reason, details)
+        is_setup = reason in _SETUP_STATE_REASONS
+        if is_setup:
+            logger.info("setup hint — %s (%s)", reason, details)
+        else:
+            logger.info("ERROR — %s (%s)", reason, details)
 
         # De-duplicate: only spawn a fresh AboutNode when the reason changes.
         # Re-firing the same error (user clicked 🔄 without fixing anything)
@@ -269,7 +293,10 @@ class PremiereBridgeNode(BaseNode):
         if reason != self._last_error_reason:
             self._spawn_error_about(reason, details)
         self._last_error_reason = reason
-        self._last_ack = "ERROR · " + reason
+        if is_setup:
+            self._last_ack = _SETUP_STATE_STATUS.get(reason, reason)
+        else:
+            self._last_ack = "ERROR · " + reason
         self.update()
 
     def _on_pong_received(self, payload: dict) -> None:
@@ -396,6 +423,11 @@ class PremiereBridgeNode(BaseNode):
         if self._handshake_state == _HANDSHAKE_READY:
             return QColor(_DOT_READY)
         if self._handshake_state == _HANDSHAKE_ERROR:
+            # Setup-state reasons stay on the bright-pink connected dot —
+            # the wire is up and the bridge is happy, the user just hasn't
+            # finished setting Premiere up yet.
+            if self._last_error_reason in _SETUP_STATE_REASONS:
+                return QColor(_DOT_CONNECTED)
             return QColor(_DOT_ERROR)
         return QColor(_DOT_CONNECTED)
 
@@ -406,7 +438,11 @@ class PremiereBridgeNode(BaseNode):
         hs = self._handshake_state
         if hs == _HANDSHAKE_READY:   return "ready — wire is warm"
         if hs == _HANDSHAKE_PENDING: return "connected — handshaking…"
-        if hs == _HANDSHAKE_ERROR:   return "connected but " + (self._last_error_reason or "not happy")
+        if hs == _HANDSHAKE_ERROR:
+            reason = self._last_error_reason
+            if reason in _SETUP_STATE_REASONS:
+                return "connected — " + _SETUP_STATE_STATUS[reason]
+            return "connected but " + (reason or "not happy")
         return "connected"
 
     def paint_content(self, painter: QPainter) -> None:
