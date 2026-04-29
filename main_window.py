@@ -1885,6 +1885,10 @@ class IntricateApp(QMainWindow):
         self._joy_buckets_watcher = joy_buckets.JoyBucketsWatcher(self)
         self._joy_buckets_watcher.changed.connect(self._on_joy_buckets_external_change)
         self._joy_happy_secs   = _joy_state.load()["happy_secs"]
+        # Live external-edit pickup for joy_state.json — Settlers writes
+        # bar-value overrides through this watcher, no restart needed.
+        self._joy_state_watcher = _joy_state.JoyStateWatcher(self)
+        self._joy_state_watcher.changed.connect(self._on_joy_state_external_change)
         self._joy_bucket_label = pretty_label(
             str(self._joy_bucket_count),
             alignment=Qt.AlignCenter,
@@ -2144,11 +2148,41 @@ class IntricateApp(QMainWindow):
 
     def _on_joy_buckets_external_change(self, new_value: int) -> None:
         """Fired when joy_buckets.txt is edited from outside the running
-        process (e.g., hand-tweak from a chat session). Sync the in-memory
-        count and the label so the UI reflects the new value immediately."""
+        process (e.g., hand-tweak from a chat session, or a Settlers
+        bucket-override slider). Sync the in-memory count and the label
+        so the UI reflects the new value immediately."""
         self._joy_bucket_count = new_value
         self._joy_bucket_label.setText(str(new_value))
         self._joy_bucket_label.setToolTip(self._joy_bucket_tooltip())
+
+    def _on_joy_state_external_change(self, state: dict) -> None:
+        """Fired when joy_state.json is edited from outside the running
+        process (Settlers bar-value override, or hand-edit). Apply the
+        new bar value live and re-seat the happy accumulator. Skip the
+        write-back loop — _persist_happy will resave on its own cycle.
+
+        bar_value is the user-visible tuning knob. happy_secs is the
+        internal accumulator; we honour an external override of it too
+        so the GDC-style 'jump to N seconds toward next bucket' test
+        scenario works, but the typical Settlers slider only writes
+        bar_value."""
+        new_bar = int(state.get("bar_value", self.joy_bar.value()))
+        new_secs = float(state.get("happy_secs", self._joy_happy_secs))
+        # Block the bar's own valueChanged-driven side effects since this
+        # write originates externally and shouldn't re-arm grace logic.
+        self.joy_bar.blockSignals(True)
+        self.joy_bar.setValue(max(0, min(100, new_bar)))
+        self.joy_bar.blockSignals(False)
+        self._joy_happy_secs = new_secs
+        # Fresh full bar should re-arm grace; less than full should clear
+        # any grace state so depletion resumes naturally.
+        if self.joy_bar.value() == 100 and not self._joy_in_grace:
+            self._begin_grace()
+        elif self.joy_bar.value() < 100 and self._joy_in_grace:
+            self._joy_in_grace = False
+            self._joy_grace_remaining = 0.0
+            self._happy_timer.stop()
+        self.update()
 
     def _deplete_joy(self) -> None:
         """Drain 1% from the joy bucket. Meow with escalating urgency.

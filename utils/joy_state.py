@@ -21,6 +21,8 @@
 import json
 from pathlib import Path
 
+from PySide6.QtCore import QObject, QFileSystemWatcher, Signal
+
 
 _STORE = Path(__file__).resolve().parent.parent / "Documents" / "Data" / "joy_state.json"
 
@@ -51,3 +53,35 @@ def save(happy_secs: float, bar_value: int) -> None:
         "bar_value":  int(bar_value),
     }
     _STORE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+class JoyStateWatcher(QObject):
+    """Watch the sidecar for external changes and emit the new state.
+
+    "External" means any write not originating from the running Intricate
+    instance — typically a Settlers slider drag, or a hand-edit from a
+    chat session. The watcher lets the running app pick up such tweaks
+    live instead of overwriting them on the next _persist_happy tick.
+
+    Mirrors JoyBucketsWatcher in utils/joy_buckets.py — same defensive
+    re-add-on-change pattern (some editors save by delete+rename, which
+    drops the watch handle), same idempotent ensure-watched flow.
+    """
+    changed = Signal(dict)
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._watcher = QFileSystemWatcher(self)
+        self._ensure_watched()
+        self._watcher.fileChanged.connect(self._on_file_changed)
+
+    def _ensure_watched(self) -> None:
+        if not _STORE.exists():
+            save(0.0, 100)
+        path = str(_STORE)
+        if path not in self._watcher.files():
+            self._watcher.addPath(path)
+
+    def _on_file_changed(self, _path: str) -> None:
+        self._ensure_watched()
+        self.changed.emit(load())
