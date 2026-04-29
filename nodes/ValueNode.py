@@ -321,13 +321,31 @@ class ValueNode(ChromelessRoot):
     # LIFECYCLE — extends ChromelessRoot teardown with slider cleanup
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _quiet_for_shake(self) -> None:
+        """Synchronous quieting before the deferred-remove window.
+
+        Severs the slider's valueChanged signal so a scrub landing
+        between shake-fire and removeItem can't dispatch _seek onto
+        a node that's about to vanish. The crew also disconnects
+        valueChanged via _demolition_pre, but that runs AFTER scene-
+        leave; this method closes the interim race.
+        """
+        super()._quiet_for_shake()
+        if self._slider:
+            try:
+                self._slider.valueChanged.disconnect(self._seek)
+            except (RuntimeError, TypeError):
+                pass
+
     def _demolition_pre(self) -> None:
         # Root disconnects viewport tracking first — call super so that
         # runs before the slider proxy is torn down by the crew.
         super()._demolition_pre()
-        # Disconnect valueChanged before the proxy teardown (the slider
-        # is the proxy's inner widget and the crew tears it down with
-        # setParent(None) + deleteLater() during the proxy walk).
+        # Disconnect valueChanged before the proxy teardown (idempotent
+        # with _quiet_for_shake — disconnect raises TypeError on a wire
+        # that's already severed, which we catch). The slider is the
+        # proxy's inner widget and the crew tears it down with
+        # setParent(None) + deleteLater() during the proxy walk.
         if self._slider:
             try:
                 self._slider.valueChanged.disconnect(self._seek)

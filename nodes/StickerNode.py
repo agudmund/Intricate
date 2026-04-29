@@ -431,13 +431,10 @@ class StickerNode(ChromelessRoot):
     # crew. Root also holds _removal_done + the _on_viewport_changed
     # race guard that used to live here.
 
-    def _quiet_for_shake(self) -> None:
-        """Synchronously silence viewport tracking before the deferred-
-        removeItem window opens.  Without this, a viewTransformed or
-        scrollbar tick landing between shake-start and removeItem can
-        collide with the destructor and fastfail the process (0xc0000409,
-        2026-04-18)."""
-        self._disconnect_viewport_tracking()
+    # _quiet_for_shake — inherited from ChromelessRoot. Default body
+    # disconnects viewport tracking, which is exactly what we need.
+    # The 2026-04-18 0xc0000409 fix that originated here has been lifted
+    # to the root so the entire chromeless family gets it for free.
 
     def _demolition_pre(self) -> None:
         """Sever viewport tracking (via super) and release the pixmap

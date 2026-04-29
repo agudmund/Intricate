@@ -20,6 +20,44 @@ Running log of node-type cleanup fixes applied to `_prepare_for_removal()` acros
 
 ## Fix Log
 
+### 2026-04-29 — Chromeless family pre-shake quieting (audit-driven)
+
+**Symptom:** None observed yet — audit-driven, not crash-driven. Found while running the compliance pass on the chromeless family (ChromelessRoot, StickerNode, JoyStatsNode, ValueNode).
+
+**Root cause.** `ChromelessRoot._on_shake_triggered` schedules `removeItem` for the next event-loop tick:
+
+```python
+QTimer.singleShot(0, lambda s=scene: s.removeItem(self) if s else None)
+```
+
+Between the shake firing and the deferred-remove tick executing, anything that ticks in that window can land on a node about to vanish:
+
+- viewport-tracking signals (`viewTransformed`, scrollbar `valueChanged`) on pinned nodes
+- JoyStatsNode's 1-second `_poll_timer.timeout` → `_refresh`
+- ValueNode's `_slider.valueChanged` if the user is mid-scrub
+
+The 2026-04-18 incident on StickerNode (0xc0000409 fastfail at the same offset as HealthNode's bug) was solved by adding a `_quiet_for_shake()` override that synchronously severed viewport tracking before the deferred-remove window opened. The pattern was never lifted to the root, so JoyStats and Value were exposed to the same race — latent only because their inline RuntimeError guards in `_refresh` and the rarity of mid-scrub shakes saved them.
+
+**Fix applied.**
+
+| Step | What | Why |
+|------|------|-----|
+| 1 | Added a default `_quiet_for_shake()` body to `ChromelessRoot` — calls `_disconnect_viewport_tracking()` | Every chromeless node has the pin contract; default body covers the common case |
+| 2 | Inserted `self._quiet_for_shake()` call at the top of `ChromelessRoot._on_shake_triggered` before the `sprinkle`/`arm_cooldown`/scheduled `removeItem` sequence | Closes the race window for all chromeless nodes that use the default shake path |
+| 3 | Dropped `StickerNode._quiet_for_shake` (now inherits from root) | Eliminates duplicate logic; sticker behaves identically |
+| 4 | Added `_quiet_for_shake` override on `JoyStatsNode` — stops `_poll_timer` synchronously, then `super()` | Closes the race for the orphan poll timer |
+| 5 | Added `_quiet_for_shake` override on `ValueNode` — disconnects `_slider.valueChanged` synchronously, then `super()` | Closes the race for mid-scrub shakes |
+
+**Parallel to `_demolition_pre` but a distinct lifecycle moment:**
+- `_quiet_for_shake` runs *before* the deferred-remove is scheduled — closes the 1-tick interim race
+- `_demolition_pre` runs *after* the scene-leave actually fires — full teardown
+
+Both are needed. The crew tears everything down, but only after the deferred-remove tick executes; `_quiet_for_shake` covers the interim.
+
+**Verification:** None reproducible — this is preventative, the bug is latent. Will be confirmed in the field by absence of `0xc0000409` reports referencing JoyStats or Value over time.
+
+**Lesson.** When a fix lands on a subclass to address a class of race condition that the parent class enables, the fix belongs on the parent. StickerNode's `_quiet_for_shake` was correct in shape but wrong in location — every future chromeless descendant would have had to remember to add it, and JoyStats and Value didn't.
+
 ### 2026-04-23 — Singleton lock listener thread (process-level, not a node)
 
 **Symptom:** Application Error in Windows Event Viewer after app close. `pythonw.exe` 3.13, faulting module `python313.dll`, exception `0xc0000005` at offset `0x4aa0e`. No Python traceback in the log; the Qt paint loop is not involved — the fault is inside CPython itself.

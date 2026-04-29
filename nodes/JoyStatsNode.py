@@ -265,6 +265,22 @@ class JoyStatsNode(ChromelessRoot):
     # off to the same crew that BaseNode uses.
     _demolition_timers = [('_poll_timer', '_refresh')]
 
+    def _quiet_for_shake(self) -> None:
+        """Synchronous quieting before the deferred-remove window.
+
+        Stops the 1-second poll timer so a tick landing between shake-
+        fire and removeItem can't dispatch _refresh onto a node that's
+        about to vanish. The demolition crew also tears the timer down
+        via _demolition_timers, but that runs AFTER scene-leave; this
+        method closes the interim race.
+        """
+        super()._quiet_for_shake()
+        try:
+            self._poll_timer.stop()
+            _log.log(TRACE, "[joy-quiet] %s _poll_timer stopped", self._log_id())
+        except (RuntimeError, AttributeError):
+            pass
+
     def _demolition_pre(self) -> None:
         """Log entry/exit around the teardown so the cross-node-destruction
         incident (2026-04-22) leaves a full paper trail. super() does the

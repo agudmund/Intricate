@@ -603,13 +603,45 @@ class ChromelessRoot(QGraphicsRectItem):
     # SHAKE-DELETE
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _quiet_for_shake(self) -> None:
+        """Synchronous quieting before the deferred-removeItem window.
+
+        The ``QTimer.singleShot(0, removeItem)`` in ``_on_shake_triggered``
+        creates a 1-tick window between the shake firing and the node
+        actually leaving the scene. Anything that ticks in that window —
+        viewport-tracking signals, poll timers, slider scrubs — can land
+        on a node about to vanish and collide with its destructor
+        (0xc0000409 fastfail, 2026-04-18 incident on StickerNode).
+
+        This default body severs viewport tracking, which every
+        chromeless node uses (it's the root's pin contract). Subclasses
+        with their own moving parts override this and call ``super()``::
+
+            def _quiet_for_shake(self):
+                super()._quiet_for_shake()
+                self._poll_timer.stop()
+                # ... type-specific synchronous quieting
+
+        Parallel to ``_demolition_pre`` but fires at a different
+        moment: ``_quiet_for_shake`` runs *before* the deferred-remove
+        is scheduled; ``_demolition_pre`` runs *after* the scene-leave
+        actually happens. Both are needed — the demolition crew tears
+        everything down, but only after the deferred-remove tick
+        executes; this method closes the race in that interim.
+        """
+        logger.log(TRACE, "[chrome-quiet] %s _quiet_for_shake — disconnecting viewport tracking",
+                   self._log_id())
+        self._disconnect_viewport_tracking()
+
     def _on_shake_triggered(self) -> None:
-        """Default shake-delete: particle burst + scene removal.
+        """Default shake-delete: synchronous quiet + particle burst + scene removal.
 
         Subclasses can override to customise (e.g., StickerNode chooses
         between ``sprinkle`` and ``orbital_burst`` based on alpha
         coverage). When overriding, keep the cooldown arm so rapid
         successive shakes don't cascade-delete neighbouring nodes.
+        Subclasses that override should also call ``_quiet_for_shake``
+        before scheduling the removeItem.
         """
         logger.info("[chrome-SHAKE] %s SHAKE TRIGGERED (already_triggered=%s removal_done=%s)",
                     self._log_id(), self._shake_triggered, self._removal_done)
@@ -625,6 +657,12 @@ class ChromelessRoot(QGraphicsRectItem):
         if scene is None:
             logger.warning("[chrome-SHAKE] %s BAIL — no scene", self._log_id())
             return
+        # Synchronous quieting BEFORE the deferred-remove tick — closes
+        # the race window where signals can land on a node about to vanish.
+        try:
+            self._quiet_for_shake()
+        except Exception:
+            logger.exception("[chrome-SHAKE] %s _quiet_for_shake raised", self._log_id())
         from graphics.Particles import sprinkle
         center = self.mapToScene(self.rect().center())
         logger.info("[chrome-SHAKE] %s → sprinkle + arm_cooldown + schedule removeItem",
