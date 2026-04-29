@@ -18,7 +18,6 @@ from data.CodeNodeData import CodeNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyEdit import PrettyEdit
 from pretty_widgets.utils.logger import setup_logger
-import pretty_widgets.utils.settings as settings
 
 _log = setup_logger("code")
 
@@ -242,7 +241,8 @@ class CodeNode(BaseNode):
     def _open_file_browser(self) -> None:
         """Open a file dialog to pick a code file."""
         win = self._lower_window()
-        start_dir = settings.get_nested("node", "code", "last_dir", "")
+        scene = self.scene()
+        start_dir = scene.get_browse_dir("code") if scene else ""
         path, _ = QFileDialog.getOpenFileName(
             None,
             "Select Code File",
@@ -251,7 +251,8 @@ class CodeNode(BaseNode):
         )
         self._raise_window(win)
         if path:
-            settings.set_nested("node", "code", "last_dir", str(Path(path).parent))
+            if scene:
+                scene.remember_browse_dir("code", str(Path(path).parent))
             self.load_from_path(path)
 
     # ─────────────────────────────────────────────────────────────────────────

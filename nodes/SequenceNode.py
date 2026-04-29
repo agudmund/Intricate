@@ -17,7 +17,6 @@ from PySide6.QtGui import QPainter, QPixmap, QColor, QPen, QPainterPath, QFont
 from nodes.BaseNode import BaseNode
 from data.SequenceNodeData import SequenceNodeData
 from pretty_widgets.graphics.Theme import Theme
-import pretty_widgets.utils.settings as settings
 
 
 # Layout constants
@@ -186,13 +185,15 @@ class SequenceNode(BaseNode):
 
     def _open_folder_browser(self) -> None:
         win = self._lower_window()
-        start_dir = settings.get_nested("node", "sequence", "last_dir", "")
+        scene = self.scene()
+        start_dir = scene.get_browse_dir("sequence") if scene else ""
         folder = QFileDialog.getExistingDirectory(
             None, "Select Sequence Folder", start_dir,
         )
         self._raise_window(win)
         if folder:
-            settings.set_nested("node", "sequence", "last_dir", folder)
+            if scene:
+                scene.remember_browse_dir("sequence", folder)
             self._scan_folder(folder)
             if self._frames:
                 self._seek(0)

@@ -8,6 +8,7 @@
 
 import ctypes
 import ctypes.wintypes as wt
+from pathlib import Path
 
 from PySide6.QtWidgets import QGraphicsScene
 from PySide6.QtCore import QPointF, QTimer
@@ -109,6 +110,16 @@ class IntricateScene(QGraphicsScene):
         self._back_z_top  = -10.0
         self._front_z_top =  10.0
 
+        # Per-session browse memory. Keyed by node-type string ("image",
+        # "audio", "video", "code", "sequence"). Persisted with the session
+        # so each project remembers its own folder rhythm. Set on load,
+        # written on save. _session_root is the project root derived from
+        # the loaded session path — used as the cold-start fallback so the
+        # first browse of a fresh session lands inside the session's own
+        # folder, not in whichever folder the previous session ended in.
+        self._last_browse_dirs: dict[str, str] = {}
+        self._session_root: Path | None = None
+
     def helpEvent(self, event) -> None:
         """Route scene item tooltips through PrettyTooltip instead of native rendering."""
         item = self.itemAt(event.scenePos(), self.views()[0].transform() if self.views() else __import__('PySide6.QtGui', fromlist=['QTransform']).QTransform())
@@ -125,6 +136,30 @@ class IntricateScene(QGraphicsScene):
         if t.isVisible():
             t.hide()
         event.accept()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # PER-SESSION BROWSE MEMORY
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def get_browse_dir(self, node_type: str) -> str:
+        """Resolve the start directory for a file browser opened from a node.
+
+        Resolution order:
+          1. The session's own remembered directory for this node type
+          2. The session's project root (cold-start fallback for fresh sessions)
+          3. Empty string — let Qt pick its platform default
+        """
+        remembered = self._last_browse_dirs.get(node_type, "")
+        if remembered and Path(remembered).exists():
+            return remembered
+        if self._session_root and self._session_root.exists():
+            return str(self._session_root)
+        return ""
+
+    def remember_browse_dir(self, node_type: str, dir_path: str) -> None:
+        """Stamp the session's last-browse memory for this node type."""
+        if dir_path:
+            self._last_browse_dirs[node_type] = str(dir_path)
 
     def raise_node(self, node) -> None:
         """Bring node to the top of its z-tier (back or front)."""
@@ -888,6 +923,7 @@ class IntricateScene(QGraphicsScene):
             "connections": connections,
             "viewport":    viewport or {},
             "ui_migrations": getattr(self, "_ui_migrations", []),
+            "last_browse_dirs": dict(self._last_browse_dirs),
         })
 
         # Garbage-collect orphaned media cache files. Shared cache dir covers
@@ -939,6 +975,17 @@ class IntricateScene(QGraphicsScene):
 
         # Store session description for round-trip persistence
         self._session_description = payload.get("description", "")
+
+        # Per-session browse-dir memory + project root (cold-start fallback).
+        raw_dirs = payload.get("last_browse_dirs", {}) or {}
+        self._last_browse_dirs = {
+            str(k): str(v) for k, v in raw_dirs.items() if isinstance(v, str)
+        }
+        try:
+            from utils.persistence.session import project_root_from_session
+            self._session_root = project_root_from_session(Path(str(path)))
+        except Exception:
+            self._session_root = None
 
         # ── UI migrations ─────────────────────────────────────────────────────
         # One-shot in-place fixes to node dicts before from_dict() sees them.

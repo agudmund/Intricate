@@ -18,7 +18,6 @@ from nodes.BaseNode import BaseNode
 from data.AudioNodeData import AudioNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.utils.logger import setup_logger
-import pretty_widgets.utils.settings as settings
 
 _log = setup_logger("audio_node")
 
@@ -261,12 +260,14 @@ class AudioNode(BaseNode):
         _log.info(f"[AudioNode] split '{stem}' at {split_s:.3f}s → {part_a.name}, {part_b.name}")
 
     def _open_file_browser(self) -> None:
-        start_dir = settings.get_nested("node", "audio", "last_dir", "")
+        scene = self.scene()
+        start_dir = scene.get_browse_dir("audio") if scene else ""
         path, _ = QFileDialog.getOpenFileName(
             None, "Select Audio", start_dir, _AUDIO_EXTENSIONS
         )
         if path:
-            settings.set_nested("node", "audio", "last_dir", str(Path(path).parent))
+            if scene:
+                scene.remember_browse_dir("audio", str(Path(path).parent))
             self.load_from_path(path)
 
     # ─────────────────────────────────────────────────────────────────────────

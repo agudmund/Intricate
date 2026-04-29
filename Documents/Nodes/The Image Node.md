@@ -19,7 +19,7 @@ It is not a cat photo widget. It is a cat photo widget backed by infrastructure 
 ### Three Ways to Create
 
 1. **Drag-and-drop from Explorer** — `IntricateView.dropEvent` creates an empty ImageNode and calls `load_from_path`
-2. **Double-click an empty image area** — opens a file browser starting at the last used directory (`[node.image.last_dir]` in settings)
+2. **Double-click an empty image area** — opens a file browser. Start directory comes from `Scene.get_browse_dir("image")`: the session's own remembered folder if present, else the session's project root (cold-start default), else Qt's platform default. Persisted per session in `last_browse_dirs` inside the session JSON — image work is per-session activity, so the memory lives where it belongs
 3. **Session restore** — `from_dict` rebuilds the data, `__init__` fires a worker to load from cache, source, or legacy base64 blob
 
 All three converge on the same async pipeline.

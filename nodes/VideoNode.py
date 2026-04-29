@@ -19,7 +19,6 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink, QVideoF
 from nodes.BaseNode import BaseNode
 from data.VideoNodeData import VideoNodeData
 from pretty_widgets.graphics.Theme import Theme
-import pretty_widgets.utils.settings as settings
 from pretty_widgets.utils.logger import setup_logger
 
 logger = setup_logger("video")
@@ -520,7 +519,8 @@ class VideoNode(BaseNode):
 
     def _open_file_browser(self) -> None:
         win = self._lower_window()
-        start_dir = settings.get_nested("node", "video", "last_dir", "")
+        scene = self.scene()
+        start_dir = scene.get_browse_dir("video") if scene else ""
         path, _ = QFileDialog.getOpenFileName(
             None,
             "Select Video",
@@ -529,7 +529,8 @@ class VideoNode(BaseNode):
         )
         self._raise_window(win)
         if path:
-            settings.set_nested("node", "video", "last_dir", str(Path(path).parent))
+            if scene:
+                scene.remember_browse_dir("video", str(Path(path).parent))
             self.load_from_path(path)
 
     # ─────────────────────────────────────────────────────────────────────────

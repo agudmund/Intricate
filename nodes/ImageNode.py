@@ -20,7 +20,6 @@ from PySide6.QtGui import (
 from nodes.BaseNode import BaseNode
 from data.ImageNodeData import ImageNodeData
 from pretty_widgets.graphics.Theme import Theme
-import pretty_widgets.utils.settings as settings
 from pretty_widgets.utils.logger import setup_logger
 
 logger = setup_logger("image")
@@ -416,7 +415,8 @@ class ImageNode(BaseNode):
                     was_collapsed = True
         except Exception:
             pass
-        start_dir = settings.get_nested("node", "image", "last_dir", "")
+        scene = self.scene()
+        start_dir = scene.get_browse_dir("image") if scene else ""
         path, _ = QFileDialog.getOpenFileName(
             None,
             "Select Image",
@@ -430,7 +430,8 @@ class ImageNode(BaseNode):
                 pass
         self._raise_window(win)
         if path:
-            settings.set_nested("node", "image", "last_dir", str(Path(path).parent))
+            if scene:
+                scene.remember_browse_dir("image", str(Path(path).parent))
             self.load_from_path(path)
 
     # ─────────────────────────────────────────────────────────────────────────
