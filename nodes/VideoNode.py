@@ -69,6 +69,13 @@ class VideoNode(BaseNode):
 
     _show_ports_btn = False   # ports toggle hidden — re-enable for debug
     _has_depth_toggle = True
+    # Resize zone is a 128×128 square centered exactly on the bottom-right
+    # corner — 64 px inward into the body and 64 px outward past the rect.
+    # The symmetry is the point: when working fast, the cursor lands
+    # "approximately at the corner" with high tolerance in either direction,
+    # and either side of the literal corner edge feels equally responsive.
+    _resize_grip = 64
+    _resize_overreach = 64
 
     def __init__(self, data: VideoNodeData | None = None):
         if data is None:
@@ -117,11 +124,17 @@ class VideoNode(BaseNode):
         self._volume_anim: QPropertyAnimation | None = None
         self._target_volume: float = data.volume / 100.0  # user's intended volume
 
-        # Button row starts hidden — double-click the top strip to reveal
+        # Button row starts hidden. Reveal is bound to the resize gesture
+        # (mirrors AboutNode): drag the bottom-right corner downward past
+        # the reveal threshold to surface the shelf, drag back upward past
+        # the hide threshold to tuck it away. The top strip's previous
+        # double-click toggle is gone — see _RESIZE_SHELF_*_THRESHOLD and
+        # mouseMoveEvent below.
         self._buttons_visible = False
         self._anim_top_offset = 8.0
         for btn in self._buttons:
             btn.hide()
+        self._shelf_anchor_h: float | None = None
 
         # Background cache/drift delivery flags — polled by main-thread timer.
         # Same pattern as ImageNode's _pending_pixmap / _pending_cache_key.
@@ -151,12 +164,17 @@ class VideoNode(BaseNode):
         return _BUTTON_ZONE_H if self._buttons_visible else 15.0
 
     def _progress_rect(self) -> QRectF:
+        # Progress bar ends short of the resize zone so a quick resize-grab
+        # doesn't snag the scrub. Mirrors AudioNode's "right-side breathing
+        # room" pattern. The end-of-bar marker is painted at this right
+        # edge in paint_content so the truncation is legible to the user.
         r = self.rect()
         vol_reserve = PROGRESS_HEIGHT + VIDEO_PADDING if self._buttons_visible else 0.0
+        right_margin = self._resize_grip + VIDEO_PADDING
         return QRectF(
             r.x() + VIDEO_PADDING + vol_reserve,
             r.bottom() - PROGRESS_HEIGHT - VIDEO_PADDING,
-            r.width() - VIDEO_PADDING * 2 - vol_reserve,
+            r.width() - VIDEO_PADDING - right_margin - vol_reserve,
             PROGRESS_HEIGHT,
         )
 
@@ -567,12 +585,15 @@ class VideoNode(BaseNode):
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Resize-driven shelf reveal (mirrors AboutNode) ───────────────────────
+    # Asymmetric thresholds: reveal demands a deliberate yank so a casual
+    # height nudge doesn't surface the shelf by accident; hide is lighter so
+    # the user can dial the final height down without the shelf clinging.
+    # Same values AboutNode uses — the gesture feels the same on both nodes.
+    _RESIZE_SHELF_REVEAL_THRESHOLD = 75.0
+    _RESIZE_SHELF_HIDE_THRESHOLD   = 30.0
+
     def mouseDoubleClickEvent(self, event) -> None:
-        # Top strip above the video area — animated shelf toggle
-        if event.pos().y() < self.rect().top() + self._top_offset():
-            self._toggle_shelf()
-            event.accept()
-            return
         if self._video_rect().contains(event.pos()):
             if self.data.source_path:
                 self._toggle_playback()
@@ -583,6 +604,11 @@ class VideoNode(BaseNode):
         super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event) -> None:
+        # Seed the shelf anchor at the start of any drag so the resize-driven
+        # threshold check measures from press-time height. Done unconditionally
+        # so a press anywhere on the node primes the gesture.
+        self._shelf_anchor_h = self.rect().height()
+
         pos = event.pos()
         if self._buttons_visible and event.button() == Qt.LeftButton:
             if self._volume_rect().contains(pos):
@@ -590,7 +616,17 @@ class VideoNode(BaseNode):
                 self._volume_scrub_to(pos.y())
                 event.accept()
                 return
-            if self._progress_rect().contains(pos):
+            # The resize handle lives in the bottom-right corner. Skip our
+            # own progress-scrub handling inside the resize zone so super()
+            # (BaseNode) gets the click and starts a resize. Without this,
+            # progress scrub eats every corner click and resize is dead.
+            rect = self.rect()
+            grip = self._resize_grip
+            in_resize_zone = (
+                pos.x() >= rect.right()  - grip
+                and pos.y() >= rect.bottom() - grip
+            )
+            if not in_resize_zone and self._progress_rect().contains(pos):
                 self._scrubbing = True
                 self._was_playing = (
                     self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
@@ -611,7 +647,28 @@ class VideoNode(BaseNode):
             self._scrub_to(event.pos().x())
             event.accept()
             return
+
+        # Defer to BaseNode first so the resize actually happens and
+        # self.rect() reflects the updated geometry before we inspect it.
         super().mouseMoveEvent(event)
+
+        # ── Bidirectional shelf coupling via resize ───────────────────────
+        # Resize direction drives shelf state:
+        #   • growing taller past the reveal threshold → reveal
+        #   • shrinking shorter past the hide threshold → hide
+        # Anchor is re-seeded after every toggle so a single continuous
+        # drag can flip the shelf multiple times.
+        if not self._is_resizing:
+            return
+        if self._shelf_anchor_h is None:
+            self._shelf_anchor_h = self.rect().height()
+        delta_h = self.rect().height() - self._shelf_anchor_h
+        if not self._buttons_visible and delta_h > self._RESIZE_SHELF_REVEAL_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
+        elif self._buttons_visible and delta_h < -self._RESIZE_SHELF_HIDE_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
 
     def mouseReleaseEvent(self, event) -> None:
         if self._volume_scrubbing and event.button() == Qt.LeftButton:
@@ -750,6 +807,19 @@ class VideoNode(BaseNode):
                 grad.setColorAt(1.0, QColor("#d87a9e"))
                 painter.setBrush(grad)
                 painter.drawRoundedRect(fill_rect, 3, 3)
+
+            # End-of-bar marker — short vertical tick at the right edge of
+            # the progress bar so the truncation (made room for resize) is
+            # legible. Same shape as AudioNode's marker; placeholder visual
+            # until a finer cue is authored.
+            marker_pen = QPen(QColor(Theme.textPrimary), 3)
+            painter.setPen(marker_pen)
+            painter.setBrush(Qt.NoBrush)
+            end_x = pr.right()
+            painter.drawLine(
+                int(end_x), int(pr.top()    - 4),
+                int(end_x), int(pr.bottom() + 4),
+            )
 
             # ── Volume slider (vertical, left of video) ──────────────────────
             vol_r = self._volume_rect()
