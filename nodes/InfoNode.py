@@ -25,13 +25,12 @@ class InfoNode(BaseNode):
 
     _BODY_LINES = [
         "A gentle nodal space where thoughts interlink ideas transitioning thoughts to things",
-        "",
         "A creative space where the next breath of air found room to grow into all that it could become",
         "",
         "Built using a single shared braincell",
         "By Yours Truly and various Intelligences",
         "",
-        "    For enjoying",
+        "    For Enjoying",
     ]
 
     def __init__(self, data: InfoNodeData | None = None):
