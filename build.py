@@ -184,7 +184,7 @@ def buildApp():
 
     manifest_path = _RUNTIME_DIR / "manifest.json"
     if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         print(f"Shared runtime: {manifest.get('hash', '?')} "
               f"(PySide6 {manifest.get('PySide6', '?')}, "
               f"pretty_widgets {manifest.get('pretty_widgets', '?')})")
