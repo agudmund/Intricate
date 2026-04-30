@@ -218,7 +218,7 @@ class VideoNode(BaseNode):
     # MEDIA PLAYER
     # ─────────────────────────────────────────────────────────────────────────
 
-    def load_from_path(self, path: str | Path) -> None:
+    def load_from_path(self, path: str | Path, *, autoplay: bool = False) -> None:
         """Load a video from a file path. Public — called by file browser and View.dropEvent.
 
         Playback starts immediately from the source path so the user never waits
@@ -226,6 +226,12 @@ class VideoNode(BaseNode):
         into the media cache and stamps data.cache_key on completion. From
         that moment on the graph knows about the video and can restore it
         even if the source file later moves or disappears.
+
+        `autoplay=True` overrides the default paused-on-load behaviour for
+        callers that need an immediately-rolling clip (e.g. GitNode's
+        progress-bar plushie, where a paused progress bar would be silly).
+        Loop semantics are still driven by `data.looping` set before this
+        call.
         """
         path = Path(path)
         if not path.exists():
@@ -237,6 +243,8 @@ class VideoNode(BaseNode):
         logger.info(f"video loaded: {path.name}")
         # Fire-and-forget cache ingestion. See _check_cache_delivery for pickup.
         self._start_cache_ingest(path)
+        if autoplay:
+            self._player.play()
 
     def _set_source(self, path: Path, restore_pos: int = 0) -> None:
         self.data.source_path = str(path.resolve())

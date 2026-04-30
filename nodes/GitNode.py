@@ -332,7 +332,7 @@ class GitNode(BaseNode):
         # away. Default VideoNode behaviour (single play, paused on load)
         # would leave the user staring at frame zero with no indication
         # that anything is happening.
-        video_node.data.loop_mode = "loop"
+        video_node.data.looping = True
         if spawn_pos is not None:
             video_node.setPos(spawn_pos)
         scene.addItem(video_node)
