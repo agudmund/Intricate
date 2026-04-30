@@ -9,6 +9,7 @@
 import ctypes
 import ctypes.wintypes as wt
 import os
+import sys
 
 from pretty_widgets.utils.logger import setup_logger
 
@@ -17,44 +18,56 @@ logger = setup_logger("window_behind")
 # ─────────────────────────────────────────────────────────────────────────────
 # WIN32 SETUP — explicit argtypes for 64-bit pointer safety
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Platform-guarded: ctypes.WinDLL only exists on Windows.  On Linux/macOS the
+# module still imports cleanly (so anything that imports it doesn't blow up
+# the whole app at boot) but every public function short-circuits to a None
+# result.  EC2 Era headless backends never need to know what's behind a
+# window — there isn't one — so a quiet None is the right answer there.
 
-user32   = ctypes.WinDLL("user32",   use_last_error=True)
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+if sys.platform == "win32":
+    user32   = ctypes.WinDLL("user32",   use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
-GW_HWNDNEXT = 2
-PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    GW_HWNDNEXT = 2
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
-user32.GetWindow.restype  = ctypes.c_void_p
-user32.GetWindow.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+    user32.GetWindow.restype  = ctypes.c_void_p
+    user32.GetWindow.argtypes = [ctypes.c_void_p, ctypes.c_uint]
 
-user32.IsWindowVisible.restype  = wt.BOOL
-user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
+    user32.IsWindowVisible.restype  = wt.BOOL
+    user32.IsWindowVisible.argtypes = [ctypes.c_void_p]
 
-user32.IsIconic.restype  = wt.BOOL
-user32.IsIconic.argtypes = [ctypes.c_void_p]
+    user32.IsIconic.restype  = wt.BOOL
+    user32.IsIconic.argtypes = [ctypes.c_void_p]
 
-user32.GetWindowTextW.restype  = ctypes.c_int
-user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+    user32.GetWindowTextW.restype  = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
 
-user32.GetWindowTextLengthW.restype  = ctypes.c_int
-user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
+    user32.GetWindowTextLengthW.restype  = ctypes.c_int
+    user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
 
-user32.GetWindowRect.restype  = wt.BOOL
-user32.GetWindowRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.RECT)]
+    user32.GetWindowRect.restype  = wt.BOOL
+    user32.GetWindowRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.RECT)]
 
-user32.GetWindowThreadProcessId.restype  = wt.DWORD
-user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.DWORD)]
+    user32.GetWindowThreadProcessId.restype  = wt.DWORD
+    user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.DWORD)]
 
-kernel32.OpenProcess.restype  = ctypes.c_void_p
-kernel32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+    kernel32.OpenProcess.restype  = ctypes.c_void_p
+    kernel32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
 
-kernel32.QueryFullProcessImageNameW.restype  = wt.BOOL
-kernel32.QueryFullProcessImageNameW.argtypes = [
-    ctypes.c_void_p, wt.DWORD, ctypes.c_wchar_p, ctypes.POINTER(wt.DWORD)
-]
+    kernel32.QueryFullProcessImageNameW.restype  = wt.BOOL
+    kernel32.QueryFullProcessImageNameW.argtypes = [
+        ctypes.c_void_p, wt.DWORD, ctypes.c_wchar_p, ctypes.POINTER(wt.DWORD)
+    ]
 
-kernel32.CloseHandle.restype  = wt.BOOL
-kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype  = wt.BOOL
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+else:
+    user32   = None
+    kernel32 = None
+    GW_HWNDNEXT = 2
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -108,8 +121,11 @@ def get_window_behind(own_hwnd: int) -> dict | None:
     """Find the first visible, non-minimized window behind *own_hwnd* in Z-order.
 
     Returns a dict with keys: hwnd, title, exe, rect — or None if nothing found.
+    Returns None unconditionally on non-Windows hosts (no shell to query).
     """
     global _last_exe
+    if user32 is None:
+        return None
     hwnd = user32.GetWindow(own_hwnd, GW_HWNDNEXT)
     while hwnd:
         if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):

@@ -8,7 +8,7 @@
 
 import ctypes
 import ctypes.wintypes as wt
-import winreg
+import sys
 from dataclasses import dataclass, field
 
 from pretty_widgets.utils.logger import setup_logger
@@ -19,73 +19,87 @@ logger = setup_logger("display_resolution")
 # ─────────────────────────────────────────────────────────────────────────────
 # WIN32 SCAFFOLDING
 # ─────────────────────────────────────────────────────────────────────────────
-
-user32  = ctypes.WinDLL("user32",  use_last_error=True)
-shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+#
+# Platform-guarded: every reader in this module is Win32-specific (registry
+# walks for EDID, EnumDisplaySettings for live driver state, SHAppBarMessage
+# for taskbar geometry).  None of it has a portable equivalent, and a Linux
+# host is by definition not running the desktop the consensus check is for.
+# So the module imports cleanly on non-Windows but every reader returns None;
+# consensus() ends up returning None, callers fall back to whatever default
+# they had ready for the disagreement case anyway.
 
 ENUM_CURRENT_SETTINGS = -1
+ABM_GETTASKBARPOS     = 0x00000005   # Taskbar query
 
-# Taskbar query
-ABM_GETTASKBARPOS = 0x00000005
+if sys.platform == "win32":
+    import winreg
 
+    user32  = ctypes.WinDLL("user32",  use_last_error=True)
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
 
-class _APPBARDATA(ctypes.Structure):
-    _fields_ = [
-        ("cbSize",           wt.DWORD),
-        ("hWnd",             ctypes.c_void_p),
-        ("uCallbackMessage", wt.UINT),
-        ("uEdge",            wt.UINT),
-        ("rc",               wt.RECT),
-        ("lParam",           wt.LPARAM),
-    ]
-
-
-shell32.SHAppBarMessage.restype  = ctypes.c_void_p
-shell32.SHAppBarMessage.argtypes = [wt.DWORD, ctypes.POINTER(_APPBARDATA)]
-
-user32.GetShellWindow.restype  = ctypes.c_void_p
-user32.GetShellWindow.argtypes = []
-
-user32.GetWindowRect.restype  = wt.BOOL
-user32.GetWindowRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.RECT)]
+    class _APPBARDATA(ctypes.Structure):
+        _fields_ = [
+            ("cbSize",           wt.DWORD),
+            ("hWnd",             ctypes.c_void_p),
+            ("uCallbackMessage", wt.UINT),
+            ("uEdge",            wt.UINT),
+            ("rc",               wt.RECT),
+            ("lParam",           wt.LPARAM),
+        ]
 
 
-class _DEVMODEW(ctypes.Structure):
-    """Minimum viable DEVMODEW — fields up to dmDisplayFrequency.
+    shell32.SHAppBarMessage.restype  = ctypes.c_void_p
+    shell32.SHAppBarMessage.argtypes = [wt.DWORD, ctypes.POINTER(_APPBARDATA)]
 
-    Natural alignment handled by ctypes. dmSize must be set to sizeof(this)
-    before calling EnumDisplaySettings; Windows fills in up to that many
-    bytes and ignores the rest.
-    """
-    _fields_ = [
-        ("dmDeviceName",         wt.WCHAR * 32),
-        ("dmSpecVersion",        wt.WORD),
-        ("dmDriverVersion",      wt.WORD),
-        ("dmSize",               wt.WORD),
-        ("dmDriverExtra",        wt.WORD),
-        ("dmFields",             wt.DWORD),
-        # Union for display contexts — POINTL + two DWORDs = 16 bytes
-        ("dmPositionX",          ctypes.c_long),
-        ("dmPositionY",          ctypes.c_long),
-        ("dmDisplayOrientation", wt.DWORD),
-        ("dmDisplayFixedOutput", wt.DWORD),
-        ("dmColor",              ctypes.c_short),
-        ("dmDuplex",             ctypes.c_short),
-        ("dmYResolution",        ctypes.c_short),
-        ("dmTTOption",           ctypes.c_short),
-        ("dmCollate",            ctypes.c_short),
-        ("dmFormName",           wt.WCHAR * 32),
-        ("dmLogPixels",          wt.WORD),
-        ("dmBitsPerPel",         wt.DWORD),
-        ("dmPelsWidth",          wt.DWORD),
-        ("dmPelsHeight",         wt.DWORD),
-        ("dmDisplayFlags",       wt.DWORD),
-        ("dmDisplayFrequency",   wt.DWORD),
-    ]
+    user32.GetShellWindow.restype  = ctypes.c_void_p
+    user32.GetShellWindow.argtypes = []
+
+    user32.GetWindowRect.restype  = wt.BOOL
+    user32.GetWindowRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.RECT)]
 
 
-user32.EnumDisplaySettingsW.restype  = wt.BOOL
-user32.EnumDisplaySettingsW.argtypes = [wt.LPCWSTR, wt.DWORD, ctypes.POINTER(_DEVMODEW)]
+    class _DEVMODEW(ctypes.Structure):
+        """Minimum viable DEVMODEW — fields up to dmDisplayFrequency.
+
+        Natural alignment handled by ctypes. dmSize must be set to sizeof(this)
+        before calling EnumDisplaySettings; Windows fills in up to that many
+        bytes and ignores the rest.
+        """
+        _fields_ = [
+            ("dmDeviceName",         wt.WCHAR * 32),
+            ("dmSpecVersion",        wt.WORD),
+            ("dmDriverVersion",      wt.WORD),
+            ("dmSize",               wt.WORD),
+            ("dmDriverExtra",        wt.WORD),
+            ("dmFields",             wt.DWORD),
+            # Union for display contexts — POINTL + two DWORDs = 16 bytes
+            ("dmPositionX",          ctypes.c_long),
+            ("dmPositionY",          ctypes.c_long),
+            ("dmDisplayOrientation", wt.DWORD),
+            ("dmDisplayFixedOutput", wt.DWORD),
+            ("dmColor",              ctypes.c_short),
+            ("dmDuplex",             ctypes.c_short),
+            ("dmYResolution",        ctypes.c_short),
+            ("dmTTOption",           ctypes.c_short),
+            ("dmCollate",            ctypes.c_short),
+            ("dmFormName",           wt.WCHAR * 32),
+            ("dmLogPixels",          wt.WORD),
+            ("dmBitsPerPel",         wt.DWORD),
+            ("dmPelsWidth",          wt.DWORD),
+            ("dmPelsHeight",         wt.DWORD),
+            ("dmDisplayFlags",       wt.DWORD),
+            ("dmDisplayFrequency",   wt.DWORD),
+        ]
+
+
+    user32.EnumDisplaySettingsW.restype  = wt.BOOL
+    user32.EnumDisplaySettingsW.argtypes = [wt.LPCWSTR, wt.DWORD, ctypes.POINTER(_DEVMODEW)]
+else:
+    winreg      = None
+    user32      = None
+    shell32     = None
+    _APPBARDATA = None
+    _DEVMODEW   = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -121,7 +135,11 @@ def _walk_display_enum_for_edid(value_name: str) -> tuple[int, int] | None:
 
     Windows tree shape:
         Enum\\DISPLAY\\{MonitorHwID}\\{InstanceID}\\Device Parameters\\{value}
+
+    Returns None on non-Windows hosts (no registry to walk).
     """
+    if winreg is None:
+        return None
     try:
         root = winreg.OpenKey(
             winreg.HKEY_LOCAL_MACHINE,
@@ -192,6 +210,8 @@ def _read_registry_current() -> tuple[int, int] | None:
     Path example (post-dereference):
         SYSTEM\\CurrentControlSet\\Control\\Video\\{GUID}\\0000
     """
+    if winreg is None:
+        return None
     try:
         devicemap = winreg.OpenKey(
             winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DEVICEMAP\VIDEO",
@@ -247,6 +267,8 @@ def _read_enum_display() -> tuple[int, int] | None:
     """Layer 4 — live current settings from the display driver via Win32
     EnumDisplaySettings(ENUM_CURRENT_SETTINGS). Same source as the
     registry, but queried at runtime — never stale."""
+    if user32 is None or _DEVMODEW is None:
+        return None
     dm = _DEVMODEW()
     dm.dmSize = ctypes.sizeof(_DEVMODEW)
     ok = user32.EnumDisplaySettingsW(None, ENUM_CURRENT_SETTINGS, ctypes.byref(dm))
@@ -262,6 +284,8 @@ def _read_progman_rect() -> tuple[int, int] | None:
     This is what actually paints the desktop wallpaper behind everything,
     so its rect is ground-truth 'what the desktop is drawn at' on the
     primary monitor."""
+    if user32 is None:
+        return None
     hwnd = user32.GetShellWindow()
     if not hwnd:
         return None
@@ -353,7 +377,10 @@ def taskbar_height_on_bottom_of(monitor_top: int, monitor_bottom: int,
 
     Implementation uses SHAppBarMessage(ABM_GETTASKBARPOS), which gives
     the taskbar's absolute position directly — independent of whatever
-    the work-area reservation looks like."""
+    the work-area reservation looks like.  Returns 0 on non-Windows hosts
+    (no taskbar, no reserved space)."""
+    if shell32 is None or _APPBARDATA is None:
+        return 0
     data = _APPBARDATA()
     data.cbSize = ctypes.sizeof(_APPBARDATA)
     result = shell32.SHAppBarMessage(ABM_GETTASKBARPOS, ctypes.byref(data))

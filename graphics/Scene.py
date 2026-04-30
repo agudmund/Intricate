@@ -24,7 +24,14 @@ def enable_blur(hwnd, tint: QColor = None):
     AccentState 5 = Mica — the OS provides a frosted glass backdrop
     behind any transparent region of the window.  GradientColor tints
     the blur in ABGR format.
+
+    No-op on non-Windows hosts — DWM is a Win32 compositor, no portable
+    equivalent.  The window stays unblurred there, which is the correct
+    fallback (the rest of the chrome doesn't depend on the blur layer).
     """
+    import sys
+    if sys.platform != "win32":
+        return
     class AccentPolicy(ctypes.Structure):
         _fields_ = [
             ("AccentState",   ctypes.c_int),

@@ -8,6 +8,7 @@
 
 import ctypes
 import ctypes.wintypes as wt
+import sys
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QPoint
 
@@ -15,54 +16,67 @@ from PySide6.QtCore import QPoint
 # ─────────────────────────────────────────────────────────────────────────────
 # WIN32 SETUP
 # ─────────────────────────────────────────────────────────────────────────────
-
-user32   = ctypes.WinDLL("user32",   use_last_error=True)
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+#
+# Platform-guarded: ctypes.WinDLL and ctypes.WINFUNCTYPE are Windows-only.
+# On non-Windows hosts the module imports cleanly with stubs; the OSClickMonitor
+# class's install() turns into a no-op (logged once) so the HealthNode that
+# owns it never observes a "click monitor missing" failure mode — there's
+# simply no global mouse hook on a Linux/macOS host, which is the correct
+# behaviour anyway since WH_MOUSE_LL is a Win32 hook and has no portable
+# equivalent we'd want here.
 
 WH_MOUSE_LL    = 14
 WM_LBUTTONDOWN = 0x0201
 WM_RBUTTONDOWN = 0x0204
 WM_MBUTTONDOWN = 0x0207
 
-# Explicit argtypes and restype for every user32 call that touches pointer-sized
-# values. Without these, ctypes defaults to c_int (32-bit) for all arguments,
-# which silently truncates 64-bit pointers on 64-bit Windows — exactly the
-# overflow we are fixing. Declared once at module load, applies to all calls.
-user32.SetWindowsHookExW.restype  = ctypes.c_void_p
-user32.SetWindowsHookExW.argtypes = [
-    ctypes.c_int,       # idHook
-    ctypes.c_void_p,    # lpfn   — HOOKPROC function pointer
-    ctypes.c_void_p,    # hMod
-    wt.DWORD,           # dwThreadId
-]
+if sys.platform == "win32":
+    user32   = ctypes.WinDLL("user32",   use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
-user32.CallNextHookEx.restype  = ctypes.c_long
-user32.CallNextHookEx.argtypes = [
-    ctypes.c_void_p,    # hhk    — hook handle (pointer-sized)
-    ctypes.c_int,       # nCode
-    wt.WPARAM,          # wParam
-    ctypes.c_void_p,    # lParam — pointer to MSLLHOOKSTRUCT (pointer-sized)
-]
+    # Explicit argtypes and restype for every user32 call that touches pointer-sized
+    # values. Without these, ctypes defaults to c_int (32-bit) for all arguments,
+    # which silently truncates 64-bit pointers on 64-bit Windows — exactly the
+    # overflow we are fixing. Declared once at module load, applies to all calls.
+    user32.SetWindowsHookExW.restype  = ctypes.c_void_p
+    user32.SetWindowsHookExW.argtypes = [
+        ctypes.c_int,       # idHook
+        ctypes.c_void_p,    # lpfn   — HOOKPROC function pointer
+        ctypes.c_void_p,    # hMod
+        wt.DWORD,           # dwThreadId
+    ]
 
-user32.UnhookWindowsHookEx.restype  = wt.BOOL
-user32.UnhookWindowsHookEx.argtypes = [ctypes.c_void_p]
+    user32.CallNextHookEx.restype  = ctypes.c_long
+    user32.CallNextHookEx.argtypes = [
+        ctypes.c_void_p,    # hhk    — hook handle (pointer-sized)
+        ctypes.c_int,       # nCode
+        wt.WPARAM,          # wParam
+        ctypes.c_void_p,    # lParam — pointer to MSLLHOOKSTRUCT (pointer-sized)
+    ]
 
-user32.WindowFromPoint.restype  = ctypes.c_void_p
-user32.WindowFromPoint.argtypes = [wt.POINT]
+    user32.UnhookWindowsHookEx.restype  = wt.BOOL
+    user32.UnhookWindowsHookEx.argtypes = [ctypes.c_void_p]
 
-user32.GetWindowThreadProcessId.restype  = wt.DWORD
-user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.DWORD)]
+    user32.WindowFromPoint.restype  = ctypes.c_void_p
+    user32.WindowFromPoint.argtypes = [wt.POINT]
+
+    user32.GetWindowThreadProcessId.restype  = wt.DWORD
+    user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.DWORD)]
 
 
-# HOOKPROC signature for WH_MOUSE_LL on 64-bit Windows.
-# lParam MUST be c_void_p — it carries a pointer to MSLLHOOKSTRUCT.
-# Using LPARAM (c_long, 32-bit) overflows on 64-bit and breaks CallNextHookEx.
-HOOKPROC = ctypes.WINFUNCTYPE(
-    ctypes.c_long,      # return
-    ctypes.c_int,       # nCode
-    wt.WPARAM,          # wParam  — message identifier (WM_LBUTTONDOWN etc.)
-    ctypes.c_void_p,    # lParam  — pointer to MSLLHOOKSTRUCT (64-bit safe)
-)
+    # HOOKPROC signature for WH_MOUSE_LL on 64-bit Windows.
+    # lParam MUST be c_void_p — it carries a pointer to MSLLHOOKSTRUCT.
+    # Using LPARAM (c_long, 32-bit) overflows on 64-bit and breaks CallNextHookEx.
+    HOOKPROC = ctypes.WINFUNCTYPE(
+        ctypes.c_long,      # return
+        ctypes.c_int,       # nCode
+        wt.WPARAM,          # wParam  — message identifier (WM_LBUTTONDOWN etc.)
+        ctypes.c_void_p,    # lParam  — pointer to MSLLHOOKSTRUCT (64-bit safe)
+    )
+else:
+    user32   = None
+    kernel32 = None
+    HOOKPROC = None
 
 
 class MSLLHOOKSTRUCT(ctypes.Structure):
@@ -118,9 +132,15 @@ class OSClickMonitor:
     def install(self) -> None:
         """
         Install the global mouse hook. Idempotent. Main thread only.
+
+        No-op on non-Windows hosts — WH_MOUSE_LL has no portable equivalent
+        and the HealthNode that owns this monitor is content with a missing
+        click stream there (the census panel just shows zeroes).
         """
         if self._hook is not None:
             return
+        if HOOKPROC is None or user32 is None:
+            return  # non-Windows host: nothing to hook into
 
         self._callback = HOOKPROC(self._hook_callback)
 

@@ -214,9 +214,14 @@ def main():
                              _INSTANCE_START_PORT)
         sys.exit(0)
 
-    # Name the process for the Windows taskbar and Task Manager Apps view
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appName)
-    ctypes.windll.kernel32.SetConsoleTitleW(appName)
+    # Name the process for the Windows taskbar and Task Manager Apps view.
+    # ctypes.windll only exists on Windows; the try/except keeps the EC2 Era
+    # boot path clean on Linux hosts where there's no taskbar to label.
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appName)
+        ctypes.windll.kernel32.SetConsoleTitleW(appName)
+    except (AttributeError, OSError):
+        pass
 
     # Passive file-association check happens further down, after the logger
     # is live, so refresh events get captured in the log with context.
