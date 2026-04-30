@@ -24,14 +24,9 @@ class InfoNode(BaseNode):
     """
 
     _BODY_LINES = [
-        "A Gentle nodal space",
-        "Where thoughts interlink ideas",
-        "Transitioning Thoughts to Things",
+        "A gentle nodal space where thoughts interlink ideas transitioning thoughts to things",
         "",
-        "A Creative Space",
-        "Where the next breath of air found us",
-        "Roaming free finding room to grow",
-        "And become all that it could be",
+        "A creative space where the next breath of air found room to grow into all that it could become",
         "",
         "Built using a single shared braincell",
         "By Yours Truly and various Intelligences",
