@@ -204,13 +204,97 @@ def extract_app_icon(extension: str, dest: Path) -> bool:
     return _extract_via_qt(QFileInfo(f"dummy{extension}"), dest, extension)
 
 
+def _resolve_lnk_icon_source(lnk_path: Path) -> tuple[Path, int] | None:
+    """Resolve a .lnk shortcut to the source the icon should come from.
+
+    Two sources of truth, consulted in order:
+
+    1. **GetIconLocation** — explicit override the shortcut creator set
+       via right-click → Properties → Change Icon.  If non-empty, this
+       is exactly what Windows displays in Explorer (minus the overlay
+       arrow), so it's the authoritative answer.  Common case for our
+       own apps where the launcher targets pythonw.exe but a project-
+       local .ico provides the visual identity.
+
+    2. **GetPath** (fallback) — the launcher's target executable.  Used
+       when no custom icon override is set; the shell would derive the
+       icon from the target's resource section.
+
+    Either way the shell overlay arrow is sidestepped because we're
+    extracting from the underlying icon file, not asking the shell to
+    render an .lnk.  Returns (path, index) — index is the icon resource
+    number for .exe/.dll; meaningless for .ico files but harmless to
+    pass through.
+
+    Returns None if pywin32 isn't available, IShellLink load fails, or
+    neither source resolves to an existing file.  Caller falls back to
+    extracting from the .lnk directly in that case (functional
+    regression: arrow returns, no crash).
+    """
+    try:
+        import pythoncom
+        from win32com.shell import shell
+    except ImportError:
+        _log.debug("[app_icons] pywin32 unavailable; .lnk overlay arrow will persist")
+        return None
+    try:
+        link = pythoncom.CoCreateInstance(
+            shell.CLSID_ShellLink, None,
+            pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink,
+        )
+        link.QueryInterface(pythoncom.IID_IPersistFile).Load(str(lnk_path))
+        # First preference: explicit IconLocation override
+        icon_raw, icon_idx = link.GetIconLocation()
+        if icon_raw:
+            from os.path import expandvars
+            icon_path = Path(expandvars(icon_raw))
+            if icon_path.exists():
+                return (icon_path, icon_idx)
+            _log.debug(f"[app_icons] .lnk IconLocation missing on disk: {icon_path}")
+        # Fallback: target executable's default icon
+        target, _ = link.GetPath(shell.SLGP_RAWPATH)
+        if target:
+            target_path = Path(target)
+            if target_path.exists():
+                return (target_path, 0)
+            _log.debug(f"[app_icons] .lnk target missing on disk: {target_path}")
+        return None
+    except Exception as e:   # COM failures surface as a wide range of types
+        _log.debug(f"[app_icons] .lnk resolve failed for {lnk_path.name}: {e}")
+        return None
+
+
+def _copy_ico(src: Path, dest: Path, label: str) -> bool:
+    """Copy an .ico file straight to dest — best fidelity, no rasterize/repack.
+
+    Used when a .lnk's IconLocation already points at an .ico file (the
+    common case for our own apps).  Skipping the QPixmap roundtrip
+    preserves whatever resolution layers the original .ico shipped with,
+    including the hand-tuned 16/24/32 px versions Windows uses for tiny
+    sidebar buttons.
+    """
+    import shutil
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        _log.info(f"[app_icons] copied {label} from {src.name}")
+        return True
+    except OSError as e:
+        _log.warning(f"[app_icons] copy failed for {label}: {e}")
+        return False
+
+
 def extract_launcher_icon(target: str, dest: Path) -> bool:
     """Extract the icon displayed for a launcher target — a filesystem
     path (.lnk, .exe) or a shell: URI (MSIX AppsFolder entries).
 
     Filesystem targets must exist; shell: targets are passed through and
-    resolved by Windows at extraction time.  Failure is non-fatal — the
-    caller keeps whatever cached .ico is already in place.
+    resolved by Windows at extraction time.  .lnk targets are resolved
+    via IShellLink so the shell's shortcut overlay arrow doesn't end up
+    baked into the cached icon, and the .lnk's own custom IconLocation
+    (if set) is honoured rather than being shadowed by the target exe's
+    default icon.  Failure is non-fatal — the caller keeps whatever
+    cached .ico is already in place.
     """
     if target.startswith("shell:"):
         # Pass-through; Windows resolves the AppsFolder virtual path
@@ -219,12 +303,66 @@ def extract_launcher_icon(target: str, dest: Path) -> bool:
     if not path.exists():
         _log.debug(f"[app_icons] launcher not present, skipping: {path}")
         return False
+    if path.suffix.lower() == ".lnk":
+        resolved = _resolve_lnk_icon_source(path)
+        if resolved is not None:
+            src_path, _src_idx = resolved
+            label = f"{path.name} → {src_path.name}"
+            # If the source is itself an .ico, copy verbatim — preserves
+            # all resolution layers without QPixmap roundtrip.
+            if src_path.suffix.lower() == ".ico":
+                return _copy_ico(src_path, dest, label)
+            # .exe/.dll source: fall through to Qt extraction.  Note that
+            # QFileIconProvider always returns the file's default (index 0)
+            # icon; if a non-zero icon index ever appears in the wild we'd
+            # need ExtractIconExW to honour it.
+            return _extract_via_qt(QFileInfo(str(src_path)), dest, label)
+        # Fall through: .lnk extraction with overlay arrow as last resort
     return _extract_via_qt(QFileInfo(str(path)), dest, path.name)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BOOT — ensure cached icons exist and are current
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Bumped whenever the launcher extraction pipeline changes in a way that
+# requires the .lnk-sourced cache entries to be regenerated.  Sentinel
+# file lives in icons/ alongside the .icos themselves; if missing, the
+# affected cached icons are deleted so ensure_app_icons re-extracts them.
+#  v2 — resolve .lnk → target exe to drop the shell's overlay arrow
+#  v3 — consult .lnk IconLocation first; honour custom-icon overrides
+#       (target was pythonw.exe → ignored Intricate's project-local .ico)
+_LAUNCHER_PIPELINE_SENTINEL = ".launcher_icon_v3"
+
+
+def _self_heal_lnk_cache(d: Path) -> None:
+    """One-shot invalidation of .lnk-sourced cached icons after a pipeline bump.
+
+    Runs once per pipeline version: if the sentinel file is missing,
+    delete every cached icon whose source key is a .lnk so the next
+    extraction pass picks up the resolver behaviour, then drop the
+    sentinel so subsequent boots are no-ops.  Non-.lnk launchers
+    (shell:, .exe) are left alone — they didn't have the arrow problem.
+    """
+    sentinel = d / _LAUNCHER_PIPELINE_SENTINEL
+    if sentinel.exists():
+        return
+    for key, filename in _LAUNCHER_ICON_MAP.items():
+        if key.startswith("shell:") or not key.lower().endswith(".lnk"):
+            continue
+        stale = d / filename
+        if stale.exists():
+            try:
+                stale.unlink()
+                _log.info(f"[app_icons] self-heal: invalidated stale {filename}")
+            except OSError as e:
+                _log.warning(f"[app_icons] self-heal failed to drop {filename}: {e}")
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        sentinel.touch()
+    except OSError as e:
+        _log.warning(f"[app_icons] self-heal failed to write sentinel: {e}")
+
 
 def ensure_app_icons() -> None:
     """Check every registered extension and launcher; extract or refresh as needed.
@@ -235,6 +373,10 @@ def ensure_app_icons() -> None:
     extraction work, which takes milliseconds per icon.
     """
     d = icons_dir()
+    # One-shot self-heal: drop .lnk-sourced cache entries that were
+    # extracted under a previous pipeline version (e.g. with the shell
+    # overlay arrow baked in).  No-op once the sentinel exists.
+    _self_heal_lnk_cache(d)
     # Extension-based: Adobe apps, third-party tools we don't own
     for ext, filename in _APP_ICON_MAP.items():
         cached = d / filename
