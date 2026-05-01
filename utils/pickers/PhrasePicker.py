@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - PhrasePicker.py phrase bank
--Curated list of short uplifting phrases used for session names and node name randomization for enjoying
+-Intricate - utils/pickers/PhrasePicker.py phrase bank
+-The last of the phrase picker held a quiet collection of small uplifting words, ready to lend one whenever a name was needed, For Enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

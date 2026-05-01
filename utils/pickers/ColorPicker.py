@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 -Intricate - utils/pickers/ColorPicker.py node tint palette facade
--A quiet window onto color_registry.toml — reads live, reports needs for enjoying
+-The last of the color picker spoke for a palette it never owned, content to ask the registry every time and trust the answer, For Enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 

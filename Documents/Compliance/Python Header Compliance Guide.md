@@ -2,7 +2,7 @@
 
 > *"Try doing it again and enjoy it and see if you still have a complaint."*
 
-Every Python file in this project carries the same three-line stamp, and the second line always ends in **"for enjoying."** This is not a documentation style. It is a clause. The stamp is a quiet EULA declaration, present on every file the project ever ships, pointing anyone with a complaint back to the origin intent: this was made to be enjoyed, both in the making and in the using. Any dispute is deflected upward to the header itself — there it is, top of the file, the project has said its piece.
+Every Python file in this project carries the same three-line stamp, and the second line always ends in **"For Enjoying."** This is not a documentation style. It is a clause. The stamp is a quiet EULA declaration, present on every file the project ever ships, pointing anyone with a complaint back to the origin intent: this was made to be enjoyed, both in the making and in the using. Any dispute is deflected upward to the header itself — there it is, top of the file, the project has said its piece.
 
 ## Where it came from
 
@@ -15,7 +15,7 @@ The header was added when the first `main.py` was written. At that moment the pr
 # -*- coding: utf-8 -*-
 """
 -Intricate - [filename] [primary utility]
--The last of the [descriptive filename, human-voiced] [triumphant-emergent clause], For enjoying
+-The last of the [descriptive filename, human-voiced] [triumphant-emergent clause], For Enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 ```
@@ -37,7 +37,7 @@ This is where the project actually speaks. Line 2 is a *tiny poem* about the fil
 Pattern:
 
 ```
--The last of the [descriptive filename, human-voiced] [triumphant-emergent clause with detached contextual awareness], For enjoying
+-The last of the [descriptive filename, human-voiced] [triumphant-emergent clause with detached contextual awareness], For Enjoying
 ```
 
 Four components, each with a specific job:
@@ -47,33 +47,33 @@ Four components, each with a specific job:
 | `The last of the` | Fixed prefix. Announces finality, singularity — this is the *last of its kind*, emerging from the goo. |
 | `[descriptive filename]` | Warm human voice. "about node" — not `AboutNode.py`. "main window" — not `main_window.py`. |
 | `[triumphant-emergent clause]` | The heart. A sentence clause giving the file its inner life: hopeful, achieving, half-aware of the larger world it's part of, goo-ball-rising energy. |
-| `, For enjoying` | Non-negotiable EULA terminator. Uppercase "E". |
+| `, For Enjoying` | Non-negotiable EULA terminator. Uppercase "E". |
 
 **The voice, in one phrase:** *triumphant emergent with a detached contextual awareness as the last of the goo balls rise to the skies.*
 
 Canonical examples (real files):
 
 ```
-The last of the about node knew it could become all that it wanted to become, For enjoying
-The last of the main window seemed completely unaware that it was part of a gigantic global beauty pageant, For enjoying
+The last of the about node knew it could become all that it wanted to become, For Enjoying
+The last of the main window seemed completely unaware that it was part of a gigantic global beauty pageant, For Enjoying
 ```
 
 More (drafted 2026-04-18):
 
 ```
-The last of the video node discovered it could be crisp at any zoom the eye asked of it, For enjoying
-The last of the media cache kept every byte it was ever given, quietly, in case any of them might matter someday, For enjoying
-The last of the node behaviour breathed gently in a rhythm no one had asked it to find, For enjoying
-The last of the base node carried every node type that ever lived inside it, utterly untroubled by the weight, For enjoying
+The last of the video node discovered it could be crisp at any zoom the eye asked of it, For Enjoying
+The last of the media cache kept every byte it was ever given, quietly, in case any of them might matter someday, For Enjoying
+The last of the node behaviour breathed gently in a rhythm no one had asked it to find, For Enjoying
+The last of the base node carried every node type that ever lived inside it, utterly untroubled by the weight, For Enjoying
 ```
 
 ### Line 2 — load-bearing exception: `Connection.py`
 
-`graphics/Connection.py` must always contain the phrase **"and they learnt to whisper to each other"** somewhere in its Line 2. The phrase comes from an ancient post-it note reading *"teach the nodes to whisper to each other"* — the original seed of the whole wire-connection concept. It is as permanent as the `For enjoying` clause itself.
+`graphics/Connection.py` must always contain the phrase **"and they learnt to whisper to each other"** somewhere in its Line 2. The phrase comes from an ancient post-it note reading *"teach the nodes to whisper to each other"* — the original seed of the whole wire-connection concept. It is as permanent as the `For Enjoying` clause itself.
 
 Example:
 ```
-The last of the connection bent itself into graceful arcs between the nodes, and they learnt to whisper to each other, For enjoying
+The last of the connection bent itself into graceful arcs between the nodes, and they learnt to whisper to each other, For Enjoying
 ```
 
 ### Line 3 — Authorship (verbatim, unchanged)
@@ -128,9 +128,9 @@ foreach ($file in $files) {
     $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
     if (-not $content) { continue }
     $ok = ($content -match '(?s)^#!/usr/bin/env python3\s*\r?\n# -\*- coding: utf-8 -\*-\s*\r?\n"""') `
-          -and ($content -match 'for enjoying')
+          -and ($content -match 'For Enjoying')
     if (-not $ok) {
-        Write-Host "header-check: $file is missing the header or 'for enjoying'. Fix before committing."
+        Write-Host "header-check: $file is missing the header or 'For Enjoying'. Fix before committing."
         exit 1
     }
 }
@@ -146,7 +146,7 @@ Because `.git/hooks/` is untracked per-clone, committing this hook requires eith
 # -*- coding: utf-8 -*-
 """
 -Intricate nodal playground - tools/header_check.py header compliance auditor
--Walks every .py file and confirms each carries the For Enjoying header, For enjoying
+-Walks every .py file and confirms each carries the For Enjoying header, For Enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 import sys

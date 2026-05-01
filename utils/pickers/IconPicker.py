@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - IconPicker.py emoji icon bank
--Curated list of emoji icons used for node accent decoration for enjoying
+-Intricate - utils/pickers/IconPicker.py emoji icon bank
+-The last of the icon picker kept its small bouquet of warm faces curated by hand, ready for any node that wanted an accent, For Enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
