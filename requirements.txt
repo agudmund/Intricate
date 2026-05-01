@@ -5,14 +5,19 @@
 # ── Runtime: GUI ──────────────────────────────────────────────────────────
 PySide6                 # Qt bindings — everything graphical
 pretty_widgets          # Shared widget package (PrettyButton, PrettyLabel, …)
+
+# ── Runtime: shared family infrastructure ────────────────────────────────
+shared_braincell        # Singleton lock + cross-process IPC (main.py / main_window.py)
 intricate_log           # Rust-backed lock-free ring-buffer logger (.pyd)
+intricate_vision        # Claude Vision worker + drop-extension list (utils/vision.py)
 
 # ── Runtime: features ────────────────────────────────────────────────────
 Pillow                  # Image loading / processing (ImageNode, icons, vision)
 markdown                # MarkdownNode / TextNode rendering
-Pygments                # Syntax highlighting inside markdown
+Pygments                # Syntax highlighting via markdown's codehilite extension
 send2trash              # Safe file deletion (session archive rotation)
-comtypes                # Windows spellchecker COM bridge (utils/spellchecker.py)
+tomli_w                 # Live colour palette writer (utils/persistence/color_registry.py)
+pywin32                 # Windows shell COM for OS-registered app icons (utils/app_icons.py)
 
 # ── Dev / tooling: icon generation pipeline (icons/*.py) ─────────────────
 numpy                   # Colour-distance masking, array ops for icon extraction
