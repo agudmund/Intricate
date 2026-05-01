@@ -90,8 +90,8 @@ A single-paragraph paste goes in normally and the node's width-wrap handles it. 
 
 1. The full content gets chunked via `utils/text_chunker.paragraph_chunks` (paragraph-aware, with the cascading chunker as fallback for paragraphs that still exceed the safety ceiling)
 2. The first chunk replaces the originating node's body
-3. Each subsequent chunk spawns a new WarmNode — auto-fit-height to the document, placed via `spiral_place` with `wander_origin(prev_node)` so the chain meanders organically rather than running in a straight line
-4. Connections wire each new node to its predecessor in the chain
+3. The remaining chunks are handed to `utils.placement.chain_spawn` — the canonical organic-scatter helper, shared with `CushionsNode._export` and any future spawn path that produces secondary or tertiary nodes from a source. It walks each chunk through offscreen-staging → `_auto_fit_title_width` → `_auto_fit_height(shrink=True)` → `wander_origin(prev_node)` → `spiral_place(parent=prev_node)` → Connection wire. The deliberate asymmetry that makes spawn trees feel alive comes from `spiral_place`'s random base angle per ring and `wander_origin`'s 85/15 cluster-vs-fling distribution — two identical trees from the same paste is roughly impossible.
+4. Each split-spawned WarmNode receives a fresh placeholder title from `PhrasePicker.randomling` (the default `WarmNodeData.title` factory) — siblings of one paste don't share a title, each earns its own
 5. The InfoBar whispers the result: *"big paste split into N nodes"*
 
 No cap on chain length — Intricate is optimised to load 1200+ nodes in ~36ms, so a thousand-paragraph paste is on-spec. The 2026-04-18 crash class (Qt6Core.dll fault when a single `QTextDocument` carries multi-megabyte content) is what motivated the safety ceiling; paragraph-split is the natural solution that also matches how a human reader thinks.
