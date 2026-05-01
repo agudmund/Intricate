@@ -25,7 +25,7 @@ from nodes.ImageNode import ImageNode
 from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
 from pretty_widgets.utils.logger import setup_logger
-from utils.pickers.PhrasePicker import random as pick_phrase
+from utils.pickers.PhrasePicker import randomling as pick_phrase
 from pretty_widgets.utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
 from utils.persistence.session import session_path, enter_project, session_residue

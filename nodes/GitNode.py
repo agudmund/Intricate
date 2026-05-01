@@ -417,7 +417,7 @@ class GitNode(BaseNode):
             self._push_complete = False
             self._pushing = False
             self._dismiss_loading_node()
-            from utils.pickers.IconPicker import random as pick_emoji
+            from utils.pickers.IconPicker import randomling as pick_emoji
             self.data.emoji = pick_emoji()
             self._poll_timer.start()
             # One final rescan to capture the last push results

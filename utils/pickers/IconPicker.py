@@ -16,11 +16,11 @@ emojiIcons = [
 ]
 
 
-def random() -> str:
+def randomling() -> str:
     """Return a random emoji from the curated icon bank."""
     return _random.choice(emojiIcons)
 
 
-def sample(n: int) -> list[str]:
+def sampleling(n: int) -> list[str]:
     """Return *n* unique emojis sampled without replacement (capped at bank size)."""
     return _random.sample(emojiIcons, min(n, len(emojiIcons)))

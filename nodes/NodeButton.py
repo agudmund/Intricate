@@ -295,7 +295,7 @@ class EmojiButton(QGraphicsObject):
         if event.button() != Qt.LeftButton or self._set_emoji is None:
             event.ignore()
             return
-        from utils.pickers.IconPicker import random as pick_emoji
+        from utils.pickers.IconPicker import randomling as pick_emoji
         self._set_emoji(pick_emoji())
         self._cached_pixmap = None   # invalidate cache
         self._cached_emoji  = None

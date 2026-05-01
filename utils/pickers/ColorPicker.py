@@ -26,13 +26,13 @@ def get(index: int) -> str:
     return colors[index % len(colors)]
 
 
-def random() -> str:
+def randomling() -> str:
     """Return a random color from the palette."""
     colors = _registry.get_all() or list(_registry._SEED_COLORS)
     return _random.choice(colors)
 
 
-def sample(n: int) -> list[str]:
+def sampleling(n: int) -> list[str]:
     """Return *n* unique colors sampled without replacement (capped at palette size)."""
     colors = _registry.get_all() or list(_registry._SEED_COLORS)
     return _random.sample(colors, min(n, len(colors)))

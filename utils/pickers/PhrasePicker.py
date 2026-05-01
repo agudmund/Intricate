@@ -46,11 +46,11 @@ motivationalMessages = [
 ]
 
 
-def random() -> str:
+def randomling() -> str:
     """Return a random phrase from the curated phrase bank."""
     return _random.choice(motivationalMessages)
 
 
-def sample(n: int) -> list[str]:
+def sampleling(n: int) -> list[str]:
     """Return *n* unique phrases sampled without replacement (capped at bank size)."""
     return _random.sample(motivationalMessages, min(n, len(motivationalMessages)))

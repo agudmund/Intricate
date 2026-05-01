@@ -89,7 +89,7 @@ class AboutNode(BaseNode):
         super()._build_buttons()
 
     def _reshuffle_emoji(self) -> None:
-        from utils.pickers.IconPicker import random as pick_emoji
+        from utils.pickers.IconPicker import randomling as pick_emoji
         self._shuffle_emoji = pick_emoji()
         self._shuffle_btn.update()
 
