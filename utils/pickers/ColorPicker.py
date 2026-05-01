@@ -8,11 +8,11 @@
 
 import random as _random
 
-# The palette itself lives in color_registry.toml (via utils.persistence.
-# color_registry).  This module is the facade existing call sites — BaseNode's
-# tint toggle, AboutNode's picker, ClaudeNode's random pick — still talk to.
-# Keeping the old surface stable means nothing further up the stack had to
-# learn about the registry.
+# Thin facade onto color_registry.toml — palette lives in the TOML
+# (loaded via utils.persistence.color_registry); this module exposes
+# the get / random / sample / register surface so callers above didn't
+# need to learn about the registry when the data moved out.
+# Current callers: BaseNode (tint cycling) and ClaudeNode (chain colours).
 from utils.persistence import color_registry as _registry
 
 
