@@ -39,6 +39,13 @@ def is_structural_only(text: str) -> bool:
 # helpers rewrite only what's displayed — the source text stays untouched.
 _ISO_DATE_RE = re.compile(r'\b(\d{4})-(\d{2})-(\d{2})\b')
 
+# ASCII tree / box-drawing chars — Unicode Box Drawing block (U+2500..U+257F).
+# These show up in source markdown as visual scaffolding inside <pre> blocks
+# (the markdown→HTML render converts them to 📁/📄 emojis upstream); in the
+# rare event one survives into a title or label slot, strip it so the spawned
+# node reads as content, not as a stray tree-branch fragment.
+_BOX_DRAWING_RE = re.compile(r'\s*[─-╿]+\s*')
+
 _MONTH_NAMES = (
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
@@ -58,9 +65,14 @@ def prettify_label(text: str) -> str:
 
     - ISO dates (``2026-04-15``) → ``April 15th 2026``
     - em-dash separators (``A — B``) → colons (``A: B``)
-    - ``**bold**`` markers stripped — the wrapped word stays; on a
-      compressed AboutNode the text's own colon / em-dash / cadence
-      carries the emphasis without needing inline font-weight.
+    - ``**bold**`` and ``*italic*`` markers stripped — the wrapped word
+      stays; on a compressed AboutNode the text's own colon / em-dash /
+      cadence carries the emphasis without needing inline font-weight or
+      slant.  Bold pairs are stripped first, then any remaining lone
+      asterisks (single-``*`` italic).
+    - box-drawing chars (``├└│─`` and the rest of the U+2500 block)
+      stripped — defensive backstop in case ASCII tree scaffolding leaks
+      from a ``<pre>`` block into a title slot.
     - backticks stripped — ``` `ident` `` reads as visual clutter on a
       plain-text surface.
     - trailing colon stripped — on an AboutNode the colon dangles
@@ -81,12 +93,21 @@ def prettify_label(text: str) -> str:
     # "date — label" / "term — definition" pattern without touching
     # compound-word em-dashes (which have no surrounding spaces).
     text = text.replace(" — ", ": ")
-    # Strip markdown bold markers.
+    # Strip markdown bold markers, then any remaining lone asterisks
+    # (single-``*`` italic).  Order matters only for readability — both
+    # `replace` passes globally remove the char regardless of pairing.
     text = text.replace("**", "")
+    text = text.replace("*", "")
+    # Strip ASCII tree / box-drawing chars — defensive backstop for the
+    # rare case where source scaffolding lands in a title slot.  Replace
+    # with a single space so a mid-word run (``Header ├── continuation``)
+    # collapses to one space rather than fusing the words together; the
+    # closing ``strip()`` removes any space introduced at the edges.
+    text = _BOX_DRAWING_RE.sub(" ", text)
     # Strip inline-code backticks.
     text = text.replace("`", "")
-    # Strip a trailing colon.
-    text = text.rstrip()
+    # Strip leading/trailing whitespace, then a trailing colon.
+    text = text.strip()
     if text.endswith(':'):
-        text = text[:-1].rstrip()
+        text = text[:-1].strip()
     return text

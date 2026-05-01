@@ -588,14 +588,17 @@ class MarkdownNode(BaseNode):
                                 wdata = WarmNodeData(body_text=cleaned_body, title=extracted_title)
                             else:
                                 wdata = WarmNodeData(body_text=para_stripped, title="")
-                        # Strip remaining inline bold markers from body
-                        # and title.  Leading-bold extraction consumes the
-                        # opening pair; mid-sentence emphasis markers
-                        # inside the body still render literally without
-                        # this.  Mirrors the strip already in _prettify_label
-                        # for AboutNode labels.
-                        wdata.body_text = wdata.body_text.replace("**", "")
-                        wdata.title     = wdata.title.replace("**", "")
+                        # Strip remaining inline emphasis markers from body
+                        # and run the title through the full prettify pass.
+                        # Leading-bold extraction consumes the opening pair
+                        # of any leading **bold** the title carried; mid-
+                        # sentence ** and * markers inside the body still
+                        # render literally without this.  Title gets the
+                        # full prettify (date / em-dash / colon / asterisk
+                        # / box-drawing / backtick) so WarmNode titles
+                        # match AboutNode label normalisation.
+                        wdata.body_text = wdata.body_text.replace("**", "").replace("*", "")
+                        wdata.title     = _prettify_label(wdata.title)
                         node = WarmNode(wdata)
                         node.setPos(_OFFSCREEN)
                         scene.addItem(node)
