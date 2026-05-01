@@ -301,3 +301,114 @@ def wander_origin(prev_node) -> QPointF:
         cx + math.cos(angle) * distance,
         cy + math.sin(angle) * distance,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CHAIN SPAWN — canonical organic scatter for any node-spawn-from-source flow
+# ─────────────────────────────────────────────────────────────────────────
+
+# Far-left-of-everything staging position for nodes that need to be added
+# to the scene (so their ``rect()`` is accurate for measurement) before
+# the real placement is computed.  Anything outside the viewport works;
+# this magnitude is comfortably beyond any reasonable canvas bound and
+# was the convention shared across the three split-spawn paths before
+# they consolidated here.
+OFFSCREEN_STAGING = QPointF(-999_999, -999_999)
+
+
+def chain_spawn(scene, source_node, items, factory, *,
+                connection_factory=None,
+                wire_first_to_source: bool = True,
+                padding: float = 28.0) -> list:
+    """Spawn a chain of nodes from *items*, organically scattered and wired.
+
+    The canonical scatter helper.  Any node type that produces secondary
+    or tertiary nodes from itself reaches for this — paste-split,
+    button-export, document-explode, ClaudeNode-invents-companions.
+    Embodies the orchestration MarkdownNode pioneered: offscreen staging
+    so the spawn never flashes at (0, 0); ``raise_node`` for z-order;
+    snug auto-fit (title-width before height because body wrap depends
+    on the current width); ``wander_origin`` → ``spiral_place`` with
+    parent collision avoidance for the wire path.  The deliberate
+    asymmetry of the result comes from spiral_place's random base
+    angle per ring and wander_origin's 85/15 cluster-vs-fling — two
+    identical trees from the same input is roughly impossible.
+
+    Parameters
+    ----------
+    scene
+        IntricateScene that will own the spawned nodes.
+    source_node
+        Originating node — the chain anchor.  ``prev_node`` for the
+        first ``wander_origin`` call; first spawn wires back to it
+        when *wire_first_to_source* is True.
+    items
+        Iterable of opaque values, each fed to *factory*.
+    factory
+        Callable ``item -> BaseNode | None``.  Returning None skips
+        the item — useful with predicate-dispatcher factories that
+        filter structural-only or otherwise unsuitable content.
+    connection_factory
+        Callable ``(prev, new) -> Connection``.  Default constructs
+        ``graphics.Connection.Connection`` directly (deferred import
+        so this module stays graphics-free at top level).
+    wire_first_to_source
+        When True (default), the first spawned node wires back to
+        *source_node* — the right behaviour for paste-split / button-
+        export flows where the source stays visible after spawning.
+        When False, the first spawned node has no incoming wire — the
+        right behaviour for zombie-spawn flows (MarkdownNode self-
+        vaporises after splitting), where wiring to the source would
+        dangle.
+    padding
+        Spiral-place padding (px).  Default matches spiral_place's
+        own default; surfaced here so callers with tighter chrome
+        can tune.
+
+    Returns
+    -------
+    list of BaseNode
+        Spawned nodes in chain order, factory-skipped items omitted.
+    """
+    if connection_factory is None:
+        from graphics.Connection import Connection
+        connection_factory = Connection
+
+    spawned: list = []
+    prev_node = source_node
+
+    for item in items:
+        node = factory(item)
+        if node is None:
+            continue
+
+        node.setPos(OFFSCREEN_STAGING)
+        scene.addItem(node)
+        scene.raise_node(node)
+
+        # Title-width first because body wrapping depends on the current
+        # width.  Both fits are guarded by hasattr so node types without
+        # them (chromeless StickerNode descendants, future minimalist
+        # types) silently keep their default geometry.
+        if hasattr(node, '_auto_fit_title_width'):
+            node._auto_fit_title_width()
+        if hasattr(node, '_auto_fit_height'):
+            node._auto_fit_height(shrink=True)
+
+        chain_origin = wander_origin(prev_node)
+        pos = spiral_place(
+            scene, node, origin=chain_origin,
+            parent=prev_node, fallback=chain_origin,
+            padding=padding,
+        )
+        node.setPos(pos)
+
+        is_first_spawn = (len(spawned) == 0)
+        if not is_first_spawn or wire_first_to_source:
+            conn = connection_factory(prev_node, node)
+            scene.addItem(conn)
+
+        spawned.append(node)
+        prev_node = node
+
+    return spawned

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - nodes/WarmNode.py WarmNode class
--The main content node. Free-form text with an emoji accent and editable title, for enjoying
+-Intricate - nodes/WarmNode.py main content node
+-The first thought to find a home on the canvas, still the place most thoughts come to rest, For Enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from pretty_widgets.PrettyEdit import PrettyEdit
-from PySide6.QtCore import Qt, QRectF, QPointF, QFileSystemWatcher, QTimer, Signal
+from PySide6.QtCore import Qt, QRectF, QFileSystemWatcher, QTimer, Signal
 from PySide6.QtGui import QPainter, QFont, QFontMetrics, QColor
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QVBoxLayout,
                                 QWidget)
@@ -544,16 +544,15 @@ class WarmNode(BaseNode):
         a multi-megabyte document crammed into one proxy (the
         2026-04-18 crash class).
 
-        Keeps the first chunk in this node, spawns additional WarmNodes
-        for the rest — chained with Connection wires so the original
-        reading order is preserved spatially.  Same placement machinery
-        CushionsNode._export uses.  No cap on chain length: Intricate
-        is optimised to load 1200+ nodes in ~36ms, so a thousand-
-        paragraph paste is on-spec.
+        Keeps the first chunk in this node and hands the remainder to
+        ``utils.placement.chain_spawn`` — the canonical organic-scatter
+        helper shared with CushionsNode._export and any future spawn
+        path.  Snug auto-fit and Connection wiring come from the helper.
+        No cap on chain length: Intricate is optimised to load 1200+
+        nodes in ~36 ms, so a thousand-paragraph paste is on-spec.
         """
         from utils.text_chunker import paragraph_chunks
-        from graphics.Connection import Connection
-        from utils.placement import spiral_place, wander_origin
+        from utils.placement import chain_spawn
 
         full_content = (existing + new_text) if existing else new_text
         chunks = paragraph_chunks(full_content, WARM_SPLIT_SAFETY_CEILING)
@@ -573,36 +572,14 @@ class WarmNode(BaseNode):
         if not scene or len(chunks) == 1:
             return
 
-        _OFFSCREEN = QPointF(-999_999, -999_999)
-        _PADDING   = 28
-        prev_node  = self
+        def _warm_factory(chunk: str) -> 'WarmNode':
+            # No ``title=`` override — WarmNodeData's default factory fires
+            # PhrasePicker.randomling so each split-spawned node gets its
+            # own placeholder title.  Pre-extraction the path passed
+            # title="" explicitly, which suppressed the placeholder.
+            return WarmNode(WarmNodeData(body_text=chunk))
 
-        for chunk in chunks[1:]:
-            wdata = WarmNodeData(body_text=chunk, title="")
-            node  = WarmNode(wdata)
-            node.setPos(_OFFSCREEN)
-            scene.addItem(node)
-            scene.raise_node(node)
-            # Auto-fit height from the document's layout
-            if node._editor:
-                doc = node._editor.document()
-                doc.setTextWidth(node.rect().width() - _PADDING * 2)
-                doc_h = doc.size().height()
-                needed = 90.0 + doc_h + _PADDING
-                if needed > node.rect().height():
-                    r = node.rect()
-                    node.setRect(QRectF(r.x(), r.y(), r.width(), needed))
-                    node.data.height = needed
-            chain_origin = wander_origin(prev_node)
-            pos = spiral_place(
-                scene, node, origin=chain_origin,
-                parent=prev_node,
-                fallback=chain_origin, padding=_PADDING,
-            )
-            node.setPos(pos)
-            conn = Connection(prev_node, node)
-            scene.addItem(conn)
-            prev_node = node
+        chain_spawn(scene, source_node=self, items=chunks[1:], factory=_warm_factory)
 
         # Whisper so the user knows the split happened. Reach through the
         # scene's views to find the main window; the info channel is the

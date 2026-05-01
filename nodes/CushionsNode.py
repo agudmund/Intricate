@@ -6,8 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QGraphicsProxyWidget
-from PySide6.QtCore import Qt, QRectF, QPointF
+from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QFont, QFontMetrics, QColor
 
 from nodes.BaseNode import BaseNode
@@ -124,12 +123,16 @@ class CushionsNode(BaseNode):
         via ``utils.text_chunker.chunk_text`` — so a single-paragraph multi-
         megabyte blob splits into many manageable nodes instead of one
         skyscraper that crashes Qt on render (the 2026-04-18 lesson).
-        Placement uses the same wander_origin + spiral_place scatter as the
-        Info/MarkdownNode pipeline.
+        Placement is delegated to ``utils.placement.chain_spawn`` — the
+        canonical organic-scatter helper, shared with WarmNode's paste-
+        split and any future spawn path.  CushionsNode is the originating
+        node of the whole split-into-chained-WarmNodes pattern; the
+        helper is its descendants' shared inheritance.
         """
-        from PySide6.QtCore import QPointF, QRectF
         from utils.text_chunker import paragraph_chunks
-        from nodes.WarmNode import WARM_SPLIT_SAFETY_CEILING
+        from utils.placement import chain_spawn
+        from nodes.WarmNode import WARM_SPLIT_SAFETY_CEILING, WarmNode
+        from data.WarmNodeData import WarmNodeData
 
         scene = self.scene()
         if not scene:
@@ -142,53 +145,13 @@ class CushionsNode(BaseNode):
         if not paragraphs:
             return
 
-        from graphics.Connection import Connection
-        from utils.placement import spiral_place
+        def _warm_factory(paragraph: str) -> 'WarmNode':
+            # No ``title=`` override — WarmNodeData's default factory fires
+            # PhrasePicker.randomling so each spawned node gets its own
+            # placeholder title.
+            return WarmNode(WarmNodeData(body_text=paragraph))
 
-        PADDING    = 28
-        _OFFSCREEN = QPointF(-999_999, -999_999)
-
-        prev_node = self
-
-        for paragraph in paragraphs:
-            from nodes.WarmNode import WarmNode
-            from data.WarmNodeData import WarmNodeData
-
-            wdata = WarmNodeData(body_text=paragraph, title="")
-            node = WarmNode(wdata)
-            node.setPos(_OFFSCREEN)
-            scene.addItem(node)
-            scene.raise_node(node)
-
-            # Let the editor lay out, then resize to fit all text.
-            if node._editor:
-                doc = node._editor.document()
-                doc.setTextWidth(node.rect().width() - PADDING * 2)
-                doc_h = doc.size().height()
-                needed = 90.0 + doc_h + PADDING
-                if needed > node.rect().height():
-                    r = node.rect()
-                    node.setRect(QRectF(r.x(), r.y(), r.width(), needed))
-                    node.data.height = needed
-
-            chain_origin = self._wander_origin(prev_node)
-            pos = spiral_place(
-                scene, node, origin=chain_origin,
-                parent=prev_node,
-                fallback=chain_origin, padding=PADDING,
-            )
-            node.setPos(pos)
-
-            conn = Connection(prev_node, node)
-            scene.addItem(conn)
-            prev_node = node
-
-    @staticmethod
-    def _wander_origin(prev_node) -> 'QPointF':
-        """Thin alias for utils.placement.wander_origin — kept as a hook
-        so subclasses can override the distribution if ever needed."""
-        from utils.placement import wander_origin
-        return wander_origin(prev_node)
+        chain_spawn(scene, source_node=self, items=paragraphs, factory=_warm_factory)
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT + LAYOUT

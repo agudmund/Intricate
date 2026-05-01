@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - data/WarmNodeData.py WarmNodeData data class
--Identity and state for the WarmNode. Pure Python, zero Qt for enjoying
+-Intricate - data/WarmNodeData.py warm thought identity
+-The shape of a warm thought before any pixels have decided how to render it, For Enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
