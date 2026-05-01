@@ -6,6 +6,8 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import random as _random
+
 motivationalMessages = [
     "Accurate",
     "All Glory",
@@ -42,3 +44,13 @@ motivationalMessages = [
     "Tiny little extra sprinkles of joy",
     "Unfold",
 ]
+
+
+def random() -> str:
+    """Return a random phrase from the curated phrase bank."""
+    return _random.choice(motivationalMessages)
+
+
+def sample(n: int) -> list[str]:
+    """Return *n* unique phrases sampled without replacement (capped at bank size)."""
+    return _random.sample(motivationalMessages, min(n, len(motivationalMessages)))

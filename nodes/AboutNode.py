@@ -89,9 +89,8 @@ class AboutNode(BaseNode):
         super()._build_buttons()
 
     def _reshuffle_emoji(self) -> None:
-        import random
-        from utils.pickers.IconPicker import emojiIcons
-        self._shuffle_emoji = random.choice(emojiIcons)
+        from utils.pickers.IconPicker import random as pick_emoji
+        self._shuffle_emoji = pick_emoji()
         self._shuffle_btn.update()
 
     # Legacy hardcoded tints that mean "use Theme default" — not a real custom tint

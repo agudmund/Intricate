@@ -6,10 +6,9 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-import random
 from dataclasses import dataclass, field
 from data.NodeData import NodeData
-from utils.pickers.PhrasePicker import motivationalMessages
+from utils.pickers.PhrasePicker import random as pick_phrase
 
 
 @dataclass
@@ -27,7 +26,7 @@ class AboutNodeData(NodeData):
     width:      float = field(default=0.0)   # 0 = auto-size from text at construction
     height:     float = field(default=0.0)   # 0 = use Theme.aboutDefaultHeight
 
-    label:      str   = field(default_factory=lambda: random.choice(motivationalMessages))
+    label:      str   = field(default_factory=pick_phrase)
     depth_front: bool  = field(default=False)
     node_tint:  str   = field(default="")   # hex string; "" = use Theme default
 

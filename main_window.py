@@ -25,7 +25,7 @@ from nodes.ImageNode import ImageNode
 from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
 from pretty_widgets.utils.logger import setup_logger
-from utils.pickers.PhrasePicker import motivationalMessages
+from utils.pickers.PhrasePicker import random as pick_phrase
 from pretty_widgets.utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
 from utils.persistence.session import session_path, enter_project, session_residue
@@ -129,7 +129,7 @@ class _NewSessionDialog(QDialog):
             font_color     = Theme.textPrimary,
             always_visible = True,
             enter_commits  = True,
-            placeholder    = f"{random.choice(motivationalMessages)}\u2026",
+            placeholder    = f"{pick_phrase()}\u2026",
         )
         self._input.setStyleSheet(f"""
             QTextEdit {{
@@ -4306,7 +4306,7 @@ class IntricateApp(QMainWindow):
             set_nested("node", "claude", "default_height", h)
 
     def _run_exit_script(self) -> None:
-        logger.info(random.choice(motivationalMessages))
+        logger.info(pick_phrase())
         # Release the singleton port so the restart child can acquire it
         # before we start fading out. Without this the child's
         # is_singleton probe finds us still holding the port, exits

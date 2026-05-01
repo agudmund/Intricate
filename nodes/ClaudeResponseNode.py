@@ -6,13 +6,9 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-import random
-
 from PySide6.QtWidgets import QGraphicsProxyWidget
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QFont, QColor, QFontMetrics
-
-from utils.pickers.IconPicker import emojiIcons
 
 _BUTTON_ZONE_H = 40.0
 _MAX_WIDTH      = 420.0

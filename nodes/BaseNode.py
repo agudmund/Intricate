@@ -95,9 +95,8 @@ class BaseNode(QGraphicsRectItem):
         # The node's identity and state. Qt reads from here, never writes here.
         # Assign a random accent emoji if none was persisted from a prior session.
         if not data.emoji or data.emoji == "🌿":
-            import random
-            from utils.pickers.IconPicker import emojiIcons
-            data.emoji = random.choice(emojiIcons)
+            from utils.pickers.IconPicker import random as pick_emoji
+            data.emoji = pick_emoji()
         self.data = data
         self.setPos(QPointF(data.x, data.y))
 
@@ -469,9 +468,8 @@ class BaseNode(QGraphicsRectItem):
         """
         if self._show_emoji_btn:
             if not self.data.emoji:
-                import random
-                from utils.pickers.IconPicker import emojiIcons
-                self.data.emoji = random.choice(emojiIcons)
+                from utils.pickers.IconPicker import random as pick_emoji
+                self.data.emoji = pick_emoji()
             self._emoji_btn = EmojiButton(
                 self,
                 get_emoji=lambda: self.data.emoji,

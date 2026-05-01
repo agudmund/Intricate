@@ -6,10 +6,9 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-import random
 from dataclasses import dataclass, field
 from data.NodeData import NodeData
-from utils.pickers.PhrasePicker import motivationalMessages
+from utils.pickers.PhrasePicker import random as pick_phrase
 
 
 @dataclass
@@ -23,7 +22,7 @@ class WarmNodeData(NodeData):
     """
 
     node_type:  str   = field(default="warm")
-    title:      str   = field(default_factory=lambda: random.choice(motivationalMessages))
+    title:      str   = field(default_factory=pick_phrase)
     width:      float = field(default=300.0)
     height:     float = field(default=200.0)
 
