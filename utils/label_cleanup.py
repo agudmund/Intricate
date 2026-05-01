@@ -33,6 +33,50 @@ def is_structural_only(text: str) -> bool:
     return len(dense) >= 3
 
 
+def is_code_fence(para: str) -> bool:
+    """True when *para* opens with a markdown code fence (triple
+    backticks, optionally followed by a language tag).  The chunker
+    isn't fence-aware, so a ````python` opener can leak
+    through as its own short paragraph and become a noisy AboutNode
+    callout — this filter catches that case.  Must be called on the
+    pre-strip text, otherwise the leading backticks are invisible."""
+    return para.lstrip().startswith("```")
+
+
+# Python source-encoding declaration.  Matches both the emacs-style
+# ``-*- coding: utf-8 -*-`` form and PEP 263's bare ``coding: utf-8``.
+# By the time this filter sees a candidate, the leading ``# `` of the
+# original source line has already been eaten by the chunker's heading
+# regex (a Python encoding line happens to look like a markdown H1
+# from the chunker's point of view), so we only test the residue.
+_ENCODING_LINE_RE = re.compile(
+    r'^(?:-\*-\s*)?coding[:=]\s*[\w\-]+(?:\s*-\*-)?\s*$',
+    re.IGNORECASE,
+)
+
+
+def is_encoding_declaration(text: str) -> bool:
+    """True when *text* is a Python source-encoding declaration leftover
+    from the chunker mistaking ``# -*- coding: utf-8 -*-`` for a heading.
+    Used in the heading-spawn path to skip these noise titles."""
+    return bool(_ENCODING_LINE_RE.match(text.strip()))
+
+
+# Glyphs that don't belong on an AboutNode sticker.  AboutNodes are the
+# clean shorthand-label surface — markdown blockquote markers (``>``)
+# and literal double quotes read as visual noise on the small chrome.
+# Both are perfectly valid in WarmNode body text, so this filter only
+# fires in the AboutNode spawn path; same content as a WarmNode is fine.
+_ABOUT_UNSUITABLE_RE = re.compile(r'[>"]')
+
+
+def is_aboutnode_unsuitable(text: str) -> bool:
+    """True when *text* contains a glyph (``>`` blockquote marker or
+    literal double quote) that should keep it off an AboutNode sticker.
+    Per-node-type exclude — WarmNodes accept the same content."""
+    return bool(_ABOUT_UNSUITABLE_RE.search(text))
+
+
 # Label display transformations.  Source text often uses conventions that
 # read well in files (ISO dates, em-dash separators, markdown emphasis
 # markers) but sound stilted when squeezed onto a small AboutNode.  These

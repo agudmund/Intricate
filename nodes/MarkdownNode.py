@@ -35,8 +35,11 @@ _CALLOUT_MAX_CHARS = 90
 # from source text.  Kept under their previous private names here so the
 # rest of this file doesn't need to change.
 from utils.label_cleanup import (
-    prettify_label   as _prettify_label,
-    is_structural_only as _is_structural_only,
+    prettify_label          as _prettify_label,
+    is_structural_only      as _is_structural_only,
+    is_code_fence           as _is_code_fence,
+    is_encoding_declaration as _is_encoding_declaration,
+    is_aboutnode_unsuitable as _is_aboutnode_unsuitable,
 )
 
 
@@ -519,24 +522,36 @@ class MarkdownNode(BaseNode):
             # AboutNode for the heading
             if title:
                 pretty_title = _prettify_label(title)
-                about = scene.add_about_node(pos=_OFFSCREEN, label=pretty_title)
-                about.data.title = pretty_title[:40]
-                if first_node and source_hidden:
-                    pos = spiral_place(scene, about)
+                # Skip headings that the chunker mistook for content —
+                # Python encoding declarations from inside a code block
+                # (``# -*- coding: utf-8 -*-`` matches the heading regex
+                # by accident) — or that carry glyphs unsuitable for an
+                # AboutNode sticker (``>`` blockquote markers, literal
+                # double quotes).  When skipped the body still spawns;
+                # only the heading AboutNode is suppressed.
+                skip_heading = (
+                    _is_encoding_declaration(title)
+                    or _is_aboutnode_unsuitable(pretty_title)
+                )
+                if not skip_heading:
+                    about = scene.add_about_node(pos=_OFFSCREEN, label=pretty_title)
+                    about.data.title = pretty_title[:40]
+                    if first_node and source_hidden:
+                        pos = spiral_place(scene, about)
+                        first_node = False
+                    else:
+                        chain_origin = self._wander_origin(prev_node)
+                        pos = spiral_place(
+                            scene, about, origin=chain_origin,
+                            parent=prev_node,
+                            fallback=chain_origin,
+                        )
+                    about.setPos(pos)
+                    if not (first_node or (prev_node is self and source_hidden)):
+                        conn = Connection(prev_node, about)
+                        scene.addItem(conn)
+                    prev_node = about
                     first_node = False
-                else:
-                    chain_origin = self._wander_origin(prev_node)
-                    pos = spiral_place(
-                        scene, about, origin=chain_origin,
-                        parent=prev_node,
-                        fallback=chain_origin,
-                    )
-                about.setPos(pos)
-                if not (first_node or (prev_node is self and source_hidden)):
-                    conn = Connection(prev_node, about)
-                    scene.addItem(conn)
-                prev_node = about
-                first_node = False
 
             # Body — split into paragraphs.  Each paragraph spawns its own
             # node, classified by LENGTH: paragraphs at or under
@@ -556,6 +571,13 @@ class MarkdownNode(BaseNode):
                     # don't earn a node in the reading chain.
                     if _is_structural_only(para_stripped):
                         continue
+                    # Skip markdown code-fence boundary fragments — the
+                    # chunker isn't fence-aware, so a ```python opener
+                    # can leak through as its own short paragraph.
+                    # Detected on pre-strip text so the leading backticks
+                    # are still visible.
+                    if _is_code_fence(para_stripped):
+                        continue
                     # Strip inline-code backticks — markdown's code tint
                     # doesn't help on a plain-text reader, and the
                     # wrapped identifiers still read cleanly without them.
@@ -568,6 +590,14 @@ class MarkdownNode(BaseNode):
                     if is_callout:
                         # Short paragraph — AboutNode callout
                         pretty = _prettify_label(para_stripped)
+                        # Per-node-type exclude: skip AboutNode spawn
+                        # for content carrying glyphs unsuitable for a
+                        # clean sticker (``>`` blockquote markers,
+                        # literal double quotes).  Same content remains
+                        # valid as a WarmNode body — only the AboutNode
+                        # path filters here.
+                        if _is_aboutnode_unsuitable(pretty):
+                            continue
                         node = scene.add_about_node(pos=_OFFSCREEN, label=pretty)
                         node.data.title = pretty[:40]
                     else:
