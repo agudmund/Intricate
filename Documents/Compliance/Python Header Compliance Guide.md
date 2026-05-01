@@ -146,7 +146,7 @@ Because `.git/hooks/` is untracked per-clone, committing this hook requires eith
 # -*- coding: utf-8 -*-
 """
 -Intricate nodal playground - tools/header_check.py header compliance auditor
--Walks every .py file and confirms each carries the For Enjoying header, for enjoying
+-Walks every .py file and confirms each carries the For Enjoying header, For enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 import sys
