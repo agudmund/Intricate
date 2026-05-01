@@ -47,7 +47,7 @@ Four components, each with a specific job:
 | `The last of the` | Fixed prefix. Announces finality, singularity — this is the *last of its kind*, emerging from the goo. |
 | `[descriptive filename]` | Warm human voice. "about node" — not `AboutNode.py`. "main window" — not `main_window.py`. |
 | `[triumphant-emergent clause]` | The heart. A sentence clause giving the file its inner life: hopeful, achieving, half-aware of the larger world it's part of, goo-ball-rising energy. |
-| `, For enjoying` | Non-negotiable EULA terminator. Lowercase "e". |
+| `, For enjoying` | Non-negotiable EULA terminator. Uppercase "E". |
 
 **The voice, in one phrase:** *triumphant emergent with a detached contextual awareness as the last of the goo balls rise to the skies.*
 
