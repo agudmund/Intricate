@@ -61,6 +61,15 @@ class ImageNode(BaseNode):
             data = ImageNodeData()
         super().__init__(data)
 
+        # Start with shelf collapsed — image is the focus, tools surface only
+        # on demand via the resize-handle gesture (see mouseMoveEvent below).
+        # Mirrors AboutNode's bespoke reveal/hide model.
+        self._buttons_visible = False
+        self._anim_top_offset = self._HIDDEN_TOP_OFFSET
+        for btn in self._buttons:
+            btn.hide()
+        self._shelf_anchor_h: float | None = None
+
         self._pixmap: QPixmap | None = None   # Full-resolution source pixmap
         self._scaled_cache: QPixmap | None = None          # Cached scaled pixmap
         self._scaled_cache_size: tuple[int, int] | None = None  # (target_w, target_h) key in device pixels
@@ -624,14 +633,51 @@ class ImageNode(BaseNode):
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Asymmetric shelf thresholds — mirrors AboutNode.  Reveal demands a
+    # deliberate yank so a casual padding adjustment doesn't surface the
+    # buttons by accident; hide is lighter so the user can dial the final
+    # height down tight without the shelf clinging on.
+    _RESIZE_SHELF_REVEAL_THRESHOLD = 75.0
+    _RESIZE_SHELF_HIDE_THRESHOLD   = 30.0
+
+    def mousePressEvent(self, event) -> None:
+        # Seed the shelf anchor at the start of any drag so the first
+        # threshold check measures from press-time height.
+        self._shelf_anchor_h = self.rect().height()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        # Defer to BaseNode first so the resize actually happens and
+        # self.rect() reflects the updated geometry before we inspect it.
+        super().mouseMoveEvent(event)
+        # ── Bidirectional shelf coupling ─────────────────────────────────
+        # Resize direction drives shelf state:
+        #   • growing taller past the reveal threshold → reveal
+        #   • shrinking shorter past the hide threshold → hide
+        # Anchor is re-seeded after every toggle so a single continuous
+        # drag can flip the shelf multiple times.
+        if not self._is_resizing:
+            return
+        if self._shelf_anchor_h is None:
+            self._shelf_anchor_h = self.rect().height()
+        delta_h = self.rect().height() - self._shelf_anchor_h
+        if not self._buttons_visible and delta_h > self._RESIZE_SHELF_REVEAL_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
+        elif self._buttons_visible and delta_h < -self._RESIZE_SHELF_HIDE_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
+
     def mouseDoubleClickEvent(self, event) -> None:
-        """Double-click the top strip to toggle buttons, image area to browse."""
+        """Double-click the image area to browse for a new image."""
         if self._image_rect().contains(event.pos()):
             self._open_file_browser()
             event.accept()
             return
-        # Fall through to BaseNode — handles shelf toggle on top-strip double-click
-        super().mouseDoubleClickEvent(event)
+        # Top-strip double-click no longer toggles the shelf — that's now
+        # driven by the resize-handle gesture.  Absorb the event so it
+        # doesn't fall through to BaseNode's legacy toggle path.
+        event.accept()
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT
