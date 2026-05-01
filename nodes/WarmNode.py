@@ -1041,9 +1041,12 @@ class WarmNode(BaseNode):
         painter.save()
         painter.setFont(font)
         painter.setPen(QColor(Theme.textPrimary))
-        # Match the editor's 4px document margin (normalize_layout=False)
-        # so idle paint and active editor align on both axes.
-        body_rect = self._body_rect().adjusted(4, 4, 0, 0)
+        # Match PrettyEdit's native QTextDocument margin so idle paint
+        # and the active editor align on both axes.  The constant lives
+        # in Pretty Widgets as the single source of truth — without it,
+        # every lazy-editor host re-encodes the same magic 4.
+        margin = PrettyEdit.NATIVE_DOCUMENT_MARGIN
+        body_rect = self._body_rect().adjusted(margin, margin, 0, 0)
         painter.drawText(
             body_rect,
             Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
