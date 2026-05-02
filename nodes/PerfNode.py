@@ -292,20 +292,30 @@ class PerfNode(ChromelessRoot):
         """Full paint pipeline — chromeless root paints nothing, every
         descendant owns its full visual. Order: rounded body fill +
         cream border (preserves the BaseNode-era look), then the stats
-        grid via the data-grid kit helpers."""
+        grid via the data-grid kit helpers.
+
+        Layout scale is derived from the rect's height vs the auto-fit
+        baseline — a single ratio that captures both user-resize (the
+        corner grip while unpinned) AND pin-state scaling, because the
+        rect grows with both: K×H_auto when resized to K, then ×z_pin
+        when pinned. ``rect.height / H_auto = K × z_pin`` captures both
+        in one number. Net effect: when the user makes the HUD bigger,
+        fonts grow proportionally with the container. Without this, a
+        resized HUD shows default-sized text floating in a big empty
+        body, which defeats the point of resizing.
+        """
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Body fill + border. Border width follows pin_scale so the visual
-        # weight is preserved through the IIT toggle.
-        s        = float(getattr(self.data, 'pin_scale', 1.0)) or 1.0
+        h_auto = self._compute_auto_height()
+        s      = self.rect().height() / h_auto if h_auto > 0 else 1.0
+
         radius   = Theme.nodeRoundRadius * s
         border_w = max(1, int(round(Theme.nodeBorderWidth * s)))
         painter.setBrush(self.brush())
         painter.setPen(QPen(QColor(Theme.nodeBorder), border_w))
         painter.drawRoundedRect(self.rect(), radius, radius)
 
-        # Stats content
         self._paint_stats(painter, s)
         painter.restore()
 
