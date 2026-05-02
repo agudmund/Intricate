@@ -509,28 +509,41 @@ class ChromelessRoot(QGraphicsRectItem):
         rect() to pick the screen size they want frozen on the next
         pin.
 
-        The rect is divided by the current zoom on unpin so the visible
-        on-screen size stays continuous across the IIT toggle — the pair
-        of this with the rescale in ``_activate_pin`` makes pin/unpin a
-        visually silent operation at any zoom level. sync_data() after
-        the user resizes while unpinned then stores the new screen-pixel
-        target (via the next pin's multiply).
+        The rect is divided by the captured ``pin_scale`` (NOT the
+        current zoom) to restore the original pre-pin scene-unit size.
+        This is the inverse of ``_activate_pin``'s ``rect *= zoom`` —
+        the two operations cancel out and the rect lands back where it
+        was before pinning, regardless of where the user's zoom level
+        sits at unpin time.
+
+        2026-05-02 fix: previously divided by the current zoom, which
+        worked when ``z_pin == z_unpin`` but produced an over-scaled
+        rect (and sub-pixel text against the still-visible body) when
+        the user zoomed between pin and unpin. Symptom was a "blank"
+        node after unpin at extreme zoom-out: rect grew to compensate
+        for the zoom, but ``pin_scale = 1.0`` left the kit at default
+        font sizes, so text rendered at sub-pixel size while the body
+        fill occupied the visible area.
+
+        Visible-size continuity across the IIT toggle is preserved
+        only when ``z_pin == z_unpin``. When zooms differ, visible
+        size jumps at unpin to match the original — which is the
+        correct trade-off, since restoring the original geometry
+        keeps the rendering consistent and avoids the blank-text
+        failure mode.
         """
         logger.log(TRACE, "[chrome-pin] %s DEACTIVATE", self._log_id())
         self.data.pinned = False
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        view = self._get_view()
-        zoom = float(getattr(view, 'current_zoom', 1.0)) if view else 1.0
-        if not zoom:
-            zoom = 1.0
-        if zoom != 1.0:
+        pin_scale = float(self.data.pin_scale) or 1.0
+        if pin_scale != 1.0:
             cur = self.rect()
             self.prepareGeometryChange()
             self.setRect(QRectF(cur.topLeft(),
-                                QSizeF(cur.width()  / zoom,
-                                       cur.height() / zoom)))
-            logger.log(TRACE, "[chrome-pin] %s DEACTIVATE rescaled rect ÷%.3f (zoom) → (%.1f,%.1f)",
-                       self._log_id(), zoom, self.rect().width(), self.rect().height())
+                                QSizeF(cur.width()  / pin_scale,
+                                       cur.height() / pin_scale)))
+            logger.log(TRACE, "[chrome-pin] %s DEACTIVATE rescaled rect ÷%.3f (pin_scale) → (%.1f,%.1f)",
+                       self._log_id(), pin_scale, self.rect().width(), self.rect().height())
         self.setFlag(QGraphicsItem.ItemIgnoresTransformations, False)
         # Reset paint-time font compensation — under IIT off the view
         # transform handles scaling, so paint_content runs at native pt.

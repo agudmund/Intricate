@@ -158,6 +158,13 @@ class PerfNode(ChromelessRoot):
     # AUTO-FIT GEOMETRY
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Footer descender breathing room — Qt's drawText with AlignCenter inside
+    # a (line_h)-tall bounding rect centres the baseline, but glyph descenders
+    # ('p' in "poll", parens) extend below the baseline and read as touching
+    # the bottom border without this padding. 6 px gives the footer text room
+    # to breathe against the rounded-rect chrome.
+    _FOOTER_BREATHING_PX = 6
+
     @classmethod
     def _compute_auto_height(cls) -> float:
         """Derive the snug node height from the kit's actual layout values
@@ -165,14 +172,16 @@ class PerfNode(ChromelessRoot):
 
         Layout from paint(): top pad + header (line_h + 22) + 6 breathing
         + N × (line_h + 3) rows + footer (gap 2 + divider + 6 post + line
-        + tail). Bottom pad rounds the rect to the same kit.pad as the top.
+        + tail) + footer-descender breathing. Bottom pad rounds the rect
+        to the same kit.pad as the top.
         """
         from utils.paint import make_kit
         kit = make_kit(cls._TITLE_FONT, cls._TITLE_STYLE, cls._TITLE_FONT_BUMP)
         header_h = kit.line_h + 22
         rows_h   = cls._ROW_COUNT * (kit.line_h + 3)
         footer_h = kit.line_h + 8
-        return float(kit.pad * 2 + header_h + 6 + rows_h + footer_h)
+        return float(kit.pad * 2 + header_h + 6 + rows_h + footer_h
+                     + cls._FOOTER_BREATHING_PX)
 
     # ─────────────────────────────────────────────────────────────────────────
     # FILTER LIFECYCLE
