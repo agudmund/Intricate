@@ -19,6 +19,7 @@
 # instead of one, so JSON instead of plain text.
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QFileSystemWatcher, Signal
@@ -32,25 +33,41 @@ def _ensure_parent() -> None:
 
 
 def load() -> dict:
-    """Read the sidecar. Returns a dict with happy_secs (float) and bar_value
-    (int). Missing file or malformed contents return sensible defaults — a
-    corrupted store should never crash startup, just reset the live pulse."""
+    """Read the sidecar. Returns a dict with happy_secs (float), bar_value
+    (int), and last_active_at (ISO datetime string or None). Missing file
+    or malformed contents return sensible defaults — a corrupted store
+    should never crash startup, just reset the live pulse.
+
+    last_active_at is the timestamp of the most recent save call, written
+    on every save. On app launch, main_window reads this and compares it
+    against the current time to compute elapsed-while-closed sleep decay
+    on the bar. None on cold-start (no previous run) means no decay
+    applied — bar starts at default."""
     try:
         data = json.loads(_STORE.read_text(encoding="utf-8"))
     except (FileNotFoundError, ValueError, OSError):
-        return {"happy_secs": 0.0, "bar_value": 100}
+        return {"happy_secs": 0.0, "bar_value": 100, "last_active_at": None}
     return {
-        "happy_secs": float(data.get("happy_secs", 0.0)),
-        "bar_value":  int(data.get("bar_value", 100)),
+        "happy_secs":     float(data.get("happy_secs", 0.0)),
+        "bar_value":      int(data.get("bar_value", 100)),
+        "last_active_at": data.get("last_active_at"),
     }
 
 
 def save(happy_secs: float, bar_value: int) -> None:
-    """Persist the current pulse. Called from the 30-second _persist_happy tick."""
+    """Persist the current pulse + an ISO timestamp of the save moment.
+
+    Called from the 30-second _persist_happy tick AND explicitly from
+    closeEvent (so the at-close value is the actual at-close value, not
+    whatever the last tick had). The timestamp drives sleep-decay on
+    next launch — the app being closed is treated as the app being
+    asleep, with the configured sleep_drain rate applied to the elapsed
+    closed period to bring the bar down on wake."""
     _ensure_parent()
     payload = {
-        "happy_secs": round(float(happy_secs), 1),
-        "bar_value":  int(bar_value),
+        "happy_secs":     round(float(happy_secs), 1),
+        "bar_value":      int(bar_value),
+        "last_active_at": datetime.now().isoformat(),
     }
     _STORE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 

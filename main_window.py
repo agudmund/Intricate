@@ -1929,6 +1929,14 @@ class IntricateApp(QMainWindow):
         self._happy_timer.timeout.connect(self._tick_happy)
         # Seed _JOY_* constants + timer interval from settings.toml.
         self._apply_joy_settings()
+        # Wake-decay — the app being closed is the app being asleep, same
+        # framing as human hunger slowing down while not active. Compute
+        # elapsed seconds since the saved last_active_at and apply the
+        # configured sleep-rate decay to the loaded bar value before the
+        # depletion timer starts running. Has to land AFTER _apply_joy_settings
+        # so _JOY_SLEEP_INTERVAL is populated, BEFORE the timer starts so the
+        # tick doesn't overlap with the decay write. See _apply_sleep_decay_on_wake.
+        self._apply_sleep_decay_on_wake()
         self._joy_timer.start()
 
         # If we launch at 100%, start the grace immediately
@@ -2133,6 +2141,79 @@ class IntricateApp(QMainWindow):
             "[joy-tune] applied: awake_drain=%dm sleep_drain=%dm grace=%ds bucket=%dm",
             awake_min, sleep_min, grace_s, bucket_m,
         )
+
+    def _apply_sleep_decay_on_wake(self) -> None:
+        """On launch, decay the bar by the elapsed time since last save.
+
+        The framing: the app being closed is the app being asleep — same
+        shape as human hunger when not active. While running awake the
+        bar drains at the awake rate (default 1 hr 100→0); while running
+        asleep (sidebar sleep button) the bar drains at the sleep rate
+        (default 10 hr 100→0). When the app is shut down entirely, that's
+        a deeper kind of asleep — but the rate that applies is still the
+        configured sleep_drain rate, since "asleep" is a single mode from
+        the bar's perspective.
+
+        This makes restarts honest: if the user closed the app last night
+        with the bar at 80, opens it the next morning ~10 hours later, the
+        bar drains by ~100% over the configured sleep window. The bar
+        loads at 0%, super hungry — exactly the user's stated intent for
+        wake-up behaviour ("wake up super hungry at 0% even").
+
+        Skipped when:
+          - last_active_at is None (cold start, no previous run on record)
+          - last_active_at parse fails (corrupted timestamp)
+          - elapsed time is negative (clock skew across the close/launch
+            boundary, e.g. user changed system time backward)
+          - sleep_drain_minutes is 0 or unset (would divide by zero)
+        """
+        from datetime import datetime
+        from utils import joy_state as _joy_state
+        import shared_braincell.settings as _s
+
+        state = _joy_state.load()
+        saved_ts = state.get("last_active_at")
+        if not saved_ts:
+            return
+        try:
+            last_active = datetime.fromisoformat(saved_ts)
+        except (ValueError, TypeError):
+            logger.debug("[joy] wake-decay: bad last_active_at=%r, skipping", saved_ts)
+            return
+        elapsed_s = (datetime.now() - last_active).total_seconds()
+        if elapsed_s <= 0:
+            return
+
+        # Sleep drain in seconds for full 100→0 traversal. Same value the
+        # _JOY_SLEEP_INTERVAL is derived from, but read here directly so
+        # the decay calc isn't coupled to the timer's per-tick interval
+        # representation.
+        sleep_drain_min = int(_s.get_nested(
+            "intricate", "joy", "sleep_drain_minutes",
+            self._JOY_DEFAULTS["sleep_drain_minutes"],
+        ))
+        sleep_drain_total_s = sleep_drain_min * 60
+        if sleep_drain_total_s <= 0:
+            return
+
+        drain_pct = (elapsed_s / sleep_drain_total_s) * 100.0
+        before = self.joy_bar.value()
+        after = max(0, int(round(before - drain_pct)))
+        if after < before:
+            self.joy_bar.blockSignals(True)
+            self.joy_bar.setValue(after)
+            self.joy_bar.blockSignals(False)
+            logger.info(
+                "[joy] wake-decay: bar %d → %d (closed for %.0f sec at sleep rate "
+                "of %d min for full drain)",
+                before, after, elapsed_s, sleep_drain_min,
+            )
+        else:
+            logger.debug(
+                "[joy] wake-decay: bar stays at %d (%.0f sec elapsed, "
+                "%.2f%% theoretical drain rounds to 0)",
+                before, elapsed_s, drain_pct,
+            )
 
     def _persist_happy(self) -> None:
         """Save happy accumulator and bar value to the joy_state sidecar.
@@ -4411,6 +4492,17 @@ class IntricateApp(QMainWindow):
             pass
         try:
             self._save_geometry()
+        except (RuntimeError, Exception):
+            pass
+        # Joy state save-on-close. Without this, the most recent persist was
+        # up to 30 seconds ago (during the depletion tick) — and with the
+        # restart-on-close spawn pattern, the next instance reads the file
+        # before the old instance ever writes again. Calling _persist_happy
+        # explicitly here stamps the bar value AND last_active_at at the
+        # actual moment of close, which feeds the wake-decay calculation
+        # on the next launch (see _apply_sleep_decay_on_wake below).
+        try:
+            self._persist_happy()
         except (RuntimeError, Exception):
             pass
         self._run_exit_script()
