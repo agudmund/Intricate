@@ -62,7 +62,7 @@ class IntricateView(QGraphicsView):
         super().__init__(scene, parent)
 
         self.current_zoom  = 1.0
-        import pretty_widgets.utils.settings as _s
+        import shared_braincell.settings as _s
         self._blur_alpha   = int(_s.get_nested("intricate", "canvas", "blur_alpha", 180))   # driven by sidebar blur slider (0=clear, 255=opaque)
         self._last_pan_pos: QPointF | None = None
         self._on_zoom_changed = None   # optional callback, set by main_window

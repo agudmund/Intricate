@@ -43,7 +43,7 @@ def _get_excluded_repos() -> set[str]:
     cloned-but-not-maintained repos living on Desktop alongside the
     user's own projects."""
     import ast
-    import pretty_widgets.utils.settings as _s
+    import shared_braincell.settings as _s
     val = _s.get_nested("node", "git", "exclude_repos", default=[])
     if isinstance(val, list):
         return set(val)
@@ -60,7 +60,7 @@ def _get_excluded_repos() -> set[str]:
 def _get_poll_interval_ms() -> int:
     """Read [node.git] poll_interval_ms at call time, with fallback to
     the baked-in default."""
-    import pretty_widgets.utils.settings as _s
+    import shared_braincell.settings as _s
     val = _s.get_nested("node", "git", "poll_interval_ms", default=_POLL_MS)
     try:
         return max(1000, int(val))   # floor at 1s to avoid runaway scans
@@ -79,7 +79,7 @@ def _get_status_colors() -> dict:
     """Read [node.git] status_color_* keys at call time, with fallback
     to the baked-in defaults.  Each key maps a status name to a hex
     string; the caller feeds that into QColor to paint the dot."""
-    import pretty_widgets.utils.settings as _s
+    import shared_braincell.settings as _s
     return {
         status: _s.get_nested("node", "git", f"status_color_{status}",
                               default=_DOT_COLORS_DEFAULT[status])

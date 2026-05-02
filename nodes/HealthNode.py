@@ -191,7 +191,7 @@ class HealthNode(BaseNode):
         """
         if self._monitor is not None:
             return
-        import pretty_widgets.utils.settings as _s
+        import shared_braincell.settings as _s
         if not bool(_s.get_nested("intricate", "health", "click_monitor", True)):
             self._last_clicked_type = "click monitor off"
             self._last_clicked_item = "enable in [intricate.health] click_monitor"

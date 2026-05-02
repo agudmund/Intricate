@@ -28,8 +28,8 @@
 
 | Package | Scope | Source |
 |---------|-------|--------|
-| [`pretty_widgets`](https://github.com/agudmund/Pretty-Widgets) | Qt widgets, Theme, TOML loader | `Desktop/Pretty Widgets/` |
-| `shared_braincell` | Non-Qt cross-app utilities (incl. logger adapter) | `Desktop/Shared Braincell/` |
+| [`pretty_widgets`](https://github.com/agudmund/Pretty-Widgets) | Qt widgets, Theme, settings live-reload watcher | `Desktop/Pretty Widgets/` |
+| `shared_braincell` | Non-Qt cross-app utilities (logger adapter, settings loader) | `Desktop/Shared Braincell/` |
 | `intricate_vision` | Anthropic Vision API helpers | `Desktop/Intricate Vision/` |
 | `intricate_log` | Rust-backed lock-free log ring buffer (`.pyd`) | `Desktop/intricate-log/` |
 
@@ -54,7 +54,9 @@ pretty_widgets/
 ├── PrettyTooltip.py     — Pill-shaped custom tooltip (WA_TransparentForMouseEvents
 │                           so it never intercepts clicks)
 ├── graphics/Theme.py    — Metaclass theme registry, live TOML reload, icon cache
-└── utils/settings.py    — TOML loader, QFileSystemWatcher, atomic writes
+└── utils/settings.py    — Qt live-reload watcher only (`init_watcher()` + module-level
+                           `watcher`); the read/write API and canonical path live in
+                           `shared_braincell.settings`
 ```
 
 ### Shared Braincell (`shared_braincell`)
@@ -66,17 +68,25 @@ shared_braincell/
 ├── instance_lock.py    — Singleton-app port lock with IPC handshake and port-range fallback
 ├── window_behind.py    — Win32 Z-order walk: name the next visible window beneath any caller
 ├── phrase_picker.py    — Curated phrase bank + randomling / sampleling helpers
-└── logger.py           — Slim duck-typed adapter onto `intricate_log` (Rust ring buffer);
-                          NullLogger if the .pyd isn't loaded, so missing logger never
-                          blocks app launch ("Intricate doesn't stop")
+├── logger.py           — Slim duck-typed adapter onto `intricate_log` (Rust ring buffer);
+│                         NullLogger if the .pyd isn't loaded, so missing logger never
+│                         blocks app launch ("Intricate doesn't stop")
+└── settings.py         — TOML loader for the family's shared `settings.toml`:
+                          `canonical_settings_path()`, defaults, deep-merge, masking,
+                          read/write API. The Qt live-reload watcher lives in
+                          `pretty_widgets.utils.settings`; the writer (`tomli_w` +
+                          atomic temp-swap) is sovereign in `Settlers/toml_writer.py`
 ```
 
 Soft dep on `intricate_log`. No fallback to stdlib `logging.FileHandler` — if the Rust sink is missing the app simply runs without a log.
+
+**Settlers steel cage.** The settings primitive is intentionally split across three locations to honour the production-crew metaphor: the **read API** is shared infrastructure (everyone's job to know the current state); the **watcher** is Qt stagehand work (`pretty_widgets`); the **writer** is sovereign to The Settlers (the booth — see `project_settlers_sovereign_writer.md`). The `set_value` / `set_nested` helpers in `shared_braincell.settings` predate this split and let any importer write — that's an architectural debt to audit, not a designed-in path.
 
 **Migration log:**
 - 2026-04-15 — `instance_lock` seeded the package
 - 2026-05-02 — `window_behind` lifted from Intricate + The Settlers; `phrase_picker` lifted from Intricate + The Majestic (both eliminated drifting forks)
 - 2026-05-02 — `logger` migrated here from `pretty_widgets.utils.logger`. Slim adapter (~210 lines, was ~370). Pretty Widgets' shim deleted with no back-compat re-export; The Settlers' stale fork (carrying a dead `StatusBarHandler`) deleted. Build pipeline (`build.py`, `_runtime/build_runtime.py`) updated to bundle `shared_braincell` + `intricate_log` directly.
+- 2026-05-02 — `settings` (read/write API + canonical path + defaults + masking) migrated here from `pretty_widgets.utils.settings`. Pretty Widgets' file shrunk from ~500 lines to ~130 — keeps only the Qt `_SettingsWatcher` + `init_watcher()`. `Settlers/toml_writer.py` retargeted at the new `canonical_settings_path` location. Bulk import rewrite touched 21 files across 4 repos; 5 watcher-using files got a supplementary `import pretty_widgets.utils.settings as _pw_settings` to keep the watcher reachable.
 
 ## Shared Contracts
 

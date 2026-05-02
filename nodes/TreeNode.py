@@ -424,7 +424,7 @@ class TreeNode(BaseNode):
     def _make_walker(self) -> _TreeWalker:
         """Build a walker from current [node.tree] TOML settings."""
         import ast
-        import pretty_widgets.utils.settings as _s
+        import shared_braincell.settings as _s
         g = lambda *keys, default=None: _s.get_nested(*keys, default)
 
         def _parse_list(val, default=()):

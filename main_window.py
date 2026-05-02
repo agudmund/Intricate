@@ -26,7 +26,7 @@ from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
 from shared_braincell.logger import setup_logger
 from shared_braincell.phrase_picker import randomling as pick_phrase
-from pretty_widgets.utils.settings import appName, set_nested, get_nested, set_value, get
+from shared_braincell.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
 from utils.persistence.session import session_path, enter_project, session_residue
 from pretty_widgets.PrettyCombo import combo as pretty_combo
@@ -973,7 +973,7 @@ class IntricateApp(QMainWindow):
             "claude.exe" = 0
             "chrome.exe" = 50
         """
-        import pretty_widgets.utils.settings as _s
+        import shared_braincell.settings as _s
         return _s.get("intricate", "dock_offsets", default={})
 
     def _toggle_dock_position(self) -> None:
@@ -1722,7 +1722,7 @@ class IntricateApp(QMainWindow):
         #   progress row  → reserved (col 1), reserved (col 2), joy (col 3)
         # Reserved slots use fixed-size spacers so column alignment is
         # preserved before the future peers land.
-        import pretty_widgets.utils.settings as _s
+        import shared_braincell.settings as _s
         sz = Theme.iconButtonSize
         bar_width = sz // 3
         bar_min_height = sz * 2
@@ -1956,7 +1956,7 @@ class IntricateApp(QMainWindow):
             return
         self.view._blur_alpha = value
         self.view.viewport().update()
-        import pretty_widgets.utils.settings as _s
+        import shared_braincell.settings as _s
         _s.set_nested("intricate", "canvas", "blur_alpha", value)
 
     def _on_feed_pressed(self) -> None:
@@ -2098,7 +2098,7 @@ class IntricateApp(QMainWindow):
         change. Calling with new values updates the depletion timer's
         interval (via setInterval, which Qt handles cleanly even mid-run).
         """
-        import pretty_widgets.utils.settings as _s
+        import shared_braincell.settings as _s
 
         d = self._JOY_DEFAULTS
         awake_min = int(_s.get_nested("intricate", "joy", "awake_drain_minutes", d["awake_drain_minutes"]))

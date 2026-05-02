@@ -40,8 +40,9 @@ if hasattr(sys.stderr, "reconfigure"):
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 from shared_braincell.logger import setup_logger, set_log_level, TRACE
-import pretty_widgets.utils.settings as settings
-from pretty_widgets.utils.settings import appName, orgName
+import shared_braincell.settings as settings
+from shared_braincell.settings import appName, orgName
+from pretty_widgets.utils.settings import init_watcher  # Qt live-reload watcher
 from shared_braincell import is_singleton
 
 _INSTANCE_START_PORT = int(settings.get("intricate", "instance_port", default=47321))
@@ -242,7 +243,7 @@ def main():
     elif args.debug:
         _debug, _trace = True, False
     else:
-        import pretty_widgets.utils.settings as _s_boot
+        import shared_braincell.settings as _s_boot
         _toml_level = str(_s_boot.get("intricate", "log_level", "info")).lower().strip()
         _trace = _toml_level == "trace"
         _debug = _toml_level == "debug"
@@ -346,7 +347,7 @@ def main():
     QImageReader.setAllocationLimit(1024)   # MB — plenty for any canvas image
 
     logger.log(TRACE, "[boot:3] importing utils.settings")
-    import pretty_widgets.utils.settings as settings
+    import shared_braincell.settings as settings
     logger.log(TRACE, "[boot:4] utils.settings imported")
 
     logger.log(TRACE, "[boot:5] importing graphics.Theme")
@@ -369,7 +370,7 @@ def main():
     logger.debug(f"[boot] TOML loaded from: {settings._SETTINGS_PATH}")
 
     logger.log(TRACE, "[boot:11] initialising file watcher")
-    _watcher = settings.init_watcher()
+    _watcher = init_watcher()
     _watcher.changed.connect(Theme.reload)
     _watcher.changed.connect(lambda: app.activeWindow() and app.activeWindow().update())
     # Live-reload joy mechanic tunables — Settlers writes through to TOML,

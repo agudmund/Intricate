@@ -24,7 +24,8 @@ from pretty_widgets.PrettyEdit import PrettyEdit
 from nodes.BaseNode import BaseNode
 from data.ClaudeNodeData import ClaudeNodeData
 from pretty_widgets.graphics.Theme import Theme
-import pretty_widgets.utils.settings as settings
+import shared_braincell.settings as settings
+import pretty_widgets.utils.settings as _pw_settings  # for the Qt watcher
 
 
 class _InputEdit(PrettyEdit):
@@ -72,8 +73,8 @@ class ClaudeNode(BaseNode):
         self.setBrush(self._bg_color())
         self._apply_depth()
         self._rebuild_pens()
-        if settings.watcher:
-            settings.watcher.changed.connect(self._on_theme_reload)
+        if _pw_settings.watcher:
+            _pw_settings.watcher.changed.connect(self._on_theme_reload)
         self._current_uuid: str | None = None
         self._watcher: QFileSystemWatcher | None = None
         self._file_offset: int = 0
@@ -1117,9 +1118,9 @@ class ClaudeNode(BaseNode):
     def _demolition_pre(self) -> None:
         # Sever the settings watcher's peer signal — it lives outside the
         # node's Qt object tree, so the crew has no way to know about it.
-        if settings.watcher:
+        if _pw_settings.watcher:
             try:
-                settings.watcher.changed.disconnect(self._on_theme_reload)
+                _pw_settings.watcher.changed.disconnect(self._on_theme_reload)
             except (RuntimeError, TypeError):
                 pass
         # Tear down the QFileSystemWatcher for the JSONL stream.  It's a

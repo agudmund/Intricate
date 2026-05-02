@@ -798,7 +798,7 @@ class WarmNode(BaseNode):
             3. Bare filename → shutil.which() (PATH fallback)
         """
         import shutil
-        import pretty_widgets.utils.settings as _settings
+        import shared_braincell.settings as _settings
         editor_path = _settings.get("apps", "warm_editor", "").strip()
 
         if not editor_path:
