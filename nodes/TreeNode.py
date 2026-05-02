@@ -32,7 +32,14 @@ PADDING      = 6.0
 TITLE_GAP    = 8.0    # breathing room between title row and tree body
 TOOLBAR_W    = 28.0   # width of the left-hand toolbar strip
 HEART_SIZE   = 18     # heart icon render size (bigger than line height → chain overlap)
-HEART_COL_W  = 20     # horizontal space reserved for the heart column
+HEART_COL_W  = 28     # horizontal space reserved for the heart column.
+                      # Heart position is body.x() - 4 (so right edge at
+                      # body.x() + 14). Text starts at body.x() + HEART_COL_W.
+                      # 20 → 28 (2026-05-02) gives ~14 px gap between heart-
+                      # right and text-left, replacing a tight ~6 px that
+                      # let icons overlap the first letter of root-level
+                      # files where there's no leading-indent whitespace
+                      # to push text rightward on its own.
 
 
 
