@@ -318,8 +318,13 @@ class GitNode(BaseNode):
         scene = self.scene()
         if not scene:
             return
+        # Clippy/ is the project's video-asset folder, parallel to Images/
+        # which holds stills only. The progress plushie is the GitNode's
+        # loading-clippy companion — visual progress affordance while the
+        # Git status scan does its work, then the node fades back to its
+        # idle state and the plushie despawns.
         video_path = str(
-            Path(__file__).resolve().parent.parent / "Images" / "Progress Bar Animation.mp4"
+            Path(__file__).resolve().parent.parent / "Clippy" / "Progress Plushie.mp4"
         )
         # Place it to the right of this node
         r = self.rect()
