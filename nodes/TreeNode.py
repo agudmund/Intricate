@@ -32,14 +32,11 @@ PADDING      = 6.0
 TITLE_GAP    = 8.0    # breathing room between title row and tree body
 TOOLBAR_W    = 28.0   # width of the left-hand toolbar strip
 HEART_SIZE   = 18     # heart icon render size (bigger than line height → chain overlap)
-HEART_COL_W  = 28     # horizontal space reserved for the heart column.
+HEART_COL_W  = 14     # horizontal space reserved for the heart column.
                       # Heart frame positions at body.x() - 4 with 18 px
                       # frame width. Heart visible bbox is ~57% of source
                       # PNG (cols 241-822 of 1024) so the visible heart
-                      # shape extends to ~body.x() + 14, but with the
-                      # source PNG's transparent right-side padding the
-                      # apparent visual right edge feels closer to text
-                      # than the frame math implies.
+                      # shape extends to ~body.x() + 14.
                       # The CSS property used to apply this padding is
                       # `margin-left` (NOT padding-left — Qt's HTML
                       # renderer drops padding on block elements). See
@@ -47,7 +44,10 @@ HEART_COL_W  = 28     # horizontal space reserved for the heart column.
                       # 2026-05-02 round-4 padding-chase that uncovered it.
                       # Iteration history: 20 → 28 → 36 (all silently
                       # ignored as padding-left) → 28 with margin-left
-                      # (first version that actually rendered).
+                      # (first version that actually rendered) → 14
+                      # (user wanted it ~half — tighter visual rhythm
+                      # now that the actual indent landing has a working
+                      # adjuster).
 
 
 
