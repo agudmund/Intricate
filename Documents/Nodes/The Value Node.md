@@ -2,7 +2,7 @@
 
 A chromeless node that displays one frame of an image sequence with an invisible scrubber running along its base. Drag the scrubber and the frame swaps — a live value readout rendered as a picture, with none of the usual node chrome getting in the way. Think of it as a dial that happens to be painted rather than numeric: whatever visual story the frame sequence tells (a bar filling, a gauge sweeping, a mood shifting) is what the node communicates.
 
-Where StickerNode is a peel-and-stick PNG (static, non-interactive, the parts you painted transparent in Photoshop stay transparent), ValueNode is the same chromeless contract with a slider bolted on. It is the second chromeless node in the tree, and the natural next inheritance test once StickerNode's detachment from BaseNode lands.
+Where StickerNode is a peel-and-stick PNG (static, non-interactive, the parts you painted transparent in Photoshop stay transparent), ValueNode is the same chromeless contract with a slider bolted on. ValueNode is the third descendant of `ChromelessRoot` (after StickerNode and JoyStatsNode — see `Documents/Design/Chromeless Nodes.md`), and the first chromeless node to wire into the graph: it carries a single input port on the W edge and a single output on the E. Ports are the only piece of structural-node machinery ValueNode uses; everything else is its own.
 
 ## Core Files
 
@@ -36,7 +36,7 @@ Range is `(0, len(frames) - 1)`. `valueChanged → _seek` loads the pixmap for t
 
 ValueNode carries the same chromeless contract as StickerNode, implemented through three deliberate invariants:
 
-1. **`setBrush(Qt.NoBrush)` is enforced on every call.** NodeBehaviour's hover glow tries to set a background colour every frame; the `setBrush` override intercepts it and forces NoBrush. Without this, the chromeless transparency would blink with the pulse animation.
+1. **`setBrush(Qt.NoBrush)` and `setPen(Qt.NoPen)` at construction.** `ChromelessRoot` doesn't own a NodeBehaviour, so there is nothing trying to paint a hover background over the node — the per-call `setBrush` override that BaseNode-era ValueNode needed is gone, and a one-shot init-time call is sufficient.
 2. **`setCacheMode(NoCache)`.** Qt's `DeviceCoordinateCache` renders through an opaque pixmap intermediate — with the cache enabled, NoBrush has no visible effect because the cache fills the backing store with black. Disabling the cache is what lets the transparent paint actually reach the scene.
 3. **The proxy widget itself is translucent.** `WA_TranslucentBackground` + `setAutoFillBackground(False)` on the inner slider, so the proxy doesn't paint its own opaque rectangle over the transparent node body.
 
@@ -86,7 +86,7 @@ The pixmap inside is aspect-fit to the new `_image_rect` (full width, full heigh
 
 ### No Button Strip
 
-`_build_buttons` is a no-op. Deletion is via shake. There are no per-node actions — the only interaction surfaces are the slider (scrub) and the corner handle (resize). Shake-to-delete inherits from BaseNode's shake-detect logic and produces a particle burst like any other node.
+Chromeless nodes don't have a button strip — `ChromelessRoot` doesn't build one. Deletion is via shake. There are no per-node actions in the visual surface; the only interaction surfaces are the slider (scrub), the corner handle (resize via `_UNPINNED_RESIZE_ENABLED = True`), and the right-click context menu (pin toggle). Shake-to-delete is inherited from `ChromelessRoot`'s composition over `ShakeDetector` and produces a particle burst like any other node.
 
 ### Paint Pipeline
 
@@ -102,7 +102,9 @@ The pixmap inside is aspect-fit to the new `_image_rect` (full width, full heigh
 
 ## Data Class
 
-`ValueNodeData` extends `NodeData` with a single stateful field:
+`ValueNodeData` extends `ChromelessRootData` (which extends `NodeData`). The pin fields (`pinned`, `pin_vp_x`, `pin_vp_y`, `pin_scale`) are inherited; `to_dict` chains through `super().to_dict()` so they always serialise without per-class bookkeeping.
+
+ValueNode-specific field:
 
 - `current_frame: int` — index into the sorted frame list, persisted across sessions
 
@@ -122,21 +124,13 @@ On restore, `__init__` clamps `current_frame` to the current frame list length b
 
 ### Removal
 
-`_demolition_pre` disconnects the slider's `valueChanged → _seek` connection before the proxy teardown crew tears the inner widget down. Without this, the slider's `setParent(None) + deleteLater()` can fire during a pending `valueChanged` and collide with half-disposed state.
+`_demolition_pre` disconnects the slider's `valueChanged → _seek` connection before the proxy teardown crew tears the inner widget down. Without this, the slider's `setParent(None) + deleteLater()` can fire during a pending `valueChanged` and collide with half-disposed state. `super()._demolition_pre()` is called for `ChromelessRoot`'s viewport-tracking disconnect.
 
 `_demolition_post` nulls `_slider` so any late reference resolves cleanly. `_demolition_proxies = ['_slider_proxy']` tells the shared teardown crew which QGraphicsProxyWidget fields to walk.
 
 ### Serialization
 
-`to_dict()` calls `sync_data()` to fold current geometry into the dataclass, then returns `data.to_dict()`. The frame library itself is not serialized — only the index into it. Sessions stay tiny.
-
-## Detachment Plan
-
-ValueNode inherits from BaseNode and overrides enough to suppress the chrome. It pays the same inheritance tax as StickerNode pre-detachment: every feature added to BaseNode must be checked against "does ValueNode want this, and if not, what's the silencing pattern?" — a permanent cost for a node that conceptually shares very little with BaseNode beyond "lives on the canvas and persists".
-
-Once StickerNode's detachment refactor settles (user-tested, no regressions), ValueNode is the natural second inheritance test of the new chromeless root. It validates that the root was designed with future raw-sibling types in mind — not just built to solve the sticker-specific case. StickerNode is the pinned, non-interactive overlay; ValueNode is the chromeless interactive sibling. Between them, the root's extension surface gets exercised in both directions.
-
-Until that refactor lands, the `setBrush`, `setCacheMode`, `shape`, `boundingRect`, `paint`, and `_build_buttons` overrides all serve as the silencing layer that keeps BaseNode features from leaking into the raw visual surface.
+`to_dict()` calls `sync_data()` to fold current geometry into the dataclass, then returns `data.to_dict()` — which chains through `ChromelessRootData.to_dict` so the pin fields ride along automatically. The frame library itself is not serialized — only the index into it. Sessions stay tiny.
 
 ## Technical Notes
 
@@ -144,5 +138,5 @@ Until that refactor lands, the `setBrush`, `setCacheMode`, `shape`, `boundingRec
 - `_natural_key` matters as soon as you have more than 10 frames. Without it, `bar10` sorts before `bar2`, and scrubbing produces an out-of-order animation. The sort is applied once at scan time and the result is cached in `self._frames`.
 - `_last_crop` is the change-detect for crop settings. TOML edits flow through `Theme` live-reload → next paint → `paint_content` sees a different tuple → slider proxy re-anchors. No explicit reload signal is wired; the paint pass is the observation point.
 - The slider's `handle_size=28` is the PrettySlider constructor parameter, not a stylesheet value. The stylesheet then sets a matching `width/height: 28px` and a negative vertical margin (`-14px`) to centre the hit area on the zero-height groove. All three values must agree or the handle drifts above or below the click zone.
-- `NodeBehaviour.pulse_anim` still runs on ValueNode (scales it subtly on hover). The visual effect is invisible because the pixmap aspect-fits to whatever rect size is current, but the timer tax remains. The detachment refactor will remove it.
 - The input port's hidden state is `Port.hide()`, not removal — the port object still exists, still participates in connection resolution, and still anchors wires. Only its visual representation is suppressed.
+- ValueNode is the first chromeless descendant to wire into the graph. Future port-bearing chromeless nodes can use it as the reference for how the chromeless root composes with ports — `_create_ports()` lives on ValueNode, not on `ChromelessRoot`, because ports are a per-subclass decision rather than a shared concern. See `Documents/Design/Chromeless Nodes.md`.

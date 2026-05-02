@@ -2,7 +2,7 @@
 
 The sticker. A chromeless, frameless PNG dropped directly onto the canvas with its alpha channel composited against whatever sits below — no background fill, no border, no caption, no chrome. If the ImageNode is the camera with the full darkroom behind it, the StickerNode is the peel-and-stick vinyl: you slap it on, you move it around, and the parts you painted transparent in Photoshop stay transparent all the way through.
 
-Conceptually, it's a different node type entirely. BaseNode-derived nodes are structured thinking: a panel, a title, ports, buttons, behaviour. A sticker is none of those things. It is an image on a canvas, and that is the whole contract.
+Conceptually, it's a different node type entirely. BaseNode-derived nodes are structured thinking: a panel, a title, ports, buttons, behaviour. A sticker is none of those things. It is an image on a canvas, and that is the whole contract. StickerNode was the first descendant of `ChromelessRoot` (the parallel root for HUD and ornament nodes — see `Documents/Design/Chromeless Nodes.md`), and the canonical proof that a non-BaseNode root could carry the canvas-citizen contract without dragging in the structural-node apparatus.
 
 ## Core Files
 
@@ -27,8 +27,8 @@ This is the single most important thing about StickerNode and the first invarian
 
 Pixel-accurate. Tested against a pixel-grid image: the hit regions line up to the pixel. This is deliberate behaviour, not a side effect, and it depends on three invariants living together:
 
-1. `paint()` and `paint_content()` never draw any background fill. No `QBrush`, no `fillRect`, no rounded-rect chrome.
-2. `setBrush(Qt.NoBrush)` is enforced on every call. `NodeBehaviour.bg_anim` tries to set a hover background colour every frame; the override intercepts it. When the NodeBehaviour dependency eventually goes away (see the "Detachment plan" section below) this override can go with it.
+1. `paint()` never draws any background fill. No `QBrush`, no `fillRect`, no rounded-rect chrome — only the pixmap (and the empty-state placeholder text when there is no image yet).
+2. `setBrush(Qt.NoBrush)` and `setPen(Qt.NoPen)` are set once at construction. `ChromelessRoot` does not own a NodeBehaviour, so there is nothing trying to paint a hover background over the sticker — the previous per-call `setBrush` override that BaseNode-era StickerNode needed is gone.
 3. `_fit_to_image()` sizes the node rect tight to the scaled pixmap, so there are no captured transparent margins surrounding the image. The rect *is* the image.
 
 Good use of alpha as a concept: it's already how Photoshop communicates "this pixel is part of the layer, this one isn't". StickerNode just carries that declaration across the filesystem and into the canvas. Intricate respects which parts of the PNG the user painted as tree and which as background.
@@ -37,17 +37,19 @@ Good use of alpha as a concept: it's already how Photoshop communicates "this pi
 
 A pinned sticker stays fixed to a point in the **viewport**, not the scene. Pan the canvas, the pinned sticker stays where it is relative to the window. Unpin and it drops back into the scene and moves with everything else.
 
-**Toggle:** double-click a sticker that already has an image loaded.
+**Toggle:** double-click a sticker that already has an image loaded, or right-click → "Pin to Viewport" from the context menu.
 
-**Data contract:**
+**Data contract:** the four pin fields live on `ChromelessRootData` (the shared base for the chromeless family) and serialise automatically — `StickerNodeData.to_dict` chains through `super().to_dict()` so they survive every save without per-class bookkeeping.
+
 - `pinned: bool` — whether the sticker is currently in screen-space mode
-- `pin_vp_x`, `pin_vp_y` — the viewport coordinates (in view pixels) where the sticker should stay
+- `pin_vp_x`, `pin_vp_y` — viewport coordinates (in view-local pixels) the sticker snaps back to on every pan/zoom
+- `pin_scale` — canvas zoom captured at pin time, so the visible size stays continuous across the pin/unpin toggle at any zoom level
 
-**Mechanism:** on pin, `ItemIsMovable` is turned off and the current viewport position is recorded. On every view transform change (pan, zoom, or any programmatic transform update), the sticker remaps `(pin_vp_x, pin_vp_y)` back through `view.mapToScene(...)` and `setPos()`es to the resolved scene position. The result is that the sticker appears locked in the viewport while the scene continues to translate beneath it.
+**Mechanism:** on pin, `ItemIsMovable` is turned off, `ItemIgnoresTransformations` is turned on (so the sticker renders at fixed screen-pixel size regardless of canvas zoom), the current rect is multiplied by the captured zoom (so the visible size is preserved through the IIT toggle), and the viewport position is recorded. On every view transform change (pan, zoom, programmatic transform mutation), the sticker remaps `(pin_vp_x, pin_vp_y)` back through `view.mapToScene(...)` and `setPos()`es to the resolved scene position. The result is that the sticker appears locked in the viewport at a fixed screen size, regardless of how the user pans or zooms the canvas.
 
 **Wiring:** the view declares its transform changes via a `viewTransformed` signal — pinned stickers subscribe to that. An NFL player's spatial awareness: the sticker is not trying to predict the canvas, it is listening for the canvas to announce itself, and adjusting its position the instant it hears the announcement. Scrollbar `valueChanged` subscriptions are kept as a secondary channel for the rare case where the scene grows past the viewport and the scrollbars do move.
 
-**Zoom behaviour (first pass):** scene size stays fixed, so the sticker scales visually with the zoom — it grows larger on zoom-in. True screen-space size lock (counter-scaling by `1/view.transform().m11()`) is a separate feature pass; the current priority is the x/y pin.
+**Inheritance:** all of this — IIT toggle, viewport tracking, the two-path `_activate_pin` (user-initiated vs session-restore), the `pin_scale` capture/divide — lives on `ChromelessRoot` and is shared verbatim with JoyStatsNode and ValueNode. See `Documents/Design/Chromeless Nodes.md` for the full pin-contract design.
 
 ### Resize
 
@@ -97,18 +99,24 @@ No borders, no shadows, no rounded corners, no selection glow. The visual appear
 
 ### Shake-to-Delete
 
-Inherited from BaseNode's shake-detect logic. Shake a sticker hard and it dissolves with a particle burst like any other node. The `_quiet_for_shake()` override fires synchronously at shake-start to disconnect pin-tracking signals before the deferred `removeItem` window opens (see `Documents/Compliance/Node Cleanup Compliance.md`, 2026-04-18 entry).
+Inherited from `ChromelessRoot`'s shake gesture (composition over `ShakeDetector` — same one BaseNode uses). Shake a sticker hard and it dissolves with a particle burst like any other node. StickerNode overrides `_on_shake_triggered` to pick between `sprinkle` and `orbital_burst` particle effects based on the sticker's alpha coverage — large opaque stickers get the orbital burst, mostly-transparent ones get sprinkle. The `_quiet_for_shake()` synchronous-quiet hook from the root disconnects viewport tracking before the deferred `removeItem` window opens, closing the race window where a transform tick could land on a node about to vanish (see `Documents/Compliance/Node Cleanup Compliance.md`, 2026-04-18 entry).
 
 ## Data Class
 
-`StickerNodeData` extends `NodeData` with:
+`StickerNodeData` extends `ChromelessRootData` (which extends `NodeData`). The pin fields are inherited; `to_dict` chains through `super().to_dict()` so they always serialise without per-class bookkeeping.
+
+Sticker-specific fields:
 
 - `cache_key: str` — SHA-256 key into the shared media cache (`<sha256>.<ext>`). Primary persistence channel.
 - `source_path: str` — absolute path to the source PNG on disk. Provenance anchor; drives the drift check on restore.
 - `source_size: int`, `source_mtime: float` — cheap drift fingerprint recorded at last cache write. A clean fingerprint skips the streaming SHA on restore.
 - `image_b64: str` — legacy base64-encoded PNG. Always written empty for new stickers; retained in `from_dict` so pre-cache sessions still load.
+
+Inherited from `ChromelessRootData`:
+
 - `pinned: bool` — current pin state.
 - `pin_vp_x: float`, `pin_vp_y: float` — viewport coordinates for the pin anchor.
+- `pin_scale: float` — canvas zoom captured at pin time, used as a layout-scale multiplier across the IIT toggle.
 
 Default size: 200 × 200, auto-fit to the image on first load (see `_fit_to_image`).
 
@@ -124,15 +132,14 @@ Default size: 200 × 200, auto-fit to the image on first load (see `_fit_to_imag
 
 ### Removal
 
-`_prepare_for_removal()`:
+`_demolition_pre()`:
 
-1. Disconnects viewport tracking signals (horizontal + vertical scrollbar, plus `viewTransformed` once the signal is wired)
+1. Calls `super()._demolition_pre()` for `ChromelessRoot`'s viewport-tracking disconnect
 2. Nulls `_pixmap` to release the image buffer
-3. Calls `super()._prepare_for_removal()` to complete BaseNode teardown
 
 `_quiet_for_shake()`:
 
-1. Synchronously severs the viewport signals before a shake-delete defers `removeItem`. Without this, a scrollbar or `viewTransformed` tick landing mid-teardown collided with Qt's destructor and fastfailed the process (Event Viewer `0xc0000409`, ucrtbase.dll). Documented in `Documents/Compliance/Node Cleanup Compliance.md`.
+1. Calls `super()._quiet_for_shake()` from `ChromelessRoot` to synchronously sever the viewport signals before a shake-delete defers `removeItem`. Without this, a scrollbar or `viewTransformed` tick landing mid-teardown collided with Qt's destructor and fastfailed the process (Event Viewer `0xc0000409`, ucrtbase.dll). Documented in `Documents/Compliance/Node Cleanup Compliance.md`.
 
 ### Serialization
 
@@ -140,22 +147,15 @@ Default size: 200 × 200, auto-fit to the image on first load (see `_fit_to_imag
 
 1. `sync_data()` folds current geometry into the dataclass
 2. If `source_path` is empty and a pixmap exists (vision-generated, drag-drop without a file path), encode the pixmap as base64 PNG into `image_b64`
-3. Return `data.to_dict()`
+3. Return `data.to_dict()` — which chains through `ChromelessRootData.to_dict` so the pin fields ride along automatically
 
-The session JSON carries either `source_path` (preferred — file lives on disk, byte-exact) or `image_b64` (fallback — pixmap round-tripped through PNG encoder).
-
-## Detachment Plan
-
-Historically StickerNode inherits from BaseNode and overrides just enough to suppress the chrome. This creates a small paradox: every feature added to BaseNode must be checked against "does the sticker want this, and if not, what's the silencing pattern?" — a permanent tax for a node that conceptually shares nothing with BaseNode except "lives on the canvas". The `setBrush` guard and the NodeBehaviour cost both exist only because of the inheritance.
-
-The intended end state is StickerNode inheriting directly from a sibling root of BaseNode (likely `QGraphicsRectItem` or `QGraphicsPixmapItem`), with a minimal session/shake contract reimplemented locally. That refactor is planned; until it lands, the `setBrush`, `shape`, `boundingRect`, `paint`, and `_build_buttons` overrides all serve as the silencing layer that keeps BaseNode features from leaking into the raw visual surface.
-
-When the detach refactor does land, StickerNode becomes the reference implementation for future raw-image-style nodes (postcards, patches, cut-outs) that want to share the chromeless-alpha-PNG pattern without inheriting BaseNode's full apparatus.
+The session JSON carries either `cache_key` + `source_path` (preferred — bytes live in the content-addressed cache, source file lives on disk) or `image_b64` (legacy fallback — pixmap round-tripped through PNG encoder).
 
 ## Technical Notes
 
-- Stickers do not have ports and cannot be wired. `_create_ports()` is overridden to empty lists; `_build_buttons()` is a no-op. Any feature that iterates scene nodes for connection data should already skip stickers because their `connections` list stays empty.
+- Stickers do not have ports and cannot be wired. The `connections` list provided by `ChromelessRoot` stays empty for the lifetime of the node. Any feature that iterates scene nodes for connection data already skips stickers because their `connections` is duck-typed-empty.
 - The `_Z_FLOOR = 100.0` floor matches ValueNode. Both are "things the user puts on top of structural work".
 - Alpha-channel hit-testing is currently rect-based at the `shape()` level, but the visual click-through (text selection passing through transparent regions) works because `paint()` leaves those pixels unpainted — items below stay visible and their event dispatch still fires when the click lands in a region the sticker didn't claim with a bounding interaction. Preserve this by never adding a background fill.
 - `_fit_to_image()` re-fits only when the rect is still at the 200×200 default — resizing to exactly 200×200 and then loading a new image will trigger a refit. A resize-by-user-flag would make this crisper; today the corner case is rare enough to leave alone.
-- `NodeBehaviour.pulse_anim` still runs on stickers (scales them subtly on hover). The effect is invisible because the sticker paints itself identically at any scale within the pulse range, but the timer tax remains. The detachment refactor will remove it.
+- StickerNode opts out of `ChromelessRoot._UNPINNED_RESIZE_ENABLED` (it stays `False` on the class) because the sticker has its own bespoke resize gesture with aspect-ratio preservation and cursor-hide. Other chromeless descendants (JoyStatsNode, ValueNode) opt in and get the generic corner grip for free.
+- StickerNode is the reference implementation of the chromeless contract — the first descendant of `ChromelessRoot` and the model future raw-image-style nodes (postcards, patches, cut-outs) will inherit from. See `Documents/Design/Chromeless Nodes.md` for the framework-level documentation.
