@@ -85,8 +85,10 @@ def build_runtime():
         "import shiboken6\n"
         "import pretty_widgets\n"
         "import pretty_widgets.graphics.Theme\n"
-        "import pretty_widgets.utils.settings\n"
-        "import pretty_widgets.utils.logger\n"
+        "import shared_braincell.settings\n"
+        "import shared_braincell\n"
+        "import shared_braincell.logger\n"
+        "import intricate_log\n"
         "import tomli_w\n"
         "import send2trash\n"
         "try:\n"
@@ -116,7 +118,9 @@ def build_runtime():
         "--hidden-import=pretty_widgets",
         "--hidden-import=pretty_widgets.graphics.Theme",
         "--hidden-import=pretty_widgets.utils.settings",
-        "--hidden-import=pretty_widgets.utils.logger",
+        "--hidden-import=shared_braincell",
+        "--hidden-import=shared_braincell.logger",
+        "--hidden-import=intricate_log",
         "--hidden-import=pretty_widgets.PrettyButton",
         "--hidden-import=pretty_widgets.PrettyLabel",
         "--hidden-import=pretty_widgets.PrettyMenu",
