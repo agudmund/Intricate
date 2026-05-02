@@ -9,7 +9,7 @@
 import os
 import shutil
 from pathlib import Path
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 logger = setup_logger("helpers")
 

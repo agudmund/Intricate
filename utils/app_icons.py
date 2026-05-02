@@ -11,7 +11,7 @@ from pathlib import Path
 from PySide6.QtCore import QFileInfo, QSize, QBuffer, QIODevice
 from PySide6.QtWidgets import QFileIconProvider
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("app_icons")
 

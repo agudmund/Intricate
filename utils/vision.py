@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QTextEdit
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtCore import Signal
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 # VisionWorker + DROP_EXTENSIONS are now imported from the shared package
 # so every app in the family shares one Vision branch.  The drag-and-drop

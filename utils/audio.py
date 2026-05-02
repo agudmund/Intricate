@@ -13,7 +13,7 @@ from PySide6.QtCore import QUrl, QTimer
 from PySide6.QtMultimedia import QSoundEffect
 
 import pretty_widgets.utils.settings as settings
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("audio")
 

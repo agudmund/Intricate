@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QComboBox, QSpinBox, QGraphicsProxyWidget, QSlider
 from nodes.BaseNode import BaseNode
 from data.BloomNodeData import BloomNodeData
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("bloom")
 

@@ -11,7 +11,7 @@ import ctypes.wintypes as wt
 import sys
 from dataclasses import dataclass, field
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 logger = setup_logger("display_resolution")
 

@@ -20,7 +20,7 @@ from PySide6.QtGui import (
 from nodes.BaseNode import BaseNode
 from data.ImageNodeData import ImageNodeData
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 logger = setup_logger("image")
 

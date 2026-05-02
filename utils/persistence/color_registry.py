@@ -12,7 +12,7 @@ from typing import Iterable
 
 from PySide6.QtCore import QFileSystemWatcher, QObject, Signal
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("color_registry")
 

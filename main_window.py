@@ -24,7 +24,7 @@ from nodes.ClaudeNode import ClaudeNode
 from nodes.ImageNode import ImageNode
 from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 from shared_braincell.phrase_picker import randomling as pick_phrase
 from pretty_widgets.utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
@@ -3900,7 +3900,7 @@ class IntricateApp(QMainWindow):
             center_scene = self.view.mapToScene(self.view.viewport().rect().center())
             self.scene.add_about_node(pos=center_scene, label=label)
         except Exception as e:
-            from pretty_widgets.utils.logger import setup_logger
+            from shared_braincell.logger import setup_logger
             setup_logger("session").warning(f"residue notice spawn failed: {e}")
 
     def _autosave(self) -> None:

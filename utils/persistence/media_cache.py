@@ -12,7 +12,7 @@ from pathlib import Path
 from PySide6.QtCore import QBuffer, QIODevice
 from PySide6.QtGui import QPixmap, QImage
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 logger = setup_logger("cache")
 

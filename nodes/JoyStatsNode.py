@@ -16,7 +16,7 @@ import traceback
 from nodes.ChromelessRoot import ChromelessRoot
 from data.JoyStatsNodeData import JoyStatsNodeData
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger, TRACE
+from shared_braincell.logger import setup_logger, TRACE
 
 _log = setup_logger("joy_stats")
 

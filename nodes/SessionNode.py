@@ -151,7 +151,7 @@ class SessionNode(BaseNode):
 
     def _do_import(self) -> None:
         """Spawn all nodes and connections from the loaded session onto the canvas."""
-        from pretty_widgets.utils.logger import setup_logger
+        from shared_braincell.logger import setup_logger
         _log = setup_logger("session")
 
         if not self.data.source_path:

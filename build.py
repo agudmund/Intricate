@@ -213,7 +213,9 @@ def buildApp():
         "--hidden-import=pretty_widgets",
         "--hidden-import=pretty_widgets.graphics.Theme",
         "--hidden-import=pretty_widgets.utils.settings",
-        "--hidden-import=pretty_widgets.utils.logger",
+        "--hidden-import=shared_braincell",
+        "--hidden-import=shared_braincell.logger",
+        "--hidden-import=intricate_log",
         "--exclude-module=pygame",
     ]
 

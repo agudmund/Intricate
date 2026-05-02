@@ -29,7 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 from utils.persistence.media_cache import (
     cache_dir, cached_bytes, cached_path, hash_file, key_hash,

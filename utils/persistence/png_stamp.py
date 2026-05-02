@@ -10,7 +10,7 @@ import struct
 import zlib
 from pathlib import Path
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("png_stamp")
 

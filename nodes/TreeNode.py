@@ -23,7 +23,7 @@ from nodes.BaseNode import BaseNode
 from data.TreeNodeData import TreeNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyEdit import PrettyEdit
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("intricate.tree")
 

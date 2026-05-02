@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QVBoxLayout,
 from nodes.BaseNode import BaseNode
 from data.WarmNodeData import WarmNodeData
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("warmnode")
 

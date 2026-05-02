@@ -17,7 +17,7 @@ from shiboken6 import isValid as _shiboken_isValid
 from nodes.BaseNode import BaseNode
 from data.AudioNodeData import AudioNodeData
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("audio_node")
 

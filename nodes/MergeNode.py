@@ -358,7 +358,7 @@ class MergeNode(BaseNode):
         """
         import subprocess as _sp
         from nodes.AudioHoldNode import AudioHoldNode
-        from pretty_widgets.utils.logger import setup_logger
+        from shared_braincell.logger import setup_logger
         _log = setup_logger("merge")
 
         ordered = self._get_ordered_audio_nodes()
@@ -457,7 +457,7 @@ class MergeNode(BaseNode):
         from nodes.AudioNode import AudioNode
         from nodes.AudioHoldNode import AudioHoldNode
         from nodes.VideoNode import VideoNode
-        from pretty_widgets.utils.logger import setup_logger
+        from shared_braincell.logger import setup_logger
         _log = setup_logger("merge")
 
         ordered = self._get_ordered_audio_nodes()

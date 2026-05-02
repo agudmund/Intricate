@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem
 from data.ChromelessRootData import ChromelessRootData
 from nodes._shake_detect import ShakeDetector, arm_cooldown
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger, TRACE
+from shared_braincell.logger import setup_logger, TRACE
 
 logger = setup_logger("chromeless")
 

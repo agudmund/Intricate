@@ -19,7 +19,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink, QVideoF
 from nodes.BaseNode import BaseNode
 from data.VideoNodeData import VideoNodeData
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 logger = setup_logger("video")
 

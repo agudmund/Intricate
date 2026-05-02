@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QGraphicsScene
 from PySide6.QtCore import QPointF, QTimer
 from PySide6.QtGui import QColor
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 logger = setup_logger()
 
 

@@ -39,7 +39,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import qInstallMessageHandler, QtMsgType
-from pretty_widgets.utils.logger import setup_logger, set_log_level, TRACE
+from shared_braincell.logger import setup_logger, set_log_level, TRACE
 import pretty_widgets.utils.settings as settings
 from pretty_widgets.utils.settings import appName, orgName
 from shared_braincell import is_singleton
@@ -316,7 +316,7 @@ def main():
     # Resolve the log directory once — used by crash/fault paths below so
     # forensic files sit next to the session logs (Documents/Data/Logs by
     # default, overridable via [shared] log_dir in settings.toml).
-    from pretty_widgets.utils.logger import _resolve_log_dir
+    from shared_braincell.logger import _resolve_log_dir
     _logs_dir = _resolve_log_dir()
 
     # Rotate stale forensic files — keep them for 24 hours for post-mortem,

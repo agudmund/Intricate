@@ -11,7 +11,7 @@ from abc import abstractmethod
 from PySide6.QtCore import QObject, Signal, QUrl, QTimer
 from PySide6.QtWebSockets import QWebSocket
 
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 logger = setup_logger("premiere_bridge")
 

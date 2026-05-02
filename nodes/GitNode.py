@@ -28,7 +28,7 @@ from nodes.BaseNode import BaseNode
 from data.GitNodeData import GitNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyButton import PrettyButton
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 _log = setup_logger("git")
 

@@ -111,7 +111,7 @@ class LogNode(BaseNode):
         # Rust/Python logger writes into — settings.toml override, then the
         # Documents/Data/Logs default.
         try:
-            from pretty_widgets.utils.logger import _resolve_log_dir
+            from shared_braincell.logger import _resolve_log_dir
             logs_dir = _resolve_log_dir()
         except Exception:
             logs_dir = Path(__file__).resolve().parent.parent / "Documents" / "Data" / "Logs"

@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QGraphicsRectItem
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
 from PySide6.QtWidgets import QGraphicsItem
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 logger = setup_logger("basenode")
 

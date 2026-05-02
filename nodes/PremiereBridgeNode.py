@@ -21,7 +21,7 @@ from utils.premiere_transport import (
     STATUS_DISCONNECTED, STATUS_ERROR,
 )
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.utils.logger import setup_logger
+from shared_braincell.logger import setup_logger
 
 logger = setup_logger("premiere_bridge")
 

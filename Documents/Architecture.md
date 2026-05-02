@@ -28,8 +28,8 @@
 
 | Package | Scope | Source |
 |---------|-------|--------|
-| [`pretty_widgets`](https://github.com/agudmund/Pretty-Widgets) | Qt widgets, Theme, TOML loader, logger adapter | `Desktop/Pretty Widgets/` |
-| `shared_braincell` | Non-Qt cross-app utilities | `Desktop/Shared Braincell/` |
+| [`pretty_widgets`](https://github.com/agudmund/Pretty-Widgets) | Qt widgets, Theme, TOML loader | `Desktop/Pretty Widgets/` |
+| `shared_braincell` | Non-Qt cross-app utilities (incl. logger adapter) | `Desktop/Shared Braincell/` |
 | `intricate_vision` | Anthropic Vision API helpers | `Desktop/Intricate Vision/` |
 | `intricate_log` | Rust-backed lock-free log ring buffer (`.pyd`) | `Desktop/intricate-log/` |
 
@@ -54,9 +54,7 @@ pretty_widgets/
 ├── PrettyTooltip.py     — Pill-shaped custom tooltip (WA_TransparentForMouseEvents
 │                           so it never intercepts clicks)
 ├── graphics/Theme.py    — Metaclass theme registry, live TOML reload, icon cache
-├── utils/settings.py    — TOML loader, QFileSystemWatcher, atomic writes
-└── utils/logger.py      — Adapter shim around `intricate_log` (Rust ring buffer); stdlib
-                           3-slot rotation as fallback when the .pyd isn't loaded
+└── utils/settings.py    — TOML loader, QFileSystemWatcher, atomic writes
 ```
 
 ### Shared Braincell (`shared_braincell`)
@@ -67,14 +65,18 @@ Installed via `pip install -e "C:\Users\thisg\Desktop\Shared Braincell"`. Pretty
 shared_braincell/
 ├── instance_lock.py    — Singleton-app port lock with IPC handshake and port-range fallback
 ├── window_behind.py    — Win32 Z-order walk: name the next visible window beneath any caller
-└── phrase_picker.py    — Curated phrase bank + randomling / sampleling helpers
+├── phrase_picker.py    — Curated phrase bank + randomling / sampleling helpers
+└── logger.py           — Slim duck-typed adapter onto `intricate_log` (Rust ring buffer);
+                          NullLogger if the .pyd isn't loaded, so missing logger never
+                          blocks app launch ("Intricate doesn't stop")
 ```
 
-Soft dep on `pretty_widgets.utils.logger` (stdlib fallback) so the package stays independently installable.
+Soft dep on `intricate_log`. No fallback to stdlib `logging.FileHandler` — if the Rust sink is missing the app simply runs without a log.
 
 **Migration log:**
 - 2026-04-15 — `instance_lock` seeded the package
 - 2026-05-02 — `window_behind` lifted from Intricate + The Settlers; `phrase_picker` lifted from Intricate + The Majestic (both eliminated drifting forks)
+- 2026-05-02 — `logger` migrated here from `pretty_widgets.utils.logger`. Slim adapter (~210 lines, was ~370). Pretty Widgets' shim deleted with no back-compat re-export; The Settlers' stale fork (carrying a dead `StatusBarHandler`) deleted. Build pipeline (`build.py`, `_runtime/build_runtime.py`) updated to bundle `shared_braincell` + `intricate_log` directly.
 
 ## Shared Contracts
 
