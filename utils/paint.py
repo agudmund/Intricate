@@ -51,20 +51,33 @@ def make_kit(
     title_font: str = "Chandler42",
     title_style: str = "MediumOblique",
     title_bump: int = 6,
+    *,
+    pin_scale: float = 1.0,
 ) -> DataGridKit:
-    """Read Theme once and return a fully resolved kit."""
+    """Read Theme once and return a fully resolved kit.
+
+    ``pin_scale`` (keyword-only) multiplies font sizes, padding, line height,
+    and the divider pen width. Default 1.0 preserves the prior behaviour for
+    BaseNode-family callers (HealthNode, GitNode). Chromeless-family callers
+    pass ``data.pin_scale`` so the kit follows the IIT toggle: under
+    ``ItemIgnoresTransformations`` the painter renders at full pt regardless
+    of canvas zoom, but the rect was multiplied by zoom at pin time, so the
+    kit must follow or text size shifts relative to the rect.
+    """
     from pretty_widgets.graphics.Theme import Theme
 
-    f_label = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeLabel))
-    f_value = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeValue))
+    s = float(pin_scale) or 1.0
+
+    f_label = QFont(Theme.healthFontFamily, max(1, int(round(Theme.healthFontSizeLabel  * s))))
+    f_value = QFont(Theme.healthFontFamily, max(1, int(round(Theme.healthFontSizeValue  * s))))
     f_value.setBold(True)
-    f_header = QFont(title_font, max(1, Theme.healthFontSizeHeader + title_bump))
+    f_header = QFont(title_font, max(1, int(round((Theme.healthFontSizeHeader + title_bump) * s))))
     f_header.setStyleName(title_style)
-    f_footer = QFont(Theme.healthFontFamily, max(1, Theme.healthFontSizeFooter))
+    f_footer = QFont(Theme.healthFontFamily, max(1, int(round(Theme.healthFontSizeFooter * s))))
 
     c_label  = QColor(Theme.healthColorLabel)
     c_header = QColor("#72b8b8")  # Lombardi Lake variant
-    div_pen  = QPen(QColor(Theme.primaryBorder), 1, Qt.DotLine)
+    div_pen  = QPen(QColor(Theme.primaryBorder), max(1, int(round(s))), Qt.DotLine)
 
     return DataGridKit(
         f_label=f_label,
@@ -74,6 +87,8 @@ def make_kit(
         c_label=c_label,
         c_header=c_header,
         div_pen=div_pen,
+        pad=int(round(12 * s)),
+        line_h=int(round(18 * s)),
     )
 
 

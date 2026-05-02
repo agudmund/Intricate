@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate nodal playground - nodes/PerfNode.py PerfNode class
--Live UI performance monitor. Times every paint lap the Qt event loop takes, for enjoying
+-Intricate - nodes/PerfNode.py PerfNode class
+-Live UI performance HUD — chromeless, pinnable. Times every paint lap the Qt event loop takes, for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 import time
 from collections import deque
 
-from PySide6.QtCore import Qt, QTimer, QObject, QEvent
-from PySide6.QtGui import QPainter, QColor
+from PySide6.QtCore import Qt, QTimer, QObject, QEvent, QRectF
+from PySide6.QtGui import QPainter, QColor, QPen
 
-from nodes.BaseNode import BaseNode
+from nodes.ChromelessRoot import ChromelessRoot
 from data.PerfNodeData import PerfNodeData
 from pretty_widgets.graphics.Theme import Theme
 
@@ -85,14 +85,19 @@ class _PaintTimer(QObject):
         return self._total_paints
 
 
-class PerfNode(BaseNode):
-    _has_depth_toggle = True
+class PerfNode(ChromelessRoot):
     """
-    Live UI performance monitor.
+    Live UI performance monitor — chromeless HUD, fourth descendant of
+    ChromelessRoot (after StickerNode, JoyStatsNode, ValueNode).
 
     Installs a transparent event filter on the graphics view's viewport
-    to time the interval between consecutive Qt paint events.  All readings
+    to time the interval between consecutive Qt paint events. All readings
     update on a fast poll timer and render directly onto the node canvas.
+
+    Migrated 2026-05-02 from BaseNode → ChromelessRoot so the node can
+    be pinned to the viewport and stay readable at any zoom altitude
+    (including aerial). The visual identity stays the same — dark teal
+    body, cream border, Lombardi Lake header — only the category changes.
 
     Readings:
         FPS     — frames per second derived from rolling average frame time
@@ -100,21 +105,74 @@ class PerfNode(BaseNode):
         Avg     — rolling average over the last 120 samples
         Min/Max — extremes of the current window
         Paints  — total paint events since the filter was installed
+        Zoom    — current canvas zoom factor
+
+    Never participates in the wire graph.
     """
 
+    # ── Paint constants ─────────────────────────────────────────────────────
+    _TITLE_FONT      = "Chandler42"
+    _TITLE_STYLE     = "MediumOblique"
+    _TITLE_FONT_BUMP = 6
+
+    _ROW_COUNT       = 8        # FPS, Last, Avg, Min, Max, Samples, Total paints, Zoom
+
+    # ── Generic unpinned resize — opt in to the corner grip ─────────────────
+    # User resizes while unpinned to set the frozen screen size on the next pin.
+    _UNPINNED_RESIZE_ENABLED = True
+
+    # ── Demolition manifest — crew tears down the poll timer ────────────────
+    _demolition_timers = [('_poll_timer', '_refresh')]
+
     def __init__(self, data: PerfNodeData | None = None):
+        is_fresh = data is None
         if data is None:
             data = PerfNodeData()
+            # Auto-fit the height to the actual content layout. Saved sessions
+            # come in with whatever height they were saved at — including any
+            # user resize via the corner grip — so the auto-fit only applies
+            # to fresh nodes.
+            data.height = self._compute_auto_height()
         super().__init__(data)
+
+        # Preserve the BaseNode-era visual: dark teal body, cream border.
+        # Set once at construction; ChromelessRoot has no NodeBehaviour
+        # trying to override the brush on hover.
         self.setBrush(QColor(Theme.perfNodeBg))
 
         self._timer_obj: _PaintTimer | None = None
 
-        # Fast refresh — 100 ms is plenty for human-readable numbers
+        # Fast refresh — 100 ms is plenty for human-readable numbers.
         self._poll_timer = QTimer()
         self._poll_timer.setInterval(100)
         self._poll_timer.timeout.connect(self._refresh)
         self._poll_timer.start()
+
+        # First-paint event-filter install if we're already in a scene
+        # (e.g. session restore — itemChange for SceneHasChanged may have
+        # already fired before this constructor ran in unusual paths).
+        if self.scene() is not None:
+            self._install_filter()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # AUTO-FIT GEOMETRY
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @classmethod
+    def _compute_auto_height(cls) -> float:
+        """Derive the snug node height from the kit's actual layout values
+        at pin_scale=1.0 (fresh nodes are always unpinned).
+
+        Layout from paint(): top pad + header (line_h + 22) + 6 breathing
+        + N × (line_h + 3) rows + footer (gap 2 + divider + 6 post + line
+        + tail). Bottom pad rounds the rect to the same kit.pad as the top.
+        """
+        from utils.paint import make_kit
+        kit = make_kit(cls._TITLE_FONT, cls._TITLE_STYLE, cls._TITLE_FONT_BUMP)
+        header_h = kit.line_h + 22
+        rows_h   = cls._ROW_COUNT * (kit.line_h + 3)
+        footer_h = kit.line_h + 8
+        return float(kit.pad * 2 + header_h + 6 + rows_h + footer_h)
 
     # ─────────────────────────────────────────────────────────────────────────
     # FILTER LIFECYCLE
@@ -146,8 +204,17 @@ class PerfNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _refresh(self) -> None:
-        # Orphan-timer guard (see BaseNode._timer_slot_alive).
-        if not self._timer_slot_alive('_poll_timer'):
+        """Timer slot — force a repaint so stats stay fresh. Orphan-timer
+        guard via self.scene() probe, matching the chromeless family pattern."""
+        try:
+            if self.scene() is None:
+                return
+        except RuntimeError:
+            try:
+                self._poll_timer.stop()
+                self._poll_timer.timeout.disconnect()
+            except (RuntimeError, TypeError):
+                pass
             return
         try:
             self.update()
@@ -155,17 +222,14 @@ class PerfNode(BaseNode):
             self._poll_timer.stop()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # BUTTONS
+    # CONTEXT MENU — Reset Stats lives here (no button strip on chromeless)
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_buttons(self) -> None:
-        from nodes.NodeButton import NodeButton
-        super()._build_buttons()
-        reset_pix = Theme.icon(Theme.iconReset, fallback_color="#7a9aaa")
-        reset_btn = NodeButton(self, reset_pix, self._reset_stats)
-        reset_btn._sticker_shadow = True
-        reset_btn.setToolTip("Clear the slate and start counting fresh")
-        self._buttons.append(reset_btn)
+    def _extra_context_menu_items(self, ctx) -> None:
+        """Append PerfNode-specific actions to the right-click menu.
+        Runs after the root inserts the Pin toggle, so this entry sits below it."""
+        reset_action = ctx.addAction("Reset Stats")
+        reset_action.triggered.connect(self._reset_stats)
 
     def _reset_stats(self) -> None:
         if self._timer_obj:
@@ -177,35 +241,74 @@ class PerfNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def itemChange(self, change, value):
-        if not hasattr(self, '_timer_obj'):
-            return super().itemChange(change, value)
-
-        match change:
-            case self.GraphicsItemChange.ItemSceneChange if value is None:
+        # Filter install/uninstall hooked off ItemSceneChange — survives
+        # session switches and ensures the filter follows the node into
+        # whatever view it lands in.
+        if change == self.GraphicsItemChange.ItemSceneHasChanged and value is not None:
+            self._install_filter()
+        elif change == self.GraphicsItemChange.ItemSceneChange and value is None:
+            # Stop polling and uninstall the filter before scene-leave
+            # so the demolition crew has a quiet node to tear down.
+            try:
                 self._poll_timer.stop()
-                self._uninstall_filter()
-            case self.GraphicsItemChange.ItemSceneHasChanged if value is not None:
-                self._install_filter()
-
+            except (RuntimeError, AttributeError):
+                pass
+            self._uninstall_filter()
         return super().itemChange(change, value)
 
-    _demolition_timers = [('_poll_timer', '_refresh')]
+    def _quiet_for_shake(self) -> None:
+        """Synchronous quieting before the deferred-remove window. Stops
+        the poll timer and uninstalls the viewport event filter so neither
+        can dispatch into a node about to vanish. Calls super() to keep
+        the root's pin-tracking disconnect."""
+        super()._quiet_for_shake()
+        try:
+            self._poll_timer.stop()
+        except (RuntimeError, AttributeError):
+            pass
+        self._uninstall_filter()
 
     def _demolition_pre(self) -> None:
+        """Type-specific teardown — uninstall the filter ahead of the
+        demolition crew's standard sequence. Calls super() for the
+        root's viewport-tracking disconnect."""
+        super()._demolition_pre()
         self._uninstall_filter()
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT
     # ─────────────────────────────────────────────────────────────────────────
 
-    def paint_content(self, painter: QPainter) -> None:
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        """Full paint pipeline — chromeless root paints nothing, every
+        descendant owns its full visual. Order: rounded body fill +
+        cream border (preserves the BaseNode-era look), then the stats
+        grid via the data-grid kit helpers."""
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Body fill + border. Border width follows pin_scale so the visual
+        # weight is preserved through the IIT toggle.
+        s        = float(getattr(self.data, 'pin_scale', 1.0)) or 1.0
+        radius   = Theme.nodeRoundRadius * s
+        border_w = max(1, int(round(Theme.nodeBorderWidth * s)))
+        painter.setBrush(self.brush())
+        painter.setPen(QPen(QColor(Theme.nodeBorder), border_w))
+        painter.drawRoundedRect(self.rect(), radius, radius)
+
+        # Stats content
+        self._paint_stats(painter, s)
+        painter.restore()
+
+    def _paint_stats(self, painter: QPainter, s: float) -> None:
         from utils.paint import make_kit, draw_header, draw_rows, draw_footer
 
         t   = self._timer_obj
-        kit = make_kit(self._TITLE_FONT, self._TITLE_STYLE, self._TITLE_FONT_BUMP)
+        kit = make_kit(self._TITLE_FONT, self._TITLE_STYLE, self._TITLE_FONT_BUMP,
+                       pin_scale=s)
         r   = self.rect()
         x   = r.x() + kit.pad
-        y   = r.y() + self._anim_top_offset + kit.pad
+        y   = r.y() + kit.pad
         w   = r.width() - kit.pad * 2
 
         y = draw_header(painter, kit, x, y, w, "Performance")
