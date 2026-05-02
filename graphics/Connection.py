@@ -6,10 +6,17 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-from PySide6.QtWidgets import QGraphicsPathItem
+from PySide6.QtWidgets import QGraphicsPathItem, QStyleOptionGraphicsItem
 from PySide6.QtGui import QPainterPath, QPen, QColor, QPainter
 from PySide6.QtCore import Qt, QPointF, QTimer
 from shiboken6 import isValid as _shibokenIsValid
+
+# Aerial-altitude threshold — wires drop entirely below this LOD. Mirrors
+# BaseNode.AERIAL_LOD_THRESHOLD; kept as a literal here to avoid importing
+# from `nodes/` into `graphics/` (Connection lives in graphics/, BaseNode
+# in nodes/, and graphics/ deliberately stays independent). If the BaseNode
+# threshold ever moves, update this constant alongside it.
+_AERIAL_LOD_THRESHOLD = 0.15
 
 from utils.motion.MotionCurves import GlideEngine
 
@@ -283,6 +290,14 @@ class Connection(QGraphicsPathItem):
         if not _endpoint_alive(self.start_node):
             return
         if self.end_node is not None and not _endpoint_alive(self.end_node):
+            return
+
+        # Aerial-altitude bypass: at navigation zoom, the canvas reads as a
+        # map of node positions; per-frame Bezier evaluation across many
+        # wires is the second-largest paint cost behind word-wrapped text
+        # rendering. Skip entirely — topology is conveyed by node positions.
+        lod = QStyleOptionGraphicsItem.levelOfDetailFromTransform(painter.worldTransform())
+        if lod < _AERIAL_LOD_THRESHOLD:
             return
 
         painter.setRenderHint(QPainter.Antialiasing)

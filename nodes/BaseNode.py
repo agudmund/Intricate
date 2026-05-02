@@ -9,7 +9,7 @@
 import time as _time
 import uuid as _uuid
 from contextlib import contextmanager
-from PySide6.QtWidgets import QGraphicsRectItem
+from PySide6.QtWidgets import QGraphicsRectItem, QStyleOptionGraphicsItem
 from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
 from PySide6.QtWidgets import QGraphicsItem
@@ -1445,9 +1445,40 @@ class BaseNode(QGraphicsRectItem):
         ))
         return path
 
+    # Aerial = navigation altitude. Below this LOD, the node drops its entire
+    # interaction layer — chrome, paint_content (title + body text), ports,
+    # selection ring all skip — and renders a single thin cream strip where
+    # body text would live. Mental model: at this zoom the canvas is being
+    # read as a map for the next swoosh-down, not as an interactive surface,
+    # so visual fidelity per node is over-investment. The strip mimics Qt's
+    # natural sub-pixel rendering of text-on-dark-body (a delicate cream
+    # line where text lives) at one fillRect cost — same look, a fraction
+    # of the paint pipeline. Lives at the same altitude the rest of the
+    # canvas already treats as map mode (NodeBehaviour pulse gate at 60 px,
+    # Scene._MEDIA_TINY_RENDER_PX). Connection.paint reads the same
+    # threshold — wires also drop below this LOD.
+    AERIAL_LOD_THRESHOLD = 0.15
+
     def paint(self, painter, option, widget=None):
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
+
+        # Aerial-zoom shortcut. levelOfDetailFromTransform reads the painter's
+        # current scene→device scale (the view's zoom factor for an unrotated
+        # node), so no cross-object lookup or signal plumbing is needed.
+        lod = QStyleOptionGraphicsItem.levelOfDetailFromTransform(painter.worldTransform())
+        if lod < self.AERIAL_LOD_THRESHOLD:
+            rect = self.rect()
+            pad_x = 8.0
+            strip_h = max(rect.height() * 0.3, 4.0)
+            strip_y = rect.center().y() - strip_h / 2
+            painter.fillRect(
+                QRectF(rect.x() + pad_x, strip_y,
+                       rect.width() - 2 * pad_x, strip_h),
+                QColor(Theme.textPrimary),
+            )
+            painter.restore()
+            return
 
         # Selection pen overrides current pen
         pen = self.selected_pen if self.isSelected() else self.current_pen
