@@ -422,6 +422,13 @@ class TreeNode(BaseNode):
             _log.debug("[tree] open-in-explorer failed: %s", e)
 
     def _build_tree_view(self) -> None:
+        # spellcheck=False — the tree is a list of file/folder names, not
+        # natural-language prose. Without this, PrettyEdit's always_visible
+        # branch attaches DebouncedSpellHighlighter and red-squiggles
+        # everything that isn't an English word: __init__.py, app_info,
+        # last_session, .otf, and most filenames. The squiggles also
+        # flicker as the highlighter debounces over re-rendered text on
+        # tree refresh. Off here, on by default everywhere else.
         self._editor = PrettyEdit(
             self,
             font_family="Lato",
@@ -429,6 +436,7 @@ class TreeNode(BaseNode):
             font_color=Theme.textPrimary,
             always_visible=True,
             scrollbar=False,
+            spellcheck=False,
         )
         self._editor.position(self._body_rect())
 
