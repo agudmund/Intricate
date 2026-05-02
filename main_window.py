@@ -25,7 +25,7 @@ from nodes.ImageNode import ImageNode
 from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
 from pretty_widgets.utils.logger import setup_logger
-from utils.pickers.PhrasePicker import randomling as pick_phrase
+from shared_braincell.phrase_picker import randomling as pick_phrase
 from pretty_widgets.utils.settings import appName, set_nested, get_nested, set_value, get
 from utils.helpers import ensure_dir, clean_pycache
 from utils.persistence.session import session_path, enter_project, session_residue
@@ -980,7 +980,7 @@ class IntricateApp(QMainWindow):
         """Glide the rolled-up strip to a Y position based on the app behind it."""
         if not self.is_collapsed:
             return
-        from utils.window_behind import get_window_behind
+        from shared_braincell import get_window_behind
         info = get_window_behind(int(self.winId()))
         exe_raw = (info.get("exe", "") if info else "").lower()
         exe = exe_raw.removesuffix(".exe")
@@ -1011,7 +1011,7 @@ class IntricateApp(QMainWindow):
         """Periodic check — auto-dock when the app behind changes."""
         if not self.is_collapsed:
             return
-        from utils.window_behind import get_window_behind
+        from shared_braincell import get_window_behind
         info = get_window_behind(int(self.winId()))
         exe_raw = (info.get("exe", "") if info else "").lower()
         exe = exe_raw.removesuffix(".exe")

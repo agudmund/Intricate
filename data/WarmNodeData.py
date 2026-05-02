@@ -8,7 +8,7 @@
 
 from dataclasses import dataclass, field
 from data.NodeData import NodeData
-from utils.pickers.PhrasePicker import randomling as pick_phrase
+from shared_braincell.phrase_picker import randomling as pick_phrase
 
 
 @dataclass

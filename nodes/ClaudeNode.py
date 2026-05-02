@@ -136,7 +136,7 @@ class ClaudeNode(BaseNode):
         body, just lets Claude say something warm into a response node.
         Samples a phrase from PhrasePicker to seed each greeting's tone.
         """
-        from utils.pickers.PhrasePicker import randomling as pick_phrase
+        from shared_braincell.phrase_picker import randomling as pick_phrase
         seed_phrase = pick_phrase()
         _GREETING_PROMPT = (
             "The user has just returned to Intricate — "
