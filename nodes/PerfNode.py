@@ -321,7 +321,7 @@ class PerfNode(ChromelessRoot):
         w   = r.width() - kit.pad * 2
 
         y = draw_header(painter, kit, x, y, w, "Performance")
-        y += 6  # breathing room between title and stats
+        y += 6 * s   # breathing room between title and stats — scaled with kit
 
         if t is None or t.sample_count == 0:
             painter.setFont(kit.f_label)

@@ -17,11 +17,19 @@ from PySide6.QtGui  import QColor, QFont, QPainter, QPen
 # ─────────────────────────────────────────────────────────────────────────────
 
 class DataGridKit:
-    """Pre-resolved fonts, colors, and pens for a data-grid paint pass."""
+    """Pre-resolved fonts, colors, and pens for a data-grid paint pass.
+
+    ``scale`` is the kit's effective rendering scale — the ``pin_scale``
+    that was passed to ``make_kit``. The draw_* helpers multiply their
+    inline layout constants (gaps, paddings, advances) by ``scale`` so
+    the layout stays proportional when the kit is built for a pinned
+    chromeless node at non-default zoom. ``pad`` and ``line_h`` are
+    already pre-scaled.
+    """
     __slots__ = (
         "f_label", "f_value", "f_header", "f_footer",
         "c_label", "c_header", "div_pen",
-        "pad", "line_h",
+        "pad", "line_h", "scale",
     )
 
     def __init__(
@@ -33,8 +41,9 @@ class DataGridKit:
         c_label:  QColor,
         c_header: QColor,
         div_pen:  QPen,
-        pad:      int = 12,
-        line_h:   int = 18,
+        pad:      int   = 12,
+        line_h:   int   = 18,
+        scale:    float = 1.0,
     ) -> None:
         self.f_label  = f_label
         self.f_value  = f_value
@@ -45,6 +54,7 @@ class DataGridKit:
         self.div_pen  = div_pen
         self.pad      = pad
         self.line_h   = line_h
+        self.scale    = scale
 
 
 def make_kit(
@@ -89,6 +99,7 @@ def make_kit(
         div_pen=div_pen,
         pad=int(round(12 * s)),
         line_h=int(round(18 * s)),
+        scale=s,
     )
 
 
@@ -104,14 +115,15 @@ def draw_header(
 ) -> float:
     """Lombardi Lake header + dotted divider. Returns new y."""
     line_h = kit.line_h
+    s      = kit.scale
     painter.setFont(kit.f_header)
     painter.setPen(kit.c_header)
-    painter.drawText(int(x), int(y - 3), int(w), line_h + 10,
+    painter.drawText(int(x), int(y - 3 * s), int(w), int(line_h + 10 * s),
                      Qt.AlignLeft | Qt.AlignVCenter, text)
-    y += line_h + 12
+    y += line_h + 12 * s
     painter.setPen(kit.div_pen)
     painter.drawLine(int(x), int(y), int(x + w), int(y))
-    y += 10
+    y += 10 * s
     return y
 
 
@@ -123,6 +135,7 @@ def draw_rows(
 ) -> float:
     """Label/value row loop — label left 60%, value right-aligned. Returns new y."""
     line_h  = kit.line_h
+    s       = kit.scale
     f_label = kit.f_label
     f_value = kit.f_value
     c_label = kit.c_label
@@ -138,7 +151,7 @@ def draw_rows(
         painter.setPen(value_color)
         painter.drawText(ix, int(y), iw, line_h,
                          Qt.AlignRight | Qt.AlignVCenter, value)
-        y += line_h + 3
+        y += line_h + 3 * s
     return y
 
 
@@ -151,10 +164,11 @@ def draw_footer(
 ) -> float:
     """Dotted divider + centered footer text. Returns new y."""
     line_h = kit.line_h
-    y += gap
+    s      = kit.scale
+    y += gap * s
     painter.setPen(kit.div_pen)
     painter.drawLine(int(x), int(y), int(x + w), int(y))
-    y += 6
+    y += 6 * s
     painter.setFont(kit.f_footer)
     painter.setPen(kit.c_label)
     painter.drawText(int(x), int(y), int(w), line_h,
@@ -173,15 +187,17 @@ def draw_hero(
     height: int = 28,
 ) -> float:
     """Bold centered hero value + second divider. Returns new y."""
+    s = kit.scale
     hero_font = QFont(kit.f_value)  # copy to avoid mutating kit
-    hero_font.setPointSize(max(1, font_size))
+    hero_font.setPointSize(max(1, int(round(font_size * s))))
     hero_font.setBold(True)
+    scaled_h = int(round(height * s))
     painter.setFont(hero_font)
     painter.setPen(color)
-    painter.drawText(int(x), int(y), int(w), height,
+    painter.drawText(int(x), int(y), int(w), scaled_h,
                      Qt.AlignCenter | Qt.AlignVCenter, text)
-    y += height + 4
+    y += scaled_h + 4 * s
     painter.setPen(kit.div_pen)
     painter.drawLine(int(x), int(y), int(x + w), int(y))
-    y += 8
+    y += 8 * s
     return y
