@@ -49,12 +49,17 @@ Each line becomes its own `<p>` block. This is critical — using `<pre>` with `
 Each `<p>` has:
 - `font-family: Lato; font-size: 8pt`
 - `white-space: pre` — preserves the indentation spaces from the walker
-- `padding-left: 20px` — reserves horizontal space for the heart column
-- `margin: 0` — no inter-paragraph spacing
+- `margin: 0 0 0 {HEART_COL_W}px` — reserves horizontal space for the heart column. **Must be `margin-left`, not `padding-left`** — Qt's QTextDocument HTML renderer silently drops `padding` on block elements but honours `margin` reliably. (See *Qt's HTML renderer drops padding on block elements* under Lessons Learned.)
+
+`HEART_COL_W` currently sits at **14 px**. Iteration history: 20 → 28 → 36 (all silently dropped as `padding-left`, no visual change) → 28 with `margin-left` (first version that actually rendered) → **14** (halved on user request once the adjuster was actually working — tighter visual rhythm now that the indent landing is real).
 
 Folder lines (ending with `/`) get `font-weight: 700; color: #ffffff`. File lines get `font-weight: 400` and inherit `Theme.textPrimary`.
 
 Legacy `📄` emoji is stripped from cached session text (`raw.replace("📄 ", "")`) so old sessions don't show both the emoji and the heart icon.
+
+### Editor configuration
+
+The body editor is a `PrettyEdit` constructed with `spellcheck=False`. The tree is a list of file and folder names — `__init__.py`, `app_info`, `last_session`, `.otf`, and most filenames are not English words, so the default `DebouncedSpellHighlighter` red-squiggles nearly every line and flickers the squiggles each time the highlighter re-runs over a refreshed tree. `spellcheck=False` is the targeted opt-out. The default everywhere else in the app stays on — this is the one node that explicitly doesn't want it.
 
 ### Heart Icon Placement
 
@@ -169,6 +174,16 @@ Uses the Rust-backed logger via `setup_logger("intricate.tree")`. The z-depth co
 ### HTML block structure matters for QTextDocument
 
 `<pre>` with `<br>` separators creates **one** QTextDocument block. `<p>` per line creates **one block per line**. If you need to map block indices to line numbers (for overlays, icons, annotations), you must use `<p>` tags. This cost several debugging rounds to discover — the hearts were being placed but the block iteration found zero matching indices because the entire tree was a single block.
+
+### Qt's HTML renderer drops `padding` on block elements — use `margin`
+
+Surfaced 2026-05-02 round 4. The pre-fix `_tree_to_html` used `padding-left:20px` on each `<p>` to reserve horizontal space for the heart column. The user reported hearts overlapping with the start of file/folder names. Bumping the value to `28px`, then `36px`, produced **no visible change** in the rendered tree — the hearts kept landing on top of the text.
+
+Root cause: Qt's QTextDocument HTML/CSS subset silently parses but does not apply `padding` declarations on block elements. There's no warning, no fallback, no rendered hint that the property was ignored — the layout just behaves as if you'd never set it. `margin` on the same elements works correctly.
+
+The fix was a one-character family swap: `padding: 0 0 0 {HEART_COL_W}px` → `margin: 0 0 0 {HEART_COL_W}px`. The first run with `margin-left` *immediately* showed the indent landing in the right place, validating that all the previous bumps had been no-ops.
+
+Diagnostic posture for the future: if you set a CSS property on a Qt-rendered HTML block and it appears to have zero effect, **try the margin equivalent before reaching for any other tool**. Check the property against Qt's documented [CSS subset support table](https://doc.qt.io/qt-6/richtext-html-subset.html) before assuming the property is honoured.
 
 ### Scene-native items beat paint hacks for proxy content
 
