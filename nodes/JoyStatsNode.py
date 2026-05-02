@@ -61,6 +61,15 @@ class JoyStatsNode(ChromelessRoot):
     # on pin) so the chosen size is preserved through zoom.
     _UNPINNED_RESIZE_ENABLED = True
 
+    # ── Layout-scale baseline ───────────────────────────────────────────────
+    # Paint scale derives from the rect's height vs this baseline — the same
+    # rect-derived scaling PerfNode uses. When the user resizes the HUD bigger
+    # via the corner grip, fonts grow with the container so the stats stay
+    # readable at any size. Without this, a resized HUD would show default-
+    # sized text floating in a big empty body. Tracks JoyStatsNodeData's
+    # default height so a fresh node lands at scale=1.0.
+    _BASELINE_HEIGHT = 280.0
+
     def __init__(self, data: JoyStatsNodeData | None = None):
         if data is None:
             data = JoyStatsNodeData()
@@ -132,28 +141,34 @@ class JoyStatsNode(ChromelessRoot):
     def paint(self, painter: QPainter, option, widget=None) -> None:
         """Full paint pipeline — background rect, then title + stats
         via paint_content. ChromelessRoot's paint() is empty by design,
-        so every descendant owns its own rendering."""
+        so every descendant owns its own rendering.
+
+        Layout scale is rect.height / _BASELINE_HEIGHT — captures both
+        user-resize (corner grip while unpinned) and pin-state in one
+        ratio. When the HUD is resized larger, fonts grow with it; when
+        the canvas zoom is frozen via pin, the kit follows. The corner
+        radius scales by the same factor so chrome stays proportional
+        to the body.
+        """
         _log.log(TRACE, "[joy-paint] %s paint() entered (removal_done=%s)",
                    self._log_id(), getattr(self, '_removal_done', '?'))
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        # Rounded rect body so the stats text is readable against the canvas.
+
+        s = self.rect().height() / self._BASELINE_HEIGHT if self._BASELINE_HEIGHT > 0 else 1.0
+
         painter.setBrush(self._bg_color())
         painter.setPen(Qt.NoPen)
-        painter.drawRoundedRect(self.rect(), self._ROUND_RADIUS, self._ROUND_RADIUS)
-        # Content (title + stats grid)
-        self.paint_content(painter)
+        painter.drawRoundedRect(self.rect(),
+                                self._ROUND_RADIUS * s,
+                                self._ROUND_RADIUS * s)
+        self.paint_content(painter, s)
         painter.restore()
 
-    def paint_content(self, painter: QPainter) -> None:
+    def paint_content(self, painter: QPainter, s: float = 1.0) -> None:
         r   = self.rect()
-        # pin_scale = 1.0 unpinned, = zoom-at-pin-time pinned. Multiplies
-        # every hardcoded font / pad / line-height so visible layout stays
-        # continuous across the IIT toggle: under IIT off the view transform
-        # scales scene-unit values by zoom; under IIT on it doesn't, and the
-        # rect itself was multiplied by zoom in _activate_pin. See
-        # ChromelessRootData.pin_scale.
-        s         = float(getattr(self.data, 'pin_scale', 1.0)) or 1.0
+        # s comes from paint() — derived from rect height vs baseline so
+        # user-resize and pin-state both scale the layout uniformly.
         pad       = self._CONTENT_PAD   * s
         title_top = self._TITLE_TOP_PAD * s
         title_h   = self._TITLE_HEIGHT  * s
