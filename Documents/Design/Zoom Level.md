@@ -4,14 +4,14 @@ The canvas's altitude system. Intricate's view zoom does double duty — it's th
 
 ## The Single Source of Truth
 
-`IntricateView.current_zoom` is the canonical scalar. Every input channel routes through `_apply_zoom(factor, anchor)`, which clamps to `[ZOOM_MIN, ZOOM_MAX] = [0.03, 5.0]` and emits `viewTransformed` so any pinned overlay (StickerNode in pinned mode, future screen-space HUDs) can re-anchor without polling. There is one zoom value, one method that mutates it, one signal that announces the change.
+`IntricateView.current_zoom` is the canonical scalar. Every input channel routes through `_apply_zoom(factor, anchor)`, which clamps to `[ZOOM_MIN, ZOOM_MAX] = [0.01, 5.0]` and emits `viewTransformed` so any pinned overlay (StickerNode in pinned mode, future screen-space HUDs) can re-anchor without polling. There is one zoom value, one method that mutates it, one signal that announces the change.
 
 ```
-ZOOM_MIN  = 0.03   (33× zoomed out)
+ZOOM_MIN  = 0.01   (100× zoomed out)
 ZOOM_MAX  = 5.0    (5× zoomed in)
 ```
 
-The 0.03 floor was extended from the original 0.10 on 2026-04-18 to accommodate large auto-split chains — once a 5 MB paste becomes a 100+ node chain, the old floor stopped being enough to see the whole shape at once. The 0.03 value also aligns exactly with slider integer 3 so the slider's bottom rung is reachable in one drag.
+The floor has been extended in two passes — originally 0.10, then 0.03 on 2026-04-18 to accommodate large auto-split chains, then 0.01 on 2026-05-02 once the aerial cream strip established a visibility floor independent of zoom (see the **Aerial Mode** section). Each pass tripled the zoom-out range, total 10× from origin. Future extensions are free to go further still — the aerial strip ensures the canvas reads as a constellation of node positions at any altitude, so the floor is now bounded by what the user needs to fit on screen, not by what's still legible.
 
 ## The Four Input Channels
 
@@ -86,7 +86,7 @@ Concretely, the four altitude bands the canvas operates in:
 | `LOD ≥ 0.15` | natural full paint | natural Bezier paint |
 | `0.07 ≤ LOD < 0.15` | natural full paint | skipped (invisible) |
 | `LOD < 0.07` | aerial cream strip | skipped |
-| `LOD ≤ ZOOM_MIN (0.03)` | aerial cream strip (smallest) | skipped |
+| `LOD ≤ ZOOM_MIN (0.01)` | aerial cream strip (smallest) | skipped |
 
 **Nodes paint as a thin cream strip below 0.07.** `BaseNode.paint()` reads the painter's LOD via `QStyleOptionGraphicsItem.levelOfDetailFromTransform(painter.worldTransform())` and, below threshold, replaces the entire paint pipeline with a single `fillRect` — a strip ~30% of the node's height, ~95% of its width, vertically centred, in `Theme.textPrimary` (cream). No chrome, no border, no body text layout, no ports, no selection ring.
 

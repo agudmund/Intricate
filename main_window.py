@@ -3259,8 +3259,10 @@ class IntricateApp(QMainWindow):
         QTimer.singleShot(0, self._restore_bottom_height)
 
     # Zoom-slider curve knobs — two cubic Hermite segments meeting at the
-    # pivot with shared tangent (C¹ smooth). Tweak to taste.
-    _ZOOM_MIN = 0.03
+    # pivot with shared tangent (C¹ smooth). Tweak to taste. Must stay in
+    # lockstep with IntricateView.ZOOM_MIN / ZOOM_MAX — the slider and the
+    # view are the same range, expressed at different layers.
+    _ZOOM_MIN = 0.01
     _ZOOM_MAX = 5.0
     _ZOOM_PIVOT = 1.0      # zoom value at the pivot
     _PIVOT_T = 0.6         # where the pivot sits on the slider (0..1)

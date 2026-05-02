@@ -42,12 +42,21 @@ class IntricateView(QGraphicsView):
         Multiple files dropped together are staggered so they don't overlap.
     """
 
-    # Zoom-out floor extended 3× (0.1 → 0.03) on 2026-04-18 to accommodate
-    # large auto-split chains from WarmNode paste-splits — once a 5 MB paste
-    # becomes 100+ chained nodes, the old 10% floor stopped being enough to
-    # see the whole shape at once. The 0.03 value aligns exactly with slider
-    # integer 3 so the slider's bottom position is reachable in one drag.
-    ZOOM_MIN = 0.03
+    # Zoom-out floor extended in two passes:
+    #   2026-04-18: 0.10 → 0.03 (3×) — accommodate large auto-split chains
+    #               from WarmNode paste-splits, once a 5 MB paste became
+    #               100+ chained nodes.
+    #   2026-05-02: 0.03 → 0.01 (3×, total 10× from original) — the aerial
+    #               cream strip now provides a visibility floor regardless
+    #               of zoom (see Documents/Design/Zoom Level.md), so the
+    #               canvas reads as a constellation of node positions at
+    #               any altitude. With the floor decoupled from the
+    #               legibility constraint, ZOOM_MIN can be pushed wherever
+    #               the user needs to fit the whole tree shape on screen.
+    #               0.01 = 100× zoomed out, enough headroom for thousand-
+    #               node chains while leaving the aerial-swap threshold
+    #               (currently 0.07) plenty of range to play with.
+    ZOOM_MIN = 0.01
     ZOOM_MAX = 5.0
 
     # Emitted after any transform mutation (pan, zoom, programmatic scale /
