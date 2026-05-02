@@ -416,6 +416,18 @@ class WarmNode(BaseNode):
     # with a smaller int here if a specific node type wants a tighter
     # right edge.
 
+    # Aerial-strip opt-in. WarmNode is the only node type that carries
+    # PURE TEXT content (no images, no structured visuals, no chrome
+    # variation). At ZOOM_MIN (0.01) every other node type still has
+    # something visually distinguishable on screen — a tinted body, a
+    # pixmap, a colour swatch — but a WarmNode without the strip rescue
+    # is just a near-invisible smudge. The 0.03 threshold is the deepest
+    # sliver of zoom where the rescue earns its keep; above 0.03 even
+    # WarmNodes paint their natural pipeline and Qt's sub-pixel text
+    # rendering carries the day. See BaseNode.AERIAL_LOD_THRESHOLD for
+    # the threshold history (2026-05-02 v1→v2→v3).
+    AERIAL_LOD_THRESHOLD = 0.03
+
     # Class-level shared font cache for body paint (matches AboutNode /
     # TextNode pattern).  All WarmNode idle bodies use the same font, so
     # one QFont + one QFontMetrics serve every instance rather than one

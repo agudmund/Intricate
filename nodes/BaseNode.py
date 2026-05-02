@@ -1626,23 +1626,34 @@ class BaseNode(QGraphicsRectItem):
     # body text would live. Mental model: at this zoom the canvas is being
     # read as a map for the next swoosh-down, not as an interactive surface.
     #
-    # Threshold at 0.07 not 0.15 — the camera trick. At 0.15 a 100 px node
-    # is still 15 px on screen and Qt's natural sub-pixel text rendering
-    # produces content-distinguishing texture (each node's visual mass
-    # reflects its actual text); our uniform 30%-height strip at that
-    # altitude reads as an abrupt information-flatten, a visible flip.
-    # At 0.07 a 100 px node is 7 px on screen, the natural rendering
-    # smears text into a generic cream-on-dark blob, and our strip
-    # becomes a faithful visual stand-in rather than an information loss.
-    # The threshold sits where the human retina is already adjusting
-    # focus — timing rather than time, the swap happens unnoticed.
+    # Threshold story (read-the-history bookmark):
+    #   2026-05-02 v1: 0.15 across the board. Visible flip at moderate aerial
+    #                  because Qt's natural sub-pixel text rendering still
+    #                  produced content-distinguishing texture there.
+    #   2026-05-02 v2: lowered to 0.07 — the "camera trick" altitude where
+    #                  natural rendering smears into a generic blob and the
+    #                  strip becomes a faithful stand-in.
+    #   2026-05-02 v3: with ZOOM_MIN extended from 0.03 to 0.01, the user
+    #                  found themselves zooming all the way to the floor
+    #                  comfortably and wanted natural rendering to dominate
+    #                  for longer. v3 narrows the strip's role to a pure
+    #                  visibility floor: 0.0 default disables it for every
+    #                  node type, and only WarmNode opts in by overriding
+    #                  AERIAL_LOD_THRESHOLD = 0.03 (text-only nodes are
+    #                  the ones that actually fade at extreme zoom; other
+    #                  node types carry visual content that reads on its
+    #                  own at any altitude).
+    #
+    # Subclasses opt in by overriding this value with the LOD they want as
+    # their aerial threshold. Default 0.0 means `lod < threshold` is never
+    # true for valid LOD values — aerial mode is off.
     #
     # NB: Connection._AERIAL_LOD_THRESHOLD stays at 0.15 — split deliberately.
     # Wires are sub-pixel by 0.15 anyway (no visible ribbon at that altitude),
     # so the wire-skip is invisible and reclaims the second-largest paint
     # cost (Bezier evaluation across many wires per zoom frame) for the
-    # whole 0.07–0.15 band where nodes are still painting natural pipeline.
-    AERIAL_LOD_THRESHOLD = 0.07
+    # whole 0.15-down band where nodes are still painting natural pipeline.
+    AERIAL_LOD_THRESHOLD = 0.0
 
     def paint(self, painter, option, widget=None):
         painter.save()
