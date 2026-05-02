@@ -3,7 +3,7 @@
 > Forensic reference for any AI or human orienting themselves in this codebase.
 > Provide this document first — it saves everyone from re-reading the source tree.
 >
-> **Last refreshed: 2026-04-18.** For what's changed since, see `Documents/Changelog.md` — append-only log of paradigm-level shifts dated to the day they landed. If this doc and the Changelog disagree, the Changelog is newer.
+> **Last refreshed: 2026-05-02.** For what's changed since, see `Documents/Changelog.md` — append-only log of paradigm-level shifts dated to the day they landed. If this doc and the Changelog disagree, the Changelog is newer.
 >
 > Living stats (line counts, folder geometry, exact file sizes) deliberately omitted — they drift every day and belong in their own place. This doc carries structure and intent only.
 
@@ -15,15 +15,31 @@
 
 ## The Family
 
+**Apps:**
+
 | Repo | Purpose | Entry Point |
 |------|---------|-------------|
 | [Intricate](https://github.com/agudmund/Intricate) | Node-based visual canvas | `main.py` |
-| [Notepad++ Duplex+ Turbo](https://github.com/agudmund/Notepad-Duplex-Turbo) | Creative writing editor | `main.py` |
-| [Pretty Widgets](https://github.com/agudmund/Pretty-Widgets) | Shared package (widgets + Theme + settings + logger) | pip package |
+| The Settlers | Settings companion — owns writes to `settings.toml` | `main.py` |
+| The Majestic | Creative writing surface | `main.py` |
+| [Notepad++ Duplex+ Turbo](https://github.com/agudmund/Notepad-Duplex-Turbo) | Creative writing editor (Eddie) | `main.py` |
 
-## Shared Infrastructure (pretty-widgets)
+**Packages (pip-installed editable):**
 
-Installed via `pip install -e "C:\Users\thisg\Desktop\Pretty Widgets"`. All apps import from `pretty_widgets.*` — no local copies.
+| Package | Scope | Source |
+|---------|-------|--------|
+| [`pretty_widgets`](https://github.com/agudmund/Pretty-Widgets) | Qt widgets, Theme, TOML loader, logger adapter | `Desktop/Pretty Widgets/` |
+| `shared_braincell` | Non-Qt cross-app utilities | `Desktop/Shared Braincell/` |
+| `intricate_vision` | Anthropic Vision API helpers | `Desktop/Intricate Vision/` |
+| `intricate_log` | Rust-backed lock-free log ring buffer (`.pyd`) | `Desktop/intricate-log/` |
+
+## Shared Infrastructure
+
+The family ships two Python packages and one Rust extension. Each app imports from these — there are no local copies of shared code.
+
+### Pretty Widgets (`pretty_widgets`)
+
+Installed via `pip install -e "C:\Users\thisg\Desktop\Pretty Widgets"`. The Qt-bound infrastructure layer.
 
 ```
 pretty_widgets/
@@ -39,8 +55,26 @@ pretty_widgets/
 │                           so it never intercepts clicks)
 ├── graphics/Theme.py    — Metaclass theme registry, live TOML reload, icon cache
 ├── utils/settings.py    — TOML loader, QFileSystemWatcher, atomic writes
-└── utils/logger.py      — 3-slot rotating log, TRACE level (5), Rust-backed ring buffer
+└── utils/logger.py      — Adapter shim around `intricate_log` (Rust ring buffer); stdlib
+                           3-slot rotation as fallback when the .pyd isn't loaded
 ```
+
+### Shared Braincell (`shared_braincell`)
+
+Installed via `pip install -e "C:\Users\thisg\Desktop\Shared Braincell"`. Pretty Widgets' non-Qt sibling — anything pure-Python that more than one app needs lifts here once a second consumer appears.
+
+```
+shared_braincell/
+├── instance_lock.py    — Singleton-app port lock with IPC handshake and port-range fallback
+├── window_behind.py    — Win32 Z-order walk: name the next visible window beneath any caller
+└── phrase_picker.py    — Curated phrase bank + randomling / sampleling helpers
+```
+
+Soft dep on `pretty_widgets.utils.logger` (stdlib fallback) so the package stays independently installable.
+
+**Migration log:**
+- 2026-04-15 — `instance_lock` seeded the package
+- 2026-05-02 — `window_behind` lifted from Intricate + The Settlers; `phrase_picker` lifted from Intricate + The Majestic (both eliminated drifting forks)
 
 ## Shared Contracts
 
