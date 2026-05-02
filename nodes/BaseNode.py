@@ -1449,15 +1449,25 @@ class BaseNode(QGraphicsRectItem):
     # interaction layer — chrome, paint_content (title + body text), ports,
     # selection ring all skip — and renders a single thin cream strip where
     # body text would live. Mental model: at this zoom the canvas is being
-    # read as a map for the next swoosh-down, not as an interactive surface,
-    # so visual fidelity per node is over-investment. The strip mimics Qt's
-    # natural sub-pixel rendering of text-on-dark-body (a delicate cream
-    # line where text lives) at one fillRect cost — same look, a fraction
-    # of the paint pipeline. Lives at the same altitude the rest of the
-    # canvas already treats as map mode (NodeBehaviour pulse gate at 60 px,
-    # Scene._MEDIA_TINY_RENDER_PX). Connection.paint reads the same
-    # threshold — wires also drop below this LOD.
-    AERIAL_LOD_THRESHOLD = 0.15
+    # read as a map for the next swoosh-down, not as an interactive surface.
+    #
+    # Threshold at 0.07 not 0.15 — the camera trick. At 0.15 a 100 px node
+    # is still 15 px on screen and Qt's natural sub-pixel text rendering
+    # produces content-distinguishing texture (each node's visual mass
+    # reflects its actual text); our uniform 30%-height strip at that
+    # altitude reads as an abrupt information-flatten, a visible flip.
+    # At 0.07 a 100 px node is 7 px on screen, the natural rendering
+    # smears text into a generic cream-on-dark blob, and our strip
+    # becomes a faithful visual stand-in rather than an information loss.
+    # The threshold sits where the human retina is already adjusting
+    # focus — timing rather than time, the swap happens unnoticed.
+    #
+    # NB: Connection._AERIAL_LOD_THRESHOLD stays at 0.15 — split deliberately.
+    # Wires are sub-pixel by 0.15 anyway (no visible ribbon at that altitude),
+    # so the wire-skip is invisible and reclaims the second-largest paint
+    # cost (Bezier evaluation across many wires per zoom frame) for the
+    # whole 0.07–0.15 band where nodes are still painting natural pipeline.
+    AERIAL_LOD_THRESHOLD = 0.07
 
     def paint(self, painter, option, widget=None):
         painter.save()

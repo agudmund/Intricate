@@ -11,11 +11,19 @@ from PySide6.QtGui import QPainterPath, QPen, QColor, QPainter
 from PySide6.QtCore import Qt, QPointF, QTimer
 from shiboken6 import isValid as _shibokenIsValid
 
-# Aerial-altitude threshold — wires drop entirely below this LOD. Mirrors
-# BaseNode.AERIAL_LOD_THRESHOLD; kept as a literal here to avoid importing
-# from `nodes/` into `graphics/` (Connection lives in graphics/, BaseNode
-# in nodes/, and graphics/ deliberately stays independent). If the BaseNode
-# threshold ever moves, update this constant alongside it.
+# Aerial-altitude threshold — wires drop entirely below this LOD. Kept as
+# a literal here to avoid importing from `nodes/` into `graphics/`
+# (Connection lives in graphics/, BaseNode in nodes/, and graphics/
+# deliberately stays independent).
+#
+# Intentionally split from BaseNode.AERIAL_LOD_THRESHOLD (0.07) — wires
+# higher, nodes lower. At 0.15 wires are already sub-pixel and produce
+# no visible ribbon, so the wire-skip below 0.15 is invisible to the
+# user but reclaims a meaningful slice of paint cost (Bezier evaluation
+# across many wires per zoom frame) for the whole 0.07–0.15 band where
+# nodes are still painting their natural pipeline. The visible aerial
+# transition is gated by the BaseNode threshold; the wire threshold is
+# a pure perf gate.
 _AERIAL_LOD_THRESHOLD = 0.15
 
 from utils.motion.MotionCurves import GlideEngine

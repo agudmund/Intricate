@@ -50,7 +50,7 @@ Several systems on the canvas read `current_zoom` (or the painter's per-frame LO
 
 | System | Threshold | Adapts to |
 |---|---|---|
-| **Aerial paint** (`BaseNode.AERIAL_LOD_THRESHOLD`) | LOD < 0.15 | Skip chrome + paint_content + ports + selection chrome; paint a thin cream strip |
+| **Aerial paint** (`BaseNode.AERIAL_LOD_THRESHOLD`) | LOD < 0.07 | Skip chrome + paint_content + ports + selection chrome; paint a thin cream strip |
 | **Wire paint** (`Connection._AERIAL_LOD_THRESHOLD`) | LOD < 0.15 | Skip the wire entirely — no Bezier evaluation, no glow segments |
 | **Pulse gate** (`NodeBehaviour._PULSE_MIN_ON_SCREEN_PX`) | smaller_dim × zoom < 60 px | Pulse animation refuses to start; bg colour snaps directly without animating |
 | **Media tiny-render** (`Scene._MEDIA_TINY_RENDER_PX`) | smaller_dim × zoom < 60 px | VideoNode pauses, AudioNode fades to silence |
@@ -58,32 +58,54 @@ Several systems on the canvas read `current_zoom` (or the painter's per-frame LO
 | **Shake-detect** (`BaseNode._detect_shake`) | always | Per-axis deltas multiplied by zoom before the threshold compare, so the same physical shake works at any altitude |
 | **Scene auto-expansion** (`View._expansion_margin`) | always | Edge buffer = `viewport.width / 2 / zoom` so any edge node can be panned to centre at the zoom it was placed at |
 
-The pulse gate, media tiny-render, and aerial paint cluster around the same altitude — roughly the point where a 400 px node renders at 60 px on screen, which lines up with LOD ≈ 0.15. That's the canvas's "altitude transition" — above it, individual nodes are a workspace; below it, they're map markers.
+The aerial paint and wire paint thresholds are intentionally split. The pulse gate, media tiny-render, and wire paint cluster around LOD ≈ 0.15 — roughly the point where a 400 px node renders at 60 px on screen, the canvas's "interactive surface vs map" altitude. Aerial paint sits lower at LOD 0.07 because at 0.15 Qt's natural sub-pixel text rendering still produces content-distinguishing texture per node — replacing that with a uniform strip would read as a visible flip. The strip earns its keep at 0.07, where natural rendering smears into a generic blob and the strip becomes a faithful stand-in. See the **Aerial Mode** section below for the camera-trick rationale.
 
 ## Aerial Mode
 
-Below `LOD < 0.15`, the canvas drops its entire interaction layer. The mental model is gameplay aerial view: zoom out to see where everything is, decide where to go next, swoosh back down. Concorde altitude — no need to read text or click ports up here, just shape recognition for navigation.
+The canvas's interaction-vs-navigation altitude split. Two thresholds participate, and they are deliberately not the same:
 
-Concretely, three things happen below the threshold:
+- **Wire paint** drops at `LOD < 0.15` — the perf gate
+- **Node paint** drops at `LOD < 0.07` — the visible-flip gate
 
-**Nodes paint as a thin cream strip.** `BaseNode.paint()` reads the painter's LOD via `QStyleOptionGraphicsItem.levelOfDetailFromTransform(painter.worldTransform())` and, below 0.15, replaces the entire paint pipeline with a single `fillRect` — a strip ~30% of the node's height, ~95% of its width, vertically centred, in `Theme.textPrimary` (cream). No chrome, no border, no body text layout, no ports, no selection ring.
+The mental model is gameplay aerial view: zoom out to see where everything is, decide where to go next, swoosh back down. Concorde altitude — no need to read text or click ports up here, just shape recognition for navigation.
 
-The strip mimics what Qt's natural sub-pixel text rendering produces in this band: text-on-dark-body composites into a delicate cream line where text lives. The cheap `fillRect` reproduces that aesthetic at a fraction of the cost — no QFont, no word-wrap layout, no per-glyph rasterisation. The cost saving compounds: 8 node types use `Qt.TextWordWrap` for body content, and word-wrap re-runs layout at every paint, which means every zoom frame previously paid that cost across every visible node.
+### Why two thresholds — the camera trick
 
-**Connections skip entirely.** `Connection.paint()` reads the same threshold (mirrored as `_AERIAL_LOD_THRESHOLD = 0.15` to avoid importing across the `nodes/`↔`graphics/` boundary) and returns early below it. Topology reads from node positions alone at this altitude — wires would just be visual noise on a map. The Bezier path evaluation across many wires per zoom frame was the second-largest paint cost behind word-wrapped text.
+A single threshold at 0.15 was the first iteration; it dropped both nodes and wires at the same altitude. The wire-drop was visually invisible (wires are sub-pixel by 0.15 anyway, no ribbon visible to the user) but the node-drop produced a noticeable visual flip: at 0.15 Qt's natural sub-pixel text rendering still produces *content-distinguishing* texture per node — each node's visual mass reflects what's actually written in it. Replacing that with a uniform 30%-height strip across all nodes reads as an information-flatten, a hop between states.
 
-**Pulse and media gates already aerial-active.** These predate the aerial paint feature and stay active at the same altitude — pulse animations refuse to start, video/audio nodes pause. The new paint optimisation is the missing piece that completes the aerial-mode picture: every per-node ambient cost now drops in unison once the canvas crosses into navigation altitude.
+Lowering the node threshold to 0.07 moves the swap to where natural rendering loses its content-distinguishing detail. At LOD 0.07 a 100 px node is 7 px on screen; the natural pipeline's text content smears into a generic cream-on-dark blob, and our strip becomes a faithful stand-in rather than an information loss. The threshold sits at the altitude where the human retina is already adjusting focus — the swap happens during that adjustment and reads as no swap at all. Timing rather than time.
 
-### Why one threshold, not a band
+The wire threshold stays at 0.15 because the wire-drop is a pure perf gate — wires aren't visually contributing at 0.15, so dropping them there reclaims the second-largest paint cost (Bezier evaluation across many wires per zoom frame) for the entire 0.07–0.15 band where nodes are still painting their natural pipeline.
 
-A smooth fade between full paint and aerial paint across an LOD range was considered and rejected. The visual transition during interactive zoom is a single hard switch in one frame, which reads as a clean "altitude change" rather than a fuzzy shift. For screenshots — the original motivation for the feature — there is no transition at all, just the final image at the chosen zoom. A hard threshold also keeps the paint logic trivial: one comparison, one branch.
+### What happens at each altitude
+
+Concretely, the four altitude bands the canvas operates in:
+
+| Altitude | Nodes | Wires |
+|---|---|---|
+| `LOD ≥ 0.15` | natural full paint | natural Bezier paint |
+| `0.07 ≤ LOD < 0.15` | natural full paint | skipped (invisible) |
+| `LOD < 0.07` | aerial cream strip | skipped |
+| `LOD ≤ ZOOM_MIN (0.03)` | aerial cream strip (smallest) | skipped |
+
+**Nodes paint as a thin cream strip below 0.07.** `BaseNode.paint()` reads the painter's LOD via `QStyleOptionGraphicsItem.levelOfDetailFromTransform(painter.worldTransform())` and, below threshold, replaces the entire paint pipeline with a single `fillRect` — a strip ~30% of the node's height, ~95% of its width, vertically centred, in `Theme.textPrimary` (cream). No chrome, no border, no body text layout, no ports, no selection ring.
+
+The strip mimics what Qt's natural sub-pixel text rendering produces at this band: text-on-dark-body composites into a delicate cream line where text lives. The cheap `fillRect` reproduces that aesthetic at a fraction of the cost — no QFont, no word-wrap layout, no per-glyph rasterisation. The cost saving compounds: 8 node types use `Qt.TextWordWrap` for body content, and word-wrap re-runs layout at every paint, which means every zoom frame previously paid that cost across every visible node.
+
+**Connections skip entirely below 0.15.** `Connection.paint()` reads its own `_AERIAL_LOD_THRESHOLD = 0.15` (mirrored as a literal to avoid importing across the `nodes/`↔`graphics/` boundary) and returns early below it. Topology reads from node positions alone at navigation altitude — wires would just be visual noise on a map. The Bezier path evaluation across many wires per zoom frame was the second-largest paint cost behind word-wrapped text.
+
+**Pulse and media gates already aerial-active at LOD ≈ 0.15.** These predate the aerial paint feature — pulse animations refuse to start, video/audio nodes pause. They stay active where they were because their cost is unrelated to text rendering or wire painting; gating them at 0.15 was always correct.
+
+### Why a hard threshold, not a fade
+
+A smooth fade between full paint and aerial paint across an LOD range was considered and rejected. The visual transition during interactive zoom is a single hard switch in one frame, which reads as a clean "altitude change" rather than a fuzzy shift — *provided the threshold sits where natural and aerial visually overlap*. The split-threshold design is what makes the hard switch invisible; a fade would be over-engineering once the threshold is in the right place. For screenshots there is no transition at all, just the final image at the chosen zoom. A hard threshold also keeps the paint logic trivial: one comparison, one branch.
 
 ### Tunable parameters
 
 | Knob | Location | Effect |
 |---|---|---|
 | `BaseNode.AERIAL_LOD_THRESHOLD` | `nodes/BaseNode.py` | Altitude at which nodes drop to strip. Raise = more paint cost, more visual fidelity at moderate aerial. Lower = less cost, cream strip kicks in only at deeper aerial. |
-| `Connection._AERIAL_LOD_THRESHOLD` | `graphics/Connection.py` | Altitude at which wires drop. Currently kept in lockstep with the BaseNode value. |
+| `Connection._AERIAL_LOD_THRESHOLD` | `graphics/Connection.py` | Altitude at which wires drop. Intentionally split from the node threshold — wire-drop is invisible at any reasonable altitude, so the threshold can stay higher to reclaim more perf. |
 | Strip height proportion (`0.3` of node height) | `BaseNode.paint()` inline | Bigger = more solid look, smaller = more delicate. |
 | Strip horizontal padding (`8.0` px) | `BaseNode.paint()` inline | Affects how flush the strip sits to the node edges. |
 
@@ -92,7 +114,7 @@ The strip math is intentionally inline rather than abstracted — it's three lin
 ## Technical Notes
 
 - **`levelOfDetailFromTransform` reads the *painter's* current transform**, which is the composed scene→viewport scale at paint time. For an unrotated, unscaled item this equals `View.current_zoom`. Reading it from the painter rather than from the View is what keeps `BaseNode.paint()` free of any cross-object state lookup — no signal plumbing, no scene-level cache to invalidate, no per-paint dictionary read.
-- **`<` and not `<=` at the threshold.** When `AERIAL_LOD_THRESHOLD == ZOOM_MIN`, strict `<` would never trigger at the floor and the aerial mode would be unreachable. The current `0.15` threshold sits comfortably above the floor, so strict `<` is correct — there is no edge case at the boundary.
+- **`<` and not `<=` at the threshold.** When `AERIAL_LOD_THRESHOLD == ZOOM_MIN`, strict `<` would never trigger at the floor and the aerial mode would be unreachable. The current `0.07` (nodes) and `0.15` (wires) thresholds sit comfortably above the floor, so strict `<` is correct — there is no edge case at the boundary.
 - **The slider's `singleStep=10, pageStep=50`** means each arrow-key tap or scroll-wheel notch on the slider widget itself moves zoom by a non-trivial amount — the slider is for jumping between altitudes, not fine-tuning. Fine zoom adjustment lives in the wheel and Alt-drag channels.
 - **`current_zoom` vs `transform().m11()`**. Both report the same value for unrotated items. `current_zoom` is the cached scalar and is preferred for any per-frame check; `transform().m11()` is read once during pan delta math (`mouseMoveEvent`) where the freshness of the live transform matters more than the cache.
 - **Programmatic callers must use `_apply_zoom`**. Calling `view.scale(factor, factor)` directly bypasses the clamp and the `current_zoom` update — the slider would desync, the aerial threshold would still work (it reads from the painter, not from `current_zoom`), but every other zoom-aware system would be lying to itself. There is no scenario where direct `scale()` is correct outside of `_apply_zoom`'s body.
