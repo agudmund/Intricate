@@ -32,22 +32,22 @@ PADDING      = 6.0
 TITLE_GAP    = 8.0    # breathing room between title row and tree body
 TOOLBAR_W    = 28.0   # width of the left-hand toolbar strip
 HEART_SIZE   = 18     # heart icon render size (bigger than line height → chain overlap)
-HEART_COL_W  = 36     # horizontal space reserved for the heart column.
+HEART_COL_W  = 28     # horizontal space reserved for the heart column.
                       # Heart frame positions at body.x() - 4 with 18 px
-                      # frame width. The heart icon's source PNG carries
-                      # significant transparent padding — the visible
-                      # content's bounding box spans only ~57% of the
-                      # 1024 source width (cols 241-822), so the rendered
-                      # visible heart shape extends to roughly body.x() + 14
-                      # rather than the full frame edge. But the apparent
-                      # gap to text is also affected by Qt's HTML text-block
-                      # left margin and the QTextEdit's internal viewport
-                      # offset, which empirically sit closer to the heart
-                      # than the bare CSS math suggests.
-                      # Iteration history (2026-05-02): 20 → 28 → 36.
-                      # Bump if root-level files at the bottom of a tree
-                      # still show first-letter overlap; trim if the gap
-                      # starts feeling generous on dense trees.
+                      # frame width. Heart visible bbox is ~57% of source
+                      # PNG (cols 241-822 of 1024) so the visible heart
+                      # shape extends to ~body.x() + 14, but with the
+                      # source PNG's transparent right-side padding the
+                      # apparent visual right edge feels closer to text
+                      # than the frame math implies.
+                      # The CSS property used to apply this padding is
+                      # `margin-left` (NOT padding-left — Qt's HTML
+                      # renderer drops padding on block elements). See
+                      # _tree_to_html for the rationale and the
+                      # 2026-05-02 round-4 padding-chase that uncovered it.
+                      # Iteration history: 20 → 28 → 36 (all silently
+                      # ignored as padding-left) → 28 with margin-left
+                      # (first version that actually rendered).
 
 
 
@@ -518,10 +518,19 @@ class TreeNode(BaseNode):
         Each line becomes its own <p> block so QTextDocument creates one
         block per line — required for _place_hearts to map block indices
         to file lines.
+
+        Indent uses `margin-left:{HEART_COL_W}px`, NOT `padding-left`.
+        Qt's HTML/CSS subset (QTextDocument's renderer) silently drops
+        `padding` declarations on block elements while honouring `margin`
+        reliably. The pre-2026-05-02 version used padding-left which
+        meant the heart-column padding was effectively zero in the
+        rendered output — bumping HEART_COL_W from 20 to 28 to 36 had
+        no visual effect because the property never made it through
+        Qt's CSS parse. See log entry 2026-05-02 round-4 padding chase.
         """
         import html as _html
         P = (f'<p style="font-family:Lato; font-size:8pt; '
-             f'white-space:pre; margin:0; padding-left:{HEART_COL_W}px;">')
+             f'white-space:pre; margin:0 0 0 {HEART_COL_W}px;">')
         blocks     = []
         file_lines = set()
         for idx, raw in enumerate(text.split("\n")):
