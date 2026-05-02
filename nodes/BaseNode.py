@@ -147,6 +147,38 @@ class BaseNode(QGraphicsRectItem):
         self._drag_suppressed_count = 0
         self._drag_suppressed_max_travel_px = 0.0
 
+        # ──────────────────────────────────────────────────────────────────────
+        # Press/release balance counters — diagnostic for the 2026-05-02
+        # "click sends node spinning far offscreen" bug class.
+        #
+        # The original symptom: a gentle click on a node sometimes sent it
+        # spinning far offscreen, identified as a series of up to 35 click
+        # events firing in rapid succession. The first investigation traced
+        # one mechanism: mousePressEvent's resize-handle early-return path
+        # was calling event.accept() and returning WITHOUT calling
+        # super().mousePressEvent(). Meanwhile, mouseReleaseEvent always
+        # called super().mouseReleaseEvent() — meaning the press half of
+        # the gesture skipped Qt's internal anchor setup, but the release
+        # half ran against whatever stale anchor was last cached (possibly
+        # from a press minutes ago, on a different node). Qt then computed
+        # a translation delta against the stale anchor and snapped the
+        # item by that delta. With a multi-minute stale anchor, the delta
+        # is huge — node spins offscreen.
+        #
+        # The fix paired with this counter: super().mousePressEvent() is
+        # now called on EVERY press path (resize-handle path included) so
+        # the press/release halves stay symmetric from Qt's view. The
+        # counters below let us detect imbalance if a different mechanism
+        # ever surfaces — _arm_seq increments on every mousePressEvent
+        # (any button, any path), _release_seq on every mouseReleaseEvent.
+        # Steady state has _release_seq one behind _arm_seq during a
+        # gesture and equal between gestures. A release that fires while
+        # _release_seq == _arm_seq is an "orphan release" — Qt sent us a
+        # release without a corresponding press through this method, and
+        # gets logged at WARNING for forensic capture.
+        self._arm_seq:     int = 0
+        self._release_seq: int = 0
+
         # ── Behaviour ─────────────────────────────────────────────────────────
         # disconnect_all() is called in _prepare_for_removal — not optional.
         self.behaviour = NodeBehaviour(self)
@@ -702,9 +734,38 @@ class BaseNode(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event):
+        """Mouse press on a BaseNode. Multiple paths:
+
+        - **Right-click**: starts a connection wire, returns early.
+        - **Left-click on resize handle**: enters resize mode. As of
+          2026-05-02 this path also calls ``super().mousePressEvent``
+          before returning so Qt's internal mouse-anchor state is
+          initialized symmetrically with the matching
+          ``super().mouseReleaseEvent``. The previous asymmetry was the
+          most plausible mechanism for the "click sends node spinning
+          far offscreen" bug — see the press/release balance counter
+          comment in ``__init__`` for the full diagnosis.
+        - **Left-click elsewhere**: arms the drag-commit dead-zone
+          (Wacom phantom-motion suppression) and proceeds with the
+          standard QGraphicsRectItem press handling via super().
+
+        Press/release balance: every entry increments ``_arm_seq``
+        regardless of which path is taken. The matching
+        ``mouseReleaseEvent`` increments ``_release_seq``. A release
+        with ``_release_seq == _arm_seq`` (i.e., no outstanding press)
+        is an orphan and gets logged WARNING.
+        """
+        self._arm_seq += 1
+        node_type = getattr(self.data, 'node_type', '?')
         scene = self.scene()
 
         if event.button() == Qt.RightButton:
+            logger.info(
+                "[base-press] %s path=connection button=right "
+                "arm_seq=%d release_seq=%d (delta=%d)",
+                node_type, self._arm_seq, self._release_seq,
+                self._arm_seq - self._release_seq,
+            )
             if scene and hasattr(scene, 'begin_connection'):
                 scene.begin_connection(self)
             event.accept()
@@ -724,6 +785,27 @@ class BaseNode(QGraphicsRectItem):
                 self._is_resizing      = True
                 self._resize_start_pos  = event.pos()
                 self._resize_start_rect = self.rect()
+                logger.info(
+                    "[base-press] %s path=resize button=left "
+                    "screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f) "
+                    "arm_seq=%d release_seq=%d (delta=%d)",
+                    node_type,
+                    event.screenPos().x(), event.screenPos().y(),
+                    self.scenePos().x(), self.scenePos().y(),
+                    self._arm_seq, self._release_seq,
+                    self._arm_seq - self._release_seq,
+                )
+                # Symmetry with mouseReleaseEvent's super() call. Qt's
+                # internal grab-anchor / cached mouse-local-pos is set
+                # up in QGraphicsItem.mousePressEvent — skipping this
+                # call (as the original resize early-return did) leaves
+                # super().mouseReleaseEvent running against stale
+                # anchor state from a previous press, which can
+                # translate the item by a huge delta on release.
+                # Suspected root cause of the 2026-05-02 "node spins
+                # far offscreen on click" bug. Fixed by always calling
+                # super here before the early-return.
+                super().mousePressEvent(event)
                 event.accept()
                 return
         self._is_resizing = False
@@ -736,10 +818,28 @@ class BaseNode(QGraphicsRectItem):
             self._drag_committed        = False
             self._drag_suppressed_count = 0
             self._drag_suppressed_max_travel_px = 0.0
-            logger.log(5, "[base-drag-gate] %s ARM screen=(%.1f,%.1f) threshold=%.1fpx",
-                       getattr(self.data, 'node_type', '?'),
-                       event.screenPos().x(), event.screenPos().y(),
-                       self._DRAG_COMMIT_THRESHOLD_PX)
+            logger.info(
+                "[base-press] %s path=normal button=left "
+                "screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f) "
+                "arm_seq=%d release_seq=%d (delta=%d) "
+                "threshold=%.1fpx",
+                node_type,
+                event.screenPos().x(), event.screenPos().y(),
+                self.scenePos().x(), self.scenePos().y(),
+                self._arm_seq, self._release_seq,
+                self._arm_seq - self._release_seq,
+                self._DRAG_COMMIT_THRESHOLD_PX,
+            )
+        else:
+            # Other-button press path (middle, etc.) — log so the seq
+            # numbers stay traceable across non-left presses.
+            logger.info(
+                "[base-press] %s path=normal button=other(%s) "
+                "arm_seq=%d release_seq=%d (delta=%d)",
+                node_type, event.button(),
+                self._arm_seq, self._release_seq,
+                self._arm_seq - self._release_seq,
+            )
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -771,21 +871,25 @@ class BaseNode(QGraphicsRectItem):
                     self._drag_suppressed_max_travel_px = travel_px
                 logger.log(5,
                     "[base-drag-gate] %s SUPPRESS #%d travel=%.2fpx (threshold=%.1f) "
-                    "screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f)",
+                    "screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f) "
+                    "arm_seq=%d release_seq=%d",
                     getattr(self.data, 'node_type', '?'),
                     self._drag_suppressed_count, travel_px,
                     self._DRAG_COMMIT_THRESHOLD_PX,
                     cur.x(), cur.y(),
-                    self.scenePos().x(), self.scenePos().y())
+                    self.scenePos().x(), self.scenePos().y(),
+                    self._arm_seq, self._release_seq)
                 event.accept()
                 return
             self._drag_committed = True
             logger.info(
                 "[base-drag-gate] %s COMMIT after %d suppressed events "
-                "(max travel during suppression=%.2fpx, commit travel=%.2fpx) — drag begins",
+                "(max travel during suppression=%.2fpx, commit travel=%.2fpx) — "
+                "drag begins. arm_seq=%d release_seq=%d",
                 getattr(self.data, 'node_type', '?'),
                 self._drag_suppressed_count,
-                self._drag_suppressed_max_travel_px, travel_px)
+                self._drag_suppressed_max_travel_px, travel_px,
+                self._arm_seq, self._release_seq)
 
         super().mouseMoveEvent(event)
         if not self._is_resizing:
@@ -1072,28 +1176,85 @@ class BaseNode(QGraphicsRectItem):
         QTimer.singleShot(0, _defer_release)
 
     def mouseReleaseEvent(self, event):
+        """Mouse release on a BaseNode. Logs the release with full
+        balance/state context, detects orphan releases (release
+        without a corresponding press through ``mousePressEvent``),
+        runs the drag-gate post-mortem, syncs geometry back to data,
+        and resets the drag-gate state so the next gesture starts
+        clean regardless of how it arrives.
+
+        Orphan release detection — added 2026-05-02 — fires WARNING
+        when ``_release_seq + 1 > _arm_seq``, i.e. Qt sent us a
+        release for a press we never saw through ``mousePressEvent``.
+        Should be unreachable now that the resize early-return path
+        also calls super, but the check is cheap and surfaces any
+        future asymmetric-gesture path immediately.
+
+        State reset at the end — added 2026-05-02 — drops
+        ``_drag_committed`` / ``_drag_suppressed_count`` /
+        ``_drag_suppressed_max_travel_px`` / ``_drag_press_screen_pos``
+        back to defaults after the post-mortem log captures their
+        gesture-end values. Belt-and-braces against future code paths
+        leaving stale drag-gate state visible to subsequent gestures.
+        """
+        self._release_seq += 1
+        node_type = getattr(self.data, 'node_type', '?')
         was_resizing = self._is_resizing
+
+        # Orphan-release detection — release_seq should never exceed
+        # arm_seq. If it does, mouseReleaseEvent was called without a
+        # matching mousePressEvent through this method (e.g., via a
+        # future asymmetric path that bypasses press-counter increment).
+        # Logged as WARNING so it surfaces in normal log scrape.
+        is_orphan = self._release_seq > self._arm_seq
+        if is_orphan:
+            logger.warning(
+                "[base-release] %s ORPHAN release — no preceding press "
+                "through mousePressEvent. button=%s was_resizing=%s "
+                "arm_seq=%d release_seq=%d. Possible asymmetric gesture "
+                "path; investigate the call site that produced this release.",
+                node_type, event.button(), was_resizing,
+                self._arm_seq, self._release_seq,
+            )
+
         self._is_resizing = False
         self._shake_press_active = False
-        # Drag-gate post-mortem — see ChromelessRoot.mouseReleaseEvent.
+
+        # Drag-gate post-mortem — captures the gesture's end state.
+        # Promoted to INFO 2026-05-02 (was TRACE) so press/release
+        # pairs are always visible in default logs.
         if event.button() == Qt.LeftButton:
             if not self._drag_committed and self._drag_suppressed_count > 0:
                 logger.info(
-                    "[base-drag-gate] %s RELEASE without commit — gate suppressed "
+                    "[base-release] %s RELEASE without commit — gate suppressed "
                     "%d phantom motion events (max travel=%.2fpx, threshold=%.1fpx). "
+                    "was_resizing=%s arm_seq=%d release_seq=%d. "
                     "If this happened on a stationary touch, the gate did its job.",
-                    getattr(self.data, 'node_type', '?'),
+                    node_type,
                     self._drag_suppressed_count,
                     self._drag_suppressed_max_travel_px,
-                    self._DRAG_COMMIT_THRESHOLD_PX)
+                    self._DRAG_COMMIT_THRESHOLD_PX,
+                    was_resizing, self._arm_seq, self._release_seq,
+                )
             else:
-                logger.log(5,
-                    "[base-drag-gate] %s RELEASE committed=%s suppressed=%d max_travel=%.2fpx",
-                    getattr(self.data, 'node_type', '?'),
+                logger.info(
+                    "[base-release] %s button=left committed=%s suppressed=%d "
+                    "max_travel=%.2fpx was_resizing=%s arm_seq=%d release_seq=%d",
+                    node_type,
                     self._drag_committed,
                     self._drag_suppressed_count,
-                    self._drag_suppressed_max_travel_px)
-        # Sync geometry back to data after a resize or move
+                    self._drag_suppressed_max_travel_px,
+                    was_resizing, self._arm_seq, self._release_seq,
+                )
+        else:
+            logger.info(
+                "[base-release] %s button=%s was_resizing=%s "
+                "arm_seq=%d release_seq=%d",
+                node_type, event.button(), was_resizing,
+                self._arm_seq, self._release_seq,
+            )
+
+        # Sync geometry back to data after a resize or move.
         self.data.x      = self.pos().x()
         self.data.y      = self.pos().y()
         self.data.width  = self.rect().width()
@@ -1110,6 +1271,20 @@ class BaseNode(QGraphicsRectItem):
                 self.rect().width(), self.rect().height(), self.data.width,
             )
         super().mouseReleaseEvent(event)
+
+        # Drag-gate state reset — added 2026-05-02 alongside the
+        # press/release balance counters. The post-mortem log above
+        # captured the values that ended this gesture; from this point
+        # on, no gesture should rely on these values until a fresh ARM.
+        # Resetting here defends against any future asymmetric path
+        # (e.g., a release that fires without a press through
+        # mousePressEvent) reading values left over from a previous
+        # click — the symptom mechanism we suspected for the
+        # "node spins far offscreen on click" bug class.
+        self._drag_committed                = False
+        self._drag_suppressed_count         = 0
+        self._drag_suppressed_max_travel_px = 0.0
+        self._drag_press_screen_pos         = QPointF()
         # Release the scene mouse grab only if THIS item still holds it.
         # ungrabMouse() is NOT a safe no-op on non-grabbers — it touches Qt's
         # internal dispatch state and can break selection on neighboring items
