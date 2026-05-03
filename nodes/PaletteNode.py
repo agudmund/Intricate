@@ -56,17 +56,20 @@ class _SwatchCell(QWidget):
         layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
         # ── Label ─────────────────────────────────────────────────────────────
+        # Font via setFont (chandler42 helper), NOT QSS font-family — QSS
+        # doesn't honour styleName so font-family alone falls through to
+        # upright Medium.  Same fix the bottom infobar / titlebar info
+        # labels use.  See pretty_widgets.utils.fonts for the rationale.
+        from pretty_widgets.utils.fonts import chandler42
+        _swatch_font = chandler42(size_pt=8)
         self._label = QLineEdit(label)
         self._label.setAlignment(Qt.AlignCenter)
+        self._label.setFont(_swatch_font)
         self._label.setStyleSheet(f"""
             QLineEdit {{
                 background:  transparent;
                 color:       {Theme.textPrimary};
                 border:      none;
-                font-family: 'Chandler42';
-                font-weight: 500;
-                font-style:  italic;
-                font-size:   8pt;
                 padding:     0;
             }}
         """)
@@ -82,15 +85,12 @@ class _SwatchCell(QWidget):
         self._hex = QLineEdit(hex_color)
         self._hex.setAlignment(Qt.AlignRight)
         self._hex.setMaxLength(9)
+        self._hex.setFont(_swatch_font)
         self._hex.setStyleSheet(f"""
             QLineEdit {{
                 background:  transparent;
                 color:       {Theme.textPrimary};
                 border:      none;
-                font-family: 'Chandler42';
-                font-weight: 500;
-                font-style:  italic;
-                font-size:   8pt;
                 padding:     0;
             }}
         """)
@@ -306,17 +306,17 @@ class _PaletteWidget(QWidget):
         outer.addWidget(self._scroll, 1)
 
         # ── Add button ────────────────────────────────────────────────────────
+        from pretty_widgets.utils.fonts import chandler42
         add_btn = QPushButton("+ add color")
         add_btn.setFixedHeight(22)
         add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setFont(chandler42(size_pt=8))
         add_btn.setStyleSheet(f"""
             QPushButton {{
                 background:    transparent;
                 color:         {Theme.textPrimary};
                 border:        1px solid {Theme.primaryBorder};
                 border-radius: 4px;
-                font-family:   'Chandler42';
-                font-size:     8pt;
                 padding:       0 6px;
             }}
             QPushButton:hover {{

@@ -50,7 +50,7 @@ class JoyStatsNode(ChromelessRoot):
 
     # ── Font family / size bumps (formerly inherited from BaseNode) ─────────
     _TITLE_FONT      = "Chandler42"
-    _TITLE_STYLE     = "MediumOblique"
+    _TITLE_STYLE     = "Italic"          # 1843.otf script-italic Medium — see pretty_widgets.utils.fonts
     _TITLE_FONT_BUMP = 6
     _BODY_FONT       = "Lato"
     _BODY_FONT_BUMP  = -1

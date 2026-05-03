@@ -59,7 +59,7 @@ class DataGridKit:
 
 def make_kit(
     title_font: str = "Chandler42",
-    title_style: str = "MediumOblique",
+    title_style: str = "Italic",   # Chandler42 1843.otf script-italic Medium — see pretty_widgets.utils.fonts
     title_bump: int = 6,
     *,
     pin_scale: float = 1.0,

@@ -1700,7 +1700,7 @@ class BaseNode(QGraphicsRectItem):
     # match exactly: needed = title_w + pad + _TITLE_RIGHT_PAD.
     _TITLE_RIGHT_PAD: int | None = None
     _TITLE_FONT      = "Chandler42"
-    _TITLE_STYLE     = "MediumOblique"   # Chandler42's pretty variant
+    _TITLE_STYLE     = "Italic"          # Chandler42's script-italic Medium (1843.otf — see pretty_widgets.utils.fonts)
     _TITLE_FONT_BUMP = 6      # added to Theme.aboutFontSize for title
     _BODY_FONT       = "Lato"
     _BODY_FONT_BUMP  = -1     # added to Theme.aboutFontSize for body

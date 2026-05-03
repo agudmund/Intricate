@@ -281,6 +281,16 @@ def main():
     app.setApplicationName(appName)
     app.setOrganizationName(orgName)
 
+    # Register the SSB family's curated .otf set into Qt's in-process font
+    # database before any QFont-using widget gets constructed.  Without
+    # this Chandler42 only carries whatever style variants Windows
+    # registered system-wide — typically Medium + LiteOblique, missing
+    # the script-italic Medium from 1843.otf — and every painter that
+    # asks for setStyleName('Italic') silently falls back to upright.
+    # Idempotent, never raises.
+    from pretty_widgets.utils.fonts import register_app_fonts
+    register_app_fonts()
+
     # Release the singleton lock BEFORE app.exec() returns, while the Qt
     # event loop is still alive and the interpreter is fully usable.
     # atexit runs too late: by then Py_Finalize has already begun tearing

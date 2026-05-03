@@ -97,7 +97,7 @@ class AudioNode(BaseNode):
         # Auto-size width to fit the title text
         from PySide6.QtGui import QFontMetrics
         _f = QFont(Theme.aboutFontFamily, max(1, Theme.aboutFontSize))
-        _f.setStyleName("MediumOblique")
+        _f.setStyleName("Italic")  # Chandler42 1843.otf — see pretty_widgets.utils.fonts
         fm = QFontMetrics(_f)
         text_w = fm.horizontalAdvance(self.data.title) + self._CONTENT_PAD * 2 + 20
         min_w = max(self.data.width, text_w)

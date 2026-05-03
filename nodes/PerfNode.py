@@ -112,7 +112,7 @@ class PerfNode(ChromelessRoot):
 
     # ── Paint constants ─────────────────────────────────────────────────────
     _TITLE_FONT      = "Chandler42"
-    _TITLE_STYLE     = "MediumOblique"
+    _TITLE_STYLE     = "Italic"          # 1843.otf script-italic Medium — see pretty_widgets.utils.fonts
     _TITLE_FONT_BUMP = 6
 
     _ROW_COUNT       = 8        # FPS, Last, Avg, Min, Max, Samples, Total paints, Zoom

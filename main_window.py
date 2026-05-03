@@ -379,9 +379,16 @@ class IntricateApp(QMainWindow):
         _INFO_FONT_RATIO = 9 / 25
         _info_font_px = max(6, round(Theme.handleHeightTop * _INFO_FONT_RATIO))
         self.info_label_top = pretty_label("", alignment=Qt.AlignCenter)
+        # Font via setFont (chandler42 helper), NOT QSS font-family — QSS
+        # doesn't honour styleName, so font-family: Chandler42 alone falls
+        # through to whatever Qt picks for "italic medium" and lands on
+        # upright Medium more often than not.  setStyleName('Italic') via
+        # the helper picks the 1843.otf script-italic Medium directly.
+        from pretty_widgets.utils.fonts import chandler42
+        self.info_label_top.setFont(chandler42(size_px=_info_font_px))
         self.info_label_top.setStyleSheet(
             f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
-            f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: {_info_font_px}px;"
+            f" color: {Theme.textPrimary};"
         )
         self.info_label_top.setParent(self.top_toolbar)
         self._info_opacity_top = QGraphicsOpacityEffect()
@@ -3260,9 +3267,12 @@ class IntricateApp(QMainWindow):
         # italic Chandler42 at 16px has a visual centre below its geometric
         # one (ascenders are larger than descenders), so without the nudge
         # the glyphs feel pinned to the window's bottom edge.
+        # Font via setFont, NOT QSS font-family — see info_label_top above.
+        from pretty_widgets.utils.fonts import chandler42
+        self.info_label.setFont(chandler42(size_px=16))
         self.info_label.setStyleSheet(
             f"background: transparent; border: none; padding: 0px 4px 4px 4px;"
-            f" color: {Theme.textPrimary}; font-family: Chandler42; font-weight: 500; font-style: italic; font-size: 16px;"
+            f" color: {Theme.textPrimary};"
         )
         self.info_label.setFixedHeight(Theme.handleHeightTop)
 
