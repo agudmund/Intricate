@@ -372,6 +372,13 @@ class PaletteNode(BaseNode):
     _MIN_PALETTE_W = 280.0
     _MIN_PALETTE_H = 300.0
 
+    # Resize-handle shelf coupling — same asymmetric thresholds AboutNode
+    # uses so the gesture feels uniform across both nodes.  Reveal demands
+    # a deliberate yank, hide is lighter so the user can dial the height
+    # down tight without the shelf clinging on.
+    _RESIZE_SHELF_REVEAL_THRESHOLD = 75.0
+    _RESIZE_SHELF_HIDE_THRESHOLD   = 30.0
+
     def __init__(self, data: PaletteNodeData | None = None):
         if data is None:
             data = PaletteNodeData()
@@ -383,6 +390,16 @@ class PaletteNode(BaseNode):
         super().__init__(data)
         self._min_width  = self._MIN_PALETTE_W
         self._min_height = self._MIN_PALETTE_H
+
+        # Start with the shelf collapsed — PaletteNode adopts AboutNode's
+        # resize-handle reveal/hide gesture (mouseMoveEvent below) in place
+        # of the default double-click toggle.  Buttons surface only when
+        # the user yanks the resize handle past the reveal threshold.
+        self._buttons_visible = False
+        self._anim_top_offset = self._HIDDEN_TOP_OFFSET
+        for btn in self._buttons:
+            btn.hide()
+        self._shelf_anchor_h: float | None = None
 
         self._palette: _PaletteWidget | None = None
         self._palette_proxy: QGraphicsProxyWidget | None = None
@@ -416,8 +433,11 @@ class PaletteNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _body_rect(self) -> QRectF:
+        # Tracks _anim_top_offset (not _BUTTON_ZONE_H) so the swatch grid
+        # slides up with the shelf when it collapses, keeping a constant
+        # visual gap between title and body across both shelf states.
         r   = self.rect()
-        top = r.y() + self._BUTTON_ZONE_H + TITLE_GAP + PADDING
+        top = r.y() + self._anim_top_offset + TITLE_GAP + PADDING
         return QRectF(
             r.x()  + PADDING,
             top,
@@ -444,16 +464,64 @@ class PaletteNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
+    # SHELF GESTURE  — resize-handle reveal/hide, same pattern as AboutNode
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def mousePressEvent(self, event) -> None:
+        # Seed the shelf anchor at every press so the first threshold
+        # check in mouseMoveEvent measures from press-time height.
+        self._shelf_anchor_h = self.rect().height()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        # BaseNode resize must run first so self.rect() reflects the
+        # updated geometry before we measure the delta.
+        super().mouseMoveEvent(event)
+        if not self._is_resizing:
+            return
+        if self._shelf_anchor_h is None:
+            self._shelf_anchor_h = self.rect().height()
+        delta_h = self.rect().height() - self._shelf_anchor_h
+        if not self._buttons_visible and delta_h > self._RESIZE_SHELF_REVEAL_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
+        elif self._buttons_visible and delta_h < -self._RESIZE_SHELF_HIDE_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
+
+    def _on_shelf_tick(self, value: float) -> None:
+        # Reposition the palette proxy every animation frame so the swatch
+        # grid follows the sliding _anim_top_offset.  Without this hook the
+        # body would jump to its final position only at animation end.
+        super()._on_shelf_tick(value)
+        if self._palette_proxy:
+            self._palette_proxy.setGeometry(self._body_rect())
+
+    def _on_shelf_done(self) -> None:
+        super()._on_shelf_done()
+        if self._palette_proxy:
+            self._palette_proxy.setGeometry(self._body_rect())
+
+    # ─────────────────────────────────────────────────────────────────────────
     # TITLE EDITING
     # ─────────────────────────────────────────────────────────────────────────
 
     def mouseDoubleClickEvent(self, event) -> None:
-        """Double-click on the title row → inline edit the node title."""
-        if event.pos().y() < self.rect().y() + self._BUTTON_ZONE_H + TITLE_GAP + PADDING:
+        """Double-click on the title row → inline edit the node title.
+
+        Shelf zone (when revealed) is reserved for shelf interactions; below
+        the title row the event is consumed so it does NOT fall through to
+        BaseNode's default top-strip shelf-toggle — PaletteNode now uses the
+        resize-handle gesture for hide/reveal instead.
+        """
+        if self._buttons_visible and event.pos().y() < self._anim_top_offset:
+            event.accept()
+            return
+        if event.pos().y() < self._anim_top_offset + self._BODY_OFFSET:
             self._start_title_edit()
             event.accept()
             return
-        super().mouseDoubleClickEvent(event)
+        event.accept()
 
     def _start_title_edit(self) -> None:
         if hasattr(self, '_title_proxy') and self._title_proxy and self._title_proxy.isVisible():
