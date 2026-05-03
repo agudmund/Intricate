@@ -120,21 +120,25 @@ class _SwatchCell(QWidget):
         self._hex.textChanged.connect(lambda _: on_change())
         self._label.textChanged.connect(lambda _: on_change())
 
-    # ── Drag support — drag the swatch to reorder or move between palettes ──
+    # ── Drag support — two gestures, modifier-disambiguated ────────────────
     #
-    # The swatch carries TWO kinds of drag from a single press:
+    # Plain drag (no modifier) on the swatch → HSL-lightness shift, live.
+    # Same gentle touch the Settlers config uses on its theme swatches: up
+    # to lighten, down to darken.  No threshold; small motions land small
+    # adjustments.  Hex field cascades through textChanged so the data
+    # model and visible #hex update together.
     #
-    #   • Vertical-dominant motion → HSL-lightness shift on the swatch (live).
-    #     Same gentle touch the Settlers config uses on its theme swatches —
-    #     up to lighten, down to darken.  No threshold; small motions land
-    #     small adjustments.  Hex field cascades through textChanged so the
-    #     data model and visible #hex update together.
+    # Ctrl+drag past 15 px → cross-palette QDrag (the classic move-or-
+    # duplicate gesture).  Drop on the same palette duplicates (CopyAction);
+    # drop on a different palette moves (MoveAction).  Modifier state is
+    # latched at press time — releasing Ctrl mid-drag doesn't switch modes.
     #
-    #   • Horizontal-dominant motion past 15 px → cross-palette QDrag, the
-    #     classic move-or-duplicate gesture.  Drop on the same palette now
-    #     duplicates (CopyAction); drop on a different palette still moves
-    #     (MoveAction).  Direction is locked at the first qualifying motion
-    #     so a vertical lightness drag can't accidentally arm a sweep.
+    # Earlier rev tried to disambiguate by motion direction (vertical =
+    # lightness, horizontal past 15 px = QDrag).  Worked in principle but
+    # leaked: a vertical lightness drag with any horizontal drift could
+    # accidentally arm the QDrag once it crossed 15 px Manhattan distance.
+    # Ctrl as the explicit gate is unambiguous and matches the platform
+    # convention for "this drag is special."
 
     _PX_PER_LIGHTNESS_UNIT = 1.5  # Settlers value — ~100 px covers two-thirds of HSL range
 
@@ -144,9 +148,11 @@ class _SwatchCell(QWidget):
             self._drag_base_color = QColor(self._hex.text())
             if not self._drag_base_color.isValid():
                 self._drag_base_color = QColor("#888888")
+            self._ctrl_drag_active = bool(event.modifiers() & Qt.ControlModifier)
             event.accept()
             return
         self._drag_start = None
+        self._ctrl_drag_active = False
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -154,19 +160,21 @@ class _SwatchCell(QWidget):
             super().mouseMoveEvent(event)
             return
         delta = event.pos() - self._drag_start
-        dx, dy = delta.x(), delta.y()
-        if abs(dx) > abs(dy) and abs(dx) > 15:
-            self._initiate_drag()
-            self._drag_start = None
+        if self._ctrl_drag_active:
+            # Ctrl held at press → cross-palette QDrag mode.  Wait until we
+            # cross the Qt-conventional 15-px threshold before initiating
+            # so a stationary Ctrl+click doesn't fire a degenerate drag.
+            if delta.manhattanLength() > 15:
+                self._initiate_drag()
+                self._drag_start = None
             return
-        # Vertical-dominant (or sub-15-px) → lightness shift.  Live update
-        # via the hex field so the data model / on_change cascade fires.
-        if abs(dy) >= abs(dx):
-            self._apply_lightness_shift(dy)
+        # Plain drag → vertical-axis lightness shift, live.
+        self._apply_lightness_shift(delta.y())
         event.accept()
 
     def mouseReleaseEvent(self, event):
         self._drag_start = None
+        self._ctrl_drag_active = False
         super().mouseReleaseEvent(event)
 
     def _apply_lightness_shift(self, dy: float) -> None:
@@ -207,6 +215,7 @@ class _SwatchCell(QWidget):
                 p._remove_cell(self)
 
     _drag_start = None
+    _ctrl_drag_active = False
 
     def _on_hex_changed(self, text: str) -> None:
         # Auto-prepend "#" when a bare hex value lands in the field — covers

@@ -46,12 +46,12 @@ The double-click that used to fall through to BaseNode's default top-strip shelf
 
 ### The Two-Mode Drag on a Swatch
 
-A press on the coloured panel arms two possible drags from a single mousedown. The motion direction picks which one fires:
+A press on the coloured panel arms two possible drags. The Ctrl modifier picks which one fires:
 
-- **Vertical-dominant motion** → HSL-lightness shift on the swatch itself. Up to lighten, down to darken. Live update via `setHsl(hue, saturation, new_lightness, alpha)`, where the new lightness is the base lightness plus `−dy / 1.5` (1.5 px per HSL unit on a 0–255 scale, lifted from the Settlers' `_DraggableSwatch`). No threshold; the smallest motion lands the smallest adjustment. Hue is preserved across the drag, including the `−1` hue value Qt uses for greys (without the explicit `if h < 0: h = 0` clamp, `setHsl` would reset a grey to red).
-- **Horizontal-dominant motion past 15 px** → cross-palette `QDrag`. Mime payload is the cell's `{"label", "hex"}` dict; the rendered swatch becomes the drag pixmap. Source side calls `drag.exec(MoveAction | CopyAction)` so both outcomes are allowed, and the drop side picks one.
+- **Plain drag** → HSL-lightness shift on the swatch itself. Up to lighten, down to darken. Live update via `setHsl(hue, saturation, new_lightness, alpha)`, where the new lightness is the base lightness plus `−dy / 1.5` (1.5 px per HSL unit on a 0–255 scale, lifted from the Settlers' `_DraggableSwatch`). No threshold; the smallest motion lands the smallest adjustment. Hue is preserved across the drag, including the `−1` hue value Qt uses for greys (without the explicit `if h < 0: h = 0` clamp, `setHsl` would reset a grey to red).
+- **Ctrl+drag past 15 px** → cross-palette `QDrag`. Mime payload is the cell's `{"label", "hex"}` dict; the rendered swatch becomes the drag pixmap. Source side calls `drag.exec(MoveAction | CopyAction)` so both outcomes are allowed, and the drop side picks one.
 
-The direction lock is the load-bearing detail. If both gestures shared a single threshold-free start path, a vertical lightness drag with even a few pixels of horizontal drift could accidentally arm a cross-palette drag mid-shift. The `abs(dx) > abs(dy) and abs(dx) > 15` gate keeps a vertical wobble in lightness mode and reserves the cross-palette drag for an actual horizontal sweep.
+Modifier state is latched at press time — releasing Ctrl partway through doesn't switch modes. This matches the platform convention where the modifier "qualifies" the gesture at the moment of commitment, not continuously.
 
 ```python
 def mouseMoveEvent(self, event):
@@ -59,13 +59,12 @@ def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
         return
     delta = event.pos() - self._drag_start
-    dx, dy = delta.x(), delta.y()
-    if abs(dx) > abs(dy) and abs(dx) > 15:
-        self._initiate_drag()         # cross-palette QDrag
-        self._drag_start = None
+    if self._ctrl_drag_active:
+        if delta.manhattanLength() > 15:
+            self._initiate_drag()         # cross-palette QDrag
+            self._drag_start = None
         return
-    if abs(dy) >= abs(dx):
-        self._apply_lightness_shift(dy)   # live HSL nudge
+    self._apply_lightness_shift(delta.y())   # live HSL nudge
     event.accept()
 ```
 
@@ -139,9 +138,13 @@ The title-edit `_title_proxy` is created lazily on first edit and torn down on c
 
 `BaseNode._title_rect` returns a rect spanning from `_content_top()` to the bottom of the node — its consumer is `paint_content`, which draws into it with `Qt.AlignTop` so the height doesn't matter for paint. Reusing the same rect for a `QLineEdit` overlay traps the cursor and text in the body's vertical centre because QLineEdit centres its content. The fix was a one-line clamp: `QRectF(full.left(), full.top(), full.width(), self._BODY_OFFSET)`. Title overlays for nodes with body content all need the same clamp; when copying this pattern to a new node, don't reuse `_title_rect` directly without trimming the height.
 
-### Direction-lock the press-armed drag if you have two drag modes
+### Use a modifier to qualify a press, not motion direction
 
-A single mousedown that arms two possible drag gestures (lightness shift here, cross-palette QDrag) needs an explicit direction-lock or the gestures bleed into each other. The 15-px Manhattan threshold the original code used was enough for one-mode press-arm, but adding the lightness shift behind the same press required disambiguation. `|dx| > |dy| and |dx| > 15` gates the cross-palette drag to actual horizontal motion; vertical-dominant motion stays in lightness mode regardless of magnitude. Without the gate, every long vertical lightness drag risked accidentally arming a cross-palette drag once it crossed 15 px Manhattan distance.
+A single mousedown that arms two possible drag gestures (lightness shift here, cross-palette QDrag) needs explicit disambiguation or the gestures bleed into each other. The first attempt locked direction at the first qualifying motion (vertical = lightness, horizontal past 15 px = QDrag). It worked in principle but leaked: any vertical lightness drag with a small horizontal drift could accidentally arm the cross-palette drag once it crossed 15 px Manhattan distance.
+
+The clean fix is a modifier key. Ctrl held at press time qualifies the gesture as cross-palette drag; without Ctrl it's lightness. Modifier state is latched at press, not sampled continuously — releasing Ctrl mid-drag doesn't switch modes. The qualifier lives in the user's intent at the moment of commitment, which matches how every modifier-driven gesture in the platform works (Ctrl+click, Shift+select, Alt+drag etc).
+
+When two gestures share a press, prefer a modifier over a heuristic. A heuristic always has an edge case where the user's actual intent loses to the rule.
 
 ### `setText` cascades — let the slot run twice instead of fighting it
 
