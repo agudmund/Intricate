@@ -526,7 +526,15 @@ class PaletteNode(BaseNode):
     def _start_title_edit(self) -> None:
         if hasattr(self, '_title_proxy') and self._title_proxy and self._title_proxy.isVisible():
             return
-        tr = self._title_rect()
+        # BaseNode._title_rect returns a rect spanning the whole body height
+        # (it's used as a clip area for paint, not an edit overlay).  A
+        # QLineEdit set to that geometry vertically-centres its text and
+        # cursor inside the body — the title-edit field then floats in the
+        # middle of the node between the swatch rows.  Clamp the height to
+        # one title row (BODY_OFFSET) so the edit overlay sits exactly
+        # where the painted title sits.
+        full = self._title_rect()
+        tr = QRectF(full.left(), full.top(), full.width(), self._BODY_OFFSET)
         edit = QLineEdit(self.data.title)
         edit.setStyleSheet(f"""
             QLineEdit {{
