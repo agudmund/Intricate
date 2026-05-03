@@ -471,10 +471,17 @@ class PaletteNode(BaseNode):
     # cost of a 1-px shortfall is a scrollbar across an entire spawned
     # palette.  Sized for the shelf-revealed chrome so the user toggling
     # the shelf later doesn't squeeze the body into a scrollbar.
-    _CELL_CONTENT_H   = 112.0   # label + swatch + hex + spacing + margins per cell
+    #
+    # _CELL_CONTENT_H tuned 2026-05-03 round 2: the original 112 underbid
+    # the actual rendered cell by ~6 px (Chandler42 8pt italic QLineEdit
+    # metrics + border).  Per-row error compounded, clipping the bottom
+    # hex row of the last cell on multi-row spawns.  Bumped to 120; the
+    # global breath also bumped from 12 → 24 for fixed cushion regardless
+    # of row count.
+    _CELL_CONTENT_H   = 120.0   # label + swatch + hex + spacing + margins per cell
     _ADD_BUTTON_BLOCK = 26.0    # 22 px button + 4 px outer-vbox spacing
     _GRID_MARGIN      = 8.0     # QGridLayout 4 + 4 contentsMargins
-    _AUTOFIT_BREATH   = 12.0    # extra slack so QLineEdit metrics rounding can't tip into overflow
+    _AUTOFIT_BREATH   = 24.0    # extra slack so QLineEdit metrics rounding can't tip into overflow
 
     @classmethod
     def height_for_colors(cls, n_colors: int) -> float:
