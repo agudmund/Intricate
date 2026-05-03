@@ -110,9 +110,30 @@ The shelf carries a single utility button (a sticker-style push icon): export th
 
 The snapshot is the atomic unit the user passes around — drop a palette PNG into a Settlers theme, into a chat, into a writing document — without exporting the data structure. A palette is a visual artefact; the PNG is its travelable form.
 
-### Body Always Visible — Scroll Bar Until Auto-Size Lands
+### Spawn-Time Auto-Fit
 
-`_PaletteWidget` wraps its grid in a `QScrollArea` so a long palette stays scrollable inside a fixed-height node. The scroll bar styles down to a thin 5 px handle in `Theme.primaryBorder` — present, visible, but quiet. The pending follow-up on the focal list is to auto-size the node height to the swatch count so the scroll bar never appears in the typical case; until then, the scroll bar is the relief valve.
+`_PaletteWidget` wraps its grid in a `QScrollArea` so a long palette stays scrollable inside a fixed-height node — but the scroll bar exists for the *manual resize the user does mid-session*, not for the moment a palette first lands on the canvas. When `Scene.add_palette_node` is called with a pre-filled `colors=[…]` list (the ClaudeNode-directive path, the .qss / .py drag-drop path), `PaletteNode.height_for_colors(n)` computes the height that fits the entire grid + add button + chrome with no scroll bar, and the data lands with that height already set. Sidebar spawn (no colours) keeps the dataclass default of 420 px.
+
+```python
+@classmethod
+def height_for_colors(cls, n_colors: int) -> float:
+    rows = (n_colors + COLUMNS - 1) // COLUMNS
+    grid_h = (rows * cls._CELL_CONTENT_H
+              + max(0, rows - 1) * CELL_SPACING
+              + cls._GRID_MARGIN)
+    chrome_top = cls._BUTTON_ZONE_H + TITLE_GAP + PADDING
+    chrome_bot = PADDING
+    return max(
+        cls._MIN_PALETTE_H,
+        chrome_top + grid_h + cls._ADD_BUTTON_BLOCK + chrome_bot + cls._AUTOFIT_BREATH,
+    )
+```
+
+Sized for the **shelf-revealed** chrome (50 px top) so a user revealing the shelf later doesn't squeeze the body into a scrollbar. Costs ~32 px of breathing room when the shelf is collapsed (the default state) — invisible cost; the alternative is much worse. The `_AUTOFIT_BREATH = 12` constant absorbs `QLineEdit` metric-rounding so a 1 px shortfall can't tip a fits-perfectly palette into a barely-overflows palette.
+
+The Scene wrapper applies the result with a grow-only guard: `data.height = max(data.height, PaletteNode.height_for_colors(n))`. A 4-colour palette stays at the 420-px default rather than shrinking to its 336-px minimum fit; the auto-fit exists to catch the "ClaudeNode spawned a 12-colour palette and it's tiny with a scrollbar" case, not to second-guess the default for small palettes. Session restore goes through `from_dict` and skips this entirely — saved geometry wins.
+
+The scroll bar is still there as the relief valve for *interactive* resize after spawn — when the user pulls the bottom-right handle inward and the body shrinks below content, the scroll bar takes over without a fuss.
 
 ## Data Class
 

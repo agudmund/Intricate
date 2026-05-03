@@ -624,12 +624,25 @@ class IntricateScene(QGraphicsScene):
         return node
 
     def add_palette_node(self, pos: QPointF | None = None, colors: list | None = None):
-        """Add a PaletteNode at pos, optionally pre-filled with colors."""
+        """Add a PaletteNode at pos, optionally pre-filled with colors.
+
+        When *colors* is supplied, the node spawns with its height auto-fit
+        to the swatch count so the full palette is visible at a glance — no
+        scrollbar on a fresh ClaudeNode-spawned palette of 12 colours.
+        Sidebar spawn (no colors) keeps the dataclass default of 420 px.
+        Session restore goes through PaletteNodeData.from_dict and preserves
+        whatever geometry the user landed on.
+        """
         from nodes.PaletteNode import PaletteNode
         from data.PaletteNodeData import PaletteNodeData
         data = PaletteNodeData()
         if colors is not None:
             data.colors = colors
+            # Grow only — never shrink below the dataclass default of 420 px.
+            # The auto-fit exists to catch the "ClaudeNode spawned a 12-colour
+            # palette and it's tiny with a scrollbar" case, not to second-
+            # guess the default height for normal-sized palettes.
+            data.height = max(data.height, PaletteNode.height_for_colors(len(colors)))
         node = PaletteNode(data)
         if pos is not None:
             node.setPos(pos)

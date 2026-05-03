@@ -465,6 +465,44 @@ class PaletteNode(BaseNode):
     _RESIZE_SHELF_REVEAL_THRESHOLD = 75.0
     _RESIZE_SHELF_HIDE_THRESHOLD   = 30.0
 
+    # Layout constants for height_for_colors().  Empirical — match the
+    # actual rendered cell at the current font + spacing settings.  Bumped
+    # cautiously: the cost of a few extra pixels per row is invisible, the
+    # cost of a 1-px shortfall is a scrollbar across an entire spawned
+    # palette.  Sized for the shelf-revealed chrome so the user toggling
+    # the shelf later doesn't squeeze the body into a scrollbar.
+    _CELL_CONTENT_H   = 112.0   # label + swatch + hex + spacing + margins per cell
+    _ADD_BUTTON_BLOCK = 26.0    # 22 px button + 4 px outer-vbox spacing
+    _GRID_MARGIN      = 8.0     # QGridLayout 4 + 4 contentsMargins
+    _AUTOFIT_BREATH   = 12.0    # extra slack so QLineEdit metrics rounding can't tip into overflow
+
+    @classmethod
+    def height_for_colors(cls, n_colors: int) -> float:
+        """Return the node height that fits *n_colors* swatches without scrollbar.
+
+        Relevant for spawn paths that pre-fill ``data.colors`` (Scene's
+        add_palette_node when called with colors, ClaudeNode directives,
+        .qss / .py drag-drops).  Default 420 px is right for the sidebar
+        spawn (5 cells); anything past that is what this method exists for.
+
+        Sized against the shelf-revealed chrome (BUTTON_ZONE_H + TITLE_GAP
+        + PADDING) — costs ~32 px of breathing room when the shelf is
+        collapsed, but means the user revealing the shelf later never
+        forces the body into a scrollbar.
+        """
+        if n_colors <= 0:
+            return cls._MIN_PALETTE_H
+        rows = (n_colors + COLUMNS - 1) // COLUMNS
+        grid_h = (rows * cls._CELL_CONTENT_H
+                  + max(0, rows - 1) * CELL_SPACING
+                  + cls._GRID_MARGIN)
+        chrome_top = cls._BUTTON_ZONE_H + TITLE_GAP + PADDING
+        chrome_bot = PADDING
+        return max(
+            cls._MIN_PALETTE_H,
+            chrome_top + grid_h + cls._ADD_BUTTON_BLOCK + chrome_bot + cls._AUTOFIT_BREATH,
+        )
+
     def __init__(self, data: PaletteNodeData | None = None):
         if data is None:
             data = PaletteNodeData()
