@@ -2086,6 +2086,12 @@ class IntricateApp(QMainWindow):
         Auto-reschedules itself at the soonest unlock event so the button
         comes back to life on its own without the caller having to track
         the timing explicitly.
+
+        Also: when a *digestion* lock (cooldown or window cap) lifts, fire
+        a meov reminder — the cat finished her digestion beat and is
+        asking for the next bite.  The "full → not full" transition does
+        NOT fire one; that one is just the bar drifting back into edible
+        territory while the cat is still content, not the cat asking.
         """
         if not hasattr(self, '_feed_btn'):
             return
@@ -2097,17 +2103,42 @@ class IntricateApp(QMainWindow):
             if now - t < self._FEED_WINDOW
         ]
         full = self.joy_bar.value() >= 100
+        cooldown_active = (now - self._last_feed_time) < self._FEED_COOLDOWN
         cooldown_remaining = max(0.0, self._FEED_COOLDOWN - (now - self._last_feed_time))
-        if len(self._feed_timestamps) >= self._FEED_MAX:
+        window_cap_active = len(self._feed_timestamps) >= self._FEED_MAX
+        if window_cap_active:
             window_remaining = max(0.0, self._FEED_WINDOW - (now - min(self._feed_timestamps)))
         else:
             window_remaining = 0.0
 
-        locked = full or cooldown_remaining > 0 or window_remaining > 0
+        locked = full or cooldown_active or window_cap_active
         try:
             self._feed_btn.setEnabled(not locked)
         except RuntimeError:
             return  # button torn down
+
+        # Detect a digestion-lock → unlock transition and fire a feed-
+        # availability meov.  Compare against the *previous* lock state
+        # snapshot so we only catch the falling edge, not every tick that
+        # happens to find both flags clear.  Skip when the bar is full —
+        # the cat isn't asking for food while she's already stuffed,
+        # only after she's both finished digesting AND has some appetite
+        # available.
+        prev_cooldown = getattr(self, '_feed_btn_prev_cooldown', False)
+        prev_window   = getattr(self, '_feed_btn_prev_window_cap', False)
+        digestion_just_lifted = (
+            (prev_cooldown and not cooldown_active)
+            or (prev_window and not window_cap_active)
+        )
+        if digestion_just_lifted and not full:
+            # _meov_tick handles the typewriter whisper, the colour pulse,
+            # the dot escalation, and the click-to-acknowledge wire — the
+            # whole meov channel reused for the "ready for the next bite"
+            # reminder so it reads as a sibling of the other meov beats
+            # rather than a separate alert system.
+            self._meov_tick()
+        self._feed_btn_prev_cooldown   = cooldown_active
+        self._feed_btn_prev_window_cap = window_cap_active
 
         # Re-schedule next refresh at the soonest auto-unlock event.  Skip
         # the "full" lock — that one unlocks when the depletion timer ticks
