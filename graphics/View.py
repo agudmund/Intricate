@@ -570,13 +570,23 @@ class IntricateView(QGraphicsView):
                     node = scene.add_palette_node(pos=drop_scene_pos, colors=colors)
                     _scatter(node)
             elif ext in _CODE_EXTENSIONS and hasattr(scene, 'add_code_node'):
-                # .py files with hex colors → palette node + code node
+                # .py files with hex colors → palette node chained to the
+                # code node, GitNode-style: spawn the code first, place the
+                # palette to its right edge, then wire them with a data
+                # connection.  The wire makes the relationship visually
+                # legible ("these are the colours in this code") and pins
+                # the palette as a satellite — _scatter's drag-along then
+                # eases the pair as a unit instead of fanning them out.
+                node = scene.add_code_node(pos=drop_scene_pos, path=path)
                 if ext == ".py" and hasattr(scene, 'add_palette_node'):
                     colors = self._parse_qss_colors(path)
                     if colors:
-                        pnode = scene.add_palette_node(pos=drop_scene_pos, colors=colors)
-                        _scatter(pnode)
-                node = scene.add_code_node(pos=drop_scene_pos, path=path)
+                        r = node.rect()
+                        palette_pos = node.mapToScene(QPointF(r.right() + 30, r.top()))
+                        pnode = scene.add_palette_node(pos=palette_pos, colors=colors)
+                        from graphics.Connection import Connection
+                        wire = Connection(node, pnode)
+                        scene.addItem(wire)
                 _scatter(node)
 
         event.acceptProposedAction()

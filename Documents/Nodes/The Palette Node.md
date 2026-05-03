@@ -133,6 +133,12 @@ Sized for the **shelf-revealed** chrome (50 px top) so a user revealing the shel
 
 The Scene wrapper applies the result with a grow-only guard: `data.height = max(data.height, PaletteNode.height_for_colors(n))`. A 4-colour palette stays at the 420-px default rather than shrinking to its 336-px minimum fit; the auto-fit exists to catch the "ClaudeNode spawned a 12-colour palette and it's tiny with a scrollbar" case, not to second-guess the default for small palettes. Session restore goes through `from_dict` and skips this entirely — saved geometry wins.
 
+### .py Drag-Drop — Chained to a CodeNode with a Data Wire
+
+When the user drops a `.py` file on the canvas, `View.py` spawns a `CodeNode` for the file and a `PaletteNode` filled with hex values extracted from the source. The two land chained: the palette spawns at the code node's right edge (`r.right() + 30, r.top()`, the same offset GitNode uses for its loading-plushie pattern), and a `Connection(code_node, palette)` wire ties them. The wire makes the relationship legible ("these are the colours in this code") and — because `_scatter`'s satellite drag-along walks along all connected nodes — eases the pair as a single unit when the code node probes for a free spot, instead of fanning them across the canvas.
+
+The `.qss` drop path stays standalone (no code node spawned, just the palette) — no wire to draw.
+
 The scroll bar is still there as the relief valve for *interactive* resize after spawn — when the user pulls the bottom-right handle inward and the body shrinks below content, the scroll bar takes over without a fuss.
 
 ## Data Class
