@@ -557,7 +557,16 @@ class PaletteNode(BaseNode):
             if views:
                 win = views[0].window()
                 if hasattr(win, 'show_info'):
-                    win.show_info(f"{path.name} exported")
+                    # Click the InfoBar message to open Explorer with the
+                    # PNG selected — same Explorer /select pattern the
+                    # canvas-snap path uses (main_window._snapshot_canvas).
+                    import subprocess
+                    win.show_info(
+                        f"{path.name} exported",
+                        on_click=lambda p=str(path): subprocess.Popen(
+                            ["explorer", "/select,", p]
+                        ),
+                    )
 
     # ─────────────────────────────────────────────────────────────────────────
     # LAYOUT
