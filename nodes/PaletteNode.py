@@ -7,6 +7,7 @@
 """
 
 import json as _json
+import random as _random
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -411,7 +412,20 @@ class _PaletteWidget(QWidget):
     def _fire_change(self) -> None:
         self._on_change(self.get_colors())
 
-    def add_color(self, label: str = "Color", hex_color: str = "#c0a888") -> None:
+    def add_color(self, label: str = "Color", hex_color: str | None = None) -> None:
+        # Default → random pleasant starting colour.  Full hue spectrum so
+        # the user gets variety per click; saturation and lightness gated
+        # to medium ranges so the swatch never lands as washed-out grey or
+        # eye-searing neon.  The user typically nudges from here anyway via
+        # the vertical-drag lightness shift, so this is just the seed.
+        if hex_color is None:
+            c = QColor()
+            c.setHsl(
+                _random.randint(0, 359),
+                _random.randint(80, 200),    # saturation: medium-range
+                _random.randint(90, 190),    # lightness:  medium-range
+            )
+            hex_color = "#{:02X}{:02X}{:02X}".format(c.red(), c.green(), c.blue())
         self._append_cell(label, hex_color)
         self._fire_change()
 

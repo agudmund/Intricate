@@ -156,7 +156,7 @@ The bare-hex auto-correct sets the field to `"#" + text` and returns; the recurs
 
 ## Technical Notes
 
-- The `+ add color` button has its own minimal stylesheet and uses `Theme.primaryBorder` for the rest state, `Theme.nodeBorderSelected` for hover. Click adds a default `("Color", "#c0a888")` entry to the end of the grid; the user edits both fields in place.
+- The `+ add color` button has its own minimal stylesheet and uses `Theme.primaryBorder` for the rest state, `Theme.nodeBorderSelected` for hover. Click adds a fresh entry to the end of the grid with a randomised HSL seed colour — full hue spectrum, saturation 80–200 and lightness 90–190 (out of 255) so the result lands in the medium-saturation, medium-lightness band on every click. No washed-out greys, no eye-searing neons. The user typically nudges further from there via the vertical lightness drag, so this is just the seed.
 - Cells render their hover-revealed `×` button via `enterEvent` / `leaveEvent`. The button is repositioned in `enterEvent` because the cell width can change as the grid relays out — pinning it once in `__init__` would leave it floating off the right edge after a resize.
 - `_index_at_container_pos` decides drop position by walking the cell list and comparing the drop point against each cell's geometry centre. A drop above a cell's vertical centre inserts before it; a drop in the same row to the left of the horizontal centre also inserts before it; otherwise the drop appends to the end.
 - `_MIME_TYPE = "application/x-intricate-palette-color"` is unique to PaletteNode — the format is the gate that lets the eventFilter recognise its own swatches and ignore foreign drops.
