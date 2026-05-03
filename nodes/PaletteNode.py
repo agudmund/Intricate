@@ -7,7 +7,6 @@
 """
 
 import json as _json
-import random as _random
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -414,16 +413,17 @@ class _PaletteWidget(QWidget):
 
     def add_color(self, label: str = "Color", hex_color: str | None = None) -> None:
         # Default → sample a random colour from Intricate's live tint palette
-        # (color_registry.toml).  Same source the node tint cycle uses and
-        # the Settlers' Color Picker category curates, so new swatches
-        # arrive in colours that already belong to the user's rotation.  The
-        # Settlers owns curation; PaletteNode is a pure consumer.  Whatever
-        # the user has the registry set to at any point — that's the pool
-        # we sample from, automatically, via the live-watched module.
+        # via the canonical ColorPicker.randomling() facade.  Same source the
+        # node tint cycle uses and the Settlers' Color Picker category
+        # curates, so new swatches arrive in colours the user has already
+        # accepted into rotation.  Whatever the registry list is at the
+        # moment of click is the sampling pool, automatically, via the
+        # file-watched module.  The Settlers owns curation; PaletteNode is
+        # a pure consumer — and randomling() owns the empty-pool fallback
+        # so we don't reinvent it here.
         if hex_color is None:
-            from utils.persistence import color_registry
-            pool = color_registry.get_all()
-            hex_color = _random.choice(pool) if pool else "#888888"
+            from utils.pickers.ColorPicker import randomling
+            hex_color = randomling()
         self._append_cell(label, hex_color)
         self._fire_change()
 
