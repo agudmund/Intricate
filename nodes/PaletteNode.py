@@ -121,27 +121,70 @@ class _SwatchCell(QWidget):
         self._label.textChanged.connect(lambda _: on_change())
 
     # ── Drag support — drag the swatch to reorder or move between palettes ──
+    #
+    # The swatch carries TWO kinds of drag from a single press:
+    #
+    #   • Vertical-dominant motion → HSL-lightness shift on the swatch (live).
+    #     Same gentle touch the Settlers config uses on its theme swatches —
+    #     up to lighten, down to darken.  No threshold; small motions land
+    #     small adjustments.  Hex field cascades through textChanged so the
+    #     data model and visible #hex update together.
+    #
+    #   • Horizontal-dominant motion past 15 px → cross-palette QDrag, the
+    #     classic move-or-duplicate gesture.  Drop on the same palette now
+    #     duplicates (CopyAction); drop on a different palette still moves
+    #     (MoveAction).  Direction is locked at the first qualifying motion
+    #     so a vertical lightness drag can't accidentally arm a sweep.
+
+    _PX_PER_LIGHTNESS_UNIT = 1.5  # Settlers value — ~100 px covers two-thirds of HSL range
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self._swatch.geometry().contains(event.pos()):
             self._drag_start = event.pos()
+            self._drag_base_color = QColor(self._hex.text())
+            if not self._drag_base_color.isValid():
+                self._drag_base_color = QColor("#888888")
             event.accept()
             return
         self._drag_start = None
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if (self._drag_start is not None
-                and (event.buttons() & Qt.LeftButton)
-                and (event.pos() - self._drag_start).manhattanLength() > 15):
+        if self._drag_start is None or not (event.buttons() & Qt.LeftButton):
+            super().mouseMoveEvent(event)
+            return
+        delta = event.pos() - self._drag_start
+        dx, dy = delta.x(), delta.y()
+        if abs(dx) > abs(dy) and abs(dx) > 15:
             self._initiate_drag()
             self._drag_start = None
             return
-        super().mouseMoveEvent(event)
+        # Vertical-dominant (or sub-15-px) → lightness shift.  Live update
+        # via the hex field so the data model / on_change cascade fires.
+        if abs(dy) >= abs(dx):
+            self._apply_lightness_shift(dy)
+        event.accept()
 
     def mouseReleaseEvent(self, event):
         self._drag_start = None
         super().mouseReleaseEvent(event)
+
+    def _apply_lightness_shift(self, dy: float) -> None:
+        """Up = lighter, down = darker.  Same HSL math the Settlers swatches use."""
+        delta = int(-dy / self._PX_PER_LIGHTNESS_UNIT)
+        h, s, _, _ = self._drag_base_color.getHsl()
+        base_l = self._drag_base_color.lightness()
+        new_l  = max(0, min(255, base_l + delta))
+        if h < 0:        # grey: hue is -1, restore to 0 so QColor doesn't reset to red
+            h = 0
+        new_color = QColor()
+        new_color.setHsl(h, s, new_l, self._drag_base_color.alpha())
+        new_hex = "#{:02X}{:02X}{:02X}".format(
+            new_color.red(), new_color.green(), new_color.blue(),
+        )
+        # setText cascades into _on_hex_changed (validates + repaints swatch)
+        # and the on_change lambda (propagates colours up to PaletteNode.data).
+        self._hex.setText(new_hex)
 
     def _initiate_drag(self) -> None:
         drag = QDrag(self)
@@ -166,6 +209,18 @@ class _SwatchCell(QWidget):
     _drag_start = None
 
     def _on_hex_changed(self, text: str) -> None:
+        # Auto-prepend "#" when a bare hex value lands in the field — covers
+        # the in-a-hurry paste case ("282828" instead of "#282828").  Only
+        # acts on lengths 6 and 8 so character-by-character typing of those
+        # forms isn't second-guessed before the user finishes.  The setText
+        # call cascades back into this slot with the corrected value and
+        # falls through to the validator below.
+        if (text and not text.startswith("#")
+                and len(text) in (6, 8)
+                and all(ch in "0123456789abcdefABCDEF" for ch in text)):
+            self._hex.setText("#" + text)
+            self._hex.setCursorPosition(len(text) + 1)
+            return
         c = QColor(text)
         if c.isValid():
             self._update_swatch(text)
@@ -289,7 +344,17 @@ class _PaletteWidget(QWidget):
                     cpos   = self._container.mapFrom(self._scroll.viewport(), vp_pos)
                     idx    = self._index_at_container_pos(cpos)
                     self._insert_cell_at(data.get("label", "Color"), data.get("hex", "#888888"), idx)
-                    event.setDropAction(Qt.MoveAction)
+                    # Drop on the same palette → duplicate (CopyAction so the
+                    # source's MoveAction post-check skips the remove step).
+                    # Drop on a different palette → move, original goes away
+                    # at the source.
+                    src_palette = event.source()
+                    while src_palette and not isinstance(src_palette, _PaletteWidget):
+                        src_palette = src_palette.parent()
+                    if src_palette is self:
+                        event.setDropAction(Qt.CopyAction)
+                    else:
+                        event.setDropAction(Qt.MoveAction)
                     event.accept()
                 return True
         return super().eventFilter(obj, event)
