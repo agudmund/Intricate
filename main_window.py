@@ -417,6 +417,17 @@ class IntricateApp(QMainWindow):
             lambda e: self._info_click_action() if getattr(self, '_info_click_action', None) else None
         )
 
+        # Mouse-passthrough management — the label sits in the user's
+        # default titlebar-drag zone, so when no message is visible we
+        # want events to fall through to the QMainWindow drag handler at
+        # mousePressEvent (the `pos.y() < Theme.handleHeightTop` branch).
+        # When a message IS visible we want the label to receive clicks
+        # so on_click handlers fire.  Initial state: no message → events
+        # pass through.  show_info() flips this off when the active label
+        # is info_label_top; the fade-out animation's finished signal
+        # flips it back on.  See _set_info_label_top_passthrough.
+        self.info_label_top.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
         # Deferred first position — toolbar width isn't known at construction time
         QTimer.singleShot(0, self._reposition_exit_btn)
 
@@ -3847,6 +3858,16 @@ class IntricateApp(QMainWindow):
         fade_ms = max(400, len(message) * 55)
         self._animate_info_opacity(0.0, 1.0, fade_ms)
 
+        # If the active label is the titlebar mirror, take it out of
+        # mouse-passthrough mode so clicks land on the message rather
+        # than passing through to the QMainWindow drag handler.  Set
+        # AFTER _animate_info_opacity since that path may stop a previous
+        # fade-out animation whose `finished` slot would also touch this
+        # attribute — running the set here ensures the post-stop state
+        # ends up correct regardless of late-firing slot order.
+        if self._active_label is self.info_label_top:
+            self._set_info_label_top_passthrough(False, reason="show_info active")
+
         self._tw_timer = QTimer(self)
         self._tw_timer.setSingleShot(True)
         self._tw_timer.timeout.connect(self._typewriter_tick)
@@ -3895,13 +3916,95 @@ class IntricateApp(QMainWindow):
 
     def _animate_info_opacity(self, start: float, end: float, duration: int) -> None:
         if self._info_anim:
+            # Was the previous animation a fade-OUT?  If so, its `finished`
+            # slot was supposed to restore titlebar drag passthrough — but
+            # we're about to stop it before completion.  Capture the
+            # direction now so we can run the restore manually below.
+            try:
+                prev_was_fade_out = float(self._info_anim.endValue()) <= 0.01
+            except (TypeError, AttributeError):
+                prev_was_fade_out = False
+            # Disconnect any previous `finished` handlers BEFORE stop().
+            # Without the disconnect, a previous fade-out's queued slot
+            # would fire right now and toggle info_label_top's passthrough
+            # back on in the middle of starting a new fade-in.  Two
+            # disconnect() forms covered: no-arg (all slots) and
+            # TypeError fallback for the case where there were no
+            # connections to begin with.
+            try:
+                self._info_anim.finished.disconnect()
+            except (TypeError, RuntimeError):
+                pass
             self._info_anim.stop()
+            # The disconnected fade-out won't fire its finished slot
+            # anymore.  Run the passthrough restore manually so we don't
+            # leave info_label_top stuck blocking mouse events when no
+            # message is actually visible.  Idempotent via the helper's
+            # no-op branch, so calling it on an already-passthrough state
+            # is a logged no-op.
+            if prev_was_fade_out:
+                self._set_info_label_top_passthrough(
+                    True, reason="stop() interrupted fade-out — manual cleanup"
+                )
         effect = getattr(self, '_active_opacity', self._info_opacity)
         self._info_anim = QPropertyAnimation(effect, b"opacity")
         self._info_anim.setDuration(duration)
         self._info_anim.setStartValue(start)
         self._info_anim.setEndValue(end)
+        # Fade-OUT animations restore the titlebar drag passthrough on
+        # info_label_top once the fade completes.  Fade-IN animations
+        # don't connect finished — passthrough was set to False by
+        # show_info before this method ran.
+        if end <= 0.01:
+            self._info_anim.finished.connect(self._on_info_fade_out_done)
         self._info_anim.start()
+
+    def _on_info_fade_out_done(self) -> None:
+        """Restore titlebar drag passthrough once the message has fully
+        faded.  Called from the fade-out animation's `finished` signal,
+        not from external callers.  Idempotent — calling when already in
+        passthrough state is a logged no-op via the `_set_*` helper."""
+        self._set_info_label_top_passthrough(True, reason="fade-out complete")
+
+    def _set_info_label_top_passthrough(self, passthrough: bool, *, reason: str = "") -> None:
+        """Toggle WA_TransparentForMouseEvents on info_label_top.
+
+        ``passthrough=True``  → label is invisible to mouse events; clicks
+        fall through to the QMainWindow titlebar drag handler.  Used when
+        no message is visible.
+
+        ``passthrough=False`` → label receives mouse events normally; the
+        on_click handler fires when clicked.  Used during the visible
+        portion of a message lifecycle (typewriter, hold, fade-out).
+
+        Logs every transition with the reason so the toggling can be
+        diagnosed if the behaviour ever feels wrong — overlapping hit
+        regions in Qt are notoriously tricky to debug without a trail.
+        Wrapped in try/except since the label can be torn down by
+        parent destruction in some edge paths.
+        """
+        if not hasattr(self, 'info_label_top'):
+            return
+        try:
+            current = self.info_label_top.testAttribute(Qt.WA_TransparentForMouseEvents)
+            if current == passthrough:
+                logger.debug(
+                    "[infobar-passthrough] no-op (%s, reason=%s)",
+                    "passthrough" if passthrough else "blocking",
+                    reason or "(unspecified)",
+                )
+                return
+            self.info_label_top.setAttribute(Qt.WA_TransparentForMouseEvents, passthrough)
+            logger.debug(
+                "[infobar-passthrough] %s → %s — drag %s (reason=%s)",
+                "passthrough" if current else "blocking",
+                "passthrough" if passthrough else "blocking",
+                "passes through" if passthrough else "blocked by visible message",
+                reason or "(unspecified)",
+            )
+        except RuntimeError:
+            # info_label_top torn down by parent destruction — silently OK
+            pass
 
     def _sync_zoom_slider(self) -> None:
         """Called after wheel-zoom to keep the slider in sync with the view."""
