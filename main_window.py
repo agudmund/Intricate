@@ -2293,10 +2293,18 @@ class IntricateApp(QMainWindow):
         self.joy_bar.setValue(v)
         if not self._joy_sleeping:
             self._maybe_meow(v)
-        # Flip dirty once below threshold; feeding is the only way back
+        # Flip dirty once below threshold; feeding is the only way back.
+        # When joy crosses the threshold she goes hungry — fire a meov tick
+        # immediately rather than waiting the full 10-15 min idle interval.
+        # That interval is the curtains-up "checking in" cadence; actively-
+        # going-hungry warrants visible presence right now.  _meov_tick
+        # increments the current level (so an already-escalated curtains-up
+        # sequence keeps climbing rather than restarting at 0), shows the
+        # whisper, fires the colour pulse, and re-arms the timer for the
+        # next idle cadence tick.
         if v < 15 and not self._joy_hungry:
             self._joy_hungry = True
-            self._start_meov()
+            self._meov_tick()
 
     def _maybe_meow(self, hunger_pct: int) -> None:
         """Play a meow from audio/meows/ based on hunger level.
