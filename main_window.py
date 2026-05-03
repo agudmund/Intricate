@@ -1938,9 +1938,17 @@ class IntricateApp(QMainWindow):
 
         layout.addSpacing(Theme.sidebarPadding)
 
-        # Feed rate limit — 3 meals per rolling 10-minute window
+        # Feed rate limit — 3 meals per rolling window.  Window length
+        # SCALES with the awake-drain-minutes setting so the feeding cadence
+        # always matches the hunger cadence: original tuning is 60-min
+        # drain ↔ 10-min feed window (1:6 ratio) and that ratio is the
+        # actual design target, not the absolute 600-second number.  Live
+        # value is set in _apply_joy_settings (called immediately below
+        # at __init__ and again on every settings.toml change).  The
+        # placeholder 600.0 here covers only the construction-time window
+        # before _apply_joy_settings runs.
         self._feed_timestamps: list[float] = []
-        self._FEED_WINDOW   = 600.0       # 10 minutes in seconds
+        self._FEED_WINDOW   = 600.0       # placeholder; set by _apply_joy_settings
         self._FEED_MAX      = 3           # meals allowed per window
 
         # Depletion timer + happy accumulator. The four tunable knobs
@@ -2158,6 +2166,15 @@ class IntricateApp(QMainWindow):
         self._JOY_GRACE_SECS     = max(0, grace_s)
         self._JOY_BUCKET_SECS    = max(60, bucket_m * 60)   # floor of 1 minute
 
+        # Feed window scales with drain rate to preserve the 1:6 design
+        # ratio (60-min drain ↔ 600 s feed window).  Without this the user
+        # tuning awake_drain_minutes down for testing finds the cat going
+        # hungry before the feed cooldown can clear — feeds-per-window
+        # stays at 3 but the time available to use them shrinks with the
+        # drain.  Floor at 5 s so absurdly fast drains don't make the
+        # window unusably small.
+        self._FEED_WINDOW = max(5.0, max(1, awake_min) * 60.0 / 6.0)
+
         # Apply to the running depletion timer. setInterval is safe mid-run
         # — Qt re-arms on the next tick. Pick the right interval for the
         # current sleep/awake mode so live-tuning the awake timer takes
@@ -2175,8 +2192,8 @@ class IntricateApp(QMainWindow):
                 )
 
         logger.debug(
-            "[joy-tune] applied: awake_drain=%dm sleep_drain=%dm grace=%ds bucket=%dm",
-            awake_min, sleep_min, grace_s, bucket_m,
+            "[joy-tune] applied: awake_drain=%dm sleep_drain=%dm grace=%ds bucket=%dm feed_window=%.1fs",
+            awake_min, sleep_min, grace_s, bucket_m, self._FEED_WINDOW,
         )
 
     def _apply_sleep_decay_on_wake(self) -> None:
