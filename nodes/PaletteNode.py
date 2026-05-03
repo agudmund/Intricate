@@ -413,19 +413,17 @@ class _PaletteWidget(QWidget):
         self._on_change(self.get_colors())
 
     def add_color(self, label: str = "Color", hex_color: str | None = None) -> None:
-        # Default → random pleasant starting colour.  Full hue spectrum so
-        # the user gets variety per click; saturation and lightness gated
-        # to medium ranges so the swatch never lands as washed-out grey or
-        # eye-searing neon.  The user typically nudges from here anyway via
-        # the vertical-drag lightness shift, so this is just the seed.
+        # Default → sample a random colour from Intricate's live tint palette
+        # (color_registry.toml).  Same source the node tint cycle uses and
+        # the Settlers' Color Picker category curates, so new swatches
+        # arrive in colours that already belong to the user's rotation.  The
+        # Settlers owns curation; PaletteNode is a pure consumer.  Whatever
+        # the user has the registry set to at any point — that's the pool
+        # we sample from, automatically, via the live-watched module.
         if hex_color is None:
-            c = QColor()
-            c.setHsl(
-                _random.randint(0, 359),
-                _random.randint(80, 200),    # saturation: medium-range
-                _random.randint(90, 190),    # lightness:  medium-range
-            )
-            hex_color = "#{:02X}{:02X}{:02X}".format(c.red(), c.green(), c.blue())
+            from utils.persistence import color_registry
+            pool = color_registry.get_all()
+            hex_color = _random.choice(pool) if pool else "#888888"
         self._append_cell(label, hex_color)
         self._fire_change()
 
