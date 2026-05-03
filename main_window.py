@@ -173,9 +173,20 @@ class _NewSessionDialog(QDialog):
 class IntricateApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        # ── Chrome-pulse registry ─────────────────────────────────────────
+        # Surfaces that share Theme.windowBg as their background register
+        # here at construction.  When the joy bar drops below the hungry
+        # threshold the registered surfaces pulse dark → bright pink →
+        # dark together as a continuous "she's hungry" signal until fed.
+        # Each entry is a (widget, qss_template_with_{bg}) tuple — the
+        # animation re-formats the template on every tick.
+        self._chrome_pulse_targets: list[tuple[QWidget, str]] = []
+
         # 1. The civil pleasantries
         self.setWindowTitle("Our Love As Intricate As The Patterns We Impose")
-        self.setStyleSheet(f"QMainWindow {{ background-color: {Theme.windowBg}; }}")
+        _qmw_template = "QMainWindow {{ background-color: {bg}; }}"
+        self.setStyleSheet(_qmw_template.format(bg=Theme.windowBg))
+        self._chrome_pulse_targets.append((self, _qmw_template))
         self.setWindowOpacity(0.0)
 
         # 2. The Beautiful and Prestigious Top Toolbar things with all it's specifics
@@ -311,7 +322,9 @@ class IntricateApp(QMainWindow):
         """
         self.top_toolbar = QWidget()
         self.top_toolbar.setFixedHeight(Theme.handleHeightTop)
-        self.top_toolbar.setStyleSheet(f"background-color: {Theme.windowBg};")
+        _top_template = "background-color: {bg};"
+        self.top_toolbar.setStyleSheet(_top_template.format(bg=Theme.windowBg))
+        self._chrome_pulse_targets.append((self.top_toolbar, _top_template))
 
         layout = QHBoxLayout(self.top_toolbar)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1663,7 +1676,9 @@ class IntricateApp(QMainWindow):
 
         sidebar = QWidget()
         sidebar.setFixedWidth(Theme.sidebarWidth())
-        sidebar.setStyleSheet(f"background-color: {Theme.windowBg};")
+        _sidebar_template = "background-color: {bg};"
+        sidebar.setStyleSheet(_sidebar_template.format(bg=Theme.windowBg))
+        self._chrome_pulse_targets.append((sidebar, _sidebar_template))
 
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(
@@ -2013,7 +2028,13 @@ class IntricateApp(QMainWindow):
         self._feed_timestamps.append(now)
         v = min(100, self.joy_bar.value() + 10)
         self.joy_bar.setValue(v)
+        # Going from hungry → fed: stop the chrome pulse so the whole-app
+        # background returns to its dark resting state.  Idempotent if the
+        # pulse wasn't running.
+        was_hungry = self._joy_hungry
         self._joy_hungry = False
+        if was_hungry:
+            self._stop_chrome_pulse()
         # Reset the depletion timer so feeding buys a full cycle of peace
         if hasattr(self, '_joy_timer') and self._joy_timer.isActive():
             self._joy_timer.start()
@@ -2295,16 +2316,16 @@ class IntricateApp(QMainWindow):
             self._maybe_meow(v)
         # Flip dirty once below threshold; feeding is the only way back.
         # When joy crosses the threshold she goes hungry — fire a meov tick
-        # immediately rather than waiting the full 10-15 min idle interval.
-        # That interval is the curtains-up "checking in" cadence; actively-
-        # going-hungry warrants visible presence right now.  _meov_tick
-        # increments the current level (so an already-escalated curtains-up
-        # sequence keeps climbing rather than restarting at 0), shows the
-        # whisper, fires the colour pulse, and re-arms the timer for the
-        # next idle cadence tick.
+        # immediately AND start the whole-app chrome pulse.  The text-meov
+        # is the local-attention signal (whisper + titlebar-text pulse);
+        # the chrome pulse is the at-distance signal that runs continuously
+        # until fed.  Two channels because text fades quickly while the
+        # surface pulse is the persistent "she's hungry" register that
+        # works even when the user is across the room.
         if v < 15 and not self._joy_hungry:
             self._joy_hungry = True
             self._meov_tick()
+            self._start_chrome_pulse()
 
     def _maybe_meow(self, hunger_pct: int) -> None:
         """Play a meow from audio/meows/ based on hunger level.
@@ -3251,7 +3272,9 @@ class IntricateApp(QMainWindow):
 
     def _setupBottomToolbar(self):
         self.bottomToolbar = QWidget()
-        self.bottomToolbar.setStyleSheet(f"background: {Theme.windowBg};")
+        _bot_template = "background: {bg};"
+        self.bottomToolbar.setStyleSheet(_bot_template.format(bg=Theme.windowBg))
+        self._chrome_pulse_targets.append((self.bottomToolbar, _bot_template))
 
         outer = QVBoxLayout(self.bottomToolbar)
         # Zero vertical outer margins so the dormant bottomToolbar matches
@@ -3475,6 +3498,7 @@ class IntricateApp(QMainWindow):
     _MEOV_MIN_MS = 10 * 60 * 1000   # 10 minutes
     _MEOV_MAX_MS = 15 * 60 * 1000   # 15 minutes
     _MEOV_BANG_CHANCE = 0.2         # 1 in 5 ticks swaps dots for exclamations
+    _MEOV_HOLD_MS    = 30_000       # whisper stays visible 30 s — long enough to notice from across the room
 
     def _meov_tick(self) -> None:
         """One whispered meov. Escalates by a dot each time the cat waits.
@@ -3483,13 +3507,17 @@ class IntricateApp(QMainWindow):
 
         First tick also kicks off the titlebar colour-pulse — visual hint
         visible at desk distance even with curtains rolled up.  Idempotent:
-        subsequent ticks find the pulse already running and skip."""
+        subsequent ticks find the pulse already running and skip.
+
+        Whisper holds 30 s instead of the default 3 s so it doesn't vanish
+        before the user looks at the screen — a 3-second meov in the corner
+        is too easy to miss; 30 s gives the cat real visible presence."""
         self._meov_level += 1
         if random.random() < self._MEOV_BANG_CHANCE:
             message = "meov" + ("!" * random.randint(1, 2))
         else:
             message = "meov" + ("." * self._meov_level)
-        self.show_info(message)
+        self.show_info(message, hold_ms=self._MEOV_HOLD_MS)
         self._start_meov_color_pulse()
         self._meov_timer.start(random.randint(self._MEOV_MIN_MS, self._MEOV_MAX_MS))
 
@@ -3561,6 +3589,63 @@ class IntricateApp(QMainWindow):
         if hasattr(self, 'info_label_top'):
             self.info_label_top.setStyleSheet(self._titlebar_info_qss(color.name()))
 
+    # ─────────────────────────────────────────────────────────────────────
+    # Chrome colour pulse (joy-hungry state)
+    # ─────────────────────────────────────────────────────────────────────
+    # The whole-app surface pulse, distinct from the titlebar-text pulse
+    # above.  Fires when joy crosses below the hungry threshold and runs
+    # continuously until the user feeds the bar back above.  The chrome
+    # surfaces (QMainWindow, top_toolbar, sidebar, bottomToolbar) cycle
+    # together so the entire app reads as a calm dark→pink→dark breath
+    # — a "she's hungry" signal big enough to register at desk distance
+    # without being demanding.  The titlebar text pulse continues to
+    # play during whisper messages on top of this background pulse.
+    #
+    # The user previously had this off for a few weeks.  Brought back
+    # 2026-05-03 after the absence proved load-bearing — the cat asking
+    # quietly through the whole app's surface is the difference between
+    # being noticed and not.
+
+    _CHROME_PULSE_DURATION_MS = 4000   # full dark → pink → dark cycle
+    _CHROME_PULSE_PEAK        = "#d87a9e"   # bright pink — gradient stop 1.0
+
+    def _apply_chrome_color(self, color_str: str) -> None:
+        """Set *color_str* as the background colour on every registered surface.
+        Called per animation tick during the pulse, and on stop with the
+        canonical Theme.windowBg to restore the dark base."""
+        for widget, template in getattr(self, '_chrome_pulse_targets', ()):
+            try:
+                widget.setStyleSheet(template.format(bg=color_str))
+            except (RuntimeError, AttributeError):
+                # Widget torn down or not yet ready — skip silently
+                pass
+
+    def _start_chrome_pulse(self) -> None:
+        """Begin the joy-hungry chrome pulse — dark base ↔ bright pink, looped."""
+        if not hasattr(self, '_chrome_pulse_anim') or self._chrome_pulse_anim is None:
+            from PySide6.QtCore import QVariantAnimation
+            from PySide6.QtGui import QColor
+            self._chrome_pulse_anim = QVariantAnimation(self)
+            self._chrome_pulse_anim.setStartValue(QColor(Theme.windowBg))
+            self._chrome_pulse_anim.setKeyValueAt(0.5, QColor(self._CHROME_PULSE_PEAK))
+            self._chrome_pulse_anim.setEndValue(QColor(Theme.windowBg))
+            self._chrome_pulse_anim.setDuration(self._CHROME_PULSE_DURATION_MS)
+            self._chrome_pulse_anim.setLoopCount(-1)
+            self._chrome_pulse_anim.valueChanged.connect(self._on_chrome_pulse_tick)
+        from PySide6.QtCore import QAbstractAnimation
+        if self._chrome_pulse_anim.state() != QAbstractAnimation.State.Running:
+            self._chrome_pulse_anim.start()
+
+    def _stop_chrome_pulse(self) -> None:
+        """Halt the chrome pulse and snap chrome back to the dark base.
+        Called on feed (joy_hungry → False)."""
+        if hasattr(self, '_chrome_pulse_anim') and self._chrome_pulse_anim is not None:
+            self._chrome_pulse_anim.stop()
+        self._apply_chrome_color(Theme.windowBg)
+
+    def _on_chrome_pulse_tick(self, color) -> None:
+        self._apply_chrome_color(color.name())
+
     def _active_info_surface(self):
         """Pick which InfoBar surface should host the next message.
 
@@ -3581,8 +3666,15 @@ class IntricateApp(QMainWindow):
             return self.info_label, self._info_opacity
         return self.info_label_top, self._info_opacity_top
 
-    def show_info(self, message: str, on_click=None) -> None:
-        """Typewriter reveal with simultaneous fade-in, hold 3 s, then fade out."""
+    def show_info(self, message: str, on_click=None, hold_ms: int = 3000) -> None:
+        """Typewriter reveal with simultaneous fade-in, hold *hold_ms*, then fade out.
+
+        Default hold is 3 s — right for save / paste-split / export
+        confirmations.  Long-hold messages (meovs, ambient cat presence)
+        pass a longer hold_ms so the whisper doesn't vanish before the
+        user notices it; visible-for-three-seconds-then-gone is too
+        short for an at-distance attention signal.
+        """
         self._info_timer.stop()
         if hasattr(self, '_tw_timer') and self._tw_timer is not None:
             self._tw_timer.stop()
@@ -3595,6 +3687,7 @@ class IntricateApp(QMainWindow):
         self._tw_full    = message
         self._tw_index   = 0
         self._info_click_action = on_click
+        self._active_hold_ms = max(0, int(hold_ms))
         self._active_label.setText("")
         self._active_label.setCursor(
             Qt.PointingHandCursor if on_click else Qt.ArrowCursor
@@ -3622,7 +3715,7 @@ class IntricateApp(QMainWindow):
             self._tw_timer.start(delay)
         else:
             self._tw_timer = None
-            self._info_timer.start(3000)
+            self._info_timer.start(getattr(self, '_active_hold_ms', 3000))
 
     def _fade_info_out(self) -> None:
         self._info_click_action = None
