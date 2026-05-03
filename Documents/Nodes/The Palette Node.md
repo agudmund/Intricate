@@ -135,9 +135,16 @@ The Scene wrapper applies the result with a grow-only guard: `data.height = max(
 
 ### .py Drag-Drop — Chained to a CodeNode with a Data Wire
 
-When the user drops a `.py` file on the canvas, `View.py` spawns a `CodeNode` for the file and a `PaletteNode` filled with hex values extracted from the source. The two land chained: the palette spawns at the code node's right edge (`r.right() + 30, r.top()`, the same offset GitNode uses for its loading-plushie pattern), and a `Connection(code_node, palette)` wire ties them. The wire makes the relationship legible ("these are the colours in this code") and — because `_scatter`'s satellite drag-along walks along all connected nodes — eases the pair as a single unit when the code node probes for a free spot, instead of fanning them across the canvas.
+When the user drops a `.py` file on the canvas, `View.py` spawns a `CodeNode` for the file and a `PaletteNode` filled with hex values extracted from the source. The placement uses `utils.placement.chain_spawn` — the canonical scatter helper — with the code node as the parent. `chain_spawn` does:
 
-The `.qss` drop path stays standalone (no code node spawned, just the palette) — no wire to draw.
+1. Stage the palette offscreen so its rect is valid for measurement.
+2. Pick a `wander_origin` near the code node (85 % gaussian cluster at ~260 px, 15 % outlier fling at 500–900 px).
+3. `spiral_place` outward from that origin, probing for a node-clear AND wire-clear seat. Stickers, AboutNodes, every other `data + to_dict` item counts as an obstacle.
+4. Place the palette and wire `Connection(code_node, palette)`.
+
+The wire makes the relationship legible ("these are the colours in this code") in the same way GitNode wires its loading-plushie back to the GitNode that spawned it. Earlier revisions used a fixed `r.right() + 30, r.top()` offset and rode the code node's `_scatter` drag-along to ease the pair together — flawless when the spawn area was open, but the satellite drag-along never collision-checks the satellite, so a code node spawning into tight space could land its palette on top of a StickerNode. `chain_spawn`'s independent probe per spawn closes that gap.
+
+The `.qss` drop path stays standalone (no code node spawned, just the palette) — no wire to draw, no chain to run.
 
 The scroll bar is still there as the relief valve for *interactive* resize after spawn — when the user pulls the bottom-right handle inward and the body shrinks below content, the scroll bar takes over without a fuss.
 

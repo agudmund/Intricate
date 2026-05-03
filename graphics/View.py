@@ -570,24 +570,31 @@ class IntricateView(QGraphicsView):
                     node = scene.add_palette_node(pos=drop_scene_pos, colors=colors)
                     _scatter(node)
             elif ext in _CODE_EXTENSIONS and hasattr(scene, 'add_code_node'):
-                # .py files with hex colors → palette node chained to the
-                # code node, GitNode-style: spawn the code first, place the
-                # palette to its right edge, then wire them with a data
-                # connection.  The wire makes the relationship visually
-                # legible ("these are the colours in this code") and pins
-                # the palette as a satellite — _scatter's drag-along then
-                # eases the pair as a unit instead of fanning them out.
-                node = scene.add_code_node(pos=drop_scene_pos, path=path)
+                # .py files with hex colours → CodeNode for the source +
+                # PaletteNode chained as a data-wire reference (GitNode's
+                # secondary-spawn pattern).  Placement goes through the
+                # canonical chain_spawn — wander_origin + spiral_place
+                # with the code node as parent — so the palette probes
+                # for a real free seat instead of being dropped at a
+                # fixed offset that might land on a sticker.  Earlier
+                # rev rode the code node's _scatter drag-along delta;
+                # the satellite drag-along moves the palette but never
+                # collision-checks it, which is exactly how it ended up
+                # on top of a StickerNode (StickerNode has data + to_dict
+                # so spiral_place would have rejected the seat — it just
+                # never got asked).
+                code_node = scene.add_code_node(pos=drop_scene_pos, path=path)
+                _scatter(code_node)
                 if ext == ".py" and hasattr(scene, 'add_palette_node'):
                     colors = self._parse_qss_colors(path)
                     if colors:
-                        r = node.rect()
-                        palette_pos = node.mapToScene(QPointF(r.right() + 30, r.top()))
-                        pnode = scene.add_palette_node(pos=palette_pos, colors=colors)
-                        from graphics.Connection import Connection
-                        wire = Connection(node, pnode)
-                        scene.addItem(wire)
-                _scatter(node)
+                        from utils.placement import chain_spawn, OFFSCREEN_STAGING
+                        chain_spawn(
+                            scene, code_node, [colors],
+                            lambda c: scene.add_palette_node(
+                                pos=OFFSCREEN_STAGING, colors=c,
+                            ),
+                        )
 
         event.acceptProposedAction()
 
