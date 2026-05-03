@@ -386,10 +386,11 @@ class IntricateApp(QMainWindow):
         # the helper picks the 1843.otf script-italic Medium directly.
         from pretty_widgets.utils.fonts import chandler42
         self.info_label_top.setFont(chandler42(size_px=_info_font_px))
-        self.info_label_top.setStyleSheet(
-            f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
-            f" color: {Theme.textPrimary};"
-        )
+        # QSS routed through a small helper so the meov colour-pulse
+        # animation can swap just the colour without rebuilding the
+        # whole sheet on every tick.  See _titlebar_info_qss /
+        # _start_meov_color_pulse below.
+        self.info_label_top.setStyleSheet(self._titlebar_info_qss(Theme.textPrimary))
         self.info_label_top.setParent(self.top_toolbar)
         self._info_opacity_top = QGraphicsOpacityEffect()
         self._info_opacity_top.setOpacity(0.0)
@@ -3470,13 +3471,18 @@ class IntricateApp(QMainWindow):
     def _meov_tick(self) -> None:
         """One whispered meov. Escalates by a dot each time the cat waits.
         Occasionally swaps the dots for a single or double exclamation when
-        the cat wants to sound a little more insistent than usual."""
+        the cat wants to sound a little more insistent than usual.
+
+        First tick also kicks off the titlebar colour-pulse — visual hint
+        visible at desk distance even with curtains rolled up.  Idempotent:
+        subsequent ticks find the pulse already running and skip."""
         self._meov_level += 1
         if random.random() < self._MEOV_BANG_CHANCE:
             message = "meov" + ("!" * random.randint(1, 2))
         else:
             message = "meov" + ("." * self._meov_level)
         self.show_info(message)
+        self._start_meov_color_pulse()
         self._meov_timer.start(random.randint(self._MEOV_MIN_MS, self._MEOV_MAX_MS))
 
     def _start_meov(self) -> None:
@@ -3489,6 +3495,63 @@ class IntricateApp(QMainWindow):
         if hasattr(self, '_meov_timer'):
             self._meov_timer.stop()
         self._meov_level = 0
+        self._stop_meov_color_pulse()
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Titlebar meov colour pulse
+    # ─────────────────────────────────────────────────────────────────────
+    # When the cat is meov-ing the titlebar text fades textPrimary →
+    # bright pink → textPrimary on a slow ~3 s loop.  Same #d87a9e endpoint
+    # as the canonical 4-stop progress-bar gradient — the family's
+    # universal "something is happening" hue.  Visible at desk distance so
+    # the user can tell from across the room that Intricate wants
+    # attention, even when curtains are rolled and the only signal would
+    # otherwise be a small italic glyph at the top of the screen.
+    #
+    # Pulse runs continuously from the first meov tick until curtains
+    # come back down (any tending-to-the-app gesture rolls them).  No
+    # amplitude / speed escalation tied to _meov_level — the message
+    # itself ("meov...." with growing dot-tail) carries that signal; the
+    # colour pulse is the at-distance secondary channel.
+
+    _MEOV_PULSE_DURATION_MS = 3000   # full textPrimary → pink → textPrimary cycle
+    _MEOV_PULSE_PEAK        = "#d87a9e"   # bright pink — gradient stop 1.0
+
+    def _titlebar_info_qss(self, color: str) -> str:
+        """Build the QSS string for info_label_top with *color* applied.
+        Used at construction (textPrimary) and on every pulse tick."""
+        return (
+            f"background: transparent; border: none; padding: 0px 4px 0px 4px;"
+            f" color: {color};"
+        )
+
+    def _start_meov_color_pulse(self) -> None:
+        """Begin (or no-op continue) the titlebar colour pulse."""
+        if not hasattr(self, '_meov_color_anim') or self._meov_color_anim is None:
+            from PySide6.QtCore import QVariantAnimation
+            from PySide6.QtGui import QColor
+            self._meov_color_anim = QVariantAnimation(self)
+            self._meov_color_anim.setStartValue(QColor(Theme.textPrimary))
+            self._meov_color_anim.setKeyValueAt(0.5, QColor(self._MEOV_PULSE_PEAK))
+            self._meov_color_anim.setEndValue(QColor(Theme.textPrimary))
+            self._meov_color_anim.setDuration(self._MEOV_PULSE_DURATION_MS)
+            self._meov_color_anim.setLoopCount(-1)
+            self._meov_color_anim.valueChanged.connect(self._on_meov_color_tick)
+        from PySide6.QtCore import QAbstractAnimation
+        if self._meov_color_anim.state() != QAbstractAnimation.State.Running:
+            self._meov_color_anim.start()
+
+    def _stop_meov_color_pulse(self) -> None:
+        """Halt the colour pulse and restore the titlebar's normal hue."""
+        if hasattr(self, '_meov_color_anim') and self._meov_color_anim is not None:
+            self._meov_color_anim.stop()
+        if hasattr(self, 'info_label_top'):
+            self.info_label_top.setStyleSheet(self._titlebar_info_qss(Theme.textPrimary))
+
+    def _on_meov_color_tick(self, color) -> None:
+        """One frame of the colour pulse — swap just the colour in the QSS."""
+        if hasattr(self, 'info_label_top'):
+            self.info_label_top.setStyleSheet(self._titlebar_info_qss(color.name()))
 
     def _active_info_surface(self):
         """Pick which InfoBar surface should host the next message.
