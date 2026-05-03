@@ -387,6 +387,14 @@ class IntricateApp(QMainWindow):
         self._info_opacity_top = QGraphicsOpacityEffect()
         self._info_opacity_top.setOpacity(0.0)
         self.info_label_top.setGraphicsEffect(self._info_opacity_top)
+        # Click → invoke the active on_click action (if any).  Mirrors the
+        # bottom-bar info_label wire in _setupBottomToolbar — same channel,
+        # both stages need to honour the click.  Without this, palette
+        # exports / save confirmations whispered while curtains are rolled
+        # leave the user with a pointer-hand cursor that does nothing.
+        self.info_label_top.mousePressEvent = (
+            lambda e: self._info_click_action() if getattr(self, '_info_click_action', None) else None
+        )
 
         # Deferred first position — toolbar width isn't known at construction time
         QTimer.singleShot(0, self._reposition_exit_btn)
