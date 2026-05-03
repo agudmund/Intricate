@@ -1938,18 +1938,30 @@ class IntricateApp(QMainWindow):
 
         layout.addSpacing(Theme.sidebarPadding)
 
-        # Feed rate limit — 3 meals per rolling window.  Window length
-        # SCALES with the awake-drain-minutes setting so the feeding cadence
-        # always matches the hunger cadence: original tuning is 60-min
-        # drain ↔ 10-min feed window (1:6 ratio) and that ratio is the
-        # actual design target, not the absolute 600-second number.  Live
-        # value is set in _apply_joy_settings (called immediately below
+        # Feed rate limits — three layers:
+        #   1) per-feed cooldown (FEED_COOLDOWN) — minimum interval between
+        #      individual feeds.  Original draft note: "you can't just keep
+        #      eating to get happier."  Without this the user could spam-
+        #      click the feed button 3 times in a second to fill the bar,
+        #      which doesn't match how feeding actually works.  Cooldown
+        #      simulates the cat digesting between bites.
+        #   2) rolling window cap (FEED_MAX in FEED_WINDOW) — total
+        #      stuffed-ness across a longer span so the user can't chain
+        #      feeds-with-cooldown-respected indefinitely.
+        #   3) bar full (>= 100) — can't eat any more right now.
+        # FEED_WINDOW and FEED_COOLDOWN both SCALE with awake-drain-minutes
+        # so the feeding cadence matches the hunger cadence at any setting:
+        # the original tuning is 60-min drain ↔ 10-min window ↔ 1-min
+        # cooldown, and those ratios are the actual design target.  Live
+        # values are set in _apply_joy_settings (called immediately below
         # at __init__ and again on every settings.toml change).  The
-        # placeholder 600.0 here covers only the construction-time window
+        # placeholders here cover only the construction-time window
         # before _apply_joy_settings runs.
         self._feed_timestamps: list[float] = []
-        self._FEED_WINDOW   = 600.0       # placeholder; set by _apply_joy_settings
-        self._FEED_MAX      = 3           # meals allowed per window
+        self._FEED_WINDOW    = 600.0      # placeholder; set by _apply_joy_settings
+        self._FEED_COOLDOWN  = 60.0       # placeholder; set by _apply_joy_settings
+        self._FEED_MAX       = 3          # meals allowed per window
+        self._last_feed_time = 0.0        # for per-feed cooldown
 
         # Depletion timer + happy accumulator. The four tunable knobs
         # below — drain durations, grace window, bucket earn rate — are
@@ -2017,23 +2029,37 @@ class IntricateApp(QMainWindow):
     def _feed_joy(self) -> None:
         """Feed the joy bucket — any click resets the timer and clears hunger.
 
-        Rate-limited to 3 feeds per rolling 10-minute window.
-        It's stuffed beyond that — can only eat so much at a time.
+        Three-layer rate limit (see _FEED_* docs in __init__):
+          1. Bar already full → silent no-op (can't eat more right now).
+          2. Inside per-feed cooldown → silent no-op (still digesting).
+          3. Window cap reached → silent no-op (stuffed for now).
+        Each layer is also reflected in the feed button's enabled state
+        via _refresh_feed_btn_state, so the user gets visible feedback
+        instead of a clicking-and-nothing-happens silence.
         """
         # Already full — didn't eat anything, don't count it
         if self.joy_bar.value() >= 100:
+            self._refresh_feed_btn_state()
             return
 
         now = time.monotonic()
-        # Prune timestamps outside the window
+
+        # Per-feed cooldown — "you can't just keep eating to get happier"
+        if now - self._last_feed_time < self._FEED_COOLDOWN:
+            self._refresh_feed_btn_state()
+            return
+
+        # Prune timestamps outside the window, then check the rolling cap
         self._feed_timestamps = [
             t for t in self._feed_timestamps
             if now - t < self._FEED_WINDOW
         ]
         if len(self._feed_timestamps) >= self._FEED_MAX:
+            self._refresh_feed_btn_state()
             return                        # stuffed — can't eat any more right now
 
         self._feed_timestamps.append(now)
+        self._last_feed_time = now
         v = min(100, self.joy_bar.value() + 10)
         self.joy_bar.setValue(v)
         # Going from hungry → fed: stop the chrome pulse so the whole-app
@@ -2049,6 +2075,56 @@ class IntricateApp(QMainWindow):
         # If we just hit 100%, start the grace period (happy time begins)
         if v == 100 and not self._joy_in_grace:
             self._begin_grace()
+        self._refresh_feed_btn_state()
+
+    def _refresh_feed_btn_state(self) -> None:
+        """Update the feed button's enabled state and schedule the next
+        refresh if currently locked.  Locks fire when:
+          - bar is at 100 % (full, can't eat more — unlocks on next drain)
+          - per-feed cooldown is active (still digesting)
+          - rolling window cap is reached (stuffed for the window's tail)
+        Auto-reschedules itself at the soonest unlock event so the button
+        comes back to life on its own without the caller having to track
+        the timing explicitly.
+        """
+        if not hasattr(self, '_feed_btn'):
+            return
+        now = time.monotonic()
+        # Prune expired window entries while we're here so the cap check
+        # below operates on fresh state.
+        self._feed_timestamps = [
+            t for t in self._feed_timestamps
+            if now - t < self._FEED_WINDOW
+        ]
+        full = self.joy_bar.value() >= 100
+        cooldown_remaining = max(0.0, self._FEED_COOLDOWN - (now - self._last_feed_time))
+        if len(self._feed_timestamps) >= self._FEED_MAX:
+            window_remaining = max(0.0, self._FEED_WINDOW - (now - min(self._feed_timestamps)))
+        else:
+            window_remaining = 0.0
+
+        locked = full or cooldown_remaining > 0 or window_remaining > 0
+        try:
+            self._feed_btn.setEnabled(not locked)
+        except RuntimeError:
+            return  # button torn down
+
+        # Re-schedule next refresh at the soonest auto-unlock event.  Skip
+        # the "full" lock — that one unlocks when the depletion timer ticks
+        # the bar below 100, which calls _refresh_feed_btn_state on its
+        # own at the end of _deplete_joy.
+        if not locked:
+            return
+        unlock_in = []
+        if cooldown_remaining > 0:
+            unlock_in.append(cooldown_remaining)
+        if window_remaining > 0:
+            unlock_in.append(window_remaining)
+        if unlock_in:
+            QTimer.singleShot(
+                int(min(unlock_in) * 1000) + 50,
+                self._refresh_feed_btn_state,
+            )
 
     def _toggle_joy_sleep(self) -> None:
         """Put the joy system to sleep or wake it up."""
@@ -2175,6 +2251,17 @@ class IntricateApp(QMainWindow):
         # window unusably small.
         self._FEED_WINDOW = max(5.0, max(1, awake_min) * 60.0 / 6.0)
 
+        # Per-feed cooldown — minimum interval between individual feeds.
+        # Scales as window/10 so the original 60-min ↔ 10-min-window ↔
+        # 1-min-cooldown ratio holds across all drain settings:
+        #   60-min drain → window 600s → cooldown 60s
+        #   30-min drain → window 300s → cooldown 30s
+        #   10-min drain → window 100s → cooldown 10s
+        #    3-min drain → window  30s → cooldown  3s
+        # Floor of 1.5 s so very fast drains still register a perceptible
+        # "she's still digesting" beat without becoming click-spammable.
+        self._FEED_COOLDOWN = max(1.5, self._FEED_WINDOW / 10.0)
+
         # Apply to the running depletion timer. setInterval is safe mid-run
         # — Qt re-arms on the next tick. Pick the right interval for the
         # current sleep/awake mode so live-tuning the awake timer takes
@@ -2192,9 +2279,17 @@ class IntricateApp(QMainWindow):
                 )
 
         logger.debug(
-            "[joy-tune] applied: awake_drain=%dm sleep_drain=%dm grace=%ds bucket=%dm feed_window=%.1fs",
-            awake_min, sleep_min, grace_s, bucket_m, self._FEED_WINDOW,
+            "[joy-tune] applied: awake_drain=%dm sleep_drain=%dm grace=%ds bucket=%dm "
+            "feed_window=%.1fs feed_cooldown=%.1fs",
+            awake_min, sleep_min, grace_s, bucket_m, self._FEED_WINDOW, self._FEED_COOLDOWN,
         )
+
+        # Live-tune feedback for the feed button — recompute its enabled
+        # state against the new window/cooldown.  Skip silently if the
+        # button doesn't exist yet (this method runs once during __init__
+        # before the sidebar is built).
+        if hasattr(self, '_feed_btn'):
+            self._refresh_feed_btn_state()
 
     def _apply_sleep_decay_on_wake(self) -> None:
         """On launch, decay the bar by the elapsed time since last save.
@@ -2343,6 +2438,9 @@ class IntricateApp(QMainWindow):
             self._joy_hungry = True
             self._meov_tick()
             self._start_chrome_pulse()
+        # Recompute feed-button enabled state — bar dropping below 100
+        # unlocks the "full" gate, this is where that re-enable happens.
+        self._refresh_feed_btn_state()
 
     def _maybe_meow(self, hunger_pct: int) -> None:
         """Play a meow from audio/meows/ based on hunger level.
