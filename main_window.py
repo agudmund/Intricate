@@ -575,8 +575,44 @@ class IntricateApp(QMainWindow):
     def eventFilter(self, obj, event):
         if obj is self.top_toolbar and event.type() == QEvent.MouseButtonDblClick:
             if event.button() == Qt.LeftButton:
-                self.toggle_fullscreen()
-                return True
+                # Maximize-on-double-click is constrained to the LEFT zone of
+                # the toolbar — specifically at-or-left-of the project
+                # selector's right edge.  The right zone is the user's
+                # default focal-zone where multiple features compound:
+                # window drag, click-to-acknowledge a meov whisper, and
+                # the right-click hidden context menu.  Keeping the
+                # maximize override out of that zone reduces a 4-feature
+                # overlap to 3, which is plenty.  The maximize button on
+                # the right side of the toolbar remains the primary path;
+                # this double-click is a rare override for screen-swap
+                # scenarios (VR → TV resolution change where the button
+                # ends up offscreen).
+                try:
+                    x = event.position().x()
+                except AttributeError:
+                    x = event.x()  # legacy Qt API fallback
+                selector_right = 0.0
+                if hasattr(self, 'project_selector') and self.project_selector is not None:
+                    try:
+                        selector_right = float(
+                            self.project_selector.x() + self.project_selector.width()
+                        )
+                    except RuntimeError:
+                        selector_right = 0.0
+                if x <= selector_right:
+                    logger.debug(
+                        "[toolbar-dblclick] maximize fired at x=%.0f (zone right edge=%.0f)",
+                        x, selector_right,
+                    )
+                    self.toggle_fullscreen()
+                    return True
+                else:
+                    logger.debug(
+                        "[toolbar-dblclick] ignored at x=%.0f — outside maximize zone "
+                        "(zone right edge=%.0f)", x, selector_right,
+                    )
+                    # Fall through; let the event propagate normally so
+                    # other handlers in the right zone don't get blocked.
         # Joy wake — deliberate button press only. No passive interaction wake.
         # The sleep/wake button is the sole controller of the sleep state.
         return super().eventFilter(obj, event)
