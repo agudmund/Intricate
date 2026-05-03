@@ -3517,7 +3517,11 @@ class IntricateApp(QMainWindow):
             message = "meov" + ("!" * random.randint(1, 2))
         else:
             message = "meov" + ("." * self._meov_level)
-        self.show_info(message, hold_ms=self._MEOV_HOLD_MS)
+        self.show_info(
+            message,
+            hold_ms=self._MEOV_HOLD_MS,
+            on_click=self._acknowledge_meov,
+        )
         self._start_meov_color_pulse()
         self._meov_timer.start(random.randint(self._MEOV_MIN_MS, self._MEOV_MAX_MS))
 
@@ -3718,10 +3722,30 @@ class IntricateApp(QMainWindow):
             self._info_timer.start(getattr(self, '_active_hold_ms', 3000))
 
     def _fade_info_out(self) -> None:
+        # Stop the hold timer so it can't fire a second _fade_info_out after
+        # a manual click-dismissal.  Without this, a click that fades the
+        # message early would later get followed by the timer firing the
+        # same method, which restarts the fade animation from opacity 1 →
+        # producing a visible flash of the already-dismissed message.
+        # Calling stop() on a stopped timer is a safe no-op so the
+        # timer-driven path stays unchanged.
+        if hasattr(self, '_info_timer'):
+            self._info_timer.stop()
         self._info_click_action = None
         target = getattr(self, '_active_label', self.info_label)
         target.setCursor(Qt.ArrowCursor)
         self._animate_info_opacity(1.0, 0.0, 600)
+
+    def _acknowledge_meov(self) -> None:
+        """Click handler for the meov whisper — the gentle ear-scratch.
+
+        Dismisses the visible whisper but leaves the chrome pulse and
+        meov timer untouched, since the cat is still hungry — this is
+        the user saying "I see you, I'm on it," not actually feeding her.
+        Same as a real cat: the scratch quiets her current ask without
+        resetting the underlying need.
+        """
+        self._fade_info_out()
 
     def _animate_info_opacity(self, start: float, end: float, duration: int) -> None:
         if self._info_anim:
