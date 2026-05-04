@@ -188,6 +188,33 @@ WarmNode writes a `.warm_bridge_{uuid}.json` to `Documents/Data/`. Notepad opens
 
 PremiereBridgeNode owns a `WebSocketTransport` in `utils/premiere_transport.py` targeting `ws://127.0.0.1:9914`. A CEP extension at `%APPDATA%\Adobe\CEP\extensions\com.intricate.bridge\` (self-signed, CEP 12 mandatory) runs a Node.js `ws` server inside Premiere Pro 2026 and dispatches to ExtendScript via `csInterface.evalScript`. Frames are `Prop|Val|Track|Clip` — `HELLO`/`READY`/`ERROR` handshake, `PING`/`PONG` heartbeat at 5s, three-strikes silent-wire detection. On mismatch the node spawns a chained AboutNode (same passive-messaging pattern as GitNode's offline guard). Full writeup at `Documents/Nodes/The Premiere Bridge Node.md` — phase history lives in its **Phase 1 History** section.
 
+## Author-Time Tools vs Runtime Helpers
+
+Two parallel directories at the repo root, each with distinct semantics. Different departments, same kitchen.
+
+| Location | Holds | Imported by runtime app? |
+|---|---|---|
+| `utils/` | Runtime helper modules — global mouse hook, joy state, image processing, paint kit, placement math, persistence layer, audio, video decoder, and friends. Code the running app calls during normal operation. | **Yes** — every module has at least one runtime caller |
+| `tools/` | Author-time tools — analysis scripts, generators, build scaffolding, third-party utilities the author runs occasionally. Not on the runtime path. | **No** — running the app never imports anything from here |
+
+**Current contents of `tools/`:**
+
+| Path | Purpose |
+|---|---|
+| `tools/icon_pipeline/` | Icon generation + extraction toolkit (`canvas.py`, `save.py`, `extract.py`, `verify.py`, `batch.py`, `paths.py`) plus 47 author-time scripts under `scripts/`. See `Documents/Design/Icon Pipeline.md`. |
+| `tools/Display Resolution/` | Custom Resolution Utility (CRU.exe, ToastyX) — third-party Windows utility for display-resolution overrides. External binary, not Python. |
+| `tools/_scan_imports.py` | Author-time analysis — scans every `.py` in the repo, reports the external-package dependency surface. Useful for audit and confirming what `requirements.txt` should contain. |
+| `tools/generate_chat_session.py` | Author-time conversion — parses a Claude Code JSONL conversation log into an Intricate `session.json` (each user/assistant message becomes a WarmNode/TextNode connected in sequence). |
+
+**The rule:** if it's imported by `main.py`, `main_window.py`, anything in `nodes/`, `graphics/`, `data/`, or anything else on the runtime path, it's a runtime helper and lives in `utils/`. If it runs separately (manual invocation, build step, batch script) and the app never imports from it, it's a tool and lives in `tools/`.
+
+**Pending candidates** (deliberately left in their current locations):
+
+- `scripts/hooks/pre-push` — joy-bucket-spending git hook. Conceptually belongs at `tools/git_hooks/`, but git's `core.hooksPath` is currently set to `scripts/hooks`. Move requires a one-line repo-local config update (`git config core.hooksPath tools/git_hooks`) — the author makes that decision themselves.
+- `Adobe/CEP/` — Adobe extension source for the Premiere Bridge. Significant codebase with its own deployment story; deserves a dedicated placement decision rather than a refactor sweep.
+- `build.py` — author-time by definition, but lives at root by convention (so the invocation `python build.py` stays short). Could move to `tools/build.py` if consistency wins over invocation-length.
+- `Clippy/Progress Plushie.mp4` — single video file, not a tool; placement is a user decision.
+
 ## Design Documentation
 
 Framework-level designs that outgrew node-specific docs live in `Documents/Design/`:

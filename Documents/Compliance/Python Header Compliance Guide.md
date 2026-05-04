@@ -105,7 +105,7 @@ This is how the 30+ node types were originally named, and it's the right cadence
 Honest accounting:
 
 - **152 Python files** in the repo.
-- **108 compliant, 44 drifted.** Most drift is in one-off utility scripts (`icons/extract_*.py`, `generate_chat_session.py`, `_scan_imports.py`) — files that pre-date or side-step the header discipline.
+- **108 compliant, 44 drifted.** Most drift is in one-off author-time scripts (`tools/icon_pipeline/scripts/extract_*.py`, `tools/generate_chat_session.py`, `tools/_scan_imports.py`) — files that pre-date or side-step the header discipline.
 - **No active automated enforcement.** The previous version of this guide described a `pre-commit` hook (in `.git/hooks/`, which is untracked and machine-local) and a `tools/header_check.py` CI script. Neither currently exists in the repo. At some point they were either removed, never committed, or lost in a `.git/` re-init.
 - **CLAUDE.md states the rule** (every Python file gets the header) and is the current authoritative enforcement — read by Claude on every session, so new files written by AI contributors are compliant by default.
 

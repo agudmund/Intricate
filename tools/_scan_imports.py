@@ -3,11 +3,14 @@
 
 Filters out stdlib and local modules, prints a frequency-ranked list of
 external package roots — the real dependency surface of the codebase.
+
+Run from project root or anywhere — ROOT resolves via __file__.
 """
 import ast
 from pathlib import Path
 
-ROOT = Path(__file__).parent
+# This file lives at tools/_scan_imports.py — repo root is one parent up.
+ROOT = Path(__file__).resolve().parent.parent
 
 # Identify local modules: any top-level .py in root + any package directory
 local_pkgs = set()
@@ -17,10 +20,11 @@ for d in ROOT.iterdir():
     if d.is_dir() and (d / "__init__.py").exists():
         local_pkgs.add(d.name)
 # Also treat these directory names as local (they hold local modules even
-# without __init__.py in this codebase)
+# without __init__.py in this codebase).  "tools" is included so the
+# scanner doesn't flag the tools/ tree itself as external.
 local_pkgs.update({
     "nodes", "graphics", "data", "widgets", "utils",
-    "icons", "audio", "archive",
+    "icons", "audio", "archive", "tools",
 })
 
 # Stdlib modules — broad but hand-curated subset
