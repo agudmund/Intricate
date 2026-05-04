@@ -9,8 +9,8 @@
 import time as _time
 import uuid as _uuid
 from contextlib import contextmanager
-from PySide6.QtWidgets import QGraphicsRectItem, QStyleOptionGraphicsItem
-from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve
+from PySide6.QtWidgets import QGraphicsRectItem, QStyleOptionGraphicsItem, QApplication
+from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve, QEventLoop, QAbstractAnimation
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
 from PySide6.QtWidgets import QGraphicsItem
 from shared_braincell.logger import setup_logger
@@ -1523,6 +1523,27 @@ class BaseNode(QGraphicsRectItem):
         can pass it as the dialog's parent — important on Windows so the
         native file picker doesn't drift behind another desktop window.
 
+        Two settle-points are load-bearing for Windows focus reliability:
+
+          1. **Curtain animation must finish before yielding.** Without
+             waiting, the dialog spawns mid-geometry-transition (the
+             curtain roll is ~539 ms).  Windows refuses to promote the
+             dialog to foreground while its parent HWND is in animated
+             flight, so the dialog opens behind whatever else holds the
+             foreground state.  We block on `curtain_anim.finished` via
+             a nested QEventLoop so the parent is fully settled when the
+             dialog appears.
+          2. **Drain the event queue after activate/raise.** `setWindow-
+             Flags` in `_lower_window()` recreates the native HWND on
+             Windows; `activateWindow()` is a request that may not land
+             until pending events drain.  `processEvents()` flushes the
+             HWND-recreation aftermath so the activation actually takes
+             effect before the dialog spawns.
+
+        Without these two settle-points, the focus loss is intermittent —
+        sometimes the race resolves favourably, sometimes the dialog
+        ends up under another desktop app.
+
         Usage:
             with self._dialog_choreography() as mw:
                 path, _ = QFileDialog.getOpenFileName(mw, "Title", start, filter)
@@ -1538,12 +1559,21 @@ class BaseNode(QGraphicsRectItem):
                 if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
                     mw.toggle_curtains()
                     was_collapsed = True
+                    # Block until the curtain roll finishes — see (1) above.
+                    anim = getattr(mw, 'curtain_anim', None)
+                    if anim is not None and anim.state() == QAbstractAnimation.State.Running:
+                        loop = QEventLoop()
+                        anim.finished.connect(loop.quit)
+                        loop.exec()
         except Exception:
             pass
         if mw is not None:
             try:
                 mw.activateWindow()
                 mw.raise_()
+                # Drain pending events so the activation actually
+                # lands before the dialog spawns — see (2) above.
+                QApplication.processEvents()
             except Exception:
                 pass
         try:
