@@ -285,9 +285,11 @@ name = "Open Session's InDesign File"
 tooltip = "Launch ./Adobe/{project}.indd via the OS default handler"
 category = "adobe"
 # Icon extracted from the Windows shell handler for .indd at boot
-# (utils/app_icons.py), cached at icons/indesign_app.ico. Stays current
-# with whatever InDesign version is registered — no manual refresh.
-icon_file = "indesign_app.ico"
+# (utils/app_icons.py), cached at icons/Tertiary/indesign_app.ico — the
+# Tertiary subfolder holds all third-party brand assets (Adobe, Anthropic,
+# etc), separated from Intricate's proprietary icons in icons/ root.
+# Stays current with whatever InDesign version is registered.
+icon_file = "Tertiary/indesign_app.ico"
 icon_fallback = "#d87a9e"
 
 [nodes.premiere_bridge]
@@ -410,9 +412,11 @@ name = "Launch Claude"
 tooltip = "Open the Claude desktop app (maximized)"
 category = "claude"
 # Icon refreshed at boot from the MSIX AppsFolder entry via utils/app_icons.py
-# (key = shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude).  Stays current with
-# whatever version Anthropic's auto-updater has installed.
-icon_file = "claude_desktop.ico"
+# (key = shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude).  Cached in
+# icons/Tertiary/ — third-party brand assets are kept separate from
+# Intricate's proprietary icons.  Stays current with whatever version
+# Anthropic's auto-updater has installed.
+icon_file = "Tertiary/claude_desktop.ico"
 icon_fallback = "#7a9a7a"
 
 [actions.launch_claude_code]
@@ -420,8 +424,9 @@ name = "Resume Claude Code"
 tooltip = "Resume this project's Claude Code session in the terminal"
 category = "claude"
 # Icon refreshed at boot from the CLI executable via utils/app_icons.py
-# (key = ~/.local/bin/claude.exe).  Auto-updates alongside CLI releases.
-icon_file = "claude_cli.ico"
+# (key = ~/.local/bin/claude.exe).  Cached in icons/Tertiary/ alongside
+# the rest of Anthropic's brand assets.  Auto-updates alongside CLI releases.
+icon_file = "Tertiary/claude_cli.ico"
 icon_fallback = "#7a9a7a"
 
 [actions.snip]

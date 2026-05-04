@@ -160,6 +160,33 @@ The update was two files of work (source PNG + script) and zero lines of Python-
 - **`NodeButton.py`'s 1.28× scale is load-bearing.** It exists to compensate for transparent padding baked into the icon PNGs (sidebar icons have ~22% padding; stickers similar). Change the padding convention and this constant must change in lockstep, or icon-based buttons will drift in apparent size relative to emoji glyphs on the same strip.
 - **Theme reload is live.** Saving `settings.toml` after registering a new icon triggers `Theme.reload()` and repaints every button that references the metaclass attribute. No restart required for icon swaps once wiring exists.
 
+## Proprietary vs Tertiary — the directory split
+
+The `icons/` directory is split into two zones at the file-system level, mirroring the design rule from `project_external_app_icons_translated.md`:
+
+| Location | Holds | Examples |
+|---|---|---|
+| `icons/` (root) | **Proprietary** Intricate brand assets — every icon designed in our own visual language | `warm_node.ico`, `claude_node.ico`, `intricate_app.ico`, `Push.png`, every sidebar / toolbar / sticker icon authored in-house |
+| `icons/Tertiary/` | **Tertiary** third-party brand assets — official icons of external apps Intricate references, kept in their original branding without alteration | `claude_desktop.ico`, `claude_cli.ico`, `anthropic_icon.ico`, `adobe_group.ico`, `indesign_app.ico`, `Adobe-Emblem.png` |
+
+The split makes the proprietary/third-party boundary visible at a glance in the asset folder. It enforces the no-altered-branding rule physically: nothing in `icons/Tertiary/` is meant to be touched, recoloured, or restyled — these are the canonical brand assets of other companies, used as-is per the three-tier icon treatment doctrine. The proprietary `icons/` root, by contrast, is fair game for the recolor / solidify / rebuild batch utilities and any creative pass.
+
+Some Tertiary icons are **procedurally extracted** from the OS at boot via `utils/app_icons.py` — `indesign_app.ico` from the registered `.indd` handler, `claude_desktop.ico` from the MSIX AppsFolder entry, `claude_cli.ico` from the CLI executable. Whatever version the user has installed becomes the canonical icon in the cache automatically. The cached files are written to `icons/Tertiary/` (the destination is the dict value in `_APP_ICON_MAP` / `_LAUNCHER_ICON_MAP`, prefixed with `Tertiary/`), keeping the boundary intact even for icons we don't author ourselves.
+
+Settings.toml registrations for tertiary icons include the path prefix:
+
+```toml
+[theme.icons]
+claude     = "Tertiary/claude_desktop.ico"
+claudeCode = "Tertiary/claude_cli.ico"
+anthropic  = "Tertiary/anthropic_icon.ico"
+adobeGroup = "Tertiary/adobe_group.ico"
+```
+
+`Theme._resolve_icon_path` handles the subdirectory transparently — `Path(icons_dir) / filename` works for either flat or nested filenames, so the metaclass lookup stays the same regardless of whether the asset is proprietary or tertiary.
+
+The split is a 2026-05-04 refactor — pre-this date, all icons sat flat in `icons/` and the proprietary/third-party boundary lived only in code conventions and our own discipline.
+
 ## The `icons/_pipeline/` Toolkit
 
 The author-time helpers used by the generation and extraction scripts. Six small modules; the runtime app never touches any of this.

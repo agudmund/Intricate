@@ -16,19 +16,25 @@ from shared_braincell.logger import setup_logger
 _log = setup_logger("app_icons")
 
 
-# Extension → cached filename under ./icons/.  Add a new entry here when a
-# new Adobe (or any other app-registered) icon is needed in the sidebar;
-# the cache fills itself at next app boot.  Icons live under the repo's
-# icons/ directory alongside the handmade ones, but are regenerated from
-# the OS on demand so they stay current with whatever app version Windows
-# has registered as the default handler.
+# Extension → cached filename relative to ./icons/.  Add a new entry here
+# when a new Adobe (or any other app-registered) icon is needed in the
+# sidebar; the cache fills itself at next app boot.
+#
+# Filenames are PREFIXED with the Tertiary/ subfolder so third-party brand
+# assets stay separated from Intricate's proprietary icons.  See the Icon
+# Pipeline doc's "Proprietary vs Tertiary" section — the rule is that we
+# never alter another company's branding, and the directory split makes
+# the boundary visible at a glance in the asset folder.
+#
+# Regenerated from the OS on demand so they stay current with whatever
+# app version Windows has registered as the default handler.
 _APP_ICON_MAP: dict[str, str] = {
-    ".indd":   "indesign_app.ico",
+    ".indd":   "Tertiary/indesign_app.ico",
     # Ready to populate as more Adobe launchers arrive:
-    # ".psd":    "photoshop_app.ico",
-    # ".ai":     "illustrator_app.ico",
-    # ".aep":    "aftereffects_app.ico",
-    # ".prproj": "premiere_app.ico",
+    # ".psd":    "Tertiary/photoshop_app.ico",
+    # ".ai":     "Tertiary/illustrator_app.ico",
+    # ".aep":    "Tertiary/aftereffects_app.ico",
+    # ".prproj": "Tertiary/premiere_app.ico",
 }
 
 # Launcher-based map: any target QFileIconProvider can resolve → cached
@@ -45,13 +51,16 @@ _APP_ICON_MAP: dict[str, str] = {
 # Extraction is once-per-missing; these apps don't re-skin often enough to
 # justify a staleness check.  Delete the cached .ico to force a refresh.
 _LAUNCHER_ICON_MAP: dict[str, str] = {
-    # Our own braincell-family apps via their Desktop shortcuts
+    # Our own braincell-family apps via their Desktop shortcuts — these
+    # are PROPRIETARY, cached at icons/ root.
     "~/Desktop/Intricate/Intricate.lnk":             "intricate_app.ico",
     "~/Desktop/The Settlers/The Settlers.lnk":       "the_settlers_app.ico",
-    # Anthropic's Claude Desktop — MSIX app, identified by its AppUserModelID
-    "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude": "claude_desktop.ico",
-    # Claude Code CLI — direct executable in the user's local bin
-    "~/.local/bin/claude.exe":                       "claude_cli.ico",
+    # Anthropic's Claude Desktop — MSIX app, identified by its AppUserModelID.
+    # TERTIARY (third-party brand) — cached under icons/Tertiary/.
+    "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude": "Tertiary/claude_desktop.ico",
+    # Claude Code CLI — direct executable in the user's local bin.
+    # TERTIARY — cached under icons/Tertiary/.
+    "~/.local/bin/claude.exe":                       "Tertiary/claude_cli.ico",
 }
 
 
