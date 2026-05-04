@@ -296,7 +296,15 @@ icon_fallback = "#d87a9e"
 name = "The Premiere Bridge"
 tooltip = "Live wire to Premiere's CEP panel — press 👋 to ping across the bridge"
 category = "adobe"
-icon = "iconPremiereBridge"
+# Sidebar entry shows the OS-extracted official Premiere icon, same
+# convention the .indd-handler-extracted InDesign icon uses on the
+# action above.  Cached at icons/Tertiary/premiere_app.ico via the
+# .prproj entry in utils/app_icons.py::_APP_ICON_MAP — refreshed
+# automatically when Adobe ships a new Premiere version (mtime check
+# against the registered .prproj handler exe).  The custom Intricate
+# bridge sticker (icons/premiere_bridge.ico, theme key iconPremiereBridge)
+# stays in the asset folder as a future-use proprietary alternate.
+icon_file = "Tertiary/premiere_app.ico"
 icon_fallback = "#d87a9e"
 spawnable = true
 status = "opening the wire"

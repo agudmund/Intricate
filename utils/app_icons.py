@@ -30,11 +30,11 @@ _log = setup_logger("app_icons")
 # app version Windows has registered as the default handler.
 _APP_ICON_MAP: dict[str, str] = {
     ".indd":   "Tertiary/indesign_app.ico",
+    ".prproj": "Tertiary/premiere_app.ico",
     # Ready to populate as more Adobe launchers arrive:
     # ".psd":    "Tertiary/photoshop_app.ico",
     # ".ai":     "Tertiary/illustrator_app.ico",
     # ".aep":    "Tertiary/aftereffects_app.ico",
-    # ".prproj": "Tertiary/premiere_app.ico",
 }
 
 # Launcher-based map: any target QFileIconProvider can resolve → cached
