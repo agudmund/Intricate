@@ -50,12 +50,12 @@ class JoyStatsNode(ChromelessRoot):
     _TITLE_STYLE     = "Italic"          # 1843.otf script-italic Medium — see pretty_widgets.utils.fonts
     _TITLE_FONT_BUMP = 6
 
-    # 10 rows total — 8 data rows + 2 visual-spacer rows that group the
+    # 11 rows total — 9 data rows + 2 visual-spacer rows that group the
     # readings into Current / Accumulators / Feed-state clusters.  Counted
     # together because draw_rows advances by line_h + 3*s for every row
     # regardless of whether it carries text, so the auto-fit needs to
     # account for them all.
-    _ROW_COUNT       = 10
+    _ROW_COUNT       = 11
 
     # ── Generic unpinned resize — opt in to the corner grip ─────────────────
     # User resizes while unpinned to set the frozen screen size on the next pin.
@@ -232,6 +232,8 @@ class JoyStatsNode(ChromelessRoot):
         feed_ts       = getattr(win, '_feed_timestamps', [])
         feed_max      = getattr(win, '_FEED_MAX', 3)
         feed_window   = getattr(win, '_FEED_WINDOW', 600.0)
+        feed_cooldown = getattr(win, '_FEED_COOLDOWN', 60.0)
+        last_feed_t   = getattr(win, '_last_feed_time', 0.0)
         depl_timer    = getattr(win, '_joy_timer', None)
         depl_interval = depl_timer.interval() if depl_timer else 0
         grace_total   = getattr(win, '_JOY_GRACE_SECS', 600)
@@ -271,6 +273,23 @@ class JoyStatsNode(ChromelessRoot):
         else:
             feeds_value = f"{active_feeds}/{feed_max}"
 
+        # Next-feed-available countdown — the binding constraint is whichever
+        # of (per-feed cooldown, window-cap reset) has more time remaining.
+        # Both are 0 when neither gate is active → feed available "now".
+        # Updated every poll tick (1 s) so the value ticks down live.
+        cooldown_remaining = max(0.0, feed_cooldown - (now - last_feed_t))
+        if active_feeds >= feed_max and active_in_window:
+            window_remaining = max(0.0, feed_window - (now - min(active_in_window)))
+        else:
+            window_remaining = 0.0
+        next_feed_secs = max(cooldown_remaining, window_remaining)
+        if next_feed_secs > 0.5:
+            next_feed_value = f"{int(next_feed_secs)}s"
+            next_feed_color = kit.c_label
+        else:
+            next_feed_value = "now"
+            next_feed_color = c_calm
+
         hungry_color = c_high if hungry else kit.c_label
 
         # ── Rows — three logical clusters separated by empty-row spacers ──
@@ -288,6 +307,7 @@ class JoyStatsNode(ChromelessRoot):
             ("",           "",                                          c_text),
             ("Depletion",  f"{depl_interval / 1000:.0f}s per tick",     kit.c_label),
             ("Feeds",      feeds_value,                                  kit.c_label),
+            ("Next feed",  next_feed_value,                              next_feed_color),
             ("Hungry",     "yes" if hungry else "no",                    hungry_color),
         ]
 
