@@ -27,6 +27,26 @@ PULSE_MAX_MS = Theme.nodePulseMaxMs
 # (see memory: project_pulse_vibrance_commitment).
 _PULSE_MIN_ON_SCREEN_PX = 60.0
 
+# Pulse-damping reference size — node dimension at and below which
+# PULSE_SCALE is honoured verbatim.  Above this size, the effective
+# pulse scale shrinks so the absolute outward pixel-expansion at the
+# largest axis stays roughly constant rather than growing linearly
+# with node size.
+#
+# Why: with a flat PULSE_SCALE = 1.018, a 300-px node grows ~5 px
+# outward (subtle, lovely), but a 2000-px node grows ~36 px — enough
+# to displace the bottom-right resize handle visibly during hover and
+# make it physically hard to track and grab.  The dampening keeps the
+# pulse signature unchanged for regular-sized nodes (the canonical
+# gust-of-wind aesthetic) and only diminishes the swell on huuuge
+# nodes where the constant-percentage scale stops feeling proportional.
+#
+# Math: target absolute growth = (PULSE_SCALE - 1.0) × reference_px.
+# At the reference size, effective_scale = PULSE_SCALE (full pulse).
+# Above reference, effective_scale = 1.0 + target_growth / largest_dim,
+# so largest_dim × (effective_scale - 1.0) = target_growth always.
+_PULSE_DAMPING_REFERENCE_PX = 500.0
+
 
 class NodeBehaviour:
     """
@@ -172,6 +192,35 @@ class NodeBehaviour:
         smaller_dim = min(rect.width(), rect.height())
         return smaller_dim * zoom >= _PULSE_MIN_ON_SCREEN_PX
 
+    def _compute_effective_pulse_scale(self) -> float:
+        """Peak hover-pulse scale, dampened by node size.
+
+        For default-sized nodes (largest dimension ≤ _PULSE_DAMPING_REFERENCE_PX)
+        returns PULSE_SCALE verbatim — the canonical gust-of-wind aesthetic is
+        untouched at the sizes nodes most often inhabit.  For larger nodes the
+        scale shrinks toward 1.0 so the absolute outward pixel-expansion at the
+        largest axis stays roughly constant rather than growing linearly with
+        node size.
+
+        Without this, a 2000-px node grows ~36 px outward at peak pulse —
+        enough to displace the bottom-right resize handle visibly during
+        hover and make it physically hard to track and grab.
+
+        Re-evaluated per hover-enter (cheap), so live-resized nodes pick
+        up the new dampening on the next breath without bookkeeping.
+        """
+        if self._node is None:
+            return PULSE_SCALE
+        try:
+            rect = self._node.rect()
+        except (RuntimeError, AttributeError):
+            return PULSE_SCALE
+        largest_dim = max(rect.width(), rect.height())
+        if largest_dim <= _PULSE_DAMPING_REFERENCE_PX:
+            return PULSE_SCALE
+        target_growth = (PULSE_SCALE - 1.0) * _PULSE_DAMPING_REFERENCE_PX
+        return 1.0 + target_growth / largest_dim
+
     def _animate_bg_to(self, target: QColor, duration: int) -> None:
         self._ensure_base()   # guarantee _current_bg is initialised before use
         # Aerial view: snap directly to the target colour without
@@ -226,6 +275,11 @@ class NodeBehaviour:
         # updates the target colour but without the 60Hz tick cost.
         if self._should_pulse():
             if self.pulse_anim.state() == QVariantAnimation.Stopped:
+                # Re-target the end-value each breath so live resizes
+                # (and huuuge nodes) pick up the size-dampened scale
+                # without separate bookkeeping. Default-sized nodes get
+                # PULSE_SCALE verbatim — no behavioural drift.
+                self.pulse_anim.setEndValue(self._compute_effective_pulse_scale())
                 self.pulse_anim.setDirection(QVariantAnimation.Forward)
                 self.pulse_anim.start()
         self._animate_bg_to(self._bg_hover(), 320)
