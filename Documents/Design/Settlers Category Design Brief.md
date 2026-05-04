@@ -42,10 +42,6 @@ Adjacent rows of the **same control type** sit at the layout's base 1 px spacing
 
 Practical consequence for `_SECTION_FIELD_ORDER`: do not split a homogeneous run of sliders across multiple chunks just to express semantic groups — the chunks would introduce uneven gaps that read as a layout bug. Group all sliders into one chunk and let row order carry the grouping. Reach for chunk spacers only where the control type actually changes.
 
-## Section Description (required)
-
-Every category has a description. It's the small italic note at the bottom that explains what the category does and why a setting might want adjusting. The brief treats descriptions as standard furniture, not an optional flourish — register a string in `_SECTION_DESCRIPTIONS` for every section that ships. Style is covered under **Section Description** below; this section establishes that the entry is **required by default**.
-
 ## Slider Row
 
 The canonical control for integer attributes. One row per TOML key.
@@ -101,8 +97,11 @@ Each node type that participates in the depth-toggle feedback pattern exposes a 
 
 ## Section Description
 
-The required poetic/explanatory text below all fields in a category. See **Section Description (required)** above for the requirement; this section covers the visual style.
+Every category has a description — the small italic note at the bottom that explains what the category does and why a setting might want adjusting. Treat descriptions as standard furniture, not optional flourish — register a string in `_SECTION_DESCRIPTIONS` for every section that ships.
 
+**Tone:** quiet, indirect, gently personifying. Explain what the category controls and why someone would touch it; don't command the reader. Em-dashes for asides. Short paragraphs separated by blank lines. Intricate is "she" when personified; the user is implicit. Look at `intricate.color_picker`, `intricate.dock_offsets`, and `intricate.joy` for canonical voice.
+
+**Style:**
 - **Widget:** `pretty_label`, 9pt font size
 - **Opacity:** 0.55 (applied via `QGraphicsOpacityEffect`)
 - **Word wrap:** Disabled (multi-line via explicit `\n` in the description string)
