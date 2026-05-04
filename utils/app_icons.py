@@ -91,6 +91,23 @@ def icons_dir() -> Path:
     return base / "icons"
 
 
+def _data_dir() -> Path:
+    """Resolve ./Documents/Data/ — the runtime cache home.
+
+    Mirrors icons_dir()'s frozen-vs-source split.  Used by the launcher
+    pipeline sentinel so the cache-version marker lives next to other
+    runtime state (joy_buckets.txt, joy_state.json, companion.json)
+    instead of cluttering the icons/ folder, which is reserved for
+    actual icon assets.
+    """
+    import sys
+    if getattr(sys, 'frozen', False):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(__file__).resolve().parent.parent
+    return base / "Documents" / "Data"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # STALENESS — did Adobe (or whoever) ship a new version since we cached?
 # ─────────────────────────────────────────────────────────────────────────────
@@ -352,8 +369,31 @@ def _self_heal_lnk_cache(d: Path) -> None:
     extraction pass picks up the resolver behaviour, then drop the
     sentinel so subsequent boots are no-ops.  Non-.lnk launchers
     (shell:, .exe) are left alone — they didn't have the arrow problem.
+
+    The sentinel lives in Documents/Data/ — the canonical runtime
+    cache home — *not* in icons/, which is reserved for actual icon
+    assets.  The cached launcher icons themselves still live in
+    icons/ alongside everything else; only the version marker moves
+    out so the asset folder stays clean.
     """
-    sentinel = d / _LAUNCHER_PIPELINE_SENTINEL
+    data_d = _data_dir()
+    sentinel = data_d / _LAUNCHER_PIPELINE_SENTINEL
+
+    # One-time migration: if the sentinel exists at the legacy
+    # location (icons/), the user's cached icons are already on the
+    # current pipeline version — port the marker to the new home
+    # rather than triggering a needless re-extraction cycle.
+    legacy_sentinel = d / _LAUNCHER_PIPELINE_SENTINEL
+    if legacy_sentinel.exists():
+        try:
+            data_d.mkdir(parents=True, exist_ok=True)
+            if not sentinel.exists():
+                sentinel.touch()
+            legacy_sentinel.unlink()
+            _log.info("[app_icons] migrated sentinel: icons/ → Documents/Data/")
+        except OSError as e:
+            _log.warning(f"[app_icons] sentinel migration failed: {e}")
+
     if sentinel.exists():
         return
     for key, filename in _LAUNCHER_ICON_MAP.items():
@@ -367,7 +407,7 @@ def _self_heal_lnk_cache(d: Path) -> None:
             except OSError as e:
                 _log.warning(f"[app_icons] self-heal failed to drop {filename}: {e}")
     try:
-        d.mkdir(parents=True, exist_ok=True)
+        data_d.mkdir(parents=True, exist_ok=True)
         sentinel.touch()
     except OSError as e:
         _log.warning(f"[app_icons] self-heal failed to write sentinel: {e}")
