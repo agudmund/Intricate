@@ -208,6 +208,27 @@ class IntricateApp(QMainWindow):
         self._curtain_perf_last_finished_t: float = 0.0
         self._curtain_perf: dict | None = None
 
+        # Curtain keep-warm timer — Phase 1 remediation hypothesis from
+        # Documents/Compliance/Curtain Resume Lag Investigation.md.  The
+        # diagnosis identified Bucket 2 (sustained cold paint pipeline)
+        # as the dominant cause of slow first rolldowns after long
+        # absences.  Hover pulses naturally keep the pipeline warm
+        # during active use — but they only fire on cursor proximity
+        # to nodes, so an absent user produces zero ambient paint
+        # activity once curtains roll up.  This timer fires a tiny
+        # update() every 5 min while curtains are up, scheduling one
+        # paintEvent which DWM composites — enough to keep the
+        # compositor caches referenced and (we hypothesise) prevent
+        # the Bucket 2 recovery cost on the next rolldown.  The next
+        # curtain-perf log line is annotated with keep_warm=N to tell
+        # us how many pulses fired during the gap, so the data answers
+        # whether the mitigation worked.
+        self._keep_warm_pulse_count: int = 0
+        self._KEEP_WARM_INTERVAL_MS = 5 * 60 * 1000   # 5 minutes
+        self._keep_warm_timer = QTimer(self)
+        self._keep_warm_timer.setInterval(self._KEEP_WARM_INTERVAL_MS)
+        self._keep_warm_timer.timeout.connect(self._on_keep_warm_tick)
+
         # 3.  Window OS Defaults
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -1037,16 +1058,27 @@ class IntricateApp(QMainWindow):
             if self._curtain_perf_last_finished_t else None
         )
         self._curtain_perf = {
-            "start_t":      _now,
-            "prev_frame_t": _now,
-            "deltas_ms":    [],
-            "roll":         "up" if collapsing else "down",
-            "gap_s":        gap_s,
+            "start_t":         _now,
+            "prev_frame_t":    _now,
+            "deltas_ms":       [],
+            "roll":            "up" if collapsing else "down",
+            "gap_s":           gap_s,
+            "keep_warm_count": self._keep_warm_pulse_count,
         }
         self.curtain_anim.valueChanged.connect(self._on_curtain_frame)
         self.curtain_anim.start()
 
         self.is_collapsed = not self.is_collapsed
+
+        # Keep-warm timer — runs while curtains are up (collapsed).
+        # Ticks DWM via self.update() every _KEEP_WARM_INTERVAL_MS to
+        # prevent Bucket 2 cold-pipeline recovery cost on the next
+        # rolldown.  Stopped during expanded use where ambient hover
+        # pulses already keep the pipeline warm naturally.
+        if self.is_collapsed:
+            self._keep_warm_timer.start()
+        else:
+            self._keep_warm_timer.stop()
 
     def _on_curtain_frame(self, _value) -> None:
         """Per-frame tick for the curtain animation perf hunt.
@@ -1062,6 +1094,31 @@ class IntricateApp(QMainWindow):
         now = time.perf_counter()
         perf["deltas_ms"].append((now - perf["prev_frame_t"]) * 1000.0)
         perf["prev_frame_t"] = now
+
+    def _on_keep_warm_tick(self) -> None:
+        """Periodic tiny repaint while curtains are up.
+
+        Schedules a single paintEvent via self.update().  DWM picks the
+        repaint up and ticks the compositor for this window, which
+        (per the Bucket 2 hypothesis) keeps paint pipeline + GPU shader
+        + blur kernel caches referenced and warm.  The visual cost is
+        nil — the strip looks identical before and after the repaint;
+        only DWM internal state differs.
+
+        Counter increments each tick; the next [curtains-perf] log
+        line emits keep_warm=N so the data tells us whether the
+        mitigation prevented the Bucket 2 recovery cost.
+
+        See Documents/Compliance/Curtain Resume Lag Investigation.md
+        for the diagnostic record this remediation tests.
+        """
+        self._keep_warm_pulse_count += 1
+        self.update()
+        logger.debug(
+            "[keep-warm] pulse #%d (curtains up, interval=%ds)",
+            self._keep_warm_pulse_count,
+            self._KEEP_WARM_INTERVAL_MS // 1000,
+        )
 
     def _on_curtains_settled(self) -> None:
         """Called when the curtains animation finishes (both collapse and restore).
@@ -1106,13 +1163,16 @@ class IntricateApp(QMainWindow):
             gap = perf["gap_s"]
             gap_str = f"{gap:.0f}s" if gap is not None else "first-curtain"
             logger.info(
-                "[curtains-perf] roll=%s total=%.0fms | gap=%s | frames=%d | "
-                "first=%.0fms median=%.0fms p95=%.0fms max=%.0fms",
-                perf["roll"], total_ms, gap_str, n,
+                "[curtains-perf] roll=%s total=%.0fms | gap=%s | keep_warm=%d | "
+                "frames=%d | first=%.0fms median=%.0fms p95=%.0fms max=%.0fms",
+                perf["roll"], total_ms, gap_str, perf["keep_warm_count"], n,
                 first_ms, median_ms, p95_ms, max_ms,
             )
         self._curtain_perf_last_finished_t = time.perf_counter()
         self._curtain_perf = None
+        # Reset for the next gap — the keep-warm timer will accumulate
+        # again from zero across the upcoming idle period.
+        self._keep_warm_pulse_count = 0
 
 
     def _get_dock_offsets(self) -> dict:
