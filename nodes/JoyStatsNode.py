@@ -2,16 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 -Intricate - nodes/JoyStatsNode.py JoyStatsNode class
--Live chromeless HUD for the joy tamagotchi system for enjoying
+-Live chromeless HUD for the joy tamagotchi system, conformed to the PerfNode visual language for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
 import time
-
-from PySide6.QtCore import Qt, QRectF, QTimer
-from PySide6.QtGui import QPainter, QFont, QColor
-
 import traceback
+
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPainter, QColor, QPen
 
 from nodes.ChromelessRoot import ChromelessRoot
 from data.JoyStatsNodeData import JoyStatsNodeData
@@ -30,55 +29,69 @@ class JoyStatsNode(ChromelessRoot):
     hunger flag.
 
     Chromeless — second descendant of ChromelessRoot (StickerNode was
-    the first). Inherits viewport pin (right-click to toggle),
-    shake-delete, right-click context menu, and the demolition-crew
-    teardown contract. Paints its own background + title + stats since
-    there's no BaseNode chrome doing it automatically.
+    the first, PerfNode is the fourth).  Inherits viewport pin (right-
+    click to toggle), shake-delete, right-click context menu, and the
+    demolition-crew teardown contract.
+
+    Visual language conformed to PerfNode 2026-05-04: dark teal
+    `Theme.perfNodeBg` body with a cream `Theme.nodeBorder` outline,
+    layout driven by `utils.paint.make_kit` + `draw_header` /
+    `draw_rows` / `draw_footer`.  The kit-based draw makes JoyStatsNode
+    and PerfNode read as siblings on the canvas — same chrome
+    proportions, same dotted dividers, same Lombardi Lake header.
+    Pre-this date the node had its own hand-rolled layout with a
+    semi-transparent about-family background and no border.
 
     Never participates in the wire graph.
     """
 
-    # ── Paint constants (chromeless — no button zone, simpler layout) ────────
-    _ROUND_RADIUS    = 12.0
-    _CONTENT_PAD     = 15.0   # horizontal padding for title/body text
-    _TITLE_TOP_PAD   = 10.0   # px from node top to title baseline area
-    _TITLE_HEIGHT    = 40.0   # vertical allowance for title text — must fit
-                              # Chandler42 MediumOblique +6 ascender + descender
-                              # ('J' top bearing and 'y' descender both clip at 30)
-    _BODY_TOP_PAD    = 54.0   # px from node top to first body line
-    _LINE_HEIGHT     = 17
-
-    # ── Font family / size bumps (formerly inherited from BaseNode) ─────────
+    # ── Paint constants ─────────────────────────────────────────────────────
     _TITLE_FONT      = "Chandler42"
     _TITLE_STYLE     = "Italic"          # 1843.otf script-italic Medium — see pretty_widgets.utils.fonts
     _TITLE_FONT_BUMP = 6
-    _BODY_FONT       = "Lato"
-    _BODY_FONT_BUMP  = -1
 
-    # ── Generic unpinned resize — opt in to ChromelessRoot's corner grip ────
-    # Bottom-right grip lets the user set the frozen screen size before
-    # pinning. Pair with ItemIgnoresTransformations (toggled by the root
-    # on pin) so the chosen size is preserved through zoom.
+    # 10 rows total — 8 data rows + 2 visual-spacer rows that group the
+    # readings into Current / Accumulators / Feed-state clusters.  Counted
+    # together because draw_rows advances by line_h + 3*s for every row
+    # regardless of whether it carries text, so the auto-fit needs to
+    # account for them all.
+    _ROW_COUNT       = 10
+
+    # ── Generic unpinned resize — opt in to the corner grip ─────────────────
+    # User resizes while unpinned to set the frozen screen size on the next pin.
     _UNPINNED_RESIZE_ENABLED = True
 
-    # ── Layout-scale baseline ───────────────────────────────────────────────
-    # Paint scale derives from the rect's height vs this baseline — the same
-    # rect-derived scaling PerfNode uses. When the user resizes the HUD bigger
-    # via the corner grip, fonts grow with the container so the stats stay
-    # readable at any size. Without this, a resized HUD would show default-
-    # sized text floating in a big empty body. Tracks JoyStatsNodeData's
-    # default height so a fresh node lands at scale=1.0.
-    _BASELINE_HEIGHT = 280.0
+    # ── Demolition manifest — crew tears down the poll timer ────────────────
+    _demolition_timers = [('_poll_timer', '_refresh')]
+
+    # ── Footer descender breathing room ─────────────────────────────────────
+    # Same 6-px nudge PerfNode adopts.  draw_footer's AlignCenter inside a
+    # line_h-tall rect centres the baseline; descenders ('p' in "poll", parens)
+    # extend below the baseline and read as touching the bottom border without
+    # this padding.
+    _FOOTER_BREATHING_PX = 6
 
     def __init__(self, data: JoyStatsNodeData | None = None):
+        is_fresh = data is None
         if data is None:
             data = JoyStatsNodeData()
+            # Auto-fit the height to the actual content layout — same
+            # convention PerfNode uses.  Saved sessions come in with
+            # whatever height they were saved at (including any user
+            # corner-grip resize), so the auto-fit only applies to fresh
+            # spawns.
+            data.height = self._compute_auto_height()
         super().__init__(data)
 
-        _log.log(TRACE, "[joy-init] JoyStatsNode __init__ entered (uuid=%s)",
-                 getattr(data, 'uuid', '?')[:8])
+        _log.log(TRACE, "[joy-init] JoyStatsNode __init__ entered (uuid=%s, fresh=%s)",
+                 getattr(data, 'uuid', '?')[:8], is_fresh)
 
-        # 1-second poll — matches the happy accumulator tick rate
+        # Match the PerfNode body colour explicitly — ChromelessRoot has
+        # no NodeBehaviour brushing the body on hover, so a single setBrush
+        # at construction holds for the lifetime.
+        self.setBrush(QColor(Theme.perfNodeBg))
+
+        # 1-second poll — matches the happy accumulator tick rate.
         self._poll_timer = QTimer()
         self._poll_timer.setInterval(1000)
         self._poll_timer.timeout.connect(self._refresh)
@@ -88,21 +101,37 @@ class JoyStatsNode(ChromelessRoot):
                  getattr(data, 'uuid', '?')[:8])
 
     # ─────────────────────────────────────────────────────────────────────────
-    # COLOR + REFRESH
+    # AUTO-FIT GEOMETRY
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _bg_color(self) -> QColor:
-        """Background fill for the rounded-rect body — reads from the
-        About-family theme colour + transparency so it stays readable
-        against the canvas while still letting the blur breathe through."""
-        c = QColor(Theme.aboutBgColor)
-        if c.isValid():
-            c.setAlpha(Theme.aboutTransparency)
-        return c
+    @classmethod
+    def _compute_auto_height(cls) -> float:
+        """Derive the snug node height from the kit's actual layout values
+        at pin_scale=1.0 (fresh nodes are always unpinned).
+
+        Mirrors PerfNode._compute_auto_height verbatim — the layout
+        constants are the same because draw_header / draw_rows /
+        draw_footer use the same internal spacing across every kit
+        consumer.  Top pad + header (line_h + 22) + 6 px breathing +
+        N × (line_h + 3) rows + footer (line_h + 8) + footer-descender
+        breathing.  Bottom pad rounds the rect to the same kit.pad
+        value used at the top.
+        """
+        from utils.paint import make_kit
+        kit = make_kit(cls._TITLE_FONT, cls._TITLE_STYLE, cls._TITLE_FONT_BUMP)
+        header_h = kit.line_h + 22
+        rows_h   = cls._ROW_COUNT * (kit.line_h + 3)
+        footer_h = kit.line_h + 8
+        return float(kit.pad * 2 + header_h + 6 + rows_h + footer_h
+                     + cls._FOOTER_BREATHING_PX)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # POLL
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _refresh(self) -> None:
-        """Timer slot — force a repaint so stats stay fresh. Orphan-timer
-        guard via self.scene() probe, matching the BaseNode pattern."""
+        """Timer slot — force a repaint so stats stay fresh.  Orphan-timer
+        guard via self.scene() probe, matching the chromeless family pattern."""
         _log.log(TRACE, "[joy-refresh] %s tick", self._log_id())
         try:
             if self.scene() is None:
@@ -139,71 +168,58 @@ class JoyStatsNode(ChromelessRoot):
     # ─────────────────────────────────────────────────────────────────────────
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
-        """Full paint pipeline — background rect, then title + stats
-        via paint_content. ChromelessRoot's paint() is empty by design,
-        so every descendant owns its own rendering.
+        """Full paint pipeline — chromeless root paints nothing, every
+        descendant owns its full visual.  Order: rounded body fill +
+        cream border (the PerfNode look), then the stats grid via the
+        data-grid kit helpers.
 
-        Layout scale is rect.height / _BASELINE_HEIGHT — captures both
-        user-resize (corner grip while unpinned) and pin-state in one
-        ratio. When the HUD is resized larger, fonts grow with it; when
-        the canvas zoom is frozen via pin, the kit follows. The corner
-        radius scales by the same factor so chrome stays proportional
-        to the body.
+        Layout scale derives from rect.height / auto-fit baseline —
+        a single ratio that captures both user-resize (corner grip
+        while unpinned) AND pin-state scaling.  When the user makes
+        the HUD bigger, fonts grow proportionally with the container.
         """
         _log.log(TRACE, "[joy-paint] %s paint() entered (removal_done=%s)",
-                   self._log_id(), getattr(self, '_removal_done', '?'))
+                 self._log_id(), getattr(self, '_removal_done', '?'))
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
 
-        s = self.rect().height() / self._BASELINE_HEIGHT if self._BASELINE_HEIGHT > 0 else 1.0
+        h_auto = self._compute_auto_height()
+        s      = self.rect().height() / h_auto if h_auto > 0 else 1.0
 
-        painter.setBrush(self._bg_color())
-        painter.setPen(Qt.NoPen)
-        painter.drawRoundedRect(self.rect(),
-                                self._ROUND_RADIUS * s,
-                                self._ROUND_RADIUS * s)
-        self.paint_content(painter, s)
+        radius   = Theme.nodeRoundRadius * s
+        border_w = max(1, int(round(Theme.nodeBorderWidth * s)))
+        painter.setBrush(self.brush())
+        painter.setPen(QPen(QColor(Theme.nodeBorder), border_w))
+        painter.drawRoundedRect(self.rect(), radius, radius)
+
+        self._paint_stats(painter, s)
         painter.restore()
 
-    def paint_content(self, painter: QPainter, s: float = 1.0) -> None:
+    def _paint_stats(self, painter: QPainter, s: float) -> None:
+        from utils.paint import make_kit, draw_header, draw_rows, draw_footer
+
+        kit = make_kit(self._TITLE_FONT, self._TITLE_STYLE, self._TITLE_FONT_BUMP,
+                       pin_scale=s)
         r   = self.rect()
-        # s comes from paint() — derived from rect height vs baseline so
-        # user-resize and pin-state both scale the layout uniformly.
-        pad       = self._CONTENT_PAD   * s
-        title_top = self._TITLE_TOP_PAD * s
-        title_h   = self._TITLE_HEIGHT  * s
-        body_top  = self._BODY_TOP_PAD  * s
-        line_h    = self._LINE_HEIGHT   * s
+        x   = r.x() + kit.pad
+        y   = r.y() + kit.pad
+        w   = r.width() - kit.pad * 2
 
-        # Title
-        title_font = QFont(self._TITLE_FONT,
-                           max(1, int(round((Theme.aboutFontSize + self._TITLE_FONT_BUMP) * s))))
-        title_font.setStyleName(self._TITLE_STYLE)
-        painter.setFont(title_font)
-        painter.setPen(QColor("#72b8b8"))   # Lombardi Lake variant
-        painter.drawText(
-            QRectF(r.left() + pad, r.top() + title_top,
-                   r.width() - pad * 2, title_h),
-            Qt.AlignLeft | Qt.AlignTop,
-            "Joy Stats",
-        )
+        y = draw_header(painter, kit, x, y, w, "Joy Stats")
+        y += 6 * s   # breathing room between title and stats — scaled with kit
 
-        # Body — live stats
-        body_font = QFont(self._BODY_FONT,
-                          max(1, int(round((Theme.aboutFontSize + self._BODY_FONT_BUMP) * s))))
-        painter.setFont(body_font)
-        painter.setPen(QColor(Theme.nodeFontColor))
-        painter.setOpacity(0.85)
-        y = r.top() + body_top
-
+        # Reach the running app for live joy state.  Out-of-scene during
+        # demolition or session-switch transitions is normal — render a
+        # quiet placeholder via the kit fonts and exit early.
         win = self._get_window()
         if win is None:
-            painter.drawText(
-                QRectF(r.left() + pad, y, r.width() - pad * 2, 20),
-                Qt.AlignLeft | Qt.AlignTop, "no window")
+            painter.setFont(kit.f_label)
+            painter.setPen(kit.c_label)
+            painter.drawText(int(x), int(y), int(w), kit.line_h * 3,
+                             Qt.AlignCenter, "no window")
             return
 
-        # Collect all joy state
+        # ── Collect joy state ────────────────────────────────────────────
         bar_val       = getattr(win, 'joy_bar', None)
         bar_pct       = bar_val.value() if bar_val else 0
         sleeping      = getattr(win, '_joy_sleeping', False)
@@ -220,72 +236,74 @@ class JoyStatsNode(ChromelessRoot):
         depl_interval = depl_timer.interval() if depl_timer else 0
         grace_total   = getattr(win, '_JOY_GRACE_SECS', 600)
 
-        # State string
-        if sleeping:
-            state = "Sleeping"
-            state_color = "#6688aa"
-        elif in_grace:
-            state = "In Grace"
-            state_color = "#7ab88a"
-        elif hungry:
-            state = "Hungry!"
-            state_color = "#d87a7a"
-        else:
-            state = "Awake"
-            state_color = "#b8b872"
+        # ── Status colours ───────────────────────────────────────────────
+        # Joy state has its own emotional palette — keep the existing
+        # hexes rather than swapping for healthColorCalm/Warn/High, since
+        # "Sleeping / In Grace / Hungry / Awake" are mood reads, not
+        # threshold reads.  The bar-percentage and hungry-flag rows DO
+        # use the standard health threshold palette since they're
+        # quantitative.
+        c_calm = QColor(Theme.healthColorCalm)
+        c_warn = QColor(Theme.healthColorWarn)
+        c_high = QColor(Theme.healthColorHigh)
+        c_text = QColor(Theme.textPrimary)
 
-        # Count active feeds in window + time until next slot opens
+        if sleeping:
+            state, state_color = "Sleeping", QColor("#6688aa")
+        elif in_grace:
+            state, state_color = "In Grace", QColor("#7ab88a")
+        elif hungry:
+            state, state_color = "Hungry!", QColor("#d87a7a")
+        else:
+            state, state_color = "Awake",   QColor("#b8b872")
+
+        # Bar colour — quantitative threshold read (high / warn / low)
+        bar_color = c_calm if bar_pct >= 70 else c_warn if bar_pct >= 30 else c_high
+
+        # Active feeds in window + reset countdown if capped
         now = time.monotonic()
         active_in_window = [t for t in feed_ts if now - t < feed_window]
         active_feeds = len(active_in_window)
         if active_feeds >= feed_max and active_in_window:
             oldest = min(active_in_window)
             reset_secs = int(feed_window - (now - oldest))
-            feed_reset = f"  (reset {reset_secs}s)"
+            feeds_value = f"{active_feeds}/{feed_max} (reset {reset_secs}s)"
         else:
-            feed_reset = ""
+            feeds_value = f"{active_feeds}/{feed_max}"
 
-        lines = [
-            (f"Bar:  {bar_pct}%", None),
-            (f"State:  {state}", state_color),
-            ("", None),
-            (f"Grace:  {int(grace_remain)}s / {int(grace_total)}s", None),
-            (f"Happy:  {int(happy_secs)}s / {int(bucket_target)}s", None),
-            (f"Buckets:  {bucket_count}", None),
-            ("", None),
-            (f"Depletion:  {depl_interval / 1000:.0f}s per tick", None),
-            (f"Feeds:  {active_feeds}/{feed_max}{feed_reset}", None),
-            (f"Hungry:  {'yes' if hungry else 'no'}", "#d87a7a" if hungry else None),
+        hungry_color = c_high if hungry else kit.c_label
+
+        # ── Rows — three logical clusters separated by empty-row spacers ──
+        # Empty ("", "", _) rows draw nothing visible but advance the y
+        # cursor by line_h + 3*s (draw_rows does this unconditionally).
+        # Total row count is _ROW_COUNT = 10, accounted for in the
+        # auto-fit calculation.
+        rows: list[tuple[str, str, QColor]] = [
+            ("Bar",        f"{bar_pct}%",                              bar_color),
+            ("State",      state,                                       state_color),
+            ("",           "",                                          c_text),
+            ("Grace",      f"{int(grace_remain)}s / {int(grace_total)}s", c_text),
+            ("Happy",      f"{int(happy_secs)}s / {int(bucket_target)}s", c_text),
+            ("Buckets",    str(bucket_count),                            c_text),
+            ("",           "",                                          c_text),
+            ("Depletion",  f"{depl_interval / 1000:.0f}s per tick",     kit.c_label),
+            ("Feeds",      feeds_value,                                  kit.c_label),
+            ("Hungry",     "yes" if hungry else "no",                    hungry_color),
         ]
 
-        for text, color in lines:
-            if not text:
-                y += line_h * 0.4
-                continue
-            if color:
-                painter.setPen(QColor(color))
-            else:
-                painter.setPen(QColor(Theme.nodeFontColor))
-            painter.drawText(
-                QRectF(r.left() + pad, y, r.width() - pad * 2, 20 * s),
-                Qt.AlignLeft | Qt.AlignTop, text)
-            y += line_h
+        y = draw_rows(painter, kit, x, y, w, rows)
+        draw_footer(painter, kit, x, y, w, "1 s poll  ·  happy accumulator")
 
     # ─────────────────────────────────────────────────────────────────────────
     # LIFECYCLE
     # ─────────────────────────────────────────────────────────────────────────
-
-    # Demolition manifest — the crew reads this and stops/disconnects
-    # the poll timer on scene-leave. ChromelessRoot.itemChange hands
-    # off to the same crew that BaseNode uses.
-    _demolition_timers = [('_poll_timer', '_refresh')]
 
     def _quiet_for_shake(self) -> None:
         """Synchronous quieting before the deferred-remove window.
 
         Stops the 1-second poll timer so a tick landing between shake-
         fire and removeItem can't dispatch _refresh onto a node that's
-        about to vanish. The demolition crew also tears the timer down
+        about to vanish.  The demolition crew also tears the timer down
         via _demolition_timers, but that runs AFTER scene-leave; this
         method closes the interim race.
         """
@@ -298,8 +316,8 @@ class JoyStatsNode(ChromelessRoot):
 
     def _demolition_pre(self) -> None:
         """Log entry/exit around the teardown so the cross-node-destruction
-        incident (2026-04-22) leaves a full paper trail. super() does the
-        pin disconnect; we log around it. Stack emitted frame-by-frame —
+        incident (2026-04-22) leaves a full paper trail.  super() does the
+        pin disconnect; we log around it.  Stack emitted frame-by-frame —
         the Rust logger truncates on embedded newlines."""
         _log.info("[joy-demolish] %s _demolition_pre ENTER", self._log_id())
         for i, frame in enumerate(traceback.format_stack()[-15:]):
