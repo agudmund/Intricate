@@ -197,6 +197,17 @@ class IntricateApp(QMainWindow):
         self._is_fullscreen = False
         self._shown_once = False
 
+        # Curtain animation perf instrumentation — Phase 1 of the
+        # "lag on resume after long idle" hunt.  Per-frame timings are
+        # accumulated into self._curtain_perf during each rolldown /
+        # rollup, then digested into one summary log line on settle.
+        # _last_finished_t is the wallclock-monotonic timestamp of the
+        # previous curtain animation's settle moment — the gap between
+        # that and the next .start() is our "idle duration" proxy
+        # (long gap = the user came back from a sleep / step-away).
+        self._curtain_perf_last_finished_t: float = 0.0
+        self._curtain_perf: dict | None = None
+
         # 3.  Window OS Defaults
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -1011,9 +1022,46 @@ class IntricateApp(QMainWindow):
         self.curtain_anim.setStartValue(start_rect)
         self.curtain_anim.setEndValue(end_rect)
         self.curtain_anim.finished.connect(self._on_curtains_settled)
+
+        # Perf instrumentation — capture per-frame timings so we can
+        # spot whether resume-lag is bucket-1 (slow first frame =
+        # paging / cold cache), bucket-2 (sustained slow = paint
+        # pipeline cost), or bucket-3 (stuttery = GC / event flush).
+        # Closure pattern: state lives on self._curtain_perf and is
+        # finalised in _on_curtains_settled.  curtain_anim is recreated
+        # each toggle so the valueChanged connection dies with it; no
+        # disconnect bookkeeping needed.
+        _now = time.perf_counter()
+        gap_s = (
+            _now - self._curtain_perf_last_finished_t
+            if self._curtain_perf_last_finished_t else None
+        )
+        self._curtain_perf = {
+            "start_t":      _now,
+            "prev_frame_t": _now,
+            "deltas_ms":    [],
+            "roll":         "up" if collapsing else "down",
+            "gap_s":        gap_s,
+        }
+        self.curtain_anim.valueChanged.connect(self._on_curtain_frame)
         self.curtain_anim.start()
 
         self.is_collapsed = not self.is_collapsed
+
+    def _on_curtain_frame(self, _value) -> None:
+        """Per-frame tick for the curtain animation perf hunt.
+
+        Records ms-since-last-frame into self._curtain_perf['deltas_ms'].
+        First entry is the gap from .start() to the first valueChanged
+        — i.e. Qt animation engine startup cost — which is the most
+        likely victim of cold-cache / paging on resume.
+        """
+        perf = self._curtain_perf
+        if perf is None:
+            return
+        now = time.perf_counter()
+        perf["deltas_ms"].append((now - perf["prev_frame_t"]) * 1000.0)
+        perf["prev_frame_t"] = now
 
     def _on_curtains_settled(self) -> None:
         """Called when the curtains animation finishes (both collapse and restore).
@@ -1036,6 +1084,35 @@ class IntricateApp(QMainWindow):
 
         if not self.is_collapsed:
             self.view._notify_viewport_changed()
+
+        # ── Curtain perf summary ─────────────────────────────────────────────
+        # Digest the per-frame deltas into one log line per curtain.
+        # Reading the shape:
+        #   - first ≫ median  → bucket-1 (cold cache / paging on first frame)
+        #   - median ≈ max ≫ ideal → bucket-2 (sustained paint pipeline cost)
+        #   - max isolated, median fine → bucket-3 (intermittent GC / event flush)
+        # The 'gap' field is seconds since the previous curtain settled —
+        # a long gap (>300s) flags this run as post-idle.
+        perf = self._curtain_perf
+        if perf and perf["deltas_ms"]:
+            deltas = perf["deltas_ms"]
+            n = len(deltas)
+            sorted_d = sorted(deltas)
+            total_ms  = (time.perf_counter() - perf["start_t"]) * 1000.0
+            first_ms  = deltas[0]
+            median_ms = sorted_d[n // 2]
+            p95_ms    = sorted_d[min(n - 1, int(n * 0.95))]
+            max_ms    = sorted_d[-1]
+            gap = perf["gap_s"]
+            gap_str = f"{gap:.0f}s" if gap is not None else "first-curtain"
+            logger.info(
+                "[curtains-perf] roll=%s total=%.0fms | gap=%s | frames=%d | "
+                "first=%.0fms median=%.0fms p95=%.0fms max=%.0fms",
+                perf["roll"], total_ms, gap_str, n,
+                first_ms, median_ms, p95_ms, max_ms,
+            )
+        self._curtain_perf_last_finished_t = time.perf_counter()
+        self._curtain_perf = None
 
 
     def _get_dock_offsets(self) -> dict:
