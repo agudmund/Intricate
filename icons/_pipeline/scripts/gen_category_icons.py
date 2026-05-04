@@ -23,7 +23,10 @@ cx = cy = S // 2
 C  = (225, 213, 198, 255)
 RING_W = 12   # thin ring — matches info_node.ico baseline
 
-OUT = os.path.dirname(__file__)
+# Script lives at icons/_pipeline/scripts/ now — go up 3 levels to repo
+# root, then into icons/ for the output target.  Pre-2026-05-04 the
+# script was directly in icons/ and OUT was just dirname(__file__).
+OUT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "icons"))
 
 
 def _base():

@@ -18,9 +18,13 @@ from PIL import Image
 import numpy as np
 import os
 
-SRC = os.path.join(os.path.dirname(__file__), "..", "Images",
+# Script lives at icons/_pipeline/scripts/ — repo root is 3 levels up.
+# Pre-2026-05-04 the script was directly in icons/ so the SRC join
+# used a single ".." hop; the move added two more.
+_REPO_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+SRC = os.path.join(_REPO_ROOT, "Images",
                    "The new official icon reference point.png")
-OUT = os.path.dirname(__file__)
+OUT = os.path.join(_REPO_ROOT, "icons")
 
 
 def process():

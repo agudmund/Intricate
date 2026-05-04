@@ -12,7 +12,10 @@ import os
 
 S   = 2048
 cx  = cy = S // 2
-OUT = os.path.dirname(__file__)
+# Script lives at icons/_pipeline/scripts/ now — go up 3 levels to
+# repo root, then into icons/ for the output target.  Pre-2026-05-04
+# the script was directly in icons/ and OUT was just dirname(__file__).
+OUT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "icons"))
 
 # ── Color palette ────────────────────────────────────────────────────
 IVORY     = (210, 209, 207, 255)   # text_primary — the eye white / outer shape

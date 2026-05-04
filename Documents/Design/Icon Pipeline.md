@@ -156,9 +156,31 @@ The update was two files of work (source PNG + script) and zero lines of Python-
 
 - **Render at 2×, downsample via LANCZOS.** The Pillow recipe renders at 2048 and downsamples to 1024 because Pillow's draw primitives do not anti-alias — the LANCZOS downsample is what produces smooth edges. Drawing directly at 1024 produces visibly jagged strokes.
 - **Multi-resolution ICO matters.** Qt picks the sharpest layer for each render target — a 16px tray icon uses the 16px layer, a 256px menu icon uses the 256px layer. Shipping a single-resolution ICO produces blurry small renders.
-- **The extract scripts are one-shot tools, not modules.** They live next to the icons they produce, each with a brief docstring identifying its source PNG. They are not imported by anything and do not participate in the app runtime — running one is a manual authoring action.
+- **The extract / generate scripts are one-shot tools, not runtime modules.** They live in `icons/_pipeline/scripts/`, each with a brief docstring identifying its source PNG and the icon it produces. They are not imported by anything in the runtime app — running one is a manual authoring action. They MAY import from the local `icons/_pipeline/` toolkit (canvas, save, extract, verify, batch helpers) so the family-1 canvas scaffolding, defringe, largest-component cleanup, multi-resolution ICO save, etc. don't have to be copy-pasted across every script. The toolkit itself is also author-time only — it never lands in the runtime tree, only build-time scripts touch it.
 - **`NodeButton.py`'s 1.28× scale is load-bearing.** It exists to compensate for transparent padding baked into the icon PNGs (sidebar icons have ~22% padding; stickers similar). Change the padding convention and this constant must change in lockstep, or icon-based buttons will drift in apparent size relative to emoji glyphs on the same strip.
 - **Theme reload is live.** Saving `settings.toml` after registering a new icon triggers `Theme.reload()` and repaints every button that references the metaclass attribute. No restart required for icon swaps once wiring exists.
+
+## The `icons/_pipeline/` Toolkit
+
+The author-time helpers used by the generation and extraction scripts. Six small modules; the runtime app never touches any of this.
+
+| Module | Surface | What it does |
+|---|---|---|
+| `canvas.py` | `make_line_art_canvas()`, `CREAM`, `CANVAS_SIZE`, `OUTPUT_SIZE` | Family-1 (sidebar / toolbar) entry point — build the 2048×2048 RGBA canvas with the canonical outer ring already drawn, return `(img, draw, cx, cy)` for the caller to add their symbol. |
+| `save.py` | `save_png_and_ico()`, `DEFAULT_ICO_SIZES` | Universal output step — resize to 1024 LANCZOS, write `{name}.png` and the multi-resolution `{name}.ico` with the canonical seven-layer set `[16, 24, 32, 48, 64, 128, 256]`. |
+| `extract.py` | `keep_largest_component()`, `defringe_against_white()`, `trim_and_square()` | Family-2/3 (emoji / sticker) post-processing tail — kill stray dots via `scipy.ndimage.label`, reverse-composite white-matte contamination off semi-transparent edges, crop to bbox + pad to square. |
+| `verify.py` | `write_dark_verify()`, `NODE_BG` | The companion `_verify_*_dark.png` writer — composite the finished icon over `(45, 52, 54)` so a missed defringe shows as a halo before the icon ships. |
+| `batch.py` | `run_over_icons()`, `BATCH_TARGETS` | Shared roster + iteration for the three batch utilities (`recolor_all`, `solidify_all`, `rebuild_ico`). The roster is centralised here so the three scripts can never drift again. |
+| `paths.py` | `REPO_ROOT`, `ICONS_DIR`, `IMAGES_DIR` | Resolved-once `Path` constants so scripts get a stable anchor regardless of where they're invoked from or where they live in the tree. |
+
+The toolkit was extracted on 2026-05-04 from the existing 47 scripts after an audit found:
+- 13 extract scripts copy-pasted the same 5-line defringe block
+- 13 extract scripts copy-pasted the same 7-line largest-component block
+- 22 generators copy-pasted the same 4-line canvas + outer-ring scaffolding
+- All 47 scripts copy-pasted the same 2-line multi-resolution ICO save
+- The three batch utilities had three near-but-not-quite-identical hardcoded `ICONS = [...]` lists — actual drift, not just duplication
+
+The 44 non-batch scripts kept their existing logic verbatim during the migration (they work; touching them risks breaking working extraction recipes for negligible gain). They migrate to the toolkit organically as they're touched in future work — next sticker update refactors that script, next batch refresh refactors those, etc. The three batch utilities WERE refactored at extraction time because their drift was the actual problem the audit caught.
 
 ## Relationship to Other Systems
 
