@@ -2556,7 +2556,7 @@
       "source_mtime": 1745506042.3926215,
       "caption": "Waving - Framed",
       "volume": 50,
-      "playback_pos": 4875,
+      "playback_pos": 3458,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -4373,7 +4373,7 @@
       "source_mtime": 1761485120.8856592,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a (1)",
       "volume": 50,
-      "playback_pos": 4250,
+      "playback_pos": 3541,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -5078,10 +5078,10 @@
       "node_type": "warm",
       "title": "Bright Tomorrow",
       "uuid": "0937893a5bb74bbeb318fc72d5a10c9d",
-      "x": 1072.7121859189251,
-      "y": 2865.0349954312087,
-      "width": 463.7814741493909,
-      "height": 103.8400047980474,
+      "x": 1789.5216952699627,
+      "y": 2671.4083495128543,
+      "width": 424.37567026922227,
+      "height": 91.61061738696094,
       "z_value": -9.829000000000095,
       "ports_visible": false,
       "shelf_visible": true,
@@ -9848,7 +9848,7 @@
       "source_mtime": 1761485120.9001687,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a",
       "volume": 50,
-      "playback_pos": 3738,
+      "playback_pos": 1439,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -10171,7 +10171,7 @@
       "source_mtime": 1746374795.2638292,
       "caption": "The Majestic",
       "volume": 50,
-      "playback_pos": 4041,
+      "playback_pos": 250,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -18399,13 +18399,13 @@
     }
   ],
   "viewport": {
-    "camera_x": 3137.179698645438,
-    "camera_y": 5555.034027730789,
-    "camera_zoom": 0.9119656107794254
+    "camera_x": 1634.5088542314352,
+    "camera_y": 2952.275590458241,
+    "camera_zoom": 0.33465710423282213
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
   "last_browse_dirs": {},
-  "checksum": "20821307c3acdf55"
+  "checksum": "6dd241223fbba731"
 }
