@@ -15,9 +15,10 @@ C  = (225, 213, 198, 255)       # warm cream
 HP = (230, 100, 140, 255)       # shiny pink for hearts
 HL = (255, 150, 180, 255)       # pink highlight / shine
 
-# Script lives at icons/_pipeline/scripts/ now — go up 3 levels to
-# repo root, then into icons/ for the output target.  Pre-2026-05-04
-# the script was directly in icons/ and OUT was just dirname(__file__).
+# Script lives at tools/icon_pipeline/scripts/ — go up 3 levels to
+# repo root, then into icons/ for the output target.  (Earlier
+# locations: pre-2026-05-04 directly in icons/ with OUT =
+# dirname(__file__); pre-2026-05-04 evening at icons/_pipeline/scripts/.)
 OUT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "icons"))
 
 

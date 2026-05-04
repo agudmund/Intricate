@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image
 from pathlib import Path
 
-# Script lives at icons/_pipeline/scripts/ — pre-2026-05-04 it was
+# Script lives at tools/icon_pipeline/scripts/ — pre-2026-05-04 it was
 # directly in icons/ and HERE-relative paths Just Worked.  After the
 # move, SRC and the icons/ outputs sit two levels up at icons/.
 HERE     = Path(__file__).resolve().parent

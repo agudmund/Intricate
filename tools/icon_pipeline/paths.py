@@ -11,10 +11,10 @@
 # Author scripts originally used a mix of conventions: some had
 # `os.path.dirname(__file__)`, some had `Path(__file__).resolve().parent`,
 # some used bare relative paths like `"icons/Push.png"` assuming the
-# script ran from project root.  When the scripts moved into
-# icons/_pipeline/scripts/, the __file__-based paths suddenly pointed
-# two directories deeper and several scripts stopped finding their
-# source assets.
+# script ran from project root.  When the scripts moved into nested
+# subdirectories, the __file__-based paths suddenly pointed several
+# directories deeper and several scripts stopped finding their source
+# assets.
 #
 # Centralising on REPO_ROOT (resolved once via __file__ here) means
 # every script that imports from this toolkit gets a stable anchor
@@ -22,8 +22,9 @@
 
 from pathlib import Path
 
-# This file lives at icons/_pipeline/paths.py, so REPO_ROOT is two
-# parents up.  Resolve to absolute so callers can use it from any cwd.
+# This file lives at tools/icon_pipeline/paths.py, so REPO_ROOT is
+# three parents up.  Resolve to absolute so callers can use it from
+# any cwd.
 REPO_ROOT  = Path(__file__).resolve().parent.parent.parent
 ICONS_DIR  = REPO_ROOT / "icons"
 IMAGES_DIR = REPO_ROOT / "Images"

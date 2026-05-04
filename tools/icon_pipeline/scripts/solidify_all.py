@@ -5,7 +5,7 @@ Solidify every line-art icon in BATCH_TARGETS — any pixel with alpha > 0
 gets alpha = 255.  Background stays transparent.
 
 Run from project root:
-    python icons/_pipeline/scripts/solidify_all.py
+    python tools/icon_pipeline/scripts/solidify_all.py
 
 Why this script exists
 ──────────────────────
@@ -22,7 +22,7 @@ correctly.  BATCH_TARGETS contains line-art icons only; check before
 adding new entries.
 
 Operates on the canonical BATCH_TARGETS roster from
-icons/_pipeline/batch.py — keeps in lockstep with rebuild_ico and
+tools/icon_pipeline/batch.py — keeps in lockstep with rebuild_ico and
 recolor_all.
 
 Pre-toolkit version: ~63 lines, hardcoded ICONS list.  After-toolkit
@@ -31,10 +31,10 @@ version: ~15 lines.
 import sys
 from pathlib import Path
 
-# Make icons._pipeline importable when this script is run directly
+# Make tools.icon_pipeline importable when this script is run directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from icons._pipeline import run_over_icons
+from tools.icon_pipeline import run_over_icons
 
 
 def _solidify(img):

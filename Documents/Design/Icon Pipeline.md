@@ -156,7 +156,7 @@ The update was two files of work (source PNG + script) and zero lines of Python-
 
 - **Render at 2×, downsample via LANCZOS.** The Pillow recipe renders at 2048 and downsamples to 1024 because Pillow's draw primitives do not anti-alias — the LANCZOS downsample is what produces smooth edges. Drawing directly at 1024 produces visibly jagged strokes.
 - **Multi-resolution ICO matters.** Qt picks the sharpest layer for each render target — a 16px tray icon uses the 16px layer, a 256px menu icon uses the 256px layer. Shipping a single-resolution ICO produces blurry small renders.
-- **The extract / generate scripts are one-shot tools, not runtime modules.** They live in `icons/_pipeline/scripts/`, each with a brief docstring identifying its source PNG and the icon it produces. They are not imported by anything in the runtime app — running one is a manual authoring action. They MAY import from the local `icons/_pipeline/` toolkit (canvas, save, extract, verify, batch helpers) so the family-1 canvas scaffolding, defringe, largest-component cleanup, multi-resolution ICO save, etc. don't have to be copy-pasted across every script. The toolkit itself is also author-time only — it never lands in the runtime tree, only build-time scripts touch it.
+- **The extract / generate scripts are one-shot tools, not runtime modules.** They live in `tools/icon_pipeline/scripts/`, each with a brief docstring identifying its source PNG and the icon it produces. They are not imported by anything in the runtime app — running one is a manual authoring action. They MAY import from the local `tools/icon_pipeline/` toolkit (canvas, save, extract, verify, batch helpers) so the family-1 canvas scaffolding, defringe, largest-component cleanup, multi-resolution ICO save, etc. don't have to be copy-pasted across every script. The toolkit itself is also author-time only — it never lands in the runtime tree, only build-time scripts touch it.
 - **`NodeButton.py`'s 1.28× scale is load-bearing.** It exists to compensate for transparent padding baked into the icon PNGs (sidebar icons have ~22% padding; stickers similar). Change the padding convention and this constant must change in lockstep, or icon-based buttons will drift in apparent size relative to emoji glyphs on the same strip.
 - **Theme reload is live.** Saving `settings.toml` after registering a new icon triggers `Theme.reload()` and repaints every button that references the metaclass attribute. No restart required for icon swaps once wiring exists.
 
@@ -171,7 +171,7 @@ Two distinct directories, two distinct roles:
 
 The flow is: **source PNG lands in `Images/Stickers/` → pipeline script processes (extract, defringe, square, multi-res ICO) → output written to `icons/`**. As each source completes its pipeline pass, the source file is ticked off and removed from the workspace; the finished icon in `icons/` is what consumers see.
 
-**Production code never references `Images/Stickers/`.** The only readers of that folder are the author-time extraction scripts in `icons/_pipeline/scripts/` — they take source PNGs as input and produce icons as output. Anywhere else in the codebase pointing at `Images/Stickers/` is a bug (the Settlers systray icon path was the canonical example: a stale `Intricate/Images/Stickers/Chat.png` reference that survived the workspace's relocation and stopped resolving — fix was to point at the local `icons/Chat.ico` instead, the production-side asset).
+**Production code never references `Images/Stickers/`.** The only readers of that folder are the author-time extraction scripts in `tools/icon_pipeline/scripts/` — they take source PNGs as input and produce icons as output. Anywhere else in the codebase pointing at `Images/Stickers/` is a bug (the Settlers systray icon path was the canonical example: a stale `Intricate/Images/Stickers/Chat.png` reference that survived the workspace's relocation and stopped resolving — fix was to point at the local `icons/Chat.ico` instead, the production-side asset).
 
 **Current home of the workspace:** `Images/Stickers/` lives in `[Desktop]/Iconic/`, a dedicated session project for handling all icon work — separate from Intricate's repo so the lookdev iteration (palette conform, kerning cleanup, padding normalisation, sticker compliance audit) doesn't pollute the production tree. `Intricate/Images/Stickers/` still holds legacy sources mid-migration; once the migration completes, that location can be removed entirely. Pipeline scripts use relative paths (`Images/Stickers/Pause.png`) so they resolve against whichever working directory they're invoked from — typically the Iconic project root.
 
@@ -202,9 +202,9 @@ adobeGroup = "Tertiary/adobe_group.ico"
 
 The split is a 2026-05-04 refactor — pre-this date, all icons sat flat in `icons/` and the proprietary/third-party boundary lived only in code conventions and our own discipline.
 
-## The `icons/_pipeline/` Toolkit
+## The `tools/icon_pipeline/` Toolkit
 
-The author-time helpers used by the generation and extraction scripts. Six small modules; the runtime app never touches any of this.
+The author-time helpers used by the generation and extraction scripts. Six small modules; the runtime app never touches any of this. Lives at `tools/icon_pipeline/` rather than embedded in the asset directory — `icons/` is for asset files only, code lives in `tools/` (different departments, same kitchen).
 
 | Module | Surface | What it does |
 |---|---|---|

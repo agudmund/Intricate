@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 import numpy as np
 import math, os
 
-# Script lives at icons/_pipeline/scripts/ — repo root is 3 levels up.
+# Script lives at tools/icon_pipeline/scripts/ — repo root is 3 levels up.
 # Pre-2026-05-04 the script was directly in icons/ so SRC and OUT
 # used a single ".." hop; the move added two more.
 _REPO_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))

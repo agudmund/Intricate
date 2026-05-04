@@ -31,7 +31,7 @@
 # What's loaded here
 # ──────────────────
 # Public functions exposed at package level so callers can do
-#     from icons._pipeline import save_png_and_ico, defringe_against_white
+#     from tools.icon_pipeline import save_png_and_ico, defringe_against_white
 # without hunting for the right submodule.
 
 from .canvas import (

@@ -4,7 +4,7 @@
 Rebuild every ICO in BATCH_TARGETS from its PNG source.
 
 Run from project root:
-    python icons/_pipeline/scripts/rebuild_ico.py
+    python tools/icon_pipeline/scripts/rebuild_ico.py
 
 Why this script exists
 ──────────────────────
@@ -15,7 +15,7 @@ layers stay synced with whatever the .png currently shows.  When the
 is the one that re-emits the matching .ico.
 
 Operates on the canonical BATCH_TARGETS roster from
-icons/_pipeline/batch.py — the same list recolor_all and solidify_all
+tools/icon_pipeline/batch.py — the same list recolor_all and solidify_all
 operate on, so the three scripts stay in lockstep.
 
 Pre-toolkit version: ~50 lines with a hardcoded ICONS list that drifted
@@ -24,10 +24,10 @@ from its siblings.  After-toolkit version: ~10 lines, no list, no drift.
 import sys
 from pathlib import Path
 
-# Make icons._pipeline importable when this script is run directly
+# Make tools.icon_pipeline importable when this script is run directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from icons._pipeline import run_over_icons
+from tools.icon_pipeline import run_over_icons
 
 
 def _rebuild(img):

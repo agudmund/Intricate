@@ -23,7 +23,7 @@ C   = (225, 213, 198, 255)
 RING_W = 12            # matches info_node baseline
 MAX_EXTENT = 680       # clear gap to the ring (ring at 800)
 
-# Script lives at icons/_pipeline/scripts/ now — go up 3 levels to
+# Script lives at tools/icon_pipeline/scripts/ now — go up 3 levels to
 # repo root, then into icons/ for the output target.  Pre-2026-05-04
 # the script was directly in icons/ and OUT was just dirname(__file__).
 OUT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "icons"))

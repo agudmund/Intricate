@@ -6,7 +6,7 @@ Recolour every line-art icon in BATCH_TARGETS to ivory text-primary.
 Preserves the alpha channel; replaces all RGB values where alpha > 0.
 
 Run from project root:
-    python icons/_pipeline/scripts/recolor_all.py
+    python tools/icon_pipeline/scripts/recolor_all.py
 
 Why this script exists
 ──────────────────────
@@ -17,7 +17,7 @@ pixels with the runtime cascade so a fresh export matches what the
 app actually paints.
 
 Operates on the canonical BATCH_TARGETS roster from
-icons/_pipeline/batch.py — keeps in lockstep with rebuild_ico and
+tools/icon_pipeline/batch.py — keeps in lockstep with rebuild_ico and
 solidify_all.
 
 Pre-toolkit version: ~75 lines, hardcoded ICONS list, hand-rolled
@@ -26,10 +26,10 @@ ICO save.  After-toolkit version: ~25 lines, no list duplication.
 import sys
 from pathlib import Path
 
-# Make icons._pipeline importable when this script is run directly
+# Make tools.icon_pipeline importable when this script is run directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
-from icons._pipeline import run_over_icons
+from tools.icon_pipeline import run_over_icons
 
 IVORY = (210, 209, 207)   # #d2d1cf — text_primary from settings.toml
 
