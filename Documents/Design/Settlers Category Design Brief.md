@@ -159,12 +159,39 @@ For TOML fields that store string booleans (`"True"` / `"False"`). Rendered as a
 
 **PrettyCheckbox `show_indicator=False` mode:** When constructed with `show_indicator=False`, `PrettyCheckbox` hides the native `QCheckBox` indicator (0px width) and instead uses its internal `PrettyLabel` as the visual toggle. The label text swaps between `✓` and `—` on each toggle, styled `#ffb6c1` pink with center alignment. Clicking anywhere on the label toggles the underlying checkbox state. This mode is the standard for boolean rows — no visible checkbox box, just the pink lettering.
 
+## Cycle Palette Pill Row
+
+For state stored in a sidecar file rather than `settings.toml`. The canonical instance is the cycle palette in `intricate.color_picker`, which reads/writes `color_registry.toml` directly via module-scope helpers and a Qt file watcher. Renders as a row of pure-colour pills with an inline add-input on the right.
+
+**Layout (left to right):**
+
+| Widget | Type | Width | Details |
+|--------|------|-------|---------|
+| Label | `pretty_label` | `_COL_LABEL` (200px) | 12pt, top-aligned so it stays flush with the first pill line when the row wraps |
+| Shorthand spacer | `QSpacerItem` | `_COL_SHORTHAND` (36px) | Empty placeholder |
+| Pill container | `color_pill_row` | stretch=1 | Flowing horizontal pill row — wraps onto multiple lines when it overflows |
+| Add input | `pill_add_input` | `_COL_APPLICATOR` (80px) | Hex add field, top-aligned to match the label |
+
+**External sidecar contract:** unlike every other row type, this one bypasses `settings.toml`. Reads via `read_color_registry()`, writes on `pills.items_changed`, and a `QFileSystemWatcher` re-syncs when Intricate registers a new colour at runtime. The watcher uses `pills.set_items(fresh)` — silent, no `items_changed` echo — so the round-trip doesn't loop. Only direct user interaction emits `items_changed` → file write.
+
+**Builder lives outside the main loop:** because the source isn't enumerated from `settings.toml`, the pill row is added by a dedicated builder (`_add_color_picker_tab()`) called after the main TOML enumeration finishes but before the saved-tab restore. Mirror this shape for any future sidecar-backed category.
+
+## Merged Categories — `tab_path` Decoupling
+
+When two TOML sources want to share one driver-side dashboard, decouple visual placement from persistence via the `tab_path` kwarg on `_add_color_row` (and any future row helper that gains it). The canonical instance is `intricate.color_picker`: chrome swatches sourced from `[theme.colors]` in `settings.toml` render in the same tab as the cycle palette pills sourced from `color_registry.toml`.
+
+- `section_path` → drives the field registry key `(section_path, field_key)`, which the save loop walks to write the TOML
+- `tab_path` → drives `_ensure_tab(tab_path)`, the visual tab the row renders into
+- Defaults: when omitted, `tab_path = section_path` — the path most callers want
+
+For the merge to land, the main TOML enumeration loop must skip the lifted source so it doesn't get its own auto-tab; the merged builder then renders the lifted row with `tab_path` pointing at the host tab. `_add_color_picker_tab()` is the worked example — chrome row first with `section_path="theme.colors"` and `tab_path="intricate.color_picker"`, spacer, then the cycle pill row.
+
 ## Adding a New Category
 
 1. Add the TOML section (e.g. `[node.xxx]`) to `settings.toml`
 2. Register a display name in `_SECTION_LABELS`
 3. Optionally define field grouping in `_SECTION_FIELD_ORDER` — each inner list is a chunk separated by a spacer; use this to group related controls visually
-4. Optionally add a description in `_SECTION_DESCRIPTIONS`
+4. Add a description in `_SECTION_DESCRIPTIONS` — required for every shipping category, see **Section Description**
 5. Add a section-specific branch in `_add_field_row()` for any fields needing custom controls:
    - Integer attributes → Slider Row
    - Hex color attributes → Color Swatch Cell (automatic, no branch needed)
@@ -173,3 +200,7 @@ For TOML fields that store string booleans (`"True"` / `"False"`). Rendered as a
    - Everything else → plain `QLineEdit` (default fallback)
 
 **The Tree Node category is the worked example** of combining all three custom control types in one page: one slider (max_depth), three chip rows (exclude lists), three boolean toggles (display options), with `_SECTION_FIELD_ORDER` providing the visual grouping.
+
+**For sidecar-backed state** (storage outside `settings.toml`), follow the **Cycle Palette Pill Row** pattern: a custom builder method invoked after the main enumeration loop, with its own helpers and `QFileSystemWatcher` for live re-sync.
+
+**For merged categories** (multiple TOML sources sharing one tab), follow the **`tab_path` Decoupling** pattern: skip the lifted source in the enumeration loop and pass `tab_path=...` when adding the row.
