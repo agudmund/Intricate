@@ -32,7 +32,13 @@ class PaletteNodeData(NodeData):
     title:     str        = field(default="Palette")
     emoji:     str        = field(default="😍")
     width:     float      = field(default=300.0)
-    height:    float      = field(default=420.0)
+    # 500 px clears PaletteNode.height_for_colors(5) (~494 px for 3 rows
+    # of swatches at 2 columns) — the dataclass default needs to fit the
+    # 5 Theme colours of _default_colors() without forcing a scrollbar.
+    # Auto-fit at spawn time still grows further when more colours are
+    # supplied (cycle-palette seed in add_palette_node, drag-drop QSS,
+    # ClaudeNode directives) — this is just the floor for the bare case.
+    height:    float      = field(default=500.0)
     colors:    list       = field(default_factory=_default_colors)
 
     def to_dict(self) -> dict:
@@ -58,7 +64,7 @@ class PaletteNodeData(NodeData):
             x             = float(data.get("x",      0.0)),
             y             = float(data.get("y",      0.0)),
             width         = float(data.get("width",  300.0)),
-            height        = float(data.get("height", 420.0)),
+            height        = float(data.get("height", 500.0)),
             ports_visible = data.get("ports_visible", False),
             colors        = colors,
         )

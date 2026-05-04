@@ -629,16 +629,38 @@ class IntricateScene(QGraphicsScene):
         When *colors* is supplied, the node spawns with its height auto-fit
         to the swatch count so the full palette is visible at a glance — no
         scrollbar on a fresh ClaudeNode-spawned palette of 12 colours.
-        Sidebar spawn (no colors) keeps the dataclass default of 420 px.
-        Session restore goes through PaletteNodeData.from_dict and preserves
-        whatever geometry the user landed on.
+        When *colors* is None, the spawn seeds from the live cycle palette
+        (the one The Color Picker curates and node tint toggles rotate
+        through) — a fresh PaletteNode arrives carrying the user's actual
+        working colours, not the static 5-Theme starter set.  If the cycle
+        registry is briefly empty (first run, mid Settlers write), falls
+        through to the dataclass default so the spawn never silently
+        skips.  Session restore goes through PaletteNodeData.from_dict
+        and preserves whatever geometry the user landed on.
         """
         from nodes.PaletteNode import PaletteNode
         from data.PaletteNodeData import PaletteNodeData
         data = PaletteNodeData()
+
+        if colors is None:
+            # Lazy import — color_registry imports Qt for its watcher,
+            # so it stays out of the data layer; Scene already lives in
+            # the Qt half of the architecture.
+            try:
+                from utils.persistence import color_registry
+                cycle = color_registry.get_all()
+            except Exception:
+                cycle = []
+            if cycle:
+                # Cycle palette stores bare hex strings; the node body
+                # expects {"label": ..., "hex": ...} dicts.  Use the hex
+                # as label too — matches the QSS drag-drop convention
+                # for "imported colours with no semantic name".
+                colors = [{"label": h, "hex": h} for h in cycle]
+
         if colors is not None:
             data.colors = colors
-            # Grow only — never shrink below the dataclass default of 420 px.
+            # Grow only — never shrink below the dataclass default.
             # The auto-fit exists to catch the "ClaudeNode spawned a 12-colour
             # palette and it's tiny with a scrollbar" case, not to second-
             # guess the default height for normal-sized palettes.
