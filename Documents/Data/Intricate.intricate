@@ -2556,7 +2556,7 @@
       "source_mtime": 1745506042.3926215,
       "caption": "Waving - Framed",
       "volume": 50,
-      "playback_pos": 3458,
+      "playback_pos": 4291,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -4373,7 +4373,7 @@
       "source_mtime": 1761485120.8856592,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a (1)",
       "volume": 50,
-      "playback_pos": 3541,
+      "playback_pos": 2670,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -9848,7 +9848,7 @@
       "source_mtime": 1761485120.9001687,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a",
       "volume": 50,
-      "playback_pos": 1439,
+      "playback_pos": 928,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -10171,7 +10171,7 @@
       "source_mtime": 1746374795.2638292,
       "caption": "The Majestic",
       "volume": 50,
-      "playback_pos": 250,
+      "playback_pos": 5041,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -18399,13 +18399,13 @@
     }
   ],
   "viewport": {
-    "camera_x": 1634.5088542314352,
-    "camera_y": 2952.275590458241,
-    "camera_zoom": 0.33465710423282213
+    "camera_x": 4547.346630340627,
+    "camera_y": 3461.85784893472,
+    "camera_zoom": 0.9396688546876674
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
   "last_browse_dirs": {},
-  "checksum": "6dd241223fbba731"
+  "checksum": "18403fbe1bddcf24"
 }
