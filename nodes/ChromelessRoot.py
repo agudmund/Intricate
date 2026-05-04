@@ -112,19 +112,32 @@ class ChromelessRoot(QGraphicsRectItem):
     # ── Drag-commit dead zone — Wacom phantom-motion guard ──────────────────
     # Stationary Wacom-pen taps generate a stream of synthesized WM_MOUSEMOVE
     # events as Windows transitions the OS cursor from its previous resting
-    # location to the pen contact point. Qt sees these as legitimate motion
+    # location to the pen contact point.  Qt sees these as legitimate motion
     # and translates the item along the synthesized path — manifesting as
     # "node propelled offscreen on touch" or "node deleted on touch" when
     # the synthesized path's reversal pattern hits the shake threshold.
     # Diagnosis closed 2026-04-29 from forensic logs at 14:59:39.
     #
-    # Until the cumulative cursor travel from press exceeds the threshold,
-    # mouseMoveEvent is suppressed: super() is not called (so the item
-    # doesn't move) and the shake detector receives no samples (so reversal
-    # accumulation can't fire on synthesized curves). Real human drags blow
-    # past 12 screen-px in a single event, so the gate releases instantly
-    # for any genuine drag — no perceptible delay.
-    _DRAG_COMMIT_THRESHOLD_PX = 12.0
+    # Two-axis gate: BOTH displacement AND hold-time must exceed their
+    # thresholds before the drag commits.  Either failing keeps super()
+    # off the mouseMoveEvent path (item doesn't move, shake detector
+    # receives no samples).
+    #
+    # Why both: Wacom pen taps drift 10-15 px during a normal click as the
+    # pen settles into the digitizer surface — a single-axis displacement
+    # gate at 12 px misfires on those.  But raising the displacement floor
+    # too high makes legitimate small drags feel laggy.  Adding a hold-time
+    # axis catches the pen-tap case (short hold) without sacrificing
+    # responsiveness for a real drag (sustained hold).  Real intentional
+    # drags both exceed 25 px AND hold > 80 ms; pen-tap phantom motion
+    # exceeds the displacement but not the hold time.
+    #
+    # Tuned 2026-05-04 from logs showing JoyStatsNode being flung 800 scene-
+    # units after a single intended click — pen drifted 6 → 9 → 11 → 12 px
+    # in <50 ms, gate committed at 12 px, then every subsequent cursor jiggle
+    # dragged the node along.
+    _DRAG_COMMIT_THRESHOLD_PX  = 25.0
+    _DRAG_COMMIT_HOLD_MS       = 80.0
 
     # ─────────────────────────────────────────────────────────────────────────
     # CONSTRUCTION
@@ -166,6 +179,7 @@ class ChromelessRoot(QGraphicsRectItem):
 
         # Drag-commit dead-zone state. See _DRAG_COMMIT_THRESHOLD_PX above.
         self._drag_press_screen_pos = QPointF()
+        self._drag_press_time_s     = 0.0   # press timestamp for the hold-time gate
         self._drag_committed        = False
         self._drag_suppressed_count = 0
         self._drag_suppressed_max_travel_px = 0.0
@@ -254,15 +268,21 @@ class ChromelessRoot(QGraphicsRectItem):
             logger.log(TRACE, "[chrome-mouse] %s → shake.press()", self._log_id())
             self._shake.press()
             # Arm the drag-commit dead-zone — see _DRAG_COMMIT_THRESHOLD_PX
-            # for the rationale (Wacom phantom-motion suppression).
+            # / _DRAG_COMMIT_HOLD_MS for the rationale (Wacom pen-tap
+            # phantom-motion suppression).
+            import time as _time
             self._drag_press_screen_pos = QPointF(event.screenPos())
+            self._drag_press_time_s     = _time.monotonic()
             self._drag_committed        = False
             self._drag_suppressed_count = 0
             self._drag_suppressed_max_travel_px = 0.0
-            logger.log(TRACE, "[chrome-drag-gate] %s ARM screen=(%.1f,%.1f) threshold=%.1fpx",
+            logger.log(TRACE,
+                       "[chrome-drag-gate] %s ARM screen=(%.1f,%.1f) "
+                       "displacement_threshold=%.1fpx hold_threshold=%.0fms",
                        self._log_id(),
                        event.screenPos().x(), event.screenPos().y(),
-                       self._DRAG_COMMIT_THRESHOLD_PX)
+                       self._DRAG_COMMIT_THRESHOLD_PX,
+                       self._DRAG_COMMIT_HOLD_MS)
         super().mousePressEvent(event)
         logger.log(TRACE, "[chrome-mouse] %s PRESS returned (super called)", self._log_id())
 
@@ -293,33 +313,43 @@ class ChromelessRoot(QGraphicsRectItem):
             return
 
         # Drag-commit dead zone — Wacom phantom-motion suppression.
-        # Until cumulative cursor travel from press exceeds the threshold,
-        # eat the event without translating the item or feeding the shake
-        # detector. See _DRAG_COMMIT_THRESHOLD_PX for the diagnosis.
+        # Two-axis gate: commit only when BOTH displacement > threshold
+        # AND hold-time > threshold.  Either axis failing eats the event
+        # (super not called, item doesn't move, shake detector receives
+        # no samples).  See _DRAG_COMMIT_THRESHOLD_PX / _HOLD_MS for the
+        # diagnosis.
         if not self._drag_committed:
+            import time as _time
             cur = event.screenPos()
             dx = cur.x() - self._drag_press_screen_pos.x()
             dy = cur.y() - self._drag_press_screen_pos.y()
             travel_px = (dx * dx + dy * dy) ** 0.5
-            if travel_px < self._DRAG_COMMIT_THRESHOLD_PX:
+            held_ms   = (_time.monotonic() - self._drag_press_time_s) * 1000.0
+            displacement_ok = travel_px >= self._DRAG_COMMIT_THRESHOLD_PX
+            hold_ok         = held_ms   >= self._DRAG_COMMIT_HOLD_MS
+            if not (displacement_ok and hold_ok):
                 self._drag_suppressed_count += 1
                 if travel_px > self._drag_suppressed_max_travel_px:
                     self._drag_suppressed_max_travel_px = travel_px
+                # Annotate which axis is still holding — useful for tuning.
+                why = []
+                if not displacement_ok: why.append(f"disp<{self._DRAG_COMMIT_THRESHOLD_PX:.0f}")
+                if not hold_ok:         why.append(f"hold<{self._DRAG_COMMIT_HOLD_MS:.0f}ms")
                 logger.log(TRACE,
-                    "[chrome-drag-gate] %s SUPPRESS #%d travel=%.2fpx (threshold=%.1f) "
-                    "screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f)",
-                    self._log_id(), self._drag_suppressed_count, travel_px,
-                    self._DRAG_COMMIT_THRESHOLD_PX,
-                    cur.x(), cur.y(),
+                    "[chrome-drag-gate] %s SUPPRESS #%d travel=%.2fpx held=%.0fms "
+                    "(%s) screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f)",
+                    self._log_id(), self._drag_suppressed_count, travel_px, held_ms,
+                    ",".join(why), cur.x(), cur.y(),
                     self.scenePos().x(), self.scenePos().y())
                 event.accept()
                 return
             self._drag_committed = True
             logger.info(
                 "[chrome-drag-gate] %s COMMIT after %d suppressed events "
-                "(max travel during suppression=%.2fpx, commit travel=%.2fpx) — drag begins",
+                "(max travel during suppression=%.2fpx, commit travel=%.2fpx, "
+                "held=%.0fms) — drag begins",
                 self._log_id(), self._drag_suppressed_count,
-                self._drag_suppressed_max_travel_px, travel_px)
+                self._drag_suppressed_max_travel_px, travel_px, held_ms)
 
         logger.log(TRACE, "[chrome-mouse] %s MOVE scene_pos=(%.1f,%.1f)",
                      self._log_id(), self.scenePos().x(), self.scenePos().y())
