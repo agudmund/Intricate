@@ -84,6 +84,109 @@ def _extract_leading_bold(body: str) -> tuple[str | None, str]:
 _TABLE_SEP_CHARS = set("-|: \t")
 
 
+def _split_into_sections_fence_aware(
+    text: str, title_pattern: str
+) -> list[tuple[str | None, str]]:
+    """Walk *text* line by line and split into (title, body) sections at
+    markdown headings — but the heading test skips lines inside a fenced
+    code block.
+
+    Why this exists
+    ───────────────
+    The Icon Pipeline doc (2026-05-04) hung Intricate for 30+ minutes on
+    a load attempt before the user force-killed.  Diagnosis: the
+    chunker's heading regex ``^#{1,6}\\s+`` matched Python comment lines
+    inside ``` fences (``# Outer ring — keep identical``, etc.) as if
+    they were H1/H2 headings.  A 23-line code block with five comment
+    lines became five phantom sections, each spawning a heading
+    AboutNode plus body WarmNodes for whatever code lines followed —
+    multiplying the spawn count and the cumulative spiral_place /
+    auto-fit cost on the populated canvas into a runaway compound.
+
+    Fence-aware section split: track a single ``in_fence`` boolean
+    that toggles on every line whose lstrip starts with ``` ``` ``.
+    The heading test only fires when ``in_fence`` is False, so code
+    comments stay code, not section boundaries.
+
+    Robustness
+    ──────────
+    - Unclosed fence (file ends inside a fence): treat the rest as
+      code; better than splitting on its comments.
+    - Indented fence delimiters: handled via ``lstrip().startswith``.
+    - Inline triple-backticks in prose: rare; the lstrip-prefix check
+      keeps inline backticks (which are at end-of-line, not prefix)
+      from toggling fence state.
+    - Tilde fences (``~~~``): not currently recognised — markdown
+      package allows them but Intricate's docs use only backticks.
+    """
+    sections: list[tuple[str | None, str]] = []
+    current_title: str | None = None
+    body_lines: list[str] = []
+    in_fence = False
+
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            body_lines.append(line)
+            continue
+        if not in_fence and re.match(title_pattern, line):
+            body = "\n".join(body_lines).strip()
+            if current_title is not None or body:
+                sections.append((current_title, body))
+            current_title = re.sub(title_pattern, "", line).strip()
+            body_lines = []
+        else:
+            body_lines.append(line)
+
+    body = "\n".join(body_lines).strip()
+    if current_title is not None or body:
+        sections.append((current_title, body))
+    return sections
+
+
+def _split_paragraphs_fence_aware(body: str) -> list[str]:
+    """Split *body* into paragraphs at blank lines, but treat fenced
+    code blocks as atomic — blank lines INSIDE a ``` fence do NOT
+    create paragraph breaks.
+
+    Without this, a 23-line Python fence with several blank lines
+    between logical groups becomes 6+ separate paragraphs, each
+    spawning its own short-snippet WarmNode that doesn't read as a
+    standalone unit.  Same root issue as the section-split fix: code
+    is one thing, not many.  Combined with the section-split fix
+    above, the Icon Pipeline doc's spawn count drops from ~63 nodes
+    to whatever the prose actually demands plus one node per fence.
+    """
+    paragraphs: list[str] = []
+    current: list[str] = []
+    in_fence = False
+
+    for line in body.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            current.append(line)
+            continue
+        if in_fence:
+            # Blank lines inside the fence stay part of the same paragraph.
+            current.append(line)
+            continue
+        if not line.strip():
+            # Outside fence: blank line ends the current paragraph.
+            if current:
+                para = "\n".join(current).strip()
+                if para:
+                    paragraphs.append(para)
+                current = []
+        else:
+            current.append(line)
+
+    if current:
+        para = "\n".join(current).strip()
+        if para:
+            paragraphs.append(para)
+    return paragraphs
+
+
 def _transform_markdown_table(body: str) -> tuple[str, str] | None:
     """Detect a markdown table in *body* (lines starting with ``|`` plus
     a ``|---|---|`` separator on line 2) and return ``(title, flat_body)``
@@ -491,26 +594,13 @@ class MarkdownNode(BaseNode):
         source_hidden = not self.isVisible()
 
         # ── Parse into (title, body) pairs ──────────────────────────────
-        sections: list[tuple[str | None, str]] = []
-        current_title: str | None = None
-        body_lines: list[str] = []
-
-        for line in text.splitlines():
-            if re.match(title_pattern, line):
-                # Flush previous section
-                body = "\n".join(body_lines).strip()
-                if current_title is not None or body:
-                    sections.append((current_title, body))
-                # Start new section — strip the markdown markers for the label
-                current_title = re.sub(title_pattern, "", line).strip()
-                body_lines = []
-            else:
-                body_lines.append(line)
-
-        # Flush final section
-        body = "\n".join(body_lines).strip()
-        if current_title is not None or body:
-            sections.append((current_title, body))
+        # Fence-aware: lines inside ``` fences don't get tested as
+        # markdown headings.  Without this, Python code-comment lines
+        # like "# Outer ring — keep identical" matched the heading
+        # regex and produced phantom sections that compounded spawn
+        # cost on populated canvases (Icon Pipeline doc 30-minute hang,
+        # 2026-05-04).  See _split_into_sections_fence_aware docstring.
+        sections = _split_into_sections_fence_aware(text, title_pattern)
 
         if not sections:
             return
@@ -563,7 +653,12 @@ class MarkdownNode(BaseNode):
             # line paragraphs that should still render as substance
             # (2026-04-18 browsability refinement).
             if body:
-                paragraphs = [p for p in body.split("\n\n") if p.strip()]
+                # Fence-aware paragraph split — blank lines inside ```
+                # fences don't create paragraph boundaries.  Same root
+                # fix as the section split above: code blocks are ONE
+                # paragraph (one node), not 5+ short-snippet WarmNodes
+                # carved out of the fence's blank-line groups.
+                paragraphs = _split_paragraphs_fence_aware(body)
                 for para in paragraphs:
                     para_stripped = para.strip()
                     # Skip horizontal rules and other pure-structure
