@@ -210,7 +210,6 @@ Two parallel directories at the repo root, each with distinct semantics. Differe
 
 **Pending candidates** (deliberately left in their current locations):
 
-- `scripts/hooks/pre-push` — joy-bucket-spending git hook. Conceptually belongs at `tools/git_hooks/`, but git's `core.hooksPath` is currently set to `scripts/hooks`. Move requires a one-line repo-local config update (`git config core.hooksPath tools/git_hooks`) which the author runs themselves; once that lands, the folder rename completes the move.
 - `Adobe/CEP/` — Adobe extension source for the Premiere Bridge. The eventual destination is its own dedicated repo and ultimately publication through Adobe's extension storefront. Currently it's a proprietary spare carbon copy of the SDK content, sitting in Intricate's tree as the simplest path while the bridge concept matures. Sensitive material (signing certs, ZXP outputs) is `.gitignore`d. Standalone-repo extraction + Adobe-store publication is a later-day item — at that point the folder leaves Intricate entirely, doesn't move into `tools/`.
 - `build.py` — author-time by definition, but the build pipeline as a whole is on the later-day list. Intricate grows faster than its builds settle, so any frozen artifact is obsolete near-instantly; the build pipeline gets a proper revisit when the prototype-to-product transition is closer. For now, `build.py` stays at root.
 
@@ -221,7 +220,9 @@ Two parallel directories at the repo root, each with distinct semantics. Differe
 - `Clippy/` — video assets, holds per-session video files (parallel to `Images/`, separated by media type)
 - `audio/` — audio assets (the `meows/`, `feeds/`, etc. that the joy mechanic and the Meov draw from)
 
-**Long-arc note:** PySide6 is the rapid-prototyping layer; the eventual destination is a proper compiled Qt application in C++. The author's deeper experience is on the C++ Qt side; PySide6 is the iteration ramp because it lets ideas land in minutes rather than build cycles. Every refactor pass like this one (asset/code separation, `tools/` vs `utils/`, sentinel relocation) is also pre-work toward that eventual rewrite — the cleaner the conceptual structure now, the smaller the translation surface later.
+**Long-arc note:** PySide6 is the rapid-prototyping layer; the eventual destination is a proper compiled Qt application in C++. The author's deeper experience is on the C++ Qt side; PySide6 is the iteration ramp because it lets ideas land in minutes rather than build cycles. Every refactor pass like this one (asset/code separation, `tools/` vs `utils/`, sentinel relocation) is also pre-work toward that eventual rewrite — the cleaner the conceptual structure now, the smaller the translation surface later. The "boundaries between concepts, not just files" intent has been held since day zero, not retrofitted.
+
+The thesis has been validated: at roughly the 10,000-line mark, the author bulk-translated the codebase to a .NET MAUI application as a methodology test. The translation landed cleanly — confirming that the design holds across language *ecosystems*, not just within Qt's. The eventual C++ Qt rewrite is therefore the third translation pass on a tested methodology, not a speculative leap. Each refactor that improves conceptual clarity in the PySide6 tree pays dividends in any future translation, regardless of target language.
 
 ## Design Documentation
 
