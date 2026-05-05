@@ -268,6 +268,17 @@ class IntricateApp(QMainWindow):
         self._joy_narrative_path: _Path = (
             _Path(__file__).resolve().parent / "Documents" / "Data" / "joy_wake_narrative.log"
         )
+        # Scene-items categorized breakdown — written each heartbeat
+        # alongside the curtain_perf.csv row.  Each line is one JSON
+        # object: {"ts":"...","TypeName":count,...}.  Captures which
+        # CLASS of QGraphicsItem is fluctuating when the aggregate
+        # scene_items count moves — undifferentiated len(scene.items())
+        # can't tell if the wobble is nodes, connections, particles, or
+        # something else accumulating.  Separate file so the existing
+        # CSV format stays unchanged.
+        self._scene_breakdown_path: _Path = (
+            _Path(__file__).resolve().parent / "Documents" / "Data" / "scene_breakdown.log"
+        )
         self._perf_last_heartbeat_t: float = 0.0
         self._perf_last_large_gap_t: float = 0.0   # most recent post-wake landing
         self._perf_heartbeat_timer = QTimer(self)
@@ -1334,8 +1345,22 @@ class IntricateApp(QMainWindow):
 
             rss_mb = self._process_rss_mb()
             g0, g1, g2 = _gc.get_count()
+            scene_items = -1
+            items_breakdown: dict = {}
             try:
-                scene_items = len(self.scene.items()) if getattr(self, 'scene', None) else 0
+                if getattr(self, 'scene', None):
+                    items = self.scene.items()
+                    scene_items = len(items)
+                    # Categorize by class name — the leak hunt needs
+                    # to know WHICH class is fluctuating, not just the
+                    # aggregate count.  Bounded by Python's class
+                    # vocabulary so the dict size stays small.
+                    for it in items:
+                        try:
+                            k = type(it).__name__
+                        except Exception:
+                            k = "?"
+                        items_breakdown[k] = items_breakdown.get(k, 0) + 1
             except Exception:
                 scene_items = -1
             curtain_state = "collapsed" if getattr(self, 'is_collapsed', False) else "expanded"
@@ -1354,6 +1379,21 @@ class IntricateApp(QMainWindow):
                     f"{ts},{rss_mb:.1f},{g0},{g1},{g2},{scene_items},"
                     f"{curtain_state},{gap_s:.1f}\n"
                 )
+
+            # Write the categorized breakdown to the side log.  JSONL
+            # so each line is independently parseable.  Dict insertion
+            # is sorted at serialise-time so the same set of types
+            # always serialises in the same column order — easy to
+            # diff between consecutive lines visually.
+            try:
+                import json as _json
+                row = {"ts": ts}
+                for k in sorted(items_breakdown.keys()):
+                    row[k] = items_breakdown[k]
+                with open(self._scene_breakdown_path, 'a', encoding='utf-8', newline='') as f:
+                    f.write(_json.dumps(row, separators=(',', ':')) + "\n")
+            except Exception:
+                pass
         except Exception:
             logger.debug("[perf-heartbeat] tick write failed", exc_info=True)
 
