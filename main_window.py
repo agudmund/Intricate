@@ -229,6 +229,38 @@ class IntricateApp(QMainWindow):
         self._keep_warm_timer.setInterval(self._KEEP_WARM_INTERVAL_MS)
         self._keep_warm_timer.timeout.connect(self._on_keep_warm_tick)
 
+        # Phase 2 perf heartbeat — Phase 1 keep_warm data showed the
+        # mitigation helped at sub-hour idle but failed for multi-hour
+        # idle, with a partial first-frame improvement.  Shape suggests
+        # working-set page trim is the dominant remaining cause; this
+        # heartbeat captures the data needed to confirm.
+        #
+        # Every 60 s, write one CSV row with: timestamp, RSS, GC counts,
+        # scene item count, curtain state, and gap-since-previous-tick.
+        # The gap-since-previous-tick is the natural wake signal — when
+        # Windows enters sleep / lock states, QTimer pauses; when it
+        # wakes, the next tick lands with a gap much larger than the
+        # 60 s interval.  Post-hoc analysis can flag wake events from
+        # the gap column without OS-level session hooks.
+        #
+        # CSV is append-only at Documents/Data/curtain_perf.csv so data
+        # accumulates across restarts (today's restart pattern needs
+        # this).  Curtain-perf log lines also report
+        # `since_heartbeat_gap=Ns` — distinguishing "first click after
+        # wake" from "click after warming up with other activity".
+        from pathlib import Path as _Path
+        self._PERF_HEARTBEAT_INTERVAL_MS = 60 * 1000   # 60 seconds
+        self._perf_csv_path: _Path = (
+            _Path(__file__).resolve().parent / "Documents" / "Data" / "curtain_perf.csv"
+        )
+        self._perf_last_heartbeat_t: float = 0.0
+        self._perf_last_large_gap_t: float = 0.0   # most recent post-wake landing
+        self._perf_heartbeat_timer = QTimer(self)
+        self._perf_heartbeat_timer.setInterval(self._PERF_HEARTBEAT_INTERVAL_MS)
+        self._perf_heartbeat_timer.timeout.connect(self._on_perf_heartbeat)
+        # Defer first tick until after _setup_grid wires self.scene/self.view
+        # — the heartbeat reads scene state.  Started at the bottom of __init__.
+
         # 3.  Window OS Defaults
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -302,6 +334,14 @@ class IntricateApp(QMainWindow):
 
         # 8. Load session for the initially selected project, then start autosave
         QTimer.singleShot(0, self._load_initial_session)
+
+        # 9. Phase 2 perf heartbeat — starts after session load so the first
+        # tick captures a representative scene-item count.  Initial timestamp
+        # is set on the first tick, not at construction, so heartbeat-gap
+        # measurement is meaningful from the first interval onward.
+        import time as _time
+        self._perf_last_heartbeat_t = _time.perf_counter()
+        self._perf_heartbeat_timer.start()
 
     def _setup_grid(self):
         """
@@ -1120,6 +1160,111 @@ class IntricateApp(QMainWindow):
             self._KEEP_WARM_INTERVAL_MS // 1000,
         )
 
+    @staticmethod
+    def _process_rss_mb() -> float:
+        """Resident set size of the current process in MB.
+
+        Uses ctypes against psapi.GetProcessMemoryInfo on Windows — no
+        psutil dependency, works in frozen builds, returns 0.0 on any
+        failure (this is a metric, not a contract; the heartbeat row
+        still writes with rss_mb=0 if the call fails).
+
+        Note: argtypes / restype are load-bearing.  Without them ctypes
+        defaults the HANDLE return to int32, which truncates the 64-bit
+        pseudo-handle on 64-bit Python and the GetProcessMemoryInfo
+        call silently fails.  Use c_void_p so the full handle survives.
+        """
+        try:
+            import ctypes
+            from ctypes import c_size_t, c_void_p, c_uint32, byref, sizeof, windll
+
+            class _PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
+                _fields_ = [
+                    ("cb",                         c_uint32),
+                    ("PageFaultCount",             c_uint32),
+                    ("PeakWorkingSetSize",         c_size_t),
+                    ("WorkingSetSize",             c_size_t),
+                    ("QuotaPeakPagedPoolUsage",    c_size_t),
+                    ("QuotaPagedPoolUsage",        c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", c_size_t),
+                    ("QuotaNonPagedPoolUsage",     c_size_t),
+                    ("PagefileUsage",              c_size_t),
+                    ("PeakPagefileUsage",          c_size_t),
+                    ("PrivateUsage",               c_size_t),
+                ]
+
+            get_proc = windll.kernel32.GetCurrentProcess
+            get_proc.argtypes = []
+            get_proc.restype = c_void_p
+
+            gpmi = windll.psapi.GetProcessMemoryInfo
+            gpmi.argtypes = [c_void_p, ctypes.POINTER(_PROCESS_MEMORY_COUNTERS_EX), c_uint32]
+            gpmi.restype = ctypes.c_int
+
+            counters = _PROCESS_MEMORY_COUNTERS_EX()
+            counters.cb = sizeof(counters)
+            ok = gpmi(get_proc(), byref(counters), counters.cb)
+            if not ok:
+                return 0.0
+            return counters.WorkingSetSize / (1024.0 * 1024.0)
+        except Exception:
+            return 0.0
+
+    def _on_perf_heartbeat(self) -> None:
+        """Phase 2 perf heartbeat tick — write one CSV row.
+
+        Each row captures: timestamp, RSS in MB, GC counts (gen 0/1/2),
+        scene item count, curtain state (collapsed/expanded), and the
+        seconds-since-previous-tick (heartbeat_gap_s).  The gap column
+        is the natural wake signal — a value much larger than the 60 s
+        interval indicates the timer paused (system slept / locked /
+        was suspended) and just resumed.
+
+        CSV is append-only at Documents/Data/curtain_perf.csv so data
+        accumulates across restarts.  The header row is written if the
+        file doesn't exist; subsequent runs just append.
+
+        Failures here are caught and logged at debug level — the
+        heartbeat is a measurement, not a contract.  A failed heartbeat
+        leaves the rest of the app untouched.
+        """
+        import time as _time
+        import gc as _gc
+        import datetime as _dt
+        try:
+            now = _time.perf_counter()
+            gap_s = now - self._perf_last_heartbeat_t
+            # Flag this tick as a post-wake landing if the gap is well
+            # above the configured interval (>= 2× = clear pause signal).
+            if gap_s >= 2.0 * (self._PERF_HEARTBEAT_INTERVAL_MS / 1000.0):
+                self._perf_last_large_gap_t = now
+            self._perf_last_heartbeat_t = now
+
+            rss_mb = self._process_rss_mb()
+            g0, g1, g2 = _gc.get_count()
+            try:
+                scene_items = len(self.scene.items()) if getattr(self, 'scene', None) else 0
+            except Exception:
+                scene_items = -1
+            curtain_state = "collapsed" if getattr(self, 'is_collapsed', False) else "expanded"
+            ts = _dt.datetime.now().isoformat(timespec='seconds')
+
+            # Ensure parent dir + header on first write
+            try:
+                self._perf_csv_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+            need_header = not self._perf_csv_path.exists()
+            with open(self._perf_csv_path, 'a', encoding='utf-8', newline='') as f:
+                if need_header:
+                    f.write("timestamp,rss_mb,gc_g0,gc_g1,gc_g2,scene_items,curtain_state,heartbeat_gap_s\n")
+                f.write(
+                    f"{ts},{rss_mb:.1f},{g0},{g1},{g2},{scene_items},"
+                    f"{curtain_state},{gap_s:.1f}\n"
+                )
+        except Exception:
+            logger.debug("[perf-heartbeat] tick write failed", exc_info=True)
+
     def _on_curtains_settled(self) -> None:
         """Called when the curtains animation finishes (both collapse and restore).
 
@@ -1162,10 +1307,23 @@ class IntricateApp(QMainWindow):
             max_ms    = sorted_d[-1]
             gap = perf["gap_s"]
             gap_str = f"{gap:.0f}s" if gap is not None else "first-curtain"
+            # since_wake = seconds since the most recent post-wake landing
+            # (heartbeat tick that came in after a multi-interval gap).
+            # Distinguishes "first click after wake" (small value) from
+            # "click after warming up with other activity" (large value).
+            # Reports "—" if no post-wake landing has been observed in
+            # this session, i.e. the app was running uninterrupted.
+            now_t = time.perf_counter()
+            if self._perf_last_large_gap_t > 0.0:
+                since_wake_s = now_t - self._perf_last_large_gap_t
+                since_wake_str = f"{since_wake_s:.0f}s"
+            else:
+                since_wake_str = "—"
             logger.info(
                 "[curtains-perf] roll=%s total=%.0fms | gap=%s | keep_warm=%d | "
-                "frames=%d | first=%.0fms median=%.0fms p95=%.0fms max=%.0fms",
-                perf["roll"], total_ms, gap_str, perf["keep_warm_count"], n,
+                "since_wake=%s | frames=%d | first=%.0fms median=%.0fms p95=%.0fms max=%.0fms",
+                perf["roll"], total_ms, gap_str, perf["keep_warm_count"],
+                since_wake_str, n,
                 first_ms, median_ms, p95_ms, max_ms,
             )
         self._curtain_perf_last_finished_t = time.perf_counter()
