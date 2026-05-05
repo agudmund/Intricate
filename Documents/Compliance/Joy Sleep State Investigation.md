@@ -97,36 +97,6 @@ The other iterations also didn't have logging. Calibrating an interaction this g
 
 ---
 
-## The Wake-Event Integrity Triangle
-
-A second log layer — `Documents/Data/joy_wake_narrative.log` — appends one human-prose sentence per wake or suppression, drawn from a fixed-cadence template set in `utils/joy_narrative.py`. This forms a three-way integrity check:
-
-| Source | What it records | Where |
-|---|---|---|
-| **Click event** | The human-side action — UI input arriving at the eventFilter | (in flight, no record) |
-| **Structured log** | `[joy-wake]` line with event type, target widget, exempt status | `intricate_*.log` |
-| **Narrative log** | One first-person sentence per event, machine-selected from voice-locked templates | `joy_wake_narrative.log` |
-
-The validation property: each wake or suppression event in the structured log should have a corresponding entry of the right *kind* in the narrative log at the same time. The two logs reinforce each other — a tampered structured line can be checked against the narrative log; a hand-edited narrative line stands out against the template voice.
-
-**Why the templates are tamper-resistant by style:**
-
-The narrative templates are written in a specific, recognisable voice — first-person observation, present-perfect or simple past, cat-as-subject, concrete sensory detail, em-dash cadence, no exclamation marks. A hand-edited entry written in the operator's own voice (or anyone else's) won't reliably match this signature. The cadence is the cryptographic key; the templates are a small, fixed wordlist that the key validates against.
-
-Sample entries the system produces:
-
-> 2026-05-05 06:55:12 — Clicked something on her surface and she stirred awake to see what I was up to.
->
-> 2026-05-05 06:55:33 — Pressed the sleep button on her and she stayed cozy, no false wake.
->
-> 2026-05-05 07:01:08 — The cursor drifted onto one of her widgets and she stirred.
-
-These read like a quiet personal journal of the interaction. They aren't the operator's words — they're the system's notes on the operator's behaviour, written in a voice that's distinctively the templates'. If the operator hand-writes an entry in the journal trying to fake an event, the cadence breaks; if the operator edits an existing entry, the changed cadence is similarly detectable.
-
-This is the human-language analogue of HMAC log signing: integrity bound to a stylistic key.
-
----
-
 ## Deliberately Not Implemented (and intentionally so)
 
 | Feature | Why it's not there |
