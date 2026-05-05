@@ -261,3 +261,23 @@ class JoyMood:
 #    INTENSITY_N, BUCKET_THRESHOLD) should be promoted to
 #    [intricate.joy] keys at wire-in so live-tuning works through
 #    The Settlers without code changes.
+#
+# 6. NPC layer and equilibrium return.  The permanence Boolean exists
+#    as a parameter — not hardcoded True — because there's a parallel
+#    NPC system that this algorithm will eventually serve as well.
+#    NPCs typically don't carry permanence with the operator, so the
+#    decay-to-zero behaviour applies cleanly to them.
+#
+#    The richer dynamic for permanence=True dyads (Intricate's case):
+#    perturbations from NPC interactions can shift the affect short-
+#    term, but the system always settles BACK toward a positive
+#    equilibrium set by the permanence, never toward zero.  The
+#    underlying love-permanence remains intact regardless of distance
+#    or time priorities.
+#
+#    Current model implements only the decay-to-zero floor.  Refinement
+#    at wire-in: decay toward a permanence-anchored set-point instead
+#    of toward zero, when permanence=True.  Floor stays at zero (per
+#    the design decision); equilibrium is some positive value above it.
+#    Two parameters needed: the equilibrium value, and how strongly the
+#    system pulls back toward it from perturbations.
