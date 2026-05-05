@@ -33,6 +33,18 @@ from pretty_widgets.PrettyCombo import combo as pretty_combo
 from pretty_widgets.PrettyLabel import label as pretty_label
 from pretty_widgets.PrettySlider import slider as pretty_slider
 
+# Optional side log writer — graceful absence.  The clean_pycache()
+# janitor wipes every *.pyc on exit, so a .pyc-only delivery for this
+# module is incompatible with the existing housekeeping.  When the
+# import fails (file doesn't exist on disk), the rest of the app keeps
+# working; the structured [joy-wake] log line still emits, only the
+# narrative side log goes silent until a janitor-compatible binary
+# format is wired in.
+try:
+    from utils import joy_narrative as _joy_narrative
+except ImportError:
+    _joy_narrative = None
+
 logger = setup_logger()
 
 
@@ -740,7 +752,14 @@ class IntricateApp(QMainWindow):
                 QEvent.Enter:            "enter",
             }.get(event.type(), str(event.type()))
             obj_name = type(obj).__name__ if obj is not None else "None"
-            from utils import joy_narrative as _joy_narrative
+            # Side log writer — graceful absence.  The pycache janitor
+            # at clean_pycache() unconditionally wipes every *.pyc on
+            # the project tree on exit, so a .pyc-based delivery for
+            # this module gets removed each cycle.  Until a janitor-
+            # compatible binary format is chosen, the import may fail
+            # at module load (see top-of-file try/except); when absent,
+            # the structured [joy-wake] log line still emits and the
+            # rest of the app keeps working.
             if exempt_hit is not None:
                 exempt_name = "sleep_btn" if exempt_hit is getattr(self, '_sleep_btn', None) \
                               else "curtains_btn" if exempt_hit is getattr(self, '_curtains_btn', None) \
@@ -750,13 +769,15 @@ class IntricateApp(QMainWindow):
                     "[joy-wake] suppressed event=%s target=%s — exempt via %s",
                     ev_name, obj_name, exempt_name,
                 )
-                _joy_narrative.record_event(self._joy_narrative_path, ev_name, exempt_name)
+                if _joy_narrative is not None:
+                    _joy_narrative.record_event(self._joy_narrative_path, ev_name, exempt_name)
             else:
                 logger.info(
                     "[joy-wake] WAKE event=%s target=%s",
                     ev_name, obj_name,
                 )
-                _joy_narrative.record_event(self._joy_narrative_path, ev_name, None)
+                if _joy_narrative is not None:
+                    _joy_narrative.record_event(self._joy_narrative_path, ev_name, None)
                 self._wake_joy()
         return super().eventFilter(obj, event)
 
