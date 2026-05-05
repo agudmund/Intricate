@@ -253,6 +253,16 @@ class IntricateApp(QMainWindow):
         self._perf_csv_path: _Path = (
             _Path(__file__).resolve().parent / "Documents" / "Data" / "curtain_perf.csv"
         )
+        # Joy wake narrative log — third leg of the wake-event integrity
+        # triangle (click → [joy-wake] structured log → narrative entry).
+        # See utils/joy_narrative.py for the validation rationale.  Each
+        # wake or suppression event appends one human-prose sentence to
+        # this file, drawn from a fixed-cadence template set.  Tamper-
+        # evidence by stylistic signature: a hand-edited entry won't
+        # match the template voice on inspection.
+        self._joy_narrative_path: _Path = (
+            _Path(__file__).resolve().parent / "Documents" / "Data" / "joy_wake_narrative.log"
+        )
         self._perf_last_heartbeat_t: float = 0.0
         self._perf_last_large_gap_t: float = 0.0   # most recent post-wake landing
         self._perf_heartbeat_timer = QTimer(self)
@@ -737,6 +747,10 @@ class IntricateApp(QMainWindow):
                 QEvent.Enter:            "enter",
             }.get(event.type(), str(event.type()))
             obj_name = type(obj).__name__ if obj is not None else "None"
+            # Bucket key for the narrative log — see utils/joy_narrative.py
+            # for the validation rationale.  Each event-type maps to one
+            # bucket, suppressions get per-exempt buckets.
+            from utils import joy_narrative as _joy_narrative
             if exempt_hit is not None:
                 exempt_name = "sleep_btn" if exempt_hit is getattr(self, '_sleep_btn', None) \
                               else "curtains_btn" if exempt_hit is getattr(self, '_curtains_btn', None) \
@@ -746,11 +760,27 @@ class IntricateApp(QMainWindow):
                     "[joy-wake] suppressed event=%s target=%s — exempt via %s",
                     ev_name, obj_name, exempt_name,
                 )
+                bucket_key = (
+                    "suppress_sleep"    if exempt_name == "sleep_btn"    else
+                    "suppress_curtains" if exempt_name == "curtains_btn" else
+                    "suppress_tray"     if exempt_name == "tray_btn"     else
+                    None
+                )
+                if bucket_key is not None:
+                    _joy_narrative.append(self._joy_narrative_path, bucket_key)
             else:
                 logger.info(
                     "[joy-wake] WAKE event=%s target=%s",
                     ev_name, obj_name,
                 )
+                bucket_key = {
+                    QEvent.MouseButtonPress: "wake_press",
+                    QEvent.KeyPress:         "wake_key",
+                    QEvent.Wheel:            "wake_wheel",
+                    QEvent.Enter:            "wake_enter",
+                }.get(event.type())
+                if bucket_key is not None:
+                    _joy_narrative.append(self._joy_narrative_path, bucket_key)
                 self._wake_joy()
         return super().eventFilter(obj, event)
 
