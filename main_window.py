@@ -685,8 +685,73 @@ class IntricateApp(QMainWindow):
                     )
                     # Fall through; let the event propagate normally so
                     # other handlers in the right zone don't get blocked.
-        # Joy wake — deliberate button press only. No passive interaction wake.
-        # The sleep/wake button is the sole controller of the sleep state.
+        # ── Joy wake-on-touch ────────────────────────────────────────────────
+        # Re-enabled 2026-05-05 after the third (instrumented) attempt.
+        # See Documents/Compliance/Joy Sleep State Investigation.md for the
+        # design intent + the historical iteration trail (a43a17c → dc207fa
+        # → b82ab8b rollback in April 2026).
+        #
+        # Wake-on-touch is the primary reason the sleep state exists.  Direct
+        # interaction with the app wakes her; OS lock/unlock and OS sleep do
+        # not.  Manual button is the only way IN to sleep mode; touch is the
+        # default way OUT.
+        #
+        # Exempt set: clicks on the sleep button (button handler is the
+        # sole authority for that click, otherwise eventFilter wakes her
+        # the very moment she's pressed-to-sleep) and on the curtains/tray
+        # buttons (so the operator can tuck her in and immediately roll
+        # curtains up / minimize without waking her on the way out).  Walk
+        # up the widget tree so clicks on icon/label children of those
+        # buttons also count as exempt.
+        #
+        # Logged at INFO with a structured tag — the calibration data this
+        # mechanic needs is observable per event, not just per state change.
+        if getattr(self, '_joy_sleeping', False) and event.type() in (
+            QEvent.MouseButtonPress,
+            QEvent.KeyPress,
+            QEvent.Wheel,
+            QEvent.Enter,
+        ):
+            exempt = {
+                getattr(self, '_sleep_btn', None),
+                getattr(self, '_curtains_btn', None),
+                getattr(self, '_tray_btn', None),
+            }
+            exempt.discard(None)
+            target = obj
+            exempt_hit = None
+            depth = 0
+            while target is not None and depth < 8:
+                if target in exempt:
+                    exempt_hit = target
+                    break
+                try:
+                    target = target.parent()
+                except RuntimeError:
+                    break
+                depth += 1
+            ev_name = {
+                QEvent.MouseButtonPress: "mouse_press",
+                QEvent.KeyPress:         "key_press",
+                QEvent.Wheel:            "wheel",
+                QEvent.Enter:            "enter",
+            }.get(event.type(), str(event.type()))
+            obj_name = type(obj).__name__ if obj is not None else "None"
+            if exempt_hit is not None:
+                exempt_name = "sleep_btn" if exempt_hit is getattr(self, '_sleep_btn', None) \
+                              else "curtains_btn" if exempt_hit is getattr(self, '_curtains_btn', None) \
+                              else "tray_btn" if exempt_hit is getattr(self, '_tray_btn', None) \
+                              else type(exempt_hit).__name__
+                logger.info(
+                    "[joy-wake] suppressed event=%s target=%s — exempt via %s",
+                    ev_name, obj_name, exempt_name,
+                )
+            else:
+                logger.info(
+                    "[joy-wake] WAKE event=%s target=%s",
+                    ev_name, obj_name,
+                )
+                self._wake_joy()
         return super().eventFilter(obj, event)
 
     # Leave a small margin at the bottom when maximising so the Windows

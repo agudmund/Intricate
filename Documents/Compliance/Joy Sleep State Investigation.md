@@ -64,7 +64,36 @@ The handler comment explicitly says the opposite — neutered to manual-button-o
 
 **Reading:** the original intent (per the wiring comment) was wake-on-touch. Some iteration of the implementation neutered the handler. The wiring was left in place. The contradiction is the historical record of the failed attempts.
 
-**What we know about previous iterations:** several attempts to make wake-on-touch work, all rolled back or neutered. Specific failure modes are not yet captured (would need git archaeology).
+**Git archaeology — three iterations on the trail:**
+
+| Commit | Date | What it did |
+|---|---|---|
+| `a43a17c` | 2026-04-07 | **Original implementation.** Added the joy sleep system. Wake on `MouseButtonPress`/`KeyPress`/`Wheel`. eventFilter at `QApplication.instance()`. Clean, minimal — exactly what the doc proposes |
+| `dc207fa` | 2026-04-07 | **Exemption refinement.** Same day. Excluded clicks on `_curtains_btn`, `_tray_btn`, `_sleep_btn` from auto-wake — *"so we can tuck it in without it waking up on the way out"*. Walked the parent chain to handle clicks on icon/label children of those buttons |
+| (intermediate, in `b82ab8b` diff) | 2026-04-07/08 | **Cooldown attempt.** Added `_joy_sleep_armed_at = time.monotonic()` + 500 ms cooldown ignored by passive wake. Introduced `_wake_joy(deliberate=True)` to differentiate button-press from event-filter wake. Trying to plug a remaining race |
+| `b82ab8b` | 2026-04-09 | **Rollback.** Stripped the entire wake-on-interaction. Commit message verbatim: *"No cooldowns, no exemption walks, no race conditions. A boolean toggle should be a boolean toggle."* The neutered-but-still-wired state we have today |
+
+**The race condition that broke it:**
+
+The cleanest read of why each iteration failed comes from sequencing the events when the user clicks the sleep button **while she's already asleep**:
+
+1. Mouse press lands on `_sleep_btn`
+2. eventFilter runs first (QApplication-level filter sees the event before button handlers)
+3. eventFilter sees `_joy_sleeping == True` and `event.type() == MouseButtonPress` → calls `_wake_joy()` → flips `_joy_sleeping` to `False`
+4. Event continues to button handler → `_toggle_joy_sleep` runs → sees `_joy_sleeping == False` → calls `_sleep_joy()` → flips back to `True`
+5. **Net effect:** user clicked button to wake, ends up asleep. Inverted intent.
+
+The exemption walk (`dc207fa`) addressed this — if the click target was the sleep button itself or its descendants, eventFilter would not auto-wake; the button handler became the sole authority for that click. Curtains and tray got the same treatment so the operator could tuck her in and immediately interact with the chrome without waking her.
+
+The cooldown attempt was a bandaid for a different timing edge — possibly clicks that arrived in rapid succession after a state transition. The commit message of the rollback names it as one of the things that wasn't quite working.
+
+**Why the rollback gave up:** complexity accumulating without resolution. Exemption walks need maintenance for every new exempt button. Cooldowns add timing-dependent behaviour that's hard to reason about. The rollback's framing — *"a boolean toggle should be a boolean toggle"* — is the philosophical conclusion: rather than keep stacking workarounds, strip the whole thing and rely on the manual button alone. That gave us today's state: technically correct manual layer, no auto-wake.
+
+**The reframing for this attempt:**
+
+The previous iterations treated wake-on-touch as a feature with edge-case bugs. The current design intent (just clarified above) reframes it: *wake-on-touch IS the primary feature; the manual button is the secondary mechanism that exists to enter sleep mode in the first place*. With that reframing, the exemption walk is not a workaround — it's a structural part of the design (the sleep button is the *only* widget the operator should be able to click without waking her, by definition).
+
+The other iterations also didn't have logging. Calibrating an interaction this gentle without per-event visibility is guesswork. This attempt adds `[joy-wake]` log lines so the daily delta is readable.
 
 ---
 
