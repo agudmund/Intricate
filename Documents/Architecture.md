@@ -261,6 +261,19 @@ App.exe (5MB) → _internal/ (junction) → _runtime/ (96MB, shared)
 
 3-slot rotation: current → previous → archive → recycle bin. SHA-256 build signatures in `Documents/Build Version.md`.
 
+## Perf Observability
+
+Permanent runtime perf instrumentation, originally landed for the curtain resume-lag investigation but kept on as ongoing observability. Three sources:
+
+- **Curtain animation perf log lines.** Per-curtain summary in the main `intricate_*.log`: `[curtains-perf] roll=down total=Nms | gap=Ns | keep_warm=N | since_wake=Ns | since_unlock=Ns | frames=N | first=Nms median=Nms p95=Nms max=Nms`. Captures every curtain rolldown / rollup with its frame timing distribution, plus context fields for the conditions that gap arrived under (heartbeat-pause-derived wake signal, Windows-session-derived unlock signal).
+- **Heartbeat CSV.** `Documents/Data/curtain_perf.csv` — append-only, one row per minute. Columns: `timestamp, rss_mb, gc_g0, gc_g1, gc_g2, scene_items, curtain_state, heartbeat_gap_s`. RSS via ctypes against `psapi.GetProcessMemoryInfo` (no psutil dependency). The `heartbeat_gap_s` column is the natural wake signal — a value much larger than the 60s interval indicates the QTimer paused (system slept / locked / suspended).
+- **Scene breakdown JSONL.** `Documents/Data/scene_breakdown.log` — companion file written each heartbeat tick. Each line is one JSON object mapping `type(item).__name__ → count` for every QGraphicsItem in the scene. Used for tracking which CLASS of graphics items moves when `scene_items` fluctuates.
+- **Windows session events.** `[session] LOCK` and `[session] UNLOCK` log lines via `WTSRegisterSessionNotification` + `nativeEvent` filter on `WM_WTSSESSION_CHANGE`. Captures lock/unlock state directly so curtain-perf rows tag against it via the `since_unlock=Ns` field.
+
+Files rotate at startup when over 10 MB — over-size files get renamed with a timestamp suffix and a fresh file is started. No mid-session rotation; a single session never grows past the threshold by enough to matter. Archived files are retained — they're the historical record for perf analysis.
+
+The full investigation history (Phase 1 keep-warm timer, Phase 2 heartbeat, three confirmations of working-set trim as the cause) lives in `Documents/Compliance/Curtain Resume Lag Investigation.md`.
+
 ## Environment
 
 - Python 3.13.3, PySide6 6.10.2, Windows 11

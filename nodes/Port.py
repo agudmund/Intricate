@@ -71,6 +71,23 @@ class Port(QGraphicsEllipseItem):
         # legacy). Removing the per-port QGraphicsDropShadowEffect skips a
         # blur pass per port per repaint.
 
+        # ItemHasNoContents — tell Qt to skip paint() processing on Ports.
+        # Ports are scene.items() for architectural reasons (Node and Port
+        # are distinct concepts; the nodal grammar holds them as separate
+        # entities) but they're invisible by design — none of the 2688
+        # Ports in a typical Iconic session ever need paint().  The flag
+        # tells Qt's paint pipeline to skip them entirely, removing the
+        # per-port overhead for cache allocation, update-region tracking,
+        # and paint() call dispatch even when the item would otherwise be
+        # eligible to render.  Identity, position, hit-test, and hover
+        # events all still work — only the paint pass is opted out.
+        #
+        # If wiring mode (v0.0.3 legacy) ever needs Port visibility back,
+        # the flag can be temporarily unset on entering that mode.
+        self.setFlag(
+            QGraphicsEllipseItem.GraphicsItemFlag.ItemHasNoContents, True,
+        )
+
     # ─────────────────────────────────────────────────────────────────────────
     # HOVER
     # ─────────────────────────────────────────────────────────────────────────

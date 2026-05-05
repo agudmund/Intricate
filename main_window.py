@@ -279,6 +279,24 @@ class IntricateApp(QMainWindow):
         self._scene_breakdown_path: _Path = (
             _Path(__file__).resolve().parent / "Documents" / "Data" / "scene_breakdown.log"
         )
+
+        # Windows session lock/unlock observation — captures the
+        # screen-lock-state variable directly so curtain-perf rows
+        # can tag against it without controlled experiments.  Hooks
+        # into Windows via WTSRegisterSessionNotification + the
+        # nativeEvent handler below.  See [session] log lines for
+        # LOCK / UNLOCK transitions; curtain-perf log lines gain a
+        # since_unlock field reporting time since the most recent
+        # observed unlock.
+        self._is_locked: bool = False
+        self._last_lock_t: float = 0.0
+        self._last_unlock_t: float = 0.0
+        self._WTS_SESSION_LOCK   = 0x7
+        self._WTS_SESSION_UNLOCK = 0x8
+        self._WM_WTSSESSION_CHANGE = 0x02B1
+        # Defer registration until the HWND exists — show() at end of
+        # __init__ wires it; QTimer.singleShot(0, ...) lands after.
+        QTimer.singleShot(0, self._register_session_notification)
         self._perf_last_heartbeat_t: float = 0.0
         self._perf_last_large_gap_t: float = 0.0   # most recent post-wake landing
         self._perf_heartbeat_timer = QTimer(self)
@@ -367,6 +385,7 @@ class IntricateApp(QMainWindow):
         # measurement is meaningful from the first interval onward.
         import time as _time
         self._perf_last_heartbeat_t = _time.perf_counter()
+        self._rotate_perf_logs_if_oversized()
         self._perf_heartbeat_timer.start()
 
     def _setup_grid(self):
@@ -1263,6 +1282,65 @@ class IntricateApp(QMainWindow):
             self._KEEP_WARM_INTERVAL_MS // 1000,
         )
 
+    def _register_session_notification(self) -> None:
+        """Hook into Windows session lock/unlock events.
+
+        WTSRegisterSessionNotification subscribes this window's HWND to
+        WM_WTSSESSION_CHANGE messages, which are delivered via the
+        normal Win32 message pump — caught by nativeEvent() below.
+        Registration is per-HWND, so if the HWND ever gets recreated
+        (setWindowFlags, etc.) we'd need to re-register; for now,
+        single registration at startup is sufficient.
+        """
+        try:
+            import ctypes
+            hwnd = int(self.winId())
+            wtsapi = ctypes.windll.wtsapi32
+            ok = wtsapi.WTSRegisterSessionNotification(
+                ctypes.c_void_p(hwnd), 0  # 0 = NOTIFY_FOR_THIS_SESSION
+            )
+            if ok:
+                logger.debug("[session] registered for lock/unlock events")
+            else:
+                logger.warning("[session] WTSRegisterSessionNotification returned 0")
+        except Exception:
+            logger.warning("[session] registration failed", exc_info=True)
+
+    def nativeEvent(self, eventType, message):
+        """Catch Windows session change messages for lock/unlock detection.
+
+        Returns (False, 0) for events we don't consume — Qt continues
+        normal dispatch.  Only WM_WTSSESSION_CHANGE messages are
+        peeked at; everything else passes through untouched.
+        """
+        try:
+            if eventType == b"windows_generic_MSG" or eventType == "windows_generic_MSG":
+                import ctypes
+                from ctypes import wintypes
+                class _MSG(ctypes.Structure):
+                    _fields_ = [
+                        ("hwnd",    wintypes.HWND),
+                        ("message", wintypes.UINT),
+                        ("wParam",  wintypes.WPARAM),
+                        ("lParam",  wintypes.LPARAM),
+                        ("time",    wintypes.DWORD),
+                        ("pt_x",    wintypes.LONG),
+                        ("pt_y",    wintypes.LONG),
+                    ]
+                msg = ctypes.cast(int(message), ctypes.POINTER(_MSG)).contents
+                if msg.message == self._WM_WTSSESSION_CHANGE:
+                    if msg.wParam == self._WTS_SESSION_LOCK:
+                        self._is_locked = True
+                        self._last_lock_t = time.perf_counter()
+                        logger.info("[session] LOCK")
+                    elif msg.wParam == self._WTS_SESSION_UNLOCK:
+                        self._is_locked = False
+                        self._last_unlock_t = time.perf_counter()
+                        logger.info("[session] UNLOCK")
+        except Exception:
+            logger.debug("[session] nativeEvent handler error", exc_info=True)
+        return False, 0
+
     @staticmethod
     def _process_rss_mb() -> float:
         """Resident set size of the current process in MB.
@@ -1312,6 +1390,39 @@ class IntricateApp(QMainWindow):
             return counters.WorkingSetSize / (1024.0 * 1024.0)
         except Exception:
             return 0.0
+
+    _PERF_LOG_ROTATE_BYTES = 10 * 1024 * 1024  # 10 MB threshold per file
+
+    def _rotate_perf_logs_if_oversized(self) -> None:
+        """At startup, archive any perf log file over the size threshold.
+
+        Permanent observability infrastructure: the heartbeat CSV and
+        scene-breakdown JSONL grow linearly forever otherwise.  Bound
+        the working file at ~10 MB by renaming it with a timestamp
+        suffix when over threshold, and starting a fresh file on next
+        write.  Archived files are retained — they're the historical
+        record for perf analysis — but live in the same Documents/Data/
+        directory under their archived name.
+
+        Rotation happens only at startup, never mid-session.  A single
+        session never grows past the threshold by enough to matter
+        (several MB max for an active day), and avoiding mid-session
+        rotation keeps the live writer simple.
+        """
+        import datetime as _dt
+        suffix = _dt.datetime.now().strftime("%Y-%m-%d_%H.%M.%S")
+        for path in (self._perf_csv_path, self._scene_breakdown_path):
+            try:
+                if path.exists() and path.stat().st_size > self._PERF_LOG_ROTATE_BYTES:
+                    archived = path.with_name(f"{path.stem}-{suffix}{path.suffix}")
+                    path.rename(archived)
+                    logger.info(
+                        "[perf-heartbeat] rotated %s → %s (was %.1f MB)",
+                        path.name, archived.name,
+                        path.stat().st_size / (1024 * 1024) if path.exists() else 0,
+                    )
+            except OSError:
+                logger.debug("[perf-heartbeat] rotation failed for %s", path, exc_info=True)
 
     def _on_perf_heartbeat(self) -> None:
         """Phase 2 perf heartbeat tick — write one CSV row.
@@ -1451,11 +1562,21 @@ class IntricateApp(QMainWindow):
                 since_wake_str = f"{since_wake_s:.0f}s"
             else:
                 since_wake_str = "—"
+            # since_unlock: time since the most recent observed Windows
+            # unlock event.  "—" if no unlock has been observed in this
+            # session (i.e. screen has been continuously unlocked since
+            # the app started).  Captures the lock-state variable
+            # without controlled experiments.
+            if self._last_unlock_t > 0.0:
+                since_unlock_str = f"{(now_t - self._last_unlock_t):.0f}s"
+            else:
+                since_unlock_str = "—"
             logger.info(
                 "[curtains-perf] roll=%s total=%.0fms | gap=%s | keep_warm=%d | "
-                "since_wake=%s | frames=%d | first=%.0fms median=%.0fms p95=%.0fms max=%.0fms",
+                "since_wake=%s | since_unlock=%s | frames=%d | "
+                "first=%.0fms median=%.0fms p95=%.0fms max=%.0fms",
                 perf["roll"], total_ms, gap_str, perf["keep_warm_count"],
-                since_wake_str, n,
+                since_wake_str, since_unlock_str, n,
                 first_ms, median_ms, p95_ms, max_ms,
             )
         self._curtain_perf_last_finished_t = time.perf_counter()

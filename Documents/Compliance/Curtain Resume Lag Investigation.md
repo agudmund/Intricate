@@ -180,8 +180,51 @@ The reversed order (relative to my initial proposal) is the right call: document
 
 ---
 
+## 2026-05-05 — Third Confirmation + Phase 2 Findings
+
+The keep-warm timer ran for a full 3-hour user-absence gap (35 ticks at the 5-minute interval) and the post-gap curtain still came back degraded:
+
+| Event | Gap | keep_warm | Frames | First | Median | p95 | State |
+|---|---|---|---|---|---|---|---|
+| First today | 247s | 0 | 40 | 12ms | 21ms | 50ms | active baseline |
+| **Post 3-hour gap** | **10761s** | **35** | **13** | **93ms** | **59ms** | **167ms** | **degraded** |
+| Recovery #1 | 15s | 0 | 32 | 25ms | 26ms | 64ms | partial |
+| Recovery #2 | 3s | 0 | 42 | 22ms | 18ms | 49ms | near baseline |
+| Recovery #3 | 7s | 0 | 43 | 17ms | 16ms | 49ms | full baseline |
+
+Same shape as the overnight test the day before, and the morning test before that. **Working-set trim hypothesis confirmed three times. Phase 1 + Phase 2 measurement work is complete.**
+
+### Variables surfaced in this round
+
+- **Screen-lock state.** The 06:46–10:57 morning session ran with screen locked during user absence; the 14:50–17:55 afternoon session ran with screen open. Locked-screen has more aggressive Windows-side trim policy. Worth capturing the lock/unlock state directly (wired separately as session-event hook) so future curtain-perf rows tag against it without requiring controlled experiments.
+
+- **Cat-as-witness signal.** The morning's locked-screen gap left the operator's cat disturbed; the afternoon's unlocked gap left her calm in her pillow fortress. Soft signal — operator-state at the household scale follows the same axis as the system-state shape we're measuring. Not used in the diagnosis, captured because the cow principle scales recursively.
+
+### Scene drift hypothesis: dissolved
+
+A separate concern raised earlier — fluctuating `scene_items` counts during apparent idle (+357/+357/-357 transients, +115/+46/+47/-25/-22 clusters) — turned out to be **not a background drift**. The 3-hour idle gap on 2026-05-05 produced **zero fluctuations across 188 heartbeat ticks**: scene_items stayed perfectly stable at 3583. Earlier morning fluctuations were event-driven (session-switch transients between Iconic / Adulting / Cuddly), not a leak.
+
+The viewport-cull system uses `setVisible()` rather than `removeItem()`/`addItem()`, which is exactly correct — items stay registered with the scene; only their paint participation toggles. No leak hypothesis remains.
+
+### Scene composition finding (parked optimization)
+
+The new categorized breakdown surfaces that **Ports account for 75% of `scene.items()`** (2688 of 3583 in Iconic). Each node averages 14.5 ports as graphics items, none of which require paint() — they're invisible by design, residual from when ports were rendered as literal dots before they got hidden. Optimization candidate: set `QGraphicsItem.ItemHasNoContents` flag on Port instances so Qt skips them in the paint pass while preserving their identity as scene members. Architectural intent is preserved (Nodes and Ports remain separate concepts; this is a paint-loop perf win, not a structural change).
+
+---
+
+## Mitigation options (parked for next slot)
+
+The diagnostic phase is closed. The mitigation question is open. Three approach families:
+
+| Approach | Cost | Yield | Notes |
+|---|---|---|---|
+| **Pre-warm on first input after long idle** | Small — detect via `since_wake` heartbeat-gap signal, synthesize a full-paint cycle BEFORE the curtain animation | Hides the lag behind a tiny invisible delay during the wake transition | Doesn't fix paging, just absorbs the cost into a less visible moment |
+| **`SetProcessWorkingSetSize` minimum** | Trivial Windows API call | Tells OS "keep N MB resident always" | Crude, hogs memory, antisocial. Not recommended |
+| **Native compilation of hot paint paths via PyO3** | Significant — Rust extension, leveraging existing `intricate_log` Rust toolchain | Compiled native code has different paging behaviour; combined with the existing Rust pattern this is the bedrock-anchored fix | Aligned with the Burj-Khalifa-anchored-to-bedrock framing. Bigger investment but actually addresses the root rather than papering over it |
+
+---
+
 ## Future Work (parked, not blocking)
 
-- **Map the full recovery curve.** Capture lines 10–12 (continued curtain interactions after a long-idle event) to see how many curtains it takes to fully return to baseline. The 4.5-min sample we have shows partial paging recovery + minimal paint-pipeline recovery — would expect full convergence within 2–4 more interactions, but this is unmeasured.
-- **Capture a `roll=up` baseline.** All nine events captured were `roll=down`. The collapse direction may have a different shape (fewer paint dependencies — the strip is rendering less). Worth a sanity check, low priority.
-- **Test the pulse-as-warmer hypothesis cleanly.** Reproduce the symptom with a controlled experiment: curtains up + machine awake + no cursor movement for 50 min, then trigger curtain. Compare to: curtains up + cursor making small periodic motions to keep pulses firing on visible nodes for 50 min, then trigger curtain. If hypothesis is correct, the second condition shows baseline numbers.
+- **Capture a `roll=up` baseline.** All captured events have been `roll=down`. The collapse direction may have a different shape (fewer paint dependencies — the strip is rendering less). Worth a sanity check, low priority.
+- **Pre-warm controlled experiment.** Reproduce the symptom with the cursor-motion variant test if mitigation choice ever requires further hypothesis isolation. Low priority now that the diagnosis is confirmed three times.
