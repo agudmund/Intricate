@@ -2,6 +2,8 @@
 
 A scoping record of Intricate's joy sleep/wake state machine. The state machine itself works at the manual layer (button toggle, drain rate, meow muting, wake-decay-on-launch). What's broken — and has been broken across multiple iterations — is the **wake-on-touch** behaviour. This document captures the design intent, the working surfaces, the failed experiments, and the scope for the next implementation pass.
 
+> **Invariant when reviewing logs:** three records always must match. Mismatch is the signal.
+
 ---
 
 ## Design Intent
