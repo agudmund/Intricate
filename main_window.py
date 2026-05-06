@@ -2558,6 +2558,28 @@ class IntricateApp(QMainWindow):
         self._FEED_MAX       = 3          # meals allowed per window
         self._last_feed_time = 0.0        # for per-feed cooldown
 
+        # Restore feed cadence state from joy_state.json so the cooldown
+        # survives an app restart.  The "feed once at low → restart to
+        # bypass cooldown → feed again" workaround was the path of least
+        # resistance until the joy_mood Phase 2 stomach-pouch mechanic
+        # made the swallow-gap meaningful — closing the workaround is a
+        # prerequisite for that mechanic to be honest.  Stored in wall-
+        # clock; converted back to current monotonic frame here.
+        _saved = _joy_state.load()
+        _wall_now = time.time()
+        _mono_now = time.monotonic()
+        for _wall_t in _saved.get("feed_wall_times", []):
+            _elapsed = _wall_now - _wall_t
+            # Drop entries with negative elapsed (clock skew / NTP correction)
+            # or outside the rolling window (already irrelevant to cap check).
+            if 0 <= _elapsed < self._FEED_WINDOW:
+                self._feed_timestamps.append(_mono_now - _elapsed)
+        _last_feed_wall = _saved.get("last_feed_wall", 0.0)
+        if _last_feed_wall > 0:
+            _elapsed = _wall_now - _last_feed_wall
+            if _elapsed >= 0:
+                self._last_feed_time = _mono_now - _elapsed
+
         # Depletion timer + happy accumulator. The four tunable knobs
         # below — drain durations, grace window, bucket earn rate — are
         # read from [intricate.joy] in settings.toml at startup AND on
@@ -2570,6 +2592,9 @@ class IntricateApp(QMainWindow):
         self._joy_timer.timeout.connect(self._deplete_joy)
         self._joy_grace_remaining = 0.0   # seconds left in current grace window
         self._joy_in_grace        = False  # True while bar is 100% and grace active
+        self._happy_persist_tick  = 0      # modulo-30 counter for periodic save —
+                                            # decoupled from happy_secs value because
+                                            # depletion makes the value non-integer
         self._happy_timer = QTimer(self)
         self._happy_timer.setInterval(1000)  # 1-second resolution
         self._happy_timer.timeout.connect(self._tick_happy)
@@ -2585,9 +2610,14 @@ class IntricateApp(QMainWindow):
         self._apply_sleep_decay_on_wake()
         self._joy_timer.start()
 
-        # If we launch at 100%, start the grace immediately
+        # If we launch at 100%, start the grace immediately.  Otherwise
+        # start the happy timer for depletion — it now runs continuously
+        # while awake regardless of bar value (grow-in-grace, decay-out-
+        # of-grace).  Sleep-mode pauses it; wake resumes.
         if self.joy_bar.value() == 100:
             self._begin_grace()
+        else:
+            self._happy_timer.start()
 
         # App-wide event filter — any mouse/key interaction wakes from sleep
         from PySide6.QtWidgets import QApplication
@@ -2760,20 +2790,33 @@ class IntricateApp(QMainWindow):
             self._sleep_joy()
 
     def _sleep_joy(self) -> None:
-        """Enter sleep mode — slow depletion, muted meows."""
+        """Enter sleep mode — slow depletion, muted meows.
+
+        Pauses the happy timer too; the cat is at rest, the relationship
+        clock pauses with her.  Both growth (during a grace window that
+        happened to be active) and decay (everywhere else) freeze.
+        """
         self._joy_sleeping = True
         self._joy_timer.setInterval(self._JOY_SLEEP_INTERVAL)
         self._joy_timer.start()          # restart with new interval
+        self._happy_timer.stop()         # freeze grow/decay while asleep
         self._sleep_btn.setIcon(QIcon(Theme.icon(Theme.iconSleepingIconic, fallback_color="#9a7abf")))
         self._sleep_btn.setToolTip("Wake me up")
 
     def _wake_joy(self) -> None:
-        """Exit sleep mode — normal depletion resumes."""
+        """Exit sleep mode — normal depletion resumes.
+
+        Restarts the happy timer so grow/decay resumes from the value
+        held at sleep entry.  No catch-up integration over the slept
+        period — the relationship clock paused, no time accrued or lost.
+        """
         if not self._joy_sleeping:
             return
         self._joy_sleeping = False
         self._joy_timer.setInterval(self._JOY_AWAKE_INTERVAL)
         self._joy_timer.start()          # restart with new interval
+        if not self._happy_timer.isActive():
+            self._happy_timer.start()    # resume grow/decay
         self._sleep_btn.setText("")
         self._sleep_btn.setIcon(QIcon(Theme.icon(Theme.iconAwakeIconic, fallback_color="#d87a9e")))
         self._sleep_btn.setToolTip("Tuck me in")
@@ -2792,42 +2835,78 @@ class IntricateApp(QMainWindow):
         """Start the grace period — bar is at 100%, happy time begins."""
         self._joy_in_grace = True
         self._joy_grace_remaining = self._JOY_GRACE_SECS
-        self._happy_timer.start()
+        if not self._happy_timer.isActive():
+            self._happy_timer.start()
 
     def _end_grace(self) -> None:
-        """Grace expired — bar will start depleting on next timer tick."""
+        """Grace expired — happy now decays gently until bar returns to 100%.
+
+        The timer keeps running; the next tick lands in the depletion
+        branch instead of the growth branch.  Stopping the timer would
+        freeze happy_secs at its current value, which is the original
+        bug this change fixes.
+        """
         self._joy_in_grace = False
-        self._happy_timer.stop()
 
     def _tick_happy(self) -> None:
-        """Called every second while at 100%. Accumulates happy time."""
-        if self.joy_bar.value() < 100:
-            # Shouldn't happen, but guard against it
-            self._end_grace()
+        """One-second pulse driving the happy accumulator.
+
+        Two branches:
+          - in grace (bar at 100% within the grace window) → grow
+          - awake outside grace → decay toward zero
+
+        Sleep mode pauses both branches by stopping the timer in
+        _sleep_joy.  A stray tick that lands after the stop is guarded
+        below.
+
+        Decay is linear at _JOY_HAPPY_DEPLETION_PER_SEC, floored at 0.
+        See utils/joy_mood.py for the richer model (intensity-modulated
+        decay, tri-state, NPC layer) that replaces this at wire-in time.
+        """
+        # Stray-tick guard — _sleep_joy stops the timer, but a tick can
+        # already be queued.
+        if self._joy_sleeping:
             return
 
-        # Count this second as happy time
-        self._joy_happy_secs += 1.0
+        if self._joy_in_grace:
+            if self.joy_bar.value() < 100:
+                # Bar dropped mid-grace (rare; external edit, etc.).
+                # Clear grace and let the next tick handle decay.
+                self._end_grace()
+                self._joy_grace_remaining = 0.0
+            else:
+                # Growth branch
+                self._joy_happy_secs += 1.0
+                if self._joy_happy_secs >= self._JOY_BUCKET_SECS:
+                    self._joy_happy_secs -= self._JOY_BUCKET_SECS
+                    # Bump via the store so the file is the authoritative
+                    # source (no in-memory drift from concurrent external
+                    # edits).
+                    self._joy_bucket_count = joy_buckets.bump_buckets(1)
+                    self._joy_bucket_label.setText(str(self._joy_bucket_count))
+                    self._persist_happy()
+                self._joy_grace_remaining -= 1.0
+                if self._joy_grace_remaining <= 0:
+                    self._end_grace()
+        else:
+            # Decay branch — gentle linear depletion outside grace.
+            # Floors at 0; permanence holds the relationship at the
+            # zero floor, never below.
+            if self._joy_happy_secs > 0.0:
+                self._joy_happy_secs = max(
+                    0.0,
+                    self._joy_happy_secs - self._JOY_HAPPY_DEPLETION_PER_SEC,
+                )
 
-        # Update tooltip with live progress
+        # Tooltip refresh (both branches) — live progress for the bucket
+        # label hover.
         self._joy_bucket_label.setToolTip(self._joy_bucket_tooltip())
 
-        # Check if we earned a bucket
-        if self._joy_happy_secs >= self._JOY_BUCKET_SECS:
-            self._joy_happy_secs -= self._JOY_BUCKET_SECS
-            # Bump via the store so the file is the authoritative source
-            # (no in-memory drift from any concurrent external edits).
-            self._joy_bucket_count = joy_buckets.bump_buckets(1)
-            self._joy_bucket_label.setText(str(self._joy_bucket_count))
-            self._persist_happy()
-
-        # Burn down the grace window
-        self._joy_grace_remaining -= 1.0
-        if self._joy_grace_remaining <= 0:
-            self._end_grace()
-
-        # Persist happy progress periodically (every 30 seconds)
-        if int(self._joy_happy_secs) % 30 == 0:
+        # Periodic persist — modulo a tick counter rather than the
+        # happy_secs value, since depletion makes happy non-integer and
+        # the old `int(...) % 30 == 0` check wouldn't fire reliably.
+        self._happy_persist_tick = (self._happy_persist_tick + 1) % 30
+        if self._happy_persist_tick == 0:
             self._persist_happy()
 
     # ── Joy mechanic tunables ─────────────────────────────────────────────
@@ -2838,6 +2917,7 @@ class IntricateApp(QMainWindow):
         "sleep_drain_minutes": 600,   # bar 100→0 over 10 hours asleep
         "grace_secs":          600,   # 10 min grace at 100% before drain starts
         "bucket_minutes":      60,    # 1 hour of happy time earns 1 bucket
+        "happy_drain_minutes": 600,   # happy 3600s→0 over 10 hours outside grace
     }
 
     def _apply_joy_settings(self) -> None:
@@ -2860,6 +2940,7 @@ class IntricateApp(QMainWindow):
         sleep_min = int(_s.get_nested("intricate", "joy", "sleep_drain_minutes", d["sleep_drain_minutes"]))
         grace_s   = int(_s.get_nested("intricate", "joy", "grace_secs",          d["grace_secs"]))
         bucket_m  = int(_s.get_nested("intricate", "joy", "bucket_minutes",      d["bucket_minutes"]))
+        happy_min = int(_s.get_nested("intricate", "joy", "happy_drain_minutes", d["happy_drain_minutes"]))
 
         # Bar drains in 100 ticks of 1 unit each; total drain time = ticks ×
         # interval. interval_ms = (minutes * 60 * 1000) / 100 = minutes * 600.
@@ -2867,6 +2948,15 @@ class IntricateApp(QMainWindow):
         self._JOY_SLEEP_INTERVAL = max(1, sleep_min) * 600
         self._JOY_GRACE_SECS     = max(0, grace_s)
         self._JOY_BUCKET_SECS    = max(60, bucket_m * 60)   # floor of 1 minute
+
+        # Happy depletion rate while awake and outside grace.  Linear decay
+        # toward zero — floor at 0 because Intricate's permanence is
+        # unconditionally True (see utils/joy_mood.py for the richer model
+        # that this simple constant will be replaced by at wire-in time).
+        # Default: 3600 s → 0 over 600 minutes = 0.1 happy-sec per real-sec.
+        self._JOY_HAPPY_DEPLETION_PER_SEC = (
+            self._JOY_BUCKET_SECS / (max(1, happy_min) * 60.0)
+        )
 
         # Feed window scales with drain rate to preserve the 1:6 design
         # ratio (60-min drain ↔ 600 s feed window).  Without this the user
@@ -2906,8 +2996,10 @@ class IntricateApp(QMainWindow):
 
         logger.debug(
             "[joy-tune] applied: awake_drain=%dm sleep_drain=%dm grace=%ds bucket=%dm "
-            "feed_window=%.1fs feed_cooldown=%.1fs",
-            awake_min, sleep_min, grace_s, bucket_m, self._FEED_WINDOW, self._FEED_COOLDOWN,
+            "happy_drain=%dm (%.4f/s) feed_window=%.1fs feed_cooldown=%.1fs",
+            awake_min, sleep_min, grace_s, bucket_m, happy_min,
+            self._JOY_HAPPY_DEPLETION_PER_SEC,
+            self._FEED_WINDOW, self._FEED_COOLDOWN,
         )
 
         # Live-tune feedback for the feed button — recompute its enabled
@@ -2991,16 +3083,40 @@ class IntricateApp(QMainWindow):
             )
 
     def _persist_happy(self) -> None:
-        """Save happy accumulator and bar value to the joy_state sidecar.
-        Bucket count is NOT written here — it's persisted at earn time via
-        joy_buckets.bump_buckets, so the file store is always authoritative
-        and external hand-edits are never overwritten by a later
-        _persist_happy tick. Same isolation principle for the sidecar pair
-        as for the bucket file: runtime persistence lives outside
-        settings.toml so The Settlers' user-tunable surface never has to
-        wrestle with values the app writes to itself."""
+        """Save happy accumulator, bar value, and feed cadence state to
+        the joy_state sidecar.
+
+        Bucket count is NOT written here — it's persisted at earn time
+        via joy_buckets.bump_buckets, so the file store is always
+        authoritative and external hand-edits are never overwritten by
+        a later _persist_happy tick.  Same isolation principle for the
+        sidecar pair as for the bucket file: runtime persistence lives
+        outside settings.toml so The Settlers' user-tunable surface
+        never has to wrestle with values the app writes to itself.
+
+        Feed cadence (timestamps + last_feed_time) is converted from
+        the in-memory monotonic frame to wall-clock anchors so the
+        cooldown / window-cap state survives across an app restart.
+        Closes the "restart-as-feed-bypass" workaround that was the
+        path of least resistance before the swallow-gap mechanic in
+        joy_mood Phase 2 made it actively harmful to the design.
+        """
         from utils import joy_state as _joy_state
-        _joy_state.save(self._joy_happy_secs, self.joy_bar.value())
+        mono_now = time.monotonic()
+        wall_now = time.time()
+        feed_wall_times = [
+            wall_now - (mono_now - t) for t in self._feed_timestamps
+        ]
+        last_feed_wall = (
+            wall_now - (mono_now - self._last_feed_time)
+            if self._last_feed_time > 0 else 0.0
+        )
+        _joy_state.save(
+            self._joy_happy_secs,
+            self.joy_bar.value(),
+            feed_wall_times=feed_wall_times,
+            last_feed_wall=last_feed_wall,
+        )
 
     def _on_joy_buckets_external_change(self, new_value: int) -> None:
         """Fired when joy_buckets.txt is edited from outside the running
@@ -3024,6 +3140,7 @@ class IntricateApp(QMainWindow):
         bar_value."""
         new_bar = int(state.get("bar_value", self.joy_bar.value()))
         new_secs = float(state.get("happy_secs", self._joy_happy_secs))
+        new_grace = state.get("grace_remaining")  # None means "no override"
         # Block the bar's own valueChanged-driven side effects since this
         # write originates externally and shouldn't re-arm grace logic.
         self.joy_bar.blockSignals(True)
@@ -3037,7 +3154,23 @@ class IntricateApp(QMainWindow):
         elif self.joy_bar.value() < 100 and self._joy_in_grace:
             self._joy_in_grace = False
             self._joy_grace_remaining = 0.0
-            self._happy_timer.stop()
+            # Don't stop the timer — depletion takes over from next tick.
+        # Grace-remaining override — Settlers writes this key when the
+        # user wants to fast-forward through grace and watch decay kick
+        # in (or extend grace beyond _JOY_GRACE_SECS for testing growth).
+        # Applied AFTER the bar/grace flag adjustments above so the
+        # override lands on the corrected in_grace state.  Pure value
+        # nudge — does not force in_grace=True; if bar < 100 the value
+        # sits dormant until next bar→100 begins fresh grace.
+        if new_grace is not None:
+            self._joy_grace_remaining = max(0.0, float(new_grace))
+        # Ensure the happy timer is running for grow/decay.  External
+        # writes can land in any state; if the timer was previously off
+        # (e.g. legacy session save before depletion landed) start it
+        # now so the live value moves.  Sleep mode wins — never start
+        # the timer while asleep.
+        if not self._joy_sleeping and not self._happy_timer.isActive():
+            self._happy_timer.start()
         self.update()
 
     def _deplete_joy(self) -> None:
