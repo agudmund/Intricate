@@ -382,12 +382,12 @@ def main():
     logger.log(TRACE, "[boot:11] initialising file watcher")
     _watcher = init_watcher()
     _watcher.changed.connect(Theme.reload)
-    _watcher.changed.connect(lambda: app.activeWindow() and app.activeWindow().update())
-    # Live-reload joy mechanic tunables — Settlers writes through to TOML,
-    # watcher fires, IntricateApp re-reads and re-applies on the fly.
-    _watcher.changed.connect(
-        lambda: app.activeWindow() and getattr(app.activeWindow(), '_apply_joy_settings', lambda: None)()
-    )
+    # Window-instance-bound connections (window.update,
+    # window._apply_joy_settings) wire AFTER IntricateApp construction
+    # below.  Resolving the window via app.activeWindow() at fire time
+    # silently no-ops when Settlers (or any sibling family-app) holds
+    # focus — exactly the case during Settlers slider drags, where the
+    # TOML save fires while Settlers is still the active window.
     logger.debug(f"[boot] File watcher active on: {settings._SETTINGS_PATH}")
     logger.log(TRACE, "[boot:12] file watcher active")
 
@@ -399,12 +399,10 @@ def main():
     logger.log(TRACE, "[boot:12b] initialising color registry")
     from utils.persistence import color_registry
     _color_watcher = color_registry.init_watcher()
-    # On Settlers-side edits to color_registry.toml, repaint the active window
-    # so any currently-visible tinted node re-reads its tint (the palette
-    # itself is pulled live by ColorPicker; the repaint just nudges the view).
-    _color_watcher.changed.connect(
-        lambda: app.activeWindow() and app.activeWindow().update()
-    )
+    # window.update connection lands after IntricateApp construction
+    # below — same focus-independence concern as the main settings
+    # watcher.  The palette itself is pulled live by ColorPicker; the
+    # repaint just nudges the view to re-read tints on visible nodes.
     logger.debug(f"[boot] Color palette loaded: {len(color_registry.get_all())} colors")
 
     logger.log(TRACE, "[boot:12c] extracting OS-registered app icons")
@@ -422,6 +420,17 @@ def main():
     logger.log(TRACE, f"[boot:13a] Theme.icon at window construction = {getattr(Theme, 'icon', 'MISSING')}")
     window = IntricateApp()
     logger.log(TRACE, "[boot:14] IntricateApp window constructed")
+
+    # Watcher connections that need a concrete IntricateApp instance.
+    # Bound directly to the constructed window so they fire regardless
+    # of which family-app holds focus when the TOML save lands — the
+    # previous app.activeWindow()-gated lambdas silently no-opped during
+    # Settlers slider drags because Settlers was the active window at
+    # save time.  Qt auto-disconnects on window destruction since
+    # window is a QObject, so no manual teardown is needed here.
+    _watcher.changed.connect(window.update)
+    _watcher.changed.connect(window._apply_joy_settings)
+    _color_watcher.changed.connect(window.update)
 
     window.show()
     # Install a global exception hook so unhandled errors inside Qt slots and
