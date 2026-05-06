@@ -12,6 +12,14 @@
 
 ---
 
+## 2026-05-06
+
+### Joy graduates to its own top-level package — `joy/`
+
+The cluster of `utils/joy_*.py` files (state, buckets, mood, narrative) crossed from "utility helpers" into "framework" and moved to a new top-level `joy/` package alongside `utils/`, `data/`, `nodes/`, `graphics/`. `JoyStatsNode` (in `nodes/`) and `JoyStatsNodeData` (in `data/`) stay where they are — they're visualisation surfaces, not joy logic, and the three-strict-layers rule still holds. Establishes the graduation pattern: when a single domain in `utils/` outgrows utility status (multiple files, own data files, own visualisation node), it gets its own top-level home rather than nesting deeper. See `Documents/Architecture.md` "Author-Time Tools vs Runtime Helpers" for the updated rule.
+
+---
+
 ## 2026-04-28
 
 ### VideoNode swapped to PyAV — A/V Transport Engine Stage 1 + Stage 3 landed

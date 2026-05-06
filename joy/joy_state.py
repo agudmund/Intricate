@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - utils/joy_state.py joy runtime persistence
+-Intricate - joy/joy_state.py joy runtime persistence
 -Tiny JSON sidecar holding the live pulse — happy seconds + bar value for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
@@ -14,7 +14,7 @@
 # in The Settlers (which they aren't — exposing them as sliders would let the
 # user "cheat" the joy gamification, the wrong shape).
 #
-# Sister to utils/joy_buckets.py — which holds the bucket count in a one-line
+# Sister to joy/joy_buckets.py — which holds the bucket count in a one-line
 # .txt file with its own external-edit watcher. Same idea here, just two values
 # instead of one, so JSON instead of plain text.
 
@@ -129,7 +129,7 @@ class JoyStateWatcher(QObject):
     chat session. The watcher lets the running app pick up such tweaks
     live instead of overwriting them on the next _persist_happy tick.
 
-    Mirrors JoyBucketsWatcher in utils/joy_buckets.py — same defensive
+    Mirrors JoyBucketsWatcher in joy/joy_buckets.py — same defensive
     re-add-on-change pattern (some editors save by delete+rename, which
     drops the watch handle), same idempotent ensure-watched flow.
     """

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - utils/joy_narrative.py joy wake narrative log
+-Intricate - joy/joy_narrative.py joy wake narrative log
 -The accountant who watches the cat with words For Enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

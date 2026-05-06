@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - utils/joy_mood.py joy tri-state mood algorithm
+-Intricate - joy/joy_mood.py joy tri-state mood algorithm
 -The shape of how she feels between encounters, captured for the next pass for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

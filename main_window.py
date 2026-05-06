@@ -41,7 +41,7 @@ from pretty_widgets.PrettySlider import slider as pretty_slider
 # narrative side log goes silent until a janitor-compatible binary
 # format is wired in.
 try:
-    from utils import joy_narrative as _joy_narrative
+    from joy import joy_narrative as _joy_narrative
 except ImportError:
     _joy_narrative = None
 
@@ -2438,7 +2438,7 @@ class IntricateApp(QMainWindow):
         self.joy_bar = QProgressBar()
         self.joy_bar.setOrientation(Qt.Vertical)
         self.joy_bar.setRange(0, 100)
-        from utils import joy_state as _joy_state
+        from joy import joy_state as _joy_state
         self.joy_bar.setValue(_joy_state.load()["bar_value"])
         self.joy_bar.setTextVisible(False)
         self.joy_bar.setFixedWidth(bar_width)
@@ -2500,13 +2500,13 @@ class IntricateApp(QMainWindow):
         layout.addWidget(joy_container)
 
         # ── Joy bucket counter ─────────────────────────────────────────────
-        # Bucket count has its own tiny file store (utils/joy_buckets.py) —
+        # Bucket count has its own tiny file store (joy/joy_buckets.py) —
         # detached from settings.toml so the value can be tweaked by hand
         # without touching the shared-braincell config surface. A watcher
         # picks up external edits live so hand-tweaks don't get clobbered
         # by the next _persist_happy tick.
-        from utils import joy_buckets
-        from utils import joy_state as _joy_state
+        from joy import joy_buckets
+        from joy import joy_state as _joy_state
         self._joy_bucket_count = joy_buckets.get_buckets()
         self._joy_buckets_watcher = joy_buckets.JoyBucketsWatcher(self)
         self._joy_buckets_watcher.changed.connect(self._on_joy_buckets_external_change)
@@ -2860,7 +2860,7 @@ class IntricateApp(QMainWindow):
         below.
 
         Decay is linear at _JOY_HAPPY_DEPLETION_PER_SEC, floored at 0.
-        See utils/joy_mood.py for the richer model (intensity-modulated
+        See joy/joy_mood.py for the richer model (intensity-modulated
         decay, tri-state, NPC layer) that replaces this at wire-in time.
         """
         # Stray-tick guard — _sleep_joy stops the timer, but a tick can
@@ -2951,7 +2951,7 @@ class IntricateApp(QMainWindow):
 
         # Happy depletion rate while awake and outside grace.  Linear decay
         # toward zero — floor at 0 because Intricate's permanence is
-        # unconditionally True (see utils/joy_mood.py for the richer model
+        # unconditionally True (see joy/joy_mood.py for the richer model
         # that this simple constant will be replaced by at wire-in time).
         # Default: 3600 s → 0 over 600 minutes = 0.1 happy-sec per real-sec.
         self._JOY_HAPPY_DEPLETION_PER_SEC = (
@@ -3035,7 +3035,7 @@ class IntricateApp(QMainWindow):
           - sleep_drain_minutes is 0 or unset (would divide by zero)
         """
         from datetime import datetime
-        from utils import joy_state as _joy_state
+        from joy import joy_state as _joy_state
         import shared_braincell.settings as _s
 
         state = _joy_state.load()
@@ -3101,7 +3101,7 @@ class IntricateApp(QMainWindow):
         path of least resistance before the swallow-gap mechanic in
         joy_mood Phase 2 made it actively harmful to the design.
         """
-        from utils import joy_state as _joy_state
+        from joy import joy_state as _joy_state
         mono_now = time.monotonic()
         wall_now = time.time()
         feed_wall_times = [

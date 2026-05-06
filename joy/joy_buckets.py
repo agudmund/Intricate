@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - utils/joy_buckets.py joy bucket counter store
+-Intricate - joy/joy_buckets.py joy bucket counter store
 -Detached one-line text store for the joy bucket count, ceremony-free for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """

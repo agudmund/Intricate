@@ -194,7 +194,8 @@ Two parallel directories at the repo root, each with distinct semantics. Differe
 
 | Location | Holds | Imported by runtime app? |
 |---|---|---|
-| `utils/` | Runtime helper modules — global mouse hook, joy state, image processing, paint kit, placement math, persistence layer, audio, video decoder, and friends. Code the running app calls during normal operation. | **Yes** — every module has at least one runtime caller |
+| `utils/` | Runtime helper modules — global mouse hook, image processing, paint kit, placement math, persistence layer, audio, video decoder, and friends. Code the running app calls during normal operation. | **Yes** — every module has at least one runtime caller |
+| `joy/` | Domain-scoped runtime package for the joy tamagotchi system — `joy_state` (runtime persistence sidecar with feed-cadence anchors), `joy_buckets` (earned-bucket counter + watcher), `joy_mood` (parked algorithm awaiting wire-in; Phase 1 linear decay shipped in `main_window.py`, Phase 2 STARVING + stomach-pouch biology captured here), `joy_narrative` (wake-narrative integrity log). Graduated from `utils/` 2026-05-06 once the cluster crossed from "utility helpers" into "framework." Visualisation belongs to `JoyStatsNode` (in `nodes/`); this package is policy + state + persistence only. | **Yes** — main_window imports from it throughout |
 | `tools/` | Author-time tools — analysis scripts, generators, build scaffolding, third-party utilities the author runs occasionally. Not on the runtime path. | **No** — running the app never imports anything from here |
 
 **Current contents of `tools/`:**
@@ -206,7 +207,7 @@ Two parallel directories at the repo root, each with distinct semantics. Differe
 | `tools/_scan_imports.py` | Author-time analysis — scans every `.py` in the repo, reports the external-package dependency surface. Useful for audit and confirming what `requirements.txt` should contain. |
 | `tools/generate_chat_session.py` | Author-time conversion — parses a Claude Code JSONL conversation log into an Intricate `session.json` (each user/assistant message becomes a WarmNode/TextNode connected in sequence). |
 
-**The rule:** if it's imported by `main.py`, `main_window.py`, anything in `nodes/`, `graphics/`, `data/`, or anything else on the runtime path, it's a runtime helper and lives in `utils/`. If it runs separately (manual invocation, build step, batch script) and the app never imports from it, it's a tool and lives in `tools/`.
+**The rule:** if it's imported by `main.py`, `main_window.py`, anything in `nodes/`, `graphics/`, `data/`, or anything else on the runtime path, it's a runtime helper and lives in `utils/`. When a single domain in `utils/` outgrows utility status (multiple files, its own data files, its own visualisation node) it graduates to its own top-level package — `joy/` is the precedent, 2026-05-06. If it runs separately (manual invocation, build step, batch script) and the app never imports from it, it's a tool and lives in `tools/`.
 
 **Pending candidates** (deliberately left in their current locations):
 
