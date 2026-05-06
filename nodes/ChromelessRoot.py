@@ -755,7 +755,14 @@ class ChromelessRoot(QGraphicsRectItem):
                 for line in frame.rstrip().splitlines():
                     logger.info("[chrome-DEMOLISH] %s   stack[%02d] %s",
                                 self._log_id(), i, line)
-            self._removal_done = True
+            # demolish() sets _removal_done=True at its own line 91 as
+            # the first action, AND uses that flag as its idempotency
+            # guard.  A pre-set here would make demolish bail at the
+            # guard on every scene-leave, leaving the crew's signal
+            # disconnects, scene invalidate, and timer teardown unrun
+            # — the node ends up half-cleaned with stopped timers but
+            # live signals, and any subsequent scene re-add (e.g., the
+            # singleton-summon path in main_window) inherits a zombie.
             try:
                 from nodes._demolition import demolish
                 demolish(self)
@@ -766,6 +773,18 @@ class ChromelessRoot(QGraphicsRectItem):
                                  self._log_id())
         elif change == QGraphicsItem.ItemSceneChange and value is not None:
             logger.log(TRACE, "[chrome-scene] %s ENTER scene=%r", self._log_id(), value)
+        elif (change == QGraphicsItem.ItemSceneHasChanged and value is not None
+                and self._removal_done):
+            # Zombie being un-deleted.  Triggered when a previously
+            # demolished singleton instance is re-attached to a scene
+            # via the limbo-recovery path (main_window's _spawn_*
+            # functions for singleton HUDs land here when the user
+            # accidentally shake-deletes then re-summons via the
+            # sidebar).  The instance has already had timers stopped,
+            # signals disconnected, and graphics flags zeroed by the
+            # demolition crew; revive re-arms the basics so the node
+            # behaves like a fresh spawn from this point forward.
+            self._revive_from_zombie()
         return super().itemChange(change, value)
 
     def _demolition_pre(self) -> None:
@@ -785,6 +804,83 @@ class ChromelessRoot(QGraphicsRectItem):
                    self._log_id(), self._pin_connected)
         self._disconnect_viewport_tracking()
         logger.log(TRACE, "[chrome-demolish-pre] %s done", self._log_id())
+
+    def _revive_from_zombie(self) -> None:
+        """Re-arm a chromeless node that was previously demolished but
+        is being re-added to a scene.
+
+        The mirror image of demolish for the singleton-summon-after-
+        shake-delete path.  Triggered automatically by itemChange when
+        ItemSceneHasChanged fires with a non-None scene and
+        ``_removal_done`` is True.  Reverses the basics:
+
+          * clears _removal_done so future scene transitions take the
+            normal demolish path again
+          * restores the three default chromeless interaction flags
+            (zeroed by demolish phase 0)
+          * walks the _demolition_timers manifest, reconnects each
+            slot, and starts the timer
+
+        Subclasses with additional teardown-affected state (custom
+        cache mode, brush, signal connections outside the manifest)
+        should override _revive_post for those — default no-op.
+
+        Pinned nodes: if the node was pinned at demolish time, the
+        viewport-tracking signal was disconnected by _demolition_pre.
+        Re-pinning is left to the caller (the singleton-summon code
+        in main_window can re-call _activate_pin if needed).
+        """
+        from nodes._demolition import _manifest as _demolition_manifest
+
+        logger.info("[chrome-revive] %s reanimating after demolition",
+                    self._log_id())
+        self._removal_done = False
+
+        # Restore default chromeless interaction flags.  Mirrors __init__;
+        # pin state will re-toggle ItemIsMovable separately if the node
+        # is reanimated into a pinned state.
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
+
+        # Walk the demolition timer manifest in reverse: reconnect
+        # each timeout-to-slot wire and start the timer.  Mirrors
+        # _demolition.demolish()'s "Manifest: timers" walk.
+        for timer_attr, slot_name in _demolition_manifest(self, '_demolition_timers'):
+            timer = getattr(self, timer_attr, None)
+            if timer is None:
+                continue
+            if slot_name:
+                slot = getattr(self, slot_name, None)
+                if slot is not None:
+                    try:
+                        timer.timeout.connect(slot)
+                    except (RuntimeError, TypeError):
+                        pass
+            try:
+                timer.start()
+            except (RuntimeError, AttributeError):
+                pass
+            logger.log(TRACE, "[chrome-revive] %s timer %s reconnected and started",
+                       self._log_id(), timer_attr)
+
+        # Subclass extension hook
+        try:
+            self._revive_post()
+        except Exception:
+            logger.exception("[chrome-revive] %s _revive_post raised",
+                             self._log_id())
+
+    def _revive_post(self) -> None:
+        """Subclass extension hook for _revive_from_zombie.
+
+        Default no-op.  Override to restore subclass-specific state
+        the demolition crew tore down — anything outside the
+        _demolition_timers manifest that ``__init__`` would normally
+        set up.  Examples: custom cache mode, brush, animations,
+        worker signal reconnects.
+        """
+        pass
 
     # ─────────────────────────────────────────────────────────────────────────
     # PAINT — deliberately empty
