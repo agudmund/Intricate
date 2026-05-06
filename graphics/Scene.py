@@ -899,11 +899,21 @@ class IntricateScene(QGraphicsScene):
                 # _attach_companion for the full lifecycle.
                 if getattr(item, '_is_companion', False):
                     continue
-                # JoyStats: app-scoped singleton when pinned. Pinned →
-                # excluded from session save (lives in sidecar instead).
+                # JoyStats: app-scoped singleton when pinned.  Pinned →
+                # excluded from session save and from cross-restart
+                # persistence entirely.  The HUD is fresh-per-launch by
+                # design — re-summoned via the sidebar, lands at the
+                # remembered seat (joy_stats.json sidecar in Documents/
+                # Data/ stores per-session positions), user re-pins if
+                # they want.  Cross-session-WITHIN-app persistence (the
+                # _joy_stats_limbo + _pinned_across_scenes machinery in
+                # main_window.py) still applies — pinned HUDs ride from
+                # one session to the next during a single app run.  It
+                # only goes away when the process does.
+                #
                 # Unpinned → saved normally; the singleton ref is dropped
                 # at park time and the next session reclaims it via
-                # _attach_joy_stats. See main_window._park_joy_stats.
+                # _attach_joy_stats.  See main_window._park_joy_stats.
                 if (getattr(item, '_is_joy_stats', False)
                         and getattr(getattr(item, 'data', None), 'pinned', False)):
                     continue
