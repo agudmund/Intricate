@@ -96,6 +96,19 @@ _LEGACY_SESSION_FILENAMES = {
 }
 _SESSION_DIRS      = {"backup", "Backup", "Documents", "data", "cache", "Data", "Cache"}
 
+# Top-level runtime sidecars in Documents/Data/ — files the running app
+# updates constantly without user intent: joy bucket state, curtain
+# animation perf samples, the system-event tape. They sit alongside the
+# session save files and should classify as session-managed so the
+# GitNode keeps them in the green-dot auto-commit group rather than
+# leaving them in blue-dot review every time the app runs. Add new
+# sidecar filenames here as the runtime grows.
+_SESSION_DATA_FILES = {
+    "curtain_perf.csv",
+    "joy_stats.json",
+    "system_events.jsonl",
+}
+
 
 def _is_session_path(raw: str) -> bool:
     """Check if a porcelain path is session-related (files or directories).
@@ -104,11 +117,15 @@ def _is_session_path(raw: str) -> bool:
       - Any *.intricate file (live session, timestamped backups, legacy names)
       - The Documents/Data/ tree (Backup/, Cache/)
       - Image node cache PNGs (Documents/Data/Cache/*.png)
+      - Top-level runtime sidecars in Documents/Data/ (curtain_perf.csv,
+        joy_stats.json, system_events.jsonl — see _SESSION_DATA_FILES)
       - Warm bridge files (.warm_bridge_*.json)
     """
     p = raw.strip().strip('"').rstrip("/")
     name = Path(p).name
     if name in _LEGACY_SESSION_FILENAMES or name in _SESSION_DIRS:
+        return True
+    if name in _SESSION_DATA_FILES:
         return True
     # Any .intricate file — covers {project}.intricate and all timestamped
     # backups under Backup/ without needing a pattern list
