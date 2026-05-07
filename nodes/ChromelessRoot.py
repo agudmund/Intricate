@@ -184,6 +184,26 @@ class ChromelessRoot(QGraphicsRectItem):
         self._drag_suppressed_count = 0
         self._drag_suppressed_max_travel_px = 0.0
 
+        # ──────────────────────────────────────────────────────────────────────
+        # Press/release balance counters — diagnostic port from BaseNode's
+        # 2026-05-02 instrumentation. Phase-1 logging-only port 2026-05-07:
+        # chromeless nodes (especially StickerNode) have historically been
+        # hit by the same "node spins far offscreen on click" symptom but
+        # with a quieter failure mode — a chromeless body without a loaded
+        # image renders only a faint label, so once the node is flung past
+        # the viewport the user can't find it and creates another, leaving
+        # the orphan in the session file. Counters feed [chrome-press] /
+        # [chrome-release] INFO logs and enable orphan-release detection
+        # in mouseReleaseEvent. No behavioural gate yet — BaseNode added
+        # one 2026-05-07; we want chromeless logs first to confirm the
+        # bug class is the same and pick the right gate placement.
+        # _arm_seq increments on every mousePressEvent entry, _release_seq
+        # on every mouseReleaseEvent entry. A release with
+        # _release_seq > _arm_seq is an "orphan release" — Qt sent us a
+        # release for a press we never saw through mousePressEvent.
+        self._arm_seq:     int = 0
+        self._release_seq: int = 0
+
         # Default interaction flags. Pin toggle disables ItemIsMovable
         # while pinned; ItemSendsScenePositionChanges so itemChange gets
         # move/leave events.
@@ -240,15 +260,38 @@ class ChromelessRoot(QGraphicsRectItem):
     # ─────────────────────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event):
-        btn = ("right" if event.button() == Qt.RightButton
-               else "left" if event.button() == Qt.LeftButton else "other")
-        logger.log(TRACE, "[chrome-mouse] %s PRESS button=%s pos=(%.1f,%.1f)",
-                   self._log_id(), btn, event.pos().x(), event.pos().y())
+        """Mouse press on a ChromelessRoot.
+
+        Three paths: right-click → context menu, left-click on opt-in
+        corner-grip → resize, left-click elsewhere → arm shake +
+        drag-commit dead zone. The matching mouseReleaseEvent must
+        eventually fire for any of these or the ``_arm_seq`` /
+        ``_release_seq`` counters drift (which is itself a useful
+        signal — see orphan-release detection in mouseReleaseEvent).
+
+        Press/release balance: every entry increments ``_arm_seq``
+        regardless of which path is taken. The matching
+        ``mouseReleaseEvent`` increments ``_release_seq``. A release
+        with ``_release_seq > _arm_seq`` is an orphan and gets logged
+        WARNING — same instrumentation pattern as BaseNode's 2026-05-02
+        port, here for chromeless nodes (StickerNode etc.) which have
+        historically been hit by the same spinning-offscreen symptom.
+        """
+        self._arm_seq += 1
+
         if event.button() == Qt.RightButton:
-            logger.log(TRACE, "[chrome-mouse] %s → context menu", self._log_id())
+            logger.info(
+                "[chrome-press] %s path=context-menu button=right "
+                "screen=(%.1f,%.1f) arm_seq=%d release_seq=%d (delta=%d)",
+                self._log_id(),
+                event.screenPos().x(), event.screenPos().y(),
+                self._arm_seq, self._release_seq,
+                self._arm_seq - self._release_seq,
+            )
             self._show_context_menu(event)
             event.accept()
             return
+
         if event.button() == Qt.LeftButton:
             # Generic unpinned corner-grip resize — bottom-right handle,
             # only active when the subclass opted in and the node is
@@ -258,14 +301,22 @@ class ChromelessRoot(QGraphicsRectItem):
             if (self._UNPINNED_RESIZE_ENABLED
                     and not self.data.pinned
                     and self._hit_resize_grip(event.pos())):
-                logger.log(TRACE, "[chrome-mouse] %s → resize grip hit", self._log_id())
+                logger.info(
+                    "[chrome-press] %s path=resize-grip button=left "
+                    "screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f) "
+                    "arm_seq=%d release_seq=%d (delta=%d)",
+                    self._log_id(),
+                    event.screenPos().x(), event.screenPos().y(),
+                    self.scenePos().x(), self.scenePos().y(),
+                    self._arm_seq, self._release_seq,
+                    self._arm_seq - self._release_seq,
+                )
                 self._chrome_resizing     = True
                 self._chrome_resize_start = event.pos()
                 self._chrome_resize_rect0 = self.rect()
                 event.accept()
                 return
             # Arm the shake detector for the duration of this drag.
-            logger.log(TRACE, "[chrome-mouse] %s → shake.press()", self._log_id())
             self._shake.press()
             # Arm the drag-commit dead-zone — see _DRAG_COMMIT_THRESHOLD_PX
             # / _DRAG_COMMIT_HOLD_MS for the rationale (Wacom pen-tap
@@ -276,15 +327,30 @@ class ChromelessRoot(QGraphicsRectItem):
             self._drag_committed        = False
             self._drag_suppressed_count = 0
             self._drag_suppressed_max_travel_px = 0.0
-            logger.log(TRACE,
-                       "[chrome-drag-gate] %s ARM screen=(%.1f,%.1f) "
-                       "displacement_threshold=%.1fpx hold_threshold=%.0fms",
-                       self._log_id(),
-                       event.screenPos().x(), event.screenPos().y(),
-                       self._DRAG_COMMIT_THRESHOLD_PX,
-                       self._DRAG_COMMIT_HOLD_MS)
+            logger.info(
+                "[chrome-press] %s path=normal button=left "
+                "screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f) "
+                "arm_seq=%d release_seq=%d (delta=%d) "
+                "disp_threshold=%.1fpx hold_threshold=%.0fms",
+                self._log_id(),
+                event.screenPos().x(), event.screenPos().y(),
+                self.scenePos().x(), self.scenePos().y(),
+                self._arm_seq, self._release_seq,
+                self._arm_seq - self._release_seq,
+                self._DRAG_COMMIT_THRESHOLD_PX,
+                self._DRAG_COMMIT_HOLD_MS,
+            )
+        else:
+            # Other-button press path (middle, etc.) — log so the seq
+            # numbers stay traceable across non-left, non-right presses.
+            logger.info(
+                "[chrome-press] %s path=normal button=other(%s) "
+                "arm_seq=%d release_seq=%d (delta=%d)",
+                self._log_id(), event.button(),
+                self._arm_seq, self._release_seq,
+                self._arm_seq - self._release_seq,
+            )
         super().mousePressEvent(event)
-        logger.log(TRACE, "[chrome-mouse] %s PRESS returned (super called)", self._log_id())
 
     def _hit_resize_grip(self, local_pos: QPointF) -> bool:
         """Bottom-right ``_RESIZE_GRIP_SIZE`` square of the node rect.
@@ -337,19 +403,23 @@ class ChromelessRoot(QGraphicsRectItem):
                 if not hold_ok:         why.append(f"hold<{self._DRAG_COMMIT_HOLD_MS:.0f}ms")
                 logger.log(TRACE,
                     "[chrome-drag-gate] %s SUPPRESS #%d travel=%.2fpx held=%.0fms "
-                    "(%s) screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f)",
+                    "(%s) screen=(%.1f,%.1f) scene_pos=(%.1f,%.1f) "
+                    "arm_seq=%d release_seq=%d",
                     self._log_id(), self._drag_suppressed_count, travel_px, held_ms,
                     ",".join(why), cur.x(), cur.y(),
-                    self.scenePos().x(), self.scenePos().y())
+                    self.scenePos().x(), self.scenePos().y(),
+                    self._arm_seq, self._release_seq)
                 event.accept()
                 return
             self._drag_committed = True
             logger.info(
                 "[chrome-drag-gate] %s COMMIT after %d suppressed events "
                 "(max travel during suppression=%.2fpx, commit travel=%.2fpx, "
-                "held=%.0fms) — drag begins",
+                "held=%.0fms) — drag begins. arm_seq=%d release_seq=%d (delta=%d)",
                 self._log_id(), self._drag_suppressed_count,
-                self._drag_suppressed_max_travel_px, travel_px, held_ms)
+                self._drag_suppressed_max_travel_px, travel_px, held_ms,
+                self._arm_seq, self._release_seq,
+                self._arm_seq - self._release_seq)
 
         logger.log(TRACE, "[chrome-mouse] %s MOVE scene_pos=(%.1f,%.1f)",
                      self._log_id(), self.scenePos().x(), self.scenePos().y())
@@ -361,28 +431,77 @@ class ChromelessRoot(QGraphicsRectItem):
         self._shake.track(self.scenePos(), zoom)
 
     def mouseReleaseEvent(self, event):
+        """Mouse release on a ChromelessRoot. Logs the release with full
+        balance/state context, detects orphan releases (release without
+        a corresponding press through ``mousePressEvent``), runs the
+        drag-gate post-mortem, syncs geometry back to data.
+
+        Orphan release detection — added 2026-05-07 (logging-only port
+        of BaseNode's instrumentation) — fires WARNING when
+        ``_release_seq > _arm_seq``, i.e. Qt sent us a release for a
+        press we never saw through ``mousePressEvent``. On BaseNode this
+        was the canary for the "node spins far offscreen on click" bug
+        class; we expect to see the same pattern here on chromeless
+        nodes (esp. StickerNode) and use the data to decide whether
+        the same outstanding-press gate placement BaseNode got is right
+        for chromeless too, or whether the two-axis gate already
+        suppresses enough of the asymmetric deliveries on its own.
+        """
+        self._release_seq += 1
+
         btn = ("right" if event.button() == Qt.RightButton
                else "left" if event.button() == Qt.LeftButton else "other")
-        logger.log(TRACE, "[chrome-mouse] %s RELEASE button=%s shake_triggered=%s removal_done=%s",
-                   self._log_id(), btn, self._shake_triggered, self._removal_done)
-        # Drag-gate post-mortem — most useful when investigating phantom
-        # motion incidents. INFO-level when the gate caught suppressed
-        # motion (a "clean tap that wasn't really clean"); TRACE otherwise.
+        was_resizing = self._chrome_resizing
+
+        # Orphan-release detection — release_seq should never exceed
+        # arm_seq. If it does, mouseReleaseEvent was called without a
+        # matching mousePressEvent through this method.
+        is_orphan = self._release_seq > self._arm_seq
+        if is_orphan:
+            logger.warning(
+                "[chrome-release] %s ORPHAN release — no preceding press "
+                "through mousePressEvent. button=%s was_resizing=%s "
+                "shake_triggered=%s arm_seq=%d release_seq=%d. Possible "
+                "asymmetric gesture path; investigate the call site that "
+                "produced this release.",
+                self._log_id(), event.button(), was_resizing,
+                self._shake_triggered,
+                self._arm_seq, self._release_seq,
+            )
+
+        # Drag-gate post-mortem — captures the gesture's end state.
+        # Promoted to INFO across the board 2026-05-07 (was mixed
+        # INFO/TRACE) so press/release pairs are always visible in
+        # default logs, matching BaseNode's [base-release] format.
         if event.button() == Qt.LeftButton:
             if not self._drag_committed and self._drag_suppressed_count > 0:
                 logger.info(
-                    "[chrome-drag-gate] %s RELEASE without commit — gate suppressed "
+                    "[chrome-release] %s RELEASE without commit — gate suppressed "
                     "%d phantom motion events (max travel=%.2fpx, threshold=%.1fpx). "
+                    "was_resizing=%s arm_seq=%d release_seq=%d. "
                     "If this happened on a stationary touch, the gate did its job.",
                     self._log_id(), self._drag_suppressed_count,
                     self._drag_suppressed_max_travel_px,
-                    self._DRAG_COMMIT_THRESHOLD_PX)
+                    self._DRAG_COMMIT_THRESHOLD_PX,
+                    was_resizing, self._arm_seq, self._release_seq,
+                )
             else:
-                logger.log(TRACE,
-                    "[chrome-drag-gate] %s RELEASE committed=%s suppressed=%d max_travel=%.2fpx",
+                logger.info(
+                    "[chrome-release] %s button=left committed=%s suppressed=%d "
+                    "max_travel=%.2fpx was_resizing=%s arm_seq=%d release_seq=%d",
                     self._log_id(), self._drag_committed,
                     self._drag_suppressed_count,
-                    self._drag_suppressed_max_travel_px)
+                    self._drag_suppressed_max_travel_px,
+                    was_resizing, self._arm_seq, self._release_seq,
+                )
+        else:
+            logger.info(
+                "[chrome-release] %s button=%s was_resizing=%s "
+                "arm_seq=%d release_seq=%d",
+                self._log_id(), event.button(), was_resizing,
+                self._arm_seq, self._release_seq,
+            )
+
         # Always clear the resize flag — a release ends whatever gesture
         # was in progress. sync_data() below captures the final rect
         # into the dataclass so the frozen-size invariant persists.
@@ -390,7 +509,6 @@ class ChromelessRoot(QGraphicsRectItem):
         self._shake.release()
         self.sync_data()
         super().mouseReleaseEvent(event)
-        logger.log(TRACE, "[chrome-mouse] %s RELEASE returned (super called)", self._log_id())
 
     # ─────────────────────────────────────────────────────────────────────────
     # CONTEXT MENU

@@ -283,6 +283,17 @@ class StickerNode(ChromelessRoot):
                 self._is_resizing       = True
                 self._resize_start_pos  = event.pos()
                 self._resize_start_rect = self.rect()
+                # Symmetry with mouseReleaseEvent's super() call — the
+                # release path always calls super (which increments
+                # ChromelessRoot's _release_seq counter), so the press
+                # path must too or every sticker resize produces a
+                # false-positive ORPHAN release warning. Same pattern as
+                # BaseNode's 2026-05-02 resize-path symmetry fix.
+                # ChromelessRoot's mousePressEvent runs its drag-gate ARM
+                # (sets _drag_press_screen_pos etc.), but StickerNode's
+                # mouseMoveEvent intercepts on _is_resizing before super
+                # so the gate never actually runs during a resize.
+                super().mousePressEvent(event)
                 event.accept()
                 return
             # Hide the cursor while dragging — the sticker should look

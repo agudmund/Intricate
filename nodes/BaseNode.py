@@ -856,6 +856,24 @@ class BaseNode(QGraphicsRectItem):
             event.accept()
             return
 
+        # ──────────────────────────────────────────────────────────────────────
+        # Outstanding-press gate — added 2026-05-07 from forensic logs at
+        # 07:45:24 onward (13 ORPHAN releases on AboutNode in one session,
+        # commit_travel up to 965 px). When _arm_seq <= _release_seq there
+        # is no press currently outstanding, so any mouseMoveEvent reaching
+        # us is an asymmetric Qt delivery (Wacom phantom motion, grab
+        # transfer after a sibling removal, focus shenanigans, etc.).
+        # Letting it fall through to super().mouseMoveEvent translates the
+        # node by Qt's stale grab-anchor delta — the "node spins far
+        # offscreen on click" symptom — because the drag-gate state reset
+        # on release puts _drag_press_screen_pos at (0, 0), so a stray
+        # move at any normal screen coord blows past _DRAG_COMMIT_THRESHOLD_PX.
+        # The orphan-release counter in mouseReleaseEvent stays as the
+        # canary; this gate just stops the translate from happening.
+        if self._arm_seq <= self._release_seq:
+            event.accept()
+            return
+
         # Drag-commit dead zone — Wacom phantom-motion suppression. See
         # _DRAG_COMMIT_THRESHOLD_PX. Until cumulative cursor travel from
         # press exceeds the threshold, eat the event without translating
