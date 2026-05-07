@@ -196,9 +196,13 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     alpha channel suitable for compositing or chroma-free workflows.
 
     Filename convention:
-        {session} {lowest-about-label} - {timestamp}.png
-    Any empty segment is omitted. Timestamp last so files sort by
-    session → label → time in Explorer.
+        first attempt   →  {session} {lowest-about-label}.png
+        on collision    →  {session} {lowest-about-label} 2.png, 3.png, …
+    Empty segments are omitted; if both session and label are empty the
+    fallback stem is "Intricate snapshot". Mirrors The Majestic's polaroid
+    collision-resolution (see _resolve_majestic_save_path) so polaroids
+    from both apps land in the shared images folder under the same naming
+    rules.
 
     Args:
         view:         The IntricateView instance.
@@ -207,7 +211,6 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
 
     Returns the Path of the saved PNG, or None on failure.
     """
-    from datetime import datetime
     from PySide6.QtCore import QRectF
     from PySide6.QtGui import QImage, QPainter
     import shared_braincell.settings as _s
@@ -230,9 +233,7 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     scene.render(painter, QRectF(0, 0, w, h), scene_rect)
     painter.end()
 
-    # ── Build filename: session aboutlabel - timestamp.png ─────────────────
-    # Timestamp last so Explorer sorts by session → label → time.
-    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    # ── Build filename stem: {session} {about_label} ──────────────────────
     parts = []
     s = _sanitize(session_name)
     if s:
@@ -240,12 +241,20 @@ def snapshot_viewport(view, session_name: str = "", scale: int = 2) -> Path | No
     about = _sanitize(_lowest_about_label(view))
     if about:
         parts.append(about)
-    name = " ".join(parts) if parts else ""
-    title = f"{name} - {stamp}.png" if name else f"{stamp}.png"
+    stem = " ".join(parts) if parts else "Intricate snapshot"
 
     out_dir = Path(_s.get("shared", "images_dir", default="."))
     ensure_dir(out_dir)
-    path = out_dir / title
+
+    # Collision-resolution — counter starts at 2 so the second polaroid of
+    # the same view reads as "<stem> 2.png", aligning with Windows' "Copy
+    # of file (2)" intuition. Matches The Majestic's polaroid pattern.
+    path = out_dir / f"{stem}.png"
+    counter = 2
+    while path.exists():
+        path = out_dir / f"{stem} {counter}.png"
+        counter += 1
+
     img.save(str(path))
     logger.info(f"📸 Viewport snapshot saved: {path}")
     return path
