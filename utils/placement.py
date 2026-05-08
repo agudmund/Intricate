@@ -383,9 +383,18 @@ def chain_spawn(scene, source_node, items, factory, *,
     # Without this the splitter freezes the UI proportional to
     # paragraphs × existing peer count (Documents/Compliance/Warm Splitter
     # Hang Investigation.md).
+    #
+    # NOTE: load_session and import_session use ExcludeUserInputEvents
+    # because they run on a not-yet-shown / mid-import scene where user
+    # clicks would land in undefined state.  chain_spawn runs on a live,
+    # already-shown scene during a deliberate user action (paste-split,
+    # cushions-export); the user must remain able to scroll, zoom, drag,
+    # and otherwise interact during a long chain.  AllEvents is correct
+    # here — the gate handles peer animation quiescence; user input just
+    # needs to flow through.
     from PySide6.QtCore import QEventLoop
     from PySide6.QtWidgets import QApplication
-    _YIELD_EVERY     = 10
+    _YIELD_EVERY     = 5
     _YIELD_BUDGET_MS = 50
 
     scene._bulk_adding = getattr(scene, '_bulk_adding', 0) + 1
@@ -429,7 +438,7 @@ def chain_spawn(scene, source_node, items, factory, *,
 
             if (i + 1) % _YIELD_EVERY == 0:
                 QApplication.processEvents(
-                    QEventLoop.ExcludeUserInputEvents, _YIELD_BUDGET_MS,
+                    QEventLoop.AllEvents, _YIELD_BUDGET_MS,
                 )
     finally:
         scene._bulk_adding = max(0, getattr(scene, '_bulk_adding', 1) - 1)
