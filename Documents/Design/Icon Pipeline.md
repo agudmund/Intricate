@@ -14,7 +14,7 @@ Every icon in the app belongs to exactly one of three families. The families are
 
 The hierarchy reads as: emoji buttons are the stars, sticker buttons are the tools, sidebar icons are the furniture. An icon's family is a decision about role before it's a decision about style.
 
-All three families render through the same widget, `NodeButton`, which scales icon-based buttons by **1.28×** to compensate for the transparent padding baked into the sidebar and sticker PNGs. Without this compensation, icon buttons read ~22% smaller than emoji glyphs sitting next to them on the same button strip.
+All three families render through the same widget, `NodeButton`. Sidebar/Pillow (Family 1) and emoji (Family 2) icons get a **1.28×** scale to compensate for the ~22% transparent padding around their outer ring; without it they read visibly smaller than emoji glyphs sitting next to them on the same button strip. Sticker icons (Family 3) fill edge-to-edge out to their white peel border and render at **1.0×** — scaling them up would crowd the strip. The branch lives at `nodes/NodeButton.py:133` as `scale = 1.0 if self._sticker_shadow else 1.28`.
 
 ## Family 1 — Sidebar & Toolbar (Pillow line-art)
 
@@ -69,7 +69,7 @@ Four stages:
 
 1. **Draft** — use the Pillow recipe above to sketch a clean vector silhouette (outer ring + symbol). This is the structural reference, not the deliverable.
 2. **Generate** — feed the silhouette to an image generator asking for a 3D shaded emoji render: warm gradients, soft lighting, subtle depth, matching the OS emoji look. Tweak the prompt until the render sits visually flush with native emoji glyphs.
-3. **Extract** — write a Python script (see `icons/extract_github_icon.py` as reference) that crops the icon from the generated strip, removes the background via colour-distance masking (`numpy`), removes any drop shadow underneath (dark pixels in the bottom region), trims transparent edges, pads to square, and resamples to 1024×1024.
+3. **Extract** — write a Python script (see `tools/icon_pipeline/scripts/extract_github_icon.py` as reference) that crops the icon from the generated strip, removes the background via colour-distance masking (`numpy`), removes any drop shadow underneath (dark pixels in the bottom region), trims transparent edges, pads to square, and resamples to 1024×1024.
 4. **Wire** — register in `[theme.icons]` in `settings.toml`, reference via `Theme.iconXxx`.
 
 The draft step exists because generators produce consistent proportions and centering when seeded from a clean silhouette — without it, each icon's content sits at a different size inside the ring and the family reads inconsistent.
@@ -84,7 +84,7 @@ Same four stages as Family 2, with one critical addition in extraction:
 
 1. **Draft or source** — create or find a clean flat icon of the action (arrow, gear, refresh, pause). A simple vector with a sticker-border treatment works best.
 2. **Generate** — ask the image generator for a sticker style: flat coloured fill (purple/blue tones fit the palette), dark outline, white cut-out border, no drop shadow.
-3. **Extract** — see reference implementations in `icons/extract_push_icon.py`, `icons/extract_trim_audio.py`, `icons/extract_pause_icon.py`. The script must:
+3. **Extract** — see reference implementations in `tools/icon_pipeline/scripts/extract_push_icon.py`, `extract_trim_audio.py`, `extract_pause_icon.py`. The script must:
    - Crop the icon from the generated image
    - Remove the background via colour-distance masking + warm-fringe removal
    - Use `scipy.ndimage.label` to keep the largest connected component (kills stray dots)
@@ -121,7 +121,7 @@ dark_bg.paste(out, (0, 0), out)
 dark_bg.save("icons/_verify_xxx_dark.png")
 ```
 
-`(45, 52, 54)` is the canonical node background. The verification PNG is where a bad defringe reveals itself. Visually check the `_verify_*_dark.png` before considering the extraction done. These files are not typically tracked in git — they are an intermediate artifact of the extraction run.
+`(45, 52, 54)` is the canonical node background. The verification PNG is where a bad defringe reveals itself. Visually check the `_verify_*_dark.png` before considering the extraction done. These files are tracked alongside the icon they verify — `git ls-files icons/_verify_*_dark.png` lists the current set — so a future audit can re-inspect what each extraction shipped against the dark backdrop without re-running the pipeline.
 
 ## Wiring — From File to Rendered Button
 
@@ -132,7 +132,7 @@ Once an icon's `.ico` and `.png` exist in `icons/`, three things connect it to t
    [theme.icons]
    xxx = "xxx_node.ico"
    ```
-2. **Metaclass resolution** in `graphics/Theme.py` — `Theme.iconXxx` resolves dynamically through the metaclass. Icons are looked up first in `./icons/`, then in `$SingleSharedBraincell_AssetVault`. A missing icon returns a circle sentinel — the app never crashes over a missing asset.
+2. **Metaclass resolution** in `pretty_widgets.graphics.Theme` — `Theme.iconXxx` resolves dynamically through the metaclass. Icons are looked up first in `./icons/`, then in `$SingleSharedBraincell_AssetVault`. A missing icon returns a circle sentinel — the app never crashes over a missing asset.
 3. **Reference** from code — whatever button-building helper is in use (`setup_iconic_button`, `_make_exid_button`, a `NodeButton` on a node's button strip) takes `Theme.iconXxx` and passes the resolved path to Qt.
 
 No code change is needed to add a new icon — the metaclass auto-exposes whatever is registered in `[theme.icons]`. Adding a new button that uses an existing icon is a one-line reference. Adding a new button with a new icon is "register + reference."
@@ -146,18 +146,35 @@ Whenever a new button is added **anywhere** in the app — sidebar, toolbar, nod
 The pause sticker used by AudioNode, VideoNode, and MergeNode had been extracted from a low-resolution source with visible kerning artefacts. The refresh produced a concrete walkthrough of the Family 3 pipeline with the simplest possible extraction path:
 
 1. **Source** — a new cleaner sticker was hand-cleaned into `Images/Stickers/Pause.png`, carrying its own alpha channel (fully transparent outside, opaque inside the sticker peel). This made the flood-fill step in the old extraction script redundant.
-2. **Extraction** — `icons/extract_pause_icon.py` was simplified to: largest-component cleanup → white-matte defringe on semi-transparent edges → trim, square, 1024 resize → PNG + multi-res ICO.
+2. **Extraction** — `tools/icon_pipeline/scripts/extract_pause_icon.py` was simplified to: largest-component cleanup → white-matte defringe on semi-transparent edges → trim, square, 1024 resize → PNG + multi-res ICO.
 3. **Verification** — the verify PNG against `(45, 52, 54)` showed a clean white peel with no halo on the dark background.
 4. **No wiring change** — the output filenames (`icons/pauseIconic.png`, `icons/pauseIconic.ico`) were preserved, so every consumer via `Theme.iconPauseIconic` picked up the new asset on the next Theme reload.
 
 The update was two files of work (source PNG + script) and zero lines of Python-consumer change. That is the pipeline running as designed: when assets are the primitive and consumers reference them through the metaclass, a visual refresh is a data edit, not a code edit.
+
+## Worked Example — The 2026-05-08 Brand Mark Refresh
+
+`icons/Intricate.ico` is the proprietary identity icon. It sits on the desktop `.lnk`, the running-window taskbar slot, the systray, and embedded in the `.exe` at build time. Refreshing it touches more than a node icon does because Windows caches the rendered version per file across several shell databases — the icon-pipeline scripts produce the new asset, but the OS won't surface it until those caches are flushed.
+
+The pipeline for the brand mark itself is deliberately simple. `tools/icon_pipeline/scripts/extract_intricate_icon.py` is a passthrough, not an extraction — the PNG at `icons/Intricate.png` is treated as already-finished art (authored externally, dropped in by hand). No defringe, no largest-component cleanup, no resize. The script just writes a verify composite on the dark node bg and emits the multi-resolution ICO from the source as-is. This is the right shape because the input is a fully-cleaned hand-authored sticker, not a generator output that needs the post-processing tail.
+
+When the PNG changes, the chain to refresh is:
+
+1. **Regenerate the ICO** — `python tools/icon_pipeline/scripts/extract_intricate_icon.py`. Produces `icons/Intricate.ico` (7 frames: 16/24/32/48/64/128/256) and `icons/_verify_intricate_dark.png`.
+2. **Re-save `Intricate.lnk`** — load the shortcut via `WScript.Shell`, set `IconLocation` back to `icons/Intricate.ico,0`, and call `Save()`. Bumps mtime and forces Explorer to re-read the `IconLocation` field. Without this, the per-file shell-icon cache for the .lnk persists.
+3. **Wipe shell icon caches** — stop `explorer.exe`, delete every `iconcache_*.db` and `thumbcache_*.db` under `%LocalAppData%\Microsoft\Windows\Explorer\` (plus the legacy `%LocalAppData%\IconCache.db`), then restart `explorer.exe`. The cache files hold rendered-pixel snapshots keyed by file path; they don't refresh on icon-content change unless deleted.
+4. **Restart Intricate** — the running window's taskbar icon and the systray icon come from `QIcon("icons/Intricate.ico")` loaded once at process start. A vaporize-relaunch picks up the new asset.
+
+What this **doesn't** require is a fresh AUMID. The namespaced form `SingleSharedBraincell.Intricate` (set in `main.py` via `SetCurrentProcessExplicitAppUserModelID`) was a one-time fix for the Win11 Personalization > Taskbar cache that had bound a wrong icon to the bare `Intricate` identity at some earlier point. That binding is now path-stable — once the file content changes and the shell caches are flushed, the pinned-taskbar slot picks up the new mark on next launch. Future brand-mark refreshes do not need re-namespacing.
+
+The brand mark also doubles as `Theme.iconCurtains` — it is BOTH a real UI primitive (the curtains share-arrow that appears on the canvas) AND the family-wide fallback for any missing-icon lookup. If a `Theme.iconXxx` reference can't resolve, the metaclass returns this share-arrow as the sentinel rather than crashing. Recognising the share-arrow in a "wrong icon" bug means our own fallback path triggered, not a Windows-generic placeholder.
 
 ## Technical Notes
 
 - **Render at 2×, downsample via LANCZOS.** The Pillow recipe renders at 2048 and downsamples to 1024 because Pillow's draw primitives do not anti-alias — the LANCZOS downsample is what produces smooth edges. Drawing directly at 1024 produces visibly jagged strokes.
 - **Multi-resolution ICO matters.** Qt picks the sharpest layer for each render target — a 16px tray icon uses the 16px layer, a 256px menu icon uses the 256px layer. Shipping a single-resolution ICO produces blurry small renders.
 - **The extract / generate scripts are one-shot tools, not runtime modules.** They live in `tools/icon_pipeline/scripts/`, each with a brief docstring identifying its source PNG and the icon it produces. They are not imported by anything in the runtime app — running one is a manual authoring action. They MAY import from the local `tools/icon_pipeline/` toolkit (canvas, save, extract, verify, batch helpers) so the family-1 canvas scaffolding, defringe, largest-component cleanup, multi-resolution ICO save, etc. don't have to be copy-pasted across every script. The toolkit itself is also author-time only — it never lands in the runtime tree, only build-time scripts touch it.
-- **`NodeButton.py`'s 1.28× scale is load-bearing.** It exists to compensate for transparent padding baked into the icon PNGs (sidebar icons have ~22% padding; stickers similar). Change the padding convention and this constant must change in lockstep, or icon-based buttons will drift in apparent size relative to emoji glyphs on the same strip.
+- **`NodeButton.py`'s 1.28× / 1.0× split is load-bearing.** Non-sticker icons (Families 1 & 2) get 1.28× to compensate for ~22% transparent padding around the outer ring; stickers (Family 3) fill edge-to-edge to their white peel border and stay at 1.0×. The branch is `scale = 1.0 if self._sticker_shadow else 1.28`. Change the padding convention and these constants must change in lockstep, or icons drift in apparent size relative to emoji glyphs on the same strip.
 - **Theme reload is live.** Saving `settings.toml` after registering a new icon triggers `Theme.reload()` and repaints every button that references the metaclass attribute. No restart required for icon swaps once wiring exists.
 
 ## Source Workspace vs Production Icons
@@ -226,7 +243,7 @@ The 44 non-batch scripts kept their existing logic verbatim during the migration
 
 ## Relationship to Other Systems
 
-- **Theme** (`graphics/Theme.py`) — the metaclass is what makes icon names feel like first-class attributes. Every icon filename in `settings.toml` becomes a `Theme.iconXxx` attribute at runtime.
+- **Theme** (`pretty_widgets.graphics.Theme`) — the metaclass is what makes icon names feel like first-class attributes. Every icon filename in `settings.toml` becomes a `Theme.iconXxx` attribute at runtime. Theme used to live at `graphics/Theme.py` in this repo; it was extracted to the shared Pretty Widgets package alongside the rest of the family-wide infrastructure.
 - **NodeButton** (`nodes/NodeButton.py`) — the single render point for all three families. Scaling, alignment, and hover handling live here, not in the button creation sites.
 - **Settings contract** — `settings.toml` is the shared file contract with The Settlers. Icon registrations are written by hand in Intricate's development, but could in principle be edited from The Settlers without touching Intricate's code.
 - **Asset vault** — `$SingleSharedBraincell_AssetVault` is the optional override path. An icon present in both the bundled `./icons/` and the vault resolves to the vault version first, giving the user a clean override channel without editing the repo.
