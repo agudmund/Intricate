@@ -6317,7 +6317,7 @@
       "source_mtime": 1761485120.9001687,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a",
       "volume": 50,
-      "playback_pos": 1044,
+      "playback_pos": 4388,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -6580,7 +6580,7 @@
       "source_mtime": 1746374795.2638292,
       "caption": "The Majestic",
       "volume": 50,
-      "playback_pos": 2291,
+      "playback_pos": 333,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -10265,7 +10265,7 @@
       "source_mtime": 1745506042.3926215,
       "caption": "Waving - Framed",
       "volume": 50,
-      "playback_pos": 4916,
+      "playback_pos": 2583,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -11794,7 +11794,7 @@
       "source_mtime": 1761485120.8856592,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a (1)",
       "volume": 50,
-      "playback_pos": 3947,
+      "playback_pos": 278,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -14301,16 +14301,16 @@
     {
       "node_id": 0,
       "node_type": "about",
-      "title": "Thingaling",
+      "title": "More Glory",
       "uuid": "6757e2fef4444fbead527d0bc16611be",
-      "x": 5257.09858741954,
-      "y": 3777.370868721184,
-      "width": 128.734375,
+      "x": 5953.058437532613,
+      "y": 3348.0872228570465,
+      "width": 129.0625,
       "height": 31.0,
       "z_value": -8.889000000000616,
       "ports_visible": false,
       "shelf_visible": false,
-      "label": "Thingaling",
+      "label": "More Glory",
       "depth_front": false,
       "node_tint": ""
     }
@@ -17946,13 +17946,13 @@
     }
   ],
   "viewport": {
-    "camera_x": 5567.678800904576,
-    "camera_y": 3159.462590583409,
+    "camera_x": 5566.052726488424,
+    "camera_y": 3657.0413619259325,
     "camera_zoom": 0.6149780047375767
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
   "last_browse_dirs": {},
-  "checksum": "d8c9f0c6434d4cd5"
+  "checksum": "d4c66f19aef76476"
 }
