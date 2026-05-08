@@ -84,7 +84,8 @@ def _segment_crosses_rect(p1: 'QPointF', p2: 'QPointF',
 
 
 def _wire_path_clear(scene, parent, candidate_pos: QPointF, new_node,
-                     wire_padding: float) -> bool:
+                     wire_padding: float,
+                     node_index: 'list | None' = None) -> bool:
     """True if the wire from *parent*'s output port to *new_node* (placed at
     *candidate_pos*) doesn't cross any unrelated node.
 
@@ -92,7 +93,14 @@ def _wire_path_clear(scene, parent, candidate_pos: QPointF, new_node,
     same mechanism that chooses which of the 8 ports the wire hooks onto
     as nodes drift.  Uses a straight-line raycast with a padding margin to
     absorb the bezier's heart-swell; not exact but correct enough for a
-    probe loop."""
+    probe loop.
+
+    If ``node_index`` is supplied, iteration runs against that pre-filtered
+    list of canvas-real items (.data / .to_dict) instead of ``scene.items``.
+    Lets bulk callers like ``chain_spawn`` snapshot the canvas once and
+    reuse it across many probes — under the scene's NoIndex policy that
+    avoids re-scanning the full item list (Ports are ~75 % of it and never
+    matter for placement)."""
     if parent is None:
         return True
 
@@ -117,6 +125,17 @@ def _wire_path_clear(scene, parent, candidate_pos: QPointF, new_node,
         abs(dst_pos.y() - src_pos.y()) + wire_padding * 2,
     )
 
+    if node_index is not None:
+        for item in node_index:
+            if item is new_node or item is parent:
+                continue
+            br = item.sceneBoundingRect()
+            if not br.intersects(seg_bbox):
+                continue
+            if _segment_crosses_rect(src_pos, dst_pos, br, wire_padding):
+                return False
+        return True
+
     for item in scene.items(seg_bbox):
         if item is new_node or item is parent:
             continue
@@ -136,7 +155,8 @@ def spiral_place(scene, node, origin: QPointF | None = None,
                  probes: int = 16,
                  max_attempts: int = 50,
                  parent=None, wire_padding: float = 18.0,
-                 fallback: QPointF | None = None) -> QPointF:
+                 fallback: QPointF | None = None,
+                 node_index: 'list | None' = None) -> QPointF:
     """Find a clear position for *node* on *scene* using spiral probing.
 
     Parameters
@@ -172,6 +192,16 @@ def spiral_place(scene, node, origin: QPointF | None = None,
     fallback : QPointF | None
         Position returned when the canvas is so packed that even node
         collision can't be avoided.  ``None`` → *origin*.
+    node_index : list | None
+        Optional pre-filtered list of canvas-real items (those with
+        ``.data`` and ``.to_dict``).  When provided, every collision
+        and wire-path probe iterates this list instead of querying
+        ``scene.items()`` — cuts probe cost dramatically on populated
+        scenes under the NoIndex policy, since ``scene.items()`` is a
+        linear scan of all items (Ports alone are ~75 %).  Bulk callers
+        like ``chain_spawn`` snapshot once at the top and reuse it
+        across the whole spawn loop.  ``None`` keeps the default
+        ``scene.items()`` path for one-off callers.
 
     Returns
     -------
@@ -205,9 +235,19 @@ def spiral_place(scene, node, origin: QPointF | None = None,
     # Duck-typed across node roots: BaseNode variants and StickerNode
     # (2026-04-18 split).  Any future root that carries `.data` and
     # `.to_dict()` is treated as a real canvas item for placement.
+    # When node_index is supplied (bulk caller), skip scene.items() and
+    # iterate the pre-filtered snapshot directly — same correctness, far
+    # smaller working set.
     def _node_clear(p: QPointF) -> bool:
         candidate = QRectF(p.x() - padding, p.y() - padding,
                            nw + padding * 2, nh + padding * 2)
+        if node_index is not None:
+            for item in node_index:
+                if item is node:
+                    continue
+                if item.sceneBoundingRect().intersects(candidate):
+                    return False
+            return True
         for item in scene.items(candidate):
             if item is node:
                 continue
@@ -226,7 +266,8 @@ def spiral_place(scene, node, origin: QPointF | None = None,
                  state['attempts'], p.x(), p.y())
         if not _node_clear(p):
             return False
-        if _wire_path_clear(scene, parent, p, node, wire_padding):
+        if _wire_path_clear(scene, parent, p, node, wire_padding,
+                            node_index=node_index):
             return True
         # Node-clear but wire crosses — reserve as graceful-failure fallback
         if state['best_wire_crosser'] is None:
@@ -395,7 +436,20 @@ def chain_spawn(scene, source_node, items, factory, *,
     from PySide6.QtCore import QEventLoop
     from PySide6.QtWidgets import QApplication
     _YIELD_EVERY     = 5
-    _YIELD_BUDGET_MS = 50
+    _YIELD_BUDGET_MS = 10
+
+    # Snapshot canvas-real items once at the top so spiral_place's probe
+    # loop iterates ~hundreds of nodes instead of ~thousands of items
+    # (Ports are ~75 % of scene.items() and never matter for placement).
+    # The snapshot grows with every spawn so siblings within the same
+    # chain still see each other for collision avoidance.  This is the
+    # per-spawn-cost half of the splitter perf story; the _bulk_adding
+    # gate above is the peer-animation half.  See Documents/Compliance/
+    # Warm Splitter Hang Investigation.md for the full diagnosis.
+    node_index: list = [
+        it for it in scene.items()
+        if hasattr(it, 'data') and hasattr(it, 'to_dict')
+    ]
 
     scene._bulk_adding = getattr(scene, '_bulk_adding', 0) + 1
     spawned: list = []
@@ -424,7 +478,7 @@ def chain_spawn(scene, source_node, items, factory, *,
             pos = spiral_place(
                 scene, node, origin=chain_origin,
                 parent=prev_node, fallback=chain_origin,
-                padding=padding,
+                padding=padding, node_index=node_index,
             )
             node.setPos(pos)
 
@@ -433,6 +487,7 @@ def chain_spawn(scene, source_node, items, factory, *,
                 conn = connection_factory(prev_node, node)
                 scene.addItem(conn)
 
+            node_index.append(node)
             spawned.append(node)
             prev_node = node
 
