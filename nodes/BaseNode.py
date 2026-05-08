@@ -175,9 +175,22 @@ class BaseNode(QGraphicsRectItem):
         # gesture and equal between gestures. A release that fires while
         # _release_seq == _arm_seq is an "orphan release" — Qt sent us a
         # release without a corresponding press through this method, and
-        # gets logged at WARNING for forensic capture.
+        # gets logged at WARNING for forensic capture. The orphan handler
+        # re-syncs _release_seq = _arm_seq after warning so a single
+        # asymmetric gesture (e.g. mouseDoubleClickEvent dispatch) fires
+        # exactly one WARNING instead of latching into a cascade where
+        # every subsequent legitimate release reads as orphan.
         self._arm_seq:     int = 0
         self._release_seq: int = 0
+
+        # Outstanding-press flag — gates mouseMoveEvent against asymmetric
+        # Qt event dispatch. Set True on every mousePressEvent entry,
+        # False on every mouseReleaseEvent exit. Used by mouseMoveEvent
+        # instead of an _arm_seq <= _release_seq comparison: the seq-based
+        # gate latched permanently after the first orphan release because
+        # the seqs drifted by 1 forever, leaving the node unmovable.
+        # A boolean is binary — it cannot drift and cannot latch.
+        self._press_outstanding: bool = False
 
         # ── Behaviour ─────────────────────────────────────────────────────────
         # disconnect_all() is called in _prepare_for_removal — not optional.
@@ -756,6 +769,7 @@ class BaseNode(QGraphicsRectItem):
         is an orphan and gets logged WARNING.
         """
         self._arm_seq += 1
+        self._press_outstanding = True
         node_type = getattr(self.data, 'node_type', '?')
         scene = self.scene()
 
@@ -858,19 +872,30 @@ class BaseNode(QGraphicsRectItem):
 
         # ──────────────────────────────────────────────────────────────────────
         # Outstanding-press gate — added 2026-05-07 from forensic logs at
-        # 07:45:24 onward (13 ORPHAN releases on AboutNode in one session,
-        # commit_travel up to 965 px). When _arm_seq <= _release_seq there
-        # is no press currently outstanding, so any mouseMoveEvent reaching
-        # us is an asymmetric Qt delivery (Wacom phantom motion, grab
-        # transfer after a sibling removal, focus shenanigans, etc.).
-        # Letting it fall through to super().mouseMoveEvent translates the
-        # node by Qt's stale grab-anchor delta — the "node spins far
-        # offscreen on click" symptom — because the drag-gate state reset
-        # on release puts _drag_press_screen_pos at (0, 0), so a stray
-        # move at any normal screen coord blows past _DRAG_COMMIT_THRESHOLD_PX.
+        # 07:45:24 onward (13 ORPHAN releases on AboutNode, commit_travel
+        # up to 965 px). When no press is outstanding, any mouseMoveEvent
+        # reaching us is an asymmetric Qt delivery (e.g. mouseDoubleClick-
+        # Event dispatch — Qt fires press→release→doubleclick→release on
+        # a double-click, so the second tap has no mousePressEvent paired
+        # with its release; ImageNode's double-click-to-browse is the
+        # confirmed instance, but the same shape applies to any node with
+        # a mouseDoubleClickEvent override). Letting it fall through to
+        # super().mouseMoveEvent translates the node by Qt's stale grab-
+        # anchor delta — the "node spins far offscreen on click" symptom.
+        #
+        # Originally implemented 2026-05-07 as `_arm_seq <= _release_seq`
+        # but that latched: once an orphan release pushed release_seq
+        # past arm_seq, every subsequent press landed at delta=0 and the
+        # gate stayed closed forever — the node became permanently
+        # unmovable. Replaced with a boolean flag the same day after
+        # forensic logs at 20:08 confirmed the latch (25 cascading
+        # ORPHAN warnings on a single image node, all from one underlying
+        # asymmetric dispatch). A boolean is binary, cannot drift,
+        # cannot latch.
+        #
         # The orphan-release counter in mouseReleaseEvent stays as the
         # canary; this gate just stops the translate from happening.
-        if self._arm_seq <= self._release_seq:
+        if not self._press_outstanding:
             event.accept()
             return
 
@@ -1216,24 +1241,35 @@ class BaseNode(QGraphicsRectItem):
         leaving stale drag-gate state visible to subsequent gestures.
         """
         self._release_seq += 1
+        self._press_outstanding = False
         node_type = getattr(self.data, 'node_type', '?')
         was_resizing = self._is_resizing
 
         # Orphan-release detection — release_seq should never exceed
         # arm_seq. If it does, mouseReleaseEvent was called without a
-        # matching mousePressEvent through this method (e.g., via a
-        # future asymmetric path that bypasses press-counter increment).
-        # Logged as WARNING so it surfaces in normal log scrape.
+        # matching mousePressEvent through this method (e.g., via Qt's
+        # mouseDoubleClickEvent dispatch where the second tap fires
+        # release without a paired press). Logged WARNING so it surfaces
+        # in normal log scrape, then immediately re-synced so a single
+        # asymmetric dispatch fires exactly one warning instead of
+        # latching into a cascade.
         is_orphan = self._release_seq > self._arm_seq
         if is_orphan:
             logger.warning(
                 "[base-release] %s ORPHAN release — no preceding press "
                 "through mousePressEvent. button=%s was_resizing=%s "
-                "arm_seq=%d release_seq=%d. Possible asymmetric gesture "
-                "path; investigate the call site that produced this release.",
+                "arm_seq=%d release_seq=%d. Likely an asymmetric Qt "
+                "dispatch (mouseDoubleClickEvent or similar). Re-syncing "
+                "release_seq to arm_seq so the next gesture starts balanced.",
                 node_type, event.button(), was_resizing,
                 self._arm_seq, self._release_seq,
             )
+            # Self-heal: pull release_seq back to arm_seq so the next
+            # press/release pair lands as delta=1 instead of compounding
+            # the drift. Prior implementation (without this reset) saw
+            # a single double-click cascade into 25 false-positive WARNs
+            # in one session because the seqs stayed permanently shifted.
+            self._release_seq = self._arm_seq
 
         self._is_resizing = False
         self._shake_press_active = False

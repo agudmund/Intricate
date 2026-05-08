@@ -455,19 +455,28 @@ class ChromelessRoot(QGraphicsRectItem):
 
         # Orphan-release detection — release_seq should never exceed
         # arm_seq. If it does, mouseReleaseEvent was called without a
-        # matching mousePressEvent through this method.
+        # matching mousePressEvent through this method (e.g., Qt's
+        # mouseDoubleClickEvent dispatch — the second tap of a double
+        # click fires release without a paired press). Logged WARNING
+        # then immediately re-synced so a single asymmetric dispatch
+        # fires exactly one warning instead of latching into a cascade.
         is_orphan = self._release_seq > self._arm_seq
         if is_orphan:
             logger.warning(
                 "[chrome-release] %s ORPHAN release — no preceding press "
                 "through mousePressEvent. button=%s was_resizing=%s "
-                "shake_triggered=%s arm_seq=%d release_seq=%d. Possible "
-                "asymmetric gesture path; investigate the call site that "
-                "produced this release.",
+                "shake_triggered=%s arm_seq=%d release_seq=%d. Likely an "
+                "asymmetric Qt dispatch (mouseDoubleClickEvent or similar). "
+                "Re-syncing release_seq to arm_seq so the next gesture "
+                "starts balanced.",
                 self._log_id(), event.button(), was_resizing,
                 self._shake_triggered,
                 self._arm_seq, self._release_seq,
             )
+            # Self-heal: pull release_seq back to arm_seq so the next
+            # press/release pair lands as delta=1 instead of compounding
+            # the drift. Mirrors BaseNode's 2026-05-07 reset.
+            self._release_seq = self._arm_seq
 
         # Drag-gate post-mortem — captures the gesture's end state.
         # Promoted to INFO across the board 2026-05-07 (was mixed
