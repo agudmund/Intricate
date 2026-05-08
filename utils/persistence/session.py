@@ -435,7 +435,10 @@ class SessionManager:
             _rotate_session(filepath)
             data["checksum"] = _session_checksum(data)
 
-            with open(filepath, "w", encoding="utf-8") as f:
+            # newline="\n" — without it, Windows text mode translates \n → \r\n
+            # on write, which conflicts with .gitattributes (eol=lf for *.intricate)
+            # and produces a CRLF-vs-LF diff on every autosave in GitHub Desktop.
+            with open(filepath, "w", encoding="utf-8", newline="\n") as f:
                 json.dump(data, f, indent=2)
             logger.debug(f"Session saved successfully to {filepath}")
         except Exception as e:

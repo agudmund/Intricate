@@ -4804,8 +4804,11 @@ class IntricateApp(QMainWindow):
         try:
             p = self._companion_sidecar_path()
             p.parent.mkdir(parents=True, exist_ok=True)
+            # newline="\n" keeps the file LF on Windows; without it write_text
+            # routes through text-mode translation and produces CRLF endings
+            # that conflict with .gitattributes eol=lf.
             p.write_text(json.dumps(self._companion_seats, indent=2),
-                         encoding="utf-8")
+                         encoding="utf-8", newline="\n")
         except Exception:
             logger.exception("[companion] failed to save seats sidecar")
 
@@ -4939,8 +4942,10 @@ class IntricateApp(QMainWindow):
         try:
             p = self._joy_stats_sidecar_path()
             p.parent.mkdir(parents=True, exist_ok=True)
+            # newline="\n" — same reason as _save_companion_seats: prevent
+            # Windows CRLF translation conflicting with eol=lf attribute.
             p.write_text(json.dumps(self._joy_stats_seats, indent=2),
-                         encoding="utf-8")
+                         encoding="utf-8", newline="\n")
         except Exception:
             logger.exception("[joy-stats] failed to save seats sidecar")
 
