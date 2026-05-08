@@ -218,8 +218,22 @@ def main():
     # Name the process for the Windows taskbar and Task Manager Apps view.
     # ctypes.windll only exists on Windows; the try/except keeps the EC2 Era
     # boot path clean on Linux hosts where there's no taskbar to label.
+    #
+    # AUMID uses the namespaced form `SingleSharedBraincell.Intricate` rather
+    # than the bare `appName`.  The bare name carried historical baggage —
+    # at some prior point Windows bound the wrong icon to the "Intricate"
+    # identity in its Personalization > Taskbar cache, and per the
+    # identity-locked-cache pattern that binding doesn't refresh from .lnk
+    # path changes or icon-content changes.  The namespaced form is a
+    # never-before-seen string, so Windows registers a fresh identity and
+    # binds the current icons/Intricate.ico cleanly.  Forward-compatible
+    # with the MSIX deployment plan where every family app gets a
+    # `SingleSharedBraincell.<AppName>` publisher-namespaced AUMID.
+    # Console title and singleton lock keep the bare `appName` so the
+    # human-readable identifiers stay unchanged.
+    _AUMID = f"SingleSharedBraincell.{appName}"
     try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appName)
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(_AUMID)
         ctypes.windll.kernel32.SetConsoleTitleW(appName)
     except (AttributeError, OSError):
         pass
