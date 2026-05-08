@@ -28,3 +28,9 @@ from pathlib import Path
 REPO_ROOT  = Path(__file__).resolve().parent.parent.parent
 ICONS_DIR  = REPO_ROOT / "icons"
 IMAGES_DIR = REPO_ROOT / "Images"
+
+# Verify PNGs land here, not in icons/ — icons/ is reserved for production
+# assets the running app references.  Verify composites are author-time
+# audit artefacts (eyeball-the-halo check on the dark node bg) and live
+# alongside the other Documents/Data/ runtime sidecars.
+VERIFY_DIR = REPO_ROOT / "Documents" / "Data" / "Icon Pipeline"

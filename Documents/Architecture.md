@@ -202,7 +202,7 @@ Two parallel directories at the repo root, each with distinct semantics. Differe
 
 | Path | Purpose |
 |---|---|
-| `tools/icon_pipeline/` | Icon generation + extraction toolkit (`canvas.py`, `save.py`, `extract.py`, `verify.py`, `batch.py`, `paths.py`) plus 47 author-time scripts under `scripts/`. See `Documents/Design/Icon Pipeline.md`. |
+| `tools/icon_pipeline/` | Icon generation + extraction toolkit (`canvas.py`, `save.py`, `extract.py`, `verify.py`, `batch.py`, `paths.py`) plus 47 author-time scripts under `scripts/`. Verify composites land in `Documents/Data/Icon Pipeline/` (the `VERIFY_DIR` constant), keeping `icons/` reserved for production assets only. **See `Documents/Design/Icon Pipeline.md` for the full pipeline — three icon families, the brand-mark refresh ritual, the toolkit surfaces, the `icons/` proprietary-vs-Tertiary split.** |
 | `tools/Display Resolution/` | Custom Resolution Utility (CRU.exe, ToastyX) — third-party Windows utility for display-resolution overrides. External binary, not Python. |
 | `tools/_scan_imports.py` | Author-time analysis — scans every `.py` in the repo, reports the external-package dependency surface. Useful for audit and confirming what `requirements.txt` should contain. |
 | `tools/generate_chat_session.py` | Author-time conversion — parses a Claude Code JSONL conversation log into an Intricate `session.json` (each user/assistant message becomes a WarmNode/TextNode connected in sequence). |
@@ -231,6 +231,7 @@ Framework-level designs that outgrew node-specific docs live in `Documents/Desig
 
 | Doc | Scope |
 |-----|-------|
+| `Icon Pipeline.md` | The end-to-end icon system — three families (sidebar/Pillow line-art, node-function emoji, node-utility sticker), generation + extraction recipes, the `tools/icon_pipeline/` toolkit (canvas/save/extract/verify/batch/paths), the `icons/` proprietary-vs-`Tertiary/` split, the `Images/Stickers/` source workspace, the brand-mark refresh ritual (`Intricate.ico` + `.lnk` + Win11 icon-cache flush). Verify PNGs land in `Documents/Data/Icon Pipeline/`, kept out of `icons/`. |
 | `Media Cache.md` | SHA-256 content-addressed byte-preserving cache — primitive shared by Image, Video, Sticker. Four invariants (content-addressed keys, byte-preserving, free dedup, retention-by-reference). API surface, integration recipe for new cached node types. |
 | `Settlers Category Design Brief.md` | Visual language + four-column grid spec for the Settlers companion app's settings categories. |
 

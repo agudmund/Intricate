@@ -91,7 +91,7 @@ out.save("icons/loopAudio.png")
 # Verify on dark background
 dark_bg = Image.new("RGBA", (1024, 1024), (45, 52, 54, 255))
 dark_bg.paste(out, (0, 0), out)
-dark_bg.save("icons/_verify_loopAudio_dark.png")
+dark_bg.save("Documents/Data/Icon Pipeline/_verify_loopAudio_dark.png")
 
 sizes = [16, 24, 32, 48, 64, 128, 256]
 out.save("icons/loopAudio.ico", format="ICO", sizes=[(s, s) for s in sizes])

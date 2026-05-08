@@ -11,15 +11,17 @@
 # bad defringe reveals itself.  Visually check the _verify_*_dark.png
 # before considering the extraction done.
 #
-# These files are intermediate artefacts of an extraction run.  They
-# are not typically tracked in git; they exist for the eyeball-the-
-# halo check and can be deleted any time.
+# Verify PNGs land in Documents/Data/Icon Pipeline/ (the VERIFY_DIR
+# constant in paths.py), not in icons/ — icons/ is reserved for
+# production assets the running app references.  The verify composites
+# are author-time audit artefacts and sit alongside the other runtime
+# sidecars in Documents/Data/.
 
 from pathlib import Path
 from PIL import Image
 
 from .canvas import OUTPUT_SIZE
-from .paths import ICONS_DIR
+from .paths import VERIFY_DIR
 
 # Canonical Intricate node background — the colour every sticker has
 # to look clean against.  If you see a white halo around a sticker on
@@ -40,11 +42,12 @@ def write_dark_verify(
 
     Returns the path to the written file for caller logging.
 
-    The leading underscore in the filename is intentional — these are
-    intermediate artefacts, easy to spot in `ls icons/` and easy to
-    sweep with `rm icons/_verify_*` after a batch run.
+    Output defaults to Documents/Data/Icon Pipeline/.  The directory is
+    created on demand so first-run on a fresh checkout still lands the
+    file even if no other tooling has touched the location yet.
     """
-    out_dir = output_dir if output_dir is not None else ICONS_DIR
+    out_dir = output_dir if output_dir is not None else VERIFY_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     canvas = Image.new("RGBA", (OUTPUT_SIZE, OUTPUT_SIZE), bg)
     canvas.paste(img, (0, 0), img)

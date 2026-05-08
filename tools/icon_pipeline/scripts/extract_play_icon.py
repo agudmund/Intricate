@@ -55,7 +55,7 @@ out.save("icons/playIconic.png")
 # Verify: composite on dark node background
 dark_bg = Image.new("RGBA", (1024, 1024), (45, 52, 54, 255))
 dark_bg.paste(out, (0, 0), out)
-dark_bg.save("icons/_verify_play_dark.png")
+dark_bg.save("Documents/Data/Icon Pipeline/_verify_play_dark.png")
 
 # Multi-resolution ICO
 sizes = [16, 24, 32, 48, 64, 128, 256]

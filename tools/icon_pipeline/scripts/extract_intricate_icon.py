@@ -15,7 +15,7 @@ from PIL import Image
 
 SRC = "icons/Intricate.png"
 ICO = "icons/Intricate.ico"
-VERIFY = "icons/_verify_intricate_dark.png"
+VERIFY = "Documents/Data/Icon Pipeline/_verify_intricate_dark.png"
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 src = Image.open(SRC).convert("RGBA")

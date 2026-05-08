@@ -86,7 +86,7 @@ out = square.resize((1024, 1024), Image.LANCZOS)
 # ── Verify: composite on dark background ─────────────────────────────
 dark_bg = Image.new("RGBA", (1024, 1024), (45, 52, 54, 255))
 dark_bg.paste(out, (0, 0), out)
-dark_bg.save("icons/_verify_chat_dark.png")
+dark_bg.save("Documents/Data/Icon Pipeline/_verify_chat_dark.png")
 
 # Multi-resolution ICO → The Settlers
 ico_path = "../The Settlers/icons/Chat.ico"

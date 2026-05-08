@@ -118,10 +118,10 @@ Every sticker extraction script writes a companion PNG composited onto the node 
 ```python
 dark_bg = Image.new("RGBA", (1024, 1024), (45, 52, 54, 255))
 dark_bg.paste(out, (0, 0), out)
-dark_bg.save("icons/_verify_xxx_dark.png")
+dark_bg.save("Documents/Data/Icon Pipeline/_verify_xxx_dark.png")
 ```
 
-`(45, 52, 54)` is the canonical node background. The verification PNG is where a bad defringe reveals itself. Visually check the `_verify_*_dark.png` before considering the extraction done. These files are tracked alongside the icon they verify — `git ls-files icons/_verify_*_dark.png` lists the current set — so a future audit can re-inspect what each extraction shipped against the dark backdrop without re-running the pipeline.
+`(45, 52, 54)` is the canonical node background. The verification PNG is where a bad defringe reveals itself. Visually check the `_verify_*_dark.png` before considering the extraction done. Verify PNGs land in `Documents/Data/Icon Pipeline/`, **not** in `icons/` — `icons/` is reserved for production assets the running app references; verify composites are author-time audit artefacts and live alongside the other `Documents/Data/` runtime sidecars. The toolkit constant is `VERIFY_DIR` in `tools/icon_pipeline/paths.py`; `write_dark_verify()` honours it by default and creates the directory on demand. These files are tracked alongside the icons they verify — `git ls-files "Documents/Data/Icon Pipeline/_verify_*_dark.png"` lists the current set — so a future audit can re-inspect what each extraction shipped against the dark backdrop without re-running the pipeline.
 
 ## Wiring — From File to Rendered Button
 
@@ -160,7 +160,7 @@ The pipeline for the brand mark itself is deliberately simple. `tools/icon_pipel
 
 When the PNG changes, the chain to refresh is:
 
-1. **Regenerate the ICO** — `python tools/icon_pipeline/scripts/extract_intricate_icon.py`. Produces `icons/Intricate.ico` (7 frames: 16/24/32/48/64/128/256) and `icons/_verify_intricate_dark.png`.
+1. **Regenerate the ICO** — `python tools/icon_pipeline/scripts/extract_intricate_icon.py`. Produces `icons/Intricate.ico` (7 frames: 16/24/32/48/64/128/256) and `Documents/Data/Icon Pipeline/_verify_intricate_dark.png`.
 2. **Re-save `Intricate.lnk`** — load the shortcut via `WScript.Shell`, set `IconLocation` back to `icons/Intricate.ico,0`, and call `Save()`. Bumps mtime and forces Explorer to re-read the `IconLocation` field. Without this, the per-file shell-icon cache for the .lnk persists.
 3. **Wipe shell icon caches** — stop `explorer.exe`, delete every `iconcache_*.db` and `thumbcache_*.db` under `%LocalAppData%\Microsoft\Windows\Explorer\` (plus the legacy `%LocalAppData%\IconCache.db`), then restart `explorer.exe`. The cache files hold rendered-pixel snapshots keyed by file path; they don't refresh on icon-content change unless deleted.
 4. **Restart Intricate** — the running window's taskbar icon and the systray icon come from `QIcon("icons/Intricate.ico")` loaded once at process start. A vaporize-relaunch picks up the new asset.
