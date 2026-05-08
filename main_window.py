@@ -617,9 +617,16 @@ class IntricateApp(QMainWindow):
         """Create the system tray icon with a restore / exit context menu."""
         self._tray_icon = QSystemTrayIcon(self)
         from pathlib import Path as _Path
-        _sticker = _Path(__file__).resolve().parent / "Images" / "Stickers" / "Intricate Official Iconic Icon.png"
-        if _sticker.exists():
-            self._tray_icon.setIcon(QIcon(QPixmap(str(_sticker))))
+        # Official brand mark lives in icons/ — .ico carries the multi-res
+        # layers Windows picks from, so pass the path straight to QIcon
+        # rather than a single-resolution QPixmap.  Theme.iconCurtains is
+        # kept as defensive last-resort: visually identical to the brand
+        # mark (the share-arrow IS the family fallback per
+        # project_curtains_icon_is_family_fallback memory), so even a
+        # missing-file scenario still lands on the right glyph.
+        _icon_path = _Path(__file__).resolve().parent / "icons" / "intricate.ico"
+        if _icon_path.exists():
+            self._tray_icon.setIcon(QIcon(str(_icon_path)))
         else:
             icon = Theme.icon(Theme.iconCurtains)
             self._tray_icon.setIcon(QIcon(icon) if icon and not icon.isNull() else self.windowIcon())
