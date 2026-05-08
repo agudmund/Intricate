@@ -374,41 +374,64 @@ def chain_spawn(scene, source_node, items, factory, *,
         from graphics.Connection import Connection
         connection_factory = Connection
 
+    # Mirror the canonical bulk-adds protections used by Scene.load_session
+    # and Scene.import_session — raise the scene's _bulk_adding counter so
+    # peer NodeBehaviour pulse/bg-anim ticks and Connection glide ticks
+    # early-return for the duration of the spawn loop, and yield to the
+    # event loop periodically so the UI thread stays responsive on chains
+    # of thousands.  See Scene.py:~1078 for the load_session reference.
+    # Without this the splitter freezes the UI proportional to
+    # paragraphs × existing peer count (Documents/Compliance/Warm Splitter
+    # Hang Investigation.md).
+    from PySide6.QtCore import QEventLoop
+    from PySide6.QtWidgets import QApplication
+    _YIELD_EVERY     = 10
+    _YIELD_BUDGET_MS = 50
+
+    scene._bulk_adding = getattr(scene, '_bulk_adding', 0) + 1
     spawned: list = []
     prev_node = source_node
 
-    for item in items:
-        node = factory(item)
-        if node is None:
-            continue
+    try:
+        for i, item in enumerate(items):
+            node = factory(item)
+            if node is None:
+                continue
 
-        node.setPos(OFFSCREEN_STAGING)
-        scene.addItem(node)
-        scene.raise_node(node)
+            node.setPos(OFFSCREEN_STAGING)
+            scene.addItem(node)
+            scene.raise_node(node)
 
-        # Title-width first because body wrapping depends on the current
-        # width.  Both fits are guarded by hasattr so node types without
-        # them (chromeless StickerNode descendants, future minimalist
-        # types) silently keep their default geometry.
-        if hasattr(node, '_auto_fit_title_width'):
-            node._auto_fit_title_width()
-        if hasattr(node, '_auto_fit_height'):
-            node._auto_fit_height(shrink=True)
+            # Title-width first because body wrapping depends on the current
+            # width.  Both fits are guarded by hasattr so node types without
+            # them (chromeless StickerNode descendants, future minimalist
+            # types) silently keep their default geometry.
+            if hasattr(node, '_auto_fit_title_width'):
+                node._auto_fit_title_width()
+            if hasattr(node, '_auto_fit_height'):
+                node._auto_fit_height(shrink=True)
 
-        chain_origin = wander_origin(prev_node)
-        pos = spiral_place(
-            scene, node, origin=chain_origin,
-            parent=prev_node, fallback=chain_origin,
-            padding=padding,
-        )
-        node.setPos(pos)
+            chain_origin = wander_origin(prev_node)
+            pos = spiral_place(
+                scene, node, origin=chain_origin,
+                parent=prev_node, fallback=chain_origin,
+                padding=padding,
+            )
+            node.setPos(pos)
 
-        is_first_spawn = (len(spawned) == 0)
-        if not is_first_spawn or wire_first_to_source:
-            conn = connection_factory(prev_node, node)
-            scene.addItem(conn)
+            is_first_spawn = (len(spawned) == 0)
+            if not is_first_spawn or wire_first_to_source:
+                conn = connection_factory(prev_node, node)
+                scene.addItem(conn)
 
-        spawned.append(node)
-        prev_node = node
+            spawned.append(node)
+            prev_node = node
+
+            if (i + 1) % _YIELD_EVERY == 0:
+                QApplication.processEvents(
+                    QEventLoop.ExcludeUserInputEvents, _YIELD_BUDGET_MS,
+                )
+    finally:
+        scene._bulk_adding = max(0, getattr(scene, '_bulk_adding', 1) - 1)
 
     return spawned
