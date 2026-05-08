@@ -6317,7 +6317,7 @@
       "source_mtime": 1761485120.9001687,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a",
       "volume": 50,
-      "playback_pos": 5416,
+      "playback_pos": 1044,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -6580,7 +6580,7 @@
       "source_mtime": 1746374795.2638292,
       "caption": "The Majestic",
       "volume": 50,
-      "playback_pos": 3750,
+      "playback_pos": 2291,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -10265,7 +10265,7 @@
       "source_mtime": 1745506042.3926215,
       "caption": "Waving - Framed",
       "volume": 50,
-      "playback_pos": 41,
+      "playback_pos": 4916,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -11794,7 +11794,7 @@
       "source_mtime": 1761485120.8856592,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a (1)",
       "volume": 50,
-      "playback_pos": 0,
+      "playback_pos": 3947,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -14297,6 +14297,22 @@
       "ports_visible": false,
       "shelf_visible": true,
       "body_text": "Also reorganised: pulled the three sister-family packages (shared_braincell, intricate_log, intricate_vision) into their own \"shared family infrastructure\" section so the three editable-installs sit together rather than scattered."
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Thingaling",
+      "uuid": "6757e2fef4444fbead527d0bc16611be",
+      "x": 5257.09858741954,
+      "y": 3777.370868721184,
+      "width": 128.734375,
+      "height": 31.0,
+      "z_value": -8.889000000000616,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Thingaling",
+      "depth_front": false,
+      "node_tint": ""
     }
   ],
   "connections": [
@@ -17930,13 +17946,13 @@
     }
   ],
   "viewport": {
-    "camera_x": 310.09532054747797,
-    "camera_y": 3856.092736067252,
-    "camera_zoom": 0.34828000567478506
+    "camera_x": 5567.678800904576,
+    "camera_y": 3159.462590583409,
+    "camera_zoom": 0.6149780047375767
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
   "last_browse_dirs": {},
-  "checksum": "b30f1773839b34ad"
+  "checksum": "d8c9f0c6434d4cd5"
 }
