@@ -53,10 +53,19 @@ _APP_ICON_MAP: dict[str, str] = {
 _LAUNCHER_ICON_MAP: dict[str, str] = {
     # Our own braincell-family apps via their Desktop shortcuts — these
     # are PROPRIETARY, cached at icons/ root.
-    # (Intricate itself is no longer extracted via .lnk — it has its own
-    # source-of-truth file at icons/Intricate.ico that the user maintains
-    # directly, so going through Windows shell extraction was circular.
-    # Other family-apps stay here while their lnk is the only handle.)
+    #
+    # Principle: this map is the **external-change detector** — it picks
+    # up icon updates that happen *outside* Intricate's scope (a sibling
+    # app rebuilding, an MSIX update, a third-party reinstall).  Icons we
+    # author and ship ourselves don't belong here, because the chain
+    # already flows IN-from our branding sources; running our own .lnk
+    # through Windows shell extraction would be circular and would let
+    # an OS-side cache state override our canonical file.
+    #
+    # Hence: Intricate itself is excluded — its source of truth is
+    # icons/Intricate.ico, which build.py embeds into the .exe and the
+    # .lnk inherits.  Other family apps remain here for now while their
+    # .lnk is still the only handle on their identity from this side.
     "~/Desktop/The Settlers/The Settlers.lnk":       "the_settlers_app.ico",
     # Anthropic's Claude Desktop — MSIX app, identified by its AppUserModelID.
     # TERTIARY (third-party brand) — cached under icons/Tertiary/.

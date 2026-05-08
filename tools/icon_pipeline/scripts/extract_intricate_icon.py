@@ -1,37 +1,37 @@
 #!/usr/bin/env python3
-"""Rebuild Intricate.ico + Intricate.png from the official sticker source.
+"""Rebuild Intricate.ico from the source-of-truth Intricate.png.
 
-Source: Images/Stickers/Intricate Official Iconic Icon.png (928x1152, RGBA)
-Background is already transparent — trim, square, resize to 1024.
+The PNG at icons/Intricate.png is the authored brand mark — replace it
+whenever the brand evolves and re-run this script to regenerate the
+multi-resolution .ico Windows reads from for the taskbar / tray /
+shortcut.  No trim or resize: the PNG is taken as-is so what the user
+authored is what ships.
+
+Pairs with project_curtains_icon_is_family_fallback memory — Intricate's
+brand mark is the share-arrow shape, also doubles as Theme.iconCurtains
+fallback.
 """
 from PIL import Image
 
-src = Image.open("Images/Stickers/Intricate Official Iconic Icon.png").convert("RGBA")
-print(f"Source: {src.size[0]}x{src.size[1]}")
+SRC = "icons/Intricate.png"
+ICO = "icons/Intricate.ico"
+VERIFY = "icons/_verify_intricate_dark.png"
+ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
-# Trim transparent edges
-bbox = src.getbbox()
-if bbox:
-    src = src.crop(bbox)
-cw, ch = src.size
-print(f"Trimmed: {cw}x{ch}")
+src = Image.open(SRC).convert("RGBA")
+print(f"Source: {SRC}  {src.size[0]}x{src.size[1]}  mode={src.mode}")
 
-# Square with slight padding
-side = int(max(cw, ch) * 1.1)
-square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-square.paste(src, ((side - cw) // 2, (side - ch) // 2))
+# Verify on the node-background colour to catch any baked-in white
+# fringes on semi-transparent edges before they ship.  Same dark bg
+# the sticker pipeline uses.
+dark_bg = Image.new("RGBA", src.size, (45, 52, 54, 255))
+dark_bg.paste(src, (0, 0), src)
+dark_bg.save(VERIFY)
 
-# Resize to 1024
-out = square.resize((1024, 1024), Image.LANCZOS)
-out.save("icons/Intricate.png")
+# Multi-resolution ICO — Pillow downsamples each frame from the source.
+# Windows picks the sharpest layer for the size it needs (taskbar 32,
+# tray 16, large icons 256, etc.).
+src.save(ICO, format="ICO", sizes=[(s, s) for s in ICO_SIZES])
 
-# Verify on dark background
-dark_bg = Image.new("RGBA", (1024, 1024), (45, 52, 54, 255))
-dark_bg.paste(out, (0, 0), out)
-dark_bg.save("icons/_verify_intricate_dark.png")
-
-# Multi-resolution ICO
-out.save("icons/Intricate.ico", format="ICO",
-         sizes=[(s, s) for s in [16, 24, 32, 48, 64, 128, 256]])
-
-print("Done — Intricate.png (1024px) + Intricate.ico (7 frames)")
+print(f"Done — {ICO} ({len(ICO_SIZES)} frames: {ICO_SIZES})")
+print(f"Verify: {VERIFY}")
