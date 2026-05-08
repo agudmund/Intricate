@@ -199,7 +199,11 @@ class _CommitDialog(QDialog):
 
     def __init__(self, repo_count: int, parent=None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        # WindowStaysOnTopHint puts the dialog in the Windows topmost z-order band.
+        # The showEvent below additionally re-asserts HWND_TOPMOST via Win32 so we
+        # land at the *top* of the band — Chrome's YouTube PiP is also HWND_TOPMOST,
+        # and within that band whoever called SetWindowPos last wins.
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedWidth(380)
 
@@ -280,6 +284,31 @@ class _CommitDialog(QDialog):
 
     def message(self) -> str:
         return self._input.toPlainText().strip()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Re-assert HWND_TOPMOST after Qt finishes showing — Chrome's YouTube PiP
+        # also sits in the topmost band, and the most recent SetWindowPos wins
+        # the z-order race within that band. Qt's WindowStaysOnTopHint alone
+        # gets us into the band but doesn't guarantee we land on top of it.
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                HWND_TOPMOST   = ctypes.c_void_p(-1)
+                SWP_NOSIZE     = 0x0001
+                SWP_NOMOVE     = 0x0002
+                SWP_SHOWWINDOW = 0x0040
+                user32.SetWindowPos(
+                    ctypes.c_void_p(int(self.winId())),
+                    HWND_TOPMOST,
+                    0, 0, 0, 0,
+                    SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW,
+                )
+            except Exception:
+                _log.debug("[git] SetWindowPos topmost failed", exc_info=True)
+        self.activateWindow()
+        self.raise_()
 
 
 class GitNode(BaseNode):
