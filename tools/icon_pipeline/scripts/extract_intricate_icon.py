@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild intricate.ico + intricate.png from the official sticker source.
+"""Rebuild Intricate.ico + Intricate.png from the official sticker source.
 
 Source: Images/Stickers/Intricate Official Iconic Icon.png (928x1152, RGBA)
 Background is already transparent — trim, square, resize to 1024.
@@ -23,7 +23,7 @@ square.paste(src, ((side - cw) // 2, (side - ch) // 2))
 
 # Resize to 1024
 out = square.resize((1024, 1024), Image.LANCZOS)
-out.save("icons/intricate.png")
+out.save("icons/Intricate.png")
 
 # Verify on dark background
 dark_bg = Image.new("RGBA", (1024, 1024), (45, 52, 54, 255))
@@ -31,7 +31,7 @@ dark_bg.paste(out, (0, 0), out)
 dark_bg.save("icons/_verify_intricate_dark.png")
 
 # Multi-resolution ICO
-out.save("icons/intricate.ico", format="ICO",
+out.save("icons/Intricate.ico", format="ICO",
          sizes=[(s, s) for s in [16, 24, 32, 48, 64, 128, 256]])
 
-print("Done — intricate.png (1024px) + intricate.ico (7 frames)")
+print("Done — Intricate.png (1024px) + Intricate.ico (7 frames)")

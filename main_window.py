@@ -624,7 +624,7 @@ class IntricateApp(QMainWindow):
         # mark (the share-arrow IS the family fallback per
         # project_curtains_icon_is_family_fallback memory), so even a
         # missing-file scenario still lands on the right glyph.
-        _icon_path = _Path(__file__).resolve().parent / "icons" / "intricate.ico"
+        _icon_path = _Path(__file__).resolve().parent / "icons" / "Intricate.ico"
         if _icon_path.exists():
             self._tray_icon.setIcon(QIcon(str(_icon_path)))
         else:

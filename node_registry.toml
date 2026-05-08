@@ -319,10 +319,12 @@ buttons = "Ping 👋"
 name = "Intricate"
 tooltip = "General Info"
 category = "info"
-# Real app icon, extracted from Intricate.lnk at boot via utils/app_icons.py
-# so the Info menu's Intricate entry renders with the finalized app lock-up
-# rather than the generic 'i' glyph.
-icon_file = "intricate_app.ico"
+# Brand mark — the source-of-truth file the user maintains directly.
+# Replaces the prior intricate_app.ico path that ran the icon through
+# Windows shell extraction from Intricate.lnk; for our own app the
+# extraction was circular indirection, so the registry now points at
+# the on-disk source the user owns end-to-end.
+icon_file = "Intricate.ico"
 icon_fallback = "#9a9aaa"
 spawnable = true
 status = "version 0.6.0 — The Housekeeping before paradise arrives Era"

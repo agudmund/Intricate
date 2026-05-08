@@ -70,7 +70,7 @@ def _expected_association_command() -> str:
 
 def _expected_association_icon() -> str:
     """The expected DefaultIcon value for the file association."""
-    return str(Path(__file__).resolve().parent / "icons" / "intricate.ico")
+    return str(Path(__file__).resolve().parent / "icons" / "Intricate.ico")
 
 
 def _read_hkcu(path: str) -> str | None:
@@ -309,7 +309,7 @@ def main():
     # but pythonw needs it explicitly or Windows shows the default Python icon.
     from pathlib import Path
     from PySide6.QtGui import QIcon
-    _app_icon = Path(__file__).resolve().parent / "icons" / "intricate.ico"
+    _app_icon = Path(__file__).resolve().parent / "icons" / "Intricate.ico"
     if _app_icon.exists():
         app.setWindowIcon(QIcon(str(_app_icon)))
 

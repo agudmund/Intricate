@@ -53,7 +53,10 @@ _APP_ICON_MAP: dict[str, str] = {
 _LAUNCHER_ICON_MAP: dict[str, str] = {
     # Our own braincell-family apps via their Desktop shortcuts — these
     # are PROPRIETARY, cached at icons/ root.
-    "~/Desktop/Intricate/Intricate.lnk":             "intricate_app.ico",
+    # (Intricate itself is no longer extracted via .lnk — it has its own
+    # source-of-truth file at icons/Intricate.ico that the user maintains
+    # directly, so going through Windows shell extraction was circular.
+    # Other family-apps stay here while their lnk is the only handle.)
     "~/Desktop/The Settlers/The Settlers.lnk":       "the_settlers_app.ico",
     # Anthropic's Claude Desktop — MSIX app, identified by its AppUserModelID.
     # TERTIARY (third-party brand) — cached under icons/Tertiary/.

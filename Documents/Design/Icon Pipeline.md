@@ -181,7 +181,7 @@ The `icons/` directory is split into two zones at the file-system level, mirrori
 
 | Location | Holds | Examples |
 |---|---|---|
-| `icons/` (root) | **Proprietary** Intricate brand assets — every icon designed in our own visual language | `warm_node.ico`, `claude_node.ico`, `intricate_app.ico`, `Push.png`, every sidebar / toolbar / sticker icon authored in-house |
+| `icons/` (root) | **Proprietary** Intricate brand assets — every icon designed in our own visual language | `Intricate.ico`, `warm_node.ico`, `claude_node.ico`, `Push.png`, every sidebar / toolbar / sticker icon authored in-house |
 | `icons/Tertiary/` | **Tertiary** third-party brand assets — official icons of external apps Intricate references, kept in their original branding without alteration | `claude_desktop.ico`, `claude_cli.ico`, `anthropic_icon.ico`, `adobe_group.ico`, `indesign_app.ico`, `Adobe-Emblem.png` |
 
 The split makes the proprietary/third-party boundary visible at a glance in the asset folder. It enforces the no-altered-branding rule physically: nothing in `icons/Tertiary/` is meant to be touched, recoloured, or restyled — these are the canonical brand assets of other companies, used as-is per the three-tier icon treatment doctrine. The proprietary `icons/` root, by contrast, is fair game for the recolor / solidify / rebuild batch utilities and any creative pass.

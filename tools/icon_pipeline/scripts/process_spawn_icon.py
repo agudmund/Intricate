@@ -90,7 +90,7 @@ def process():
     out.save(ico_path, format="ICO", sizes=[(s, s) for s in sizes])
     print(f"done  {ico_path}")
 
-    # NOTE: intricate.ico is now built from the official sticker source
+    # NOTE: Intricate.ico is now built from the official sticker source
     # via extract_intricate_icon.py — do not overwrite it here.
 
     # ── Clean variant — shadow + reddish-brown outline stripped ─────────────
