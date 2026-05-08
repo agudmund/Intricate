@@ -136,7 +136,9 @@ def _write_file(colors: list[str]) -> bool:
         # Atomic swap — write to sibling temp then rename, so a crash mid-write
         # doesn't leave a half-file the watchers pick up.
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(header + body, encoding="utf-8")
+        # newline="\n" — Windows text mode otherwise translates \n → \r\n,
+        # producing CRLF in a file the .gitattributes pins to LF.
+        tmp.write_text(header + body, encoding="utf-8", newline="\n")
         tmp.replace(path)
         return True
     except OSError:

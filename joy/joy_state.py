@@ -118,7 +118,9 @@ def save(
         "feed_wall_times": [round(float(t), 1) for t in (feed_wall_times or [])],
         "last_feed_wall":  round(float(last_feed_wall), 1),
     }
-    _STORE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # newline="\n" — keep LF on Windows so the file doesn't drift against
+    # eol=lf if/when it joins the tracked sidecars in Documents/Data/.
+    _STORE.write_text(json.dumps(payload, indent=2), encoding="utf-8", newline="\n")
 
 
 class JoyStateWatcher(QObject):

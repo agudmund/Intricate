@@ -5326,15 +5326,19 @@ class IntricateApp(QMainWindow):
                 cmd, cwd=str(project_dir), capture_output=True, text=True, timeout=15
             )
             _run(["git", "init"])
+            # newline="\n" on both — these land in a fresh git repo and LF
+            # is the portable choice for .gitignore + README.md.
             gitignore = project_dir / ".gitignore"
             gitignore.write_text(
                 "__pycache__/\n*.pyc\n.env\n*.log\nlogs/\n",
                 encoding="utf-8",
+                newline="\n",
             )
             readme = project_dir / "README.md"
             readme.write_text(
                 f"# {name}\n\nIt is what it is\n",
                 encoding="utf-8",
+                newline="\n",
             )
             _run(["git", "add", "."])
             _run(["git", "commit", "-m", f"init {name}"])

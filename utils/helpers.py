@@ -62,9 +62,12 @@ def ensure_init(path: str | Path, project_root: str | Path | None = None) -> boo
     try:
         rel  = path.relative_to(project_root) if project_root else Path(path.name)
         name = rel.parts[-1].capitalize() if rel.parts else path.name.capitalize()
+        # newline="\n" — generated __init__.py files end up tracked Python
+        # source; LF keeps them aligned with .gitattributes eol=lf.
         init_file.write_text(
             _INIT_TEMPLATE.format(path=rel.as_posix(), name=name),
             encoding="utf-8",
+            newline="\n",
         )
         logger.info(f"🌱 Created __init__.py in {path}")
         return True

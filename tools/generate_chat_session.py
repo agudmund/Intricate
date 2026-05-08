@@ -163,7 +163,9 @@ def main():
     session = build_session(messages)
     print(f"Generated {len(session['nodes'])} nodes, {len(session['connections'])} connections")
 
-    with open(output_path, "w", encoding="utf-8") as f:
+    # newline="\n" — generated .intricate output is committed alongside the
+    # repo; LF matches the eol=lf attribute on tracked session files.
+    with open(output_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(session, f, indent=2, ensure_ascii=False)
     print(f"Saved to {output_path}")
 

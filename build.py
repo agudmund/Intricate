@@ -123,7 +123,9 @@ class BuildManager:
             f"**Status:** `Stable Daily Build`\n"
         )
         docsPath = root / docsFolder
-        with open(docsPath / cls.docName, "w", encoding="utf-8") as f:
+        # newline="\n" so Build Version.md stays LF on Windows and matches
+        # the eol=lf attribute for tracked markdown.
+        with open(docsPath / cls.docName, "w", encoding="utf-8", newline="\n") as f:
             f.write(content)
         return timestamp
 
