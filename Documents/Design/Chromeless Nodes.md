@@ -23,7 +23,7 @@ The visual style of any individual node is up to that node — chromeless nodes 
 | `data/ChromelessRootData.py` | Pure Python dataclass — extends `NodeData` with the four pin fields and serialises them via `super().to_dict()` chaining |
 | `nodes/_demolition.py` | Shared demolition crew — same one BaseNode uses; tolerates missing connections / behaviour / buttons / ports |
 | `nodes/_shake_detect.py` | Shake gesture detection — composition rather than inheritance, both root families share it |
-| `nodes/_dialog_helper.py` | Extra-window framework — `_DialogChoreographyMixin` (WHEN: ChromelessRoot inherits it as a second base for the curtain dance + HWND settle around any dialog spawn) and `_PrettyDialogBase` (HOW: Qt-managed `QDialog` base with cross-OS topmost-band defense, available to any chromeless or BaseNode descendant that needs a styled popup) |
+| `nodes/_dialog_helper.py` | Extra-window framework — `_DialogChoreographyMixin` (WHEN: ChromelessRoot inherits it as a second base for the curtain dance + HWND settle around any dialog spawn; the same mixin also serves `BaseNode` and `IntricateApp` via the `_get_main_window` extension point) and `_PrettyDialogBase` (HOW: Qt-managed `QDialog` base with explicit screen centring + cross-OS topmost-band defense, available to any node or main-window context that needs a ceremony popup) |
 
 ## The Pin Contract
 

@@ -165,8 +165,14 @@ class _DialogChoreographyMixin:
                     # access above and the state read below, leaving
                     # us listening for a signal that already fired.
                     if anim.state() == QAbstractAnimation.State.Running:
-                        # Safety timeout — see (2) in docstring.
-                        QTimer.singleShot(1500, loop.quit)
+                        # Safety timeout — see (2) in docstring.  Scales
+                        # with the curtain anim duration so a future
+                        # speed-up or slow-down keeps the same margin
+                        # ratio; floored at 1500 ms so a momentarily
+                        # zero-duration anim doesn't collapse the
+                        # safety to nothing.
+                        safety_ms = max(1500, anim.duration() * 3)
+                        QTimer.singleShot(safety_ms, loop.quit)
                         loop.exec()
                     try:
                         anim.finished.disconnect(loop.quit)
