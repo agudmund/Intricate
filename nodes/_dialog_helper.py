@@ -10,6 +10,7 @@ import sys
 from contextlib import contextmanager
 
 from PySide6.QtCore import Qt, QEventLoop, QTimer, QAbstractAnimation
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QDialog
 
 
@@ -198,9 +199,45 @@ class _PrettyDialogBase(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._center_on_screen()
         self._assert_topmost_if_platform()
         self.activateWindow()
         self.raise_()
+
+    def _center_on_screen(self) -> None:
+        """Position the dialog centered on the appropriate screen.
+
+        Overrides Qt's default parent-relative positioning, which can
+        land the dialog off-centre when the parent main window is in a
+        transient state during the choreography — most notably the
+        collapsed-curtain state, where Qt would centre the dialog on
+        the small strip at the top of the screen and the dialog would
+        land flat against the title bar instead of in the middle of
+        the canvas. With explicit centring here, every Qt-managed
+        ceremony dialog spawns dead-centre regardless of parent
+        geometry quirks.
+
+        Honours multi-monitor setups by preferring the parent's
+        screen when available, falling back to the primary screen.
+        Uses ``availableGeometry`` so the centred dialog excludes
+        the OS taskbar from its calculation.
+        """
+        screen = None
+        parent = self.parent()
+        if parent is not None:
+            try:
+                screen = parent.screen()
+            except Exception:
+                pass
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+        geom = screen.availableGeometry()
+        self.move(
+            geom.x() + (geom.width()  - self.width())  // 2,
+            geom.y() + (geom.height() - self.height()) // 2,
+        )
 
     def _assert_topmost_if_platform(self) -> None:
         """OS-aware topmost-band defense hook.
