@@ -65,18 +65,38 @@ class _DialogChoreographyMixin:
     # ─────────────────────────────────────────────────────────────────────────
 
     def _lower_window(self):
-        """Drop always-on-top before opening a dialog so it isn't hidden."""
+        """Drop always-on-top before opening a dialog so it isn't hidden.
+
+        Pushes the current windowFlags onto an instance-level stack so
+        nested ``with self._dialog_choreography():`` calls (any future
+        feature that branches dialog flow off another dialog flow on the
+        same node / window) restore correctly in LIFO order. A flat
+        single-attribute save would have the inner call read the OUTER
+        call's already-modified flags and clobber the outer's saved
+        state on its own exit — recoverable but confusing. Stack
+        bookkeeping closes that door.
+        """
         win = self._get_main_window()
         if win is not None:
-            self._saved_flags = win.windowFlags()
-            win.setWindowFlags(self._saved_flags & ~Qt.WindowStaysOnTopHint)
+            if not hasattr(self, '_saved_flags_stack'):
+                self._saved_flags_stack = []
+            saved = win.windowFlags()
+            self._saved_flags_stack.append(saved)
+            win.setWindowFlags(saved & ~Qt.WindowStaysOnTopHint)
             win.show()
         return win
 
     def _raise_window(self, win=None) -> None:
-        """Restore always-on-top after the dialog closes."""
-        if win is not None and hasattr(self, '_saved_flags'):
-            win.setWindowFlags(self._saved_flags)
+        """Restore always-on-top after the dialog closes.
+
+        Pops the most recently saved flags from the stack — see
+        ``_lower_window`` for the LIFO contract. Empty-stack fallback
+        is silent (matches the prior hasattr-guard behaviour for cases
+        where ``_lower_window`` returned early without a real win).
+        """
+        stack = getattr(self, '_saved_flags_stack', None)
+        if win is not None and stack:
+            win.setWindowFlags(stack.pop())
             win.show()
             win.raise_()
 
