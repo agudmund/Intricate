@@ -178,18 +178,29 @@ class CodeNode(BaseNode):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_editor(self) -> None:
+        # spellcheck=False — CodeNode's whole reason to exist is the syntax
+        # highlighter below, and Qt allows only one QSyntaxHighlighter per
+        # document. PrettyEdit's always_visible branch auto-attaches its
+        # DebouncedSpellHighlighter at end of __init__; without opting out
+        # here, that auto-attach displaces CodeHighlighter and we lose all
+        # syntax colour AND get red squiggles on every identifier (because
+        # code isn't English prose). TreeNode opted out for the same reason
+        # 2026-05-02; this is the matching opt-out for the code editor.
         self._editor = PrettyEdit(
             self,
             font_family=_CODE_FONT,
             font_size=_CODE_SIZE,
             font_color=Theme.nodeFontColor,
             always_visible=True,
+            spellcheck=False,
         )
         self._editor.setPlainText(self.data.label)
         self._editor.textChanged.connect(self._on_text_changed)
         self._position_editor()
 
-        # Attach syntax highlighter to the underlying QTextEdit's document
+        # Attach syntax highlighter to the underlying QTextEdit's document.
+        # With spellcheck=False above, this is the sole QSyntaxHighlighter
+        # on the document and runs unchallenged.
         self._highlighter = CodeHighlighter(self._editor.document())
 
     def _on_text_changed(self) -> None:
