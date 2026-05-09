@@ -253,6 +253,13 @@ class CodeNode(BaseNode):
             if scene:
                 scene.remember_browse_dir("code", str(Path(path).parent))
             self.load_from_path(path)
+            # Mirror View.dropEvent's secondary spawn — .py source with hex
+            # literals gets a PaletteNode satellite alongside the CodeNode.
+            # Uses the _from_text variant so we don't re-read the file the
+            # loader just pulled into self.data.label.
+            if scene and Path(path).suffix.lower() == ".py":
+                from utils.palette_satellite import spawn_palette_satellite_from_text
+                spawn_palette_satellite_from_text(scene, self, self.data.label)
 
     # ─────────────────────────────────────────────────────────────────────────
     # BUTTONS

@@ -565,55 +565,23 @@ class IntricateView(QGraphicsView):
                 node = scene.add_session_node(pos=drop_scene_pos, source_path=path)
                 _scatter(node)
             elif ext == ".qss" and hasattr(scene, 'add_palette_node'):
-                colors = self._parse_qss_colors(path)
+                from utils.hex_extract import extract_hex_colors_from_file
+                colors = extract_hex_colors_from_file(path)
                 if colors:
                     node = scene.add_palette_node(pos=drop_scene_pos, colors=colors)
                     _scatter(node)
             elif ext in _CODE_EXTENSIONS and hasattr(scene, 'add_code_node'):
-                # .py files with hex colours → CodeNode for the source +
-                # PaletteNode chained as a data-wire reference (GitNode's
-                # secondary-spawn pattern).  Placement goes through the
-                # canonical chain_spawn — wander_origin + spiral_place
-                # with the code node as parent — so the palette probes
-                # for a real free seat instead of being dropped at a
-                # fixed offset that might land on a sticker.  Earlier
-                # rev rode the code node's _scatter drag-along delta;
-                # the satellite drag-along moves the palette but never
-                # collision-checks it, which is exactly how it ended up
-                # on top of a StickerNode (StickerNode has data + to_dict
-                # so spiral_place would have rejected the seat — it just
-                # never got asked).
                 code_node = scene.add_code_node(pos=drop_scene_pos, path=path)
                 _scatter(code_node)
+                # .py source with hex literals gets a PaletteNode satellite —
+                # see utils/palette_satellite.py.  The helper handles the
+                # chain_spawn placement so we don't double-up with _scatter
+                # and land the palette on top of a peer.
                 if ext == ".py" and hasattr(scene, 'add_palette_node'):
-                    colors = self._parse_qss_colors(path)
-                    if colors:
-                        from utils.placement import chain_spawn, OFFSCREEN_STAGING
-                        chain_spawn(
-                            scene, code_node, [colors],
-                            lambda c: scene.add_palette_node(
-                                pos=OFFSCREEN_STAGING, colors=c,
-                            ),
-                        )
+                    from utils.palette_satellite import spawn_palette_satellite_from_file
+                    spawn_palette_satellite_from_file(scene, code_node, path)
 
         event.acceptProposedAction()
-
-    @staticmethod
-    def _parse_qss_colors(path: str) -> list:
-        """Extract unique hex colors from a .qss file as palette-ready dicts."""
-        import re
-        try:
-            text = Path(path).read_text(encoding="utf-8", errors="replace")
-        except Exception:
-            return []
-        raw = re.findall(r'#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b', text)
-        seen = set()
-        colors = []
-        for h in raw:
-            if h.lower() not in seen:
-                seen.add(h.lower())
-                colors.append({"label": h, "hex": h})
-        return colors
 
 
 # Theme import at bottom — View.py is part of the graphics package and
