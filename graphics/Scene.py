@@ -445,13 +445,17 @@ class IntricateScene(QGraphicsScene):
         from data.CodeNodeData import CodeNodeData
         data = CodeNodeData(label=label) if label else CodeNodeData()
         node = CodeNode(data)
+        # Load + fit BEFORE setPos so the drop-position centring uses the
+        # fitted rect — without this, a freshly-loaded huge file would
+        # land off-centre because the centring math ran against the
+        # default 360x280 rect that the auto-fit then expanded out of.
+        if path:
+            node.load_from_path_and_fit(path)
         if pos is not None:
             r = node.rect()
             node.setPos(pos - QPointF(r.width() / 2, r.height() / 2))
         self.addItem(node)
         self.raise_node(node)
-        if path:
-            node.load_from_path(path)
         return node
 
     def add_bloom_node(self, pos: QPointF | None = None):

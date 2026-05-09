@@ -231,12 +231,77 @@ class CodeNode(BaseNode):
         _log.info(f"[CodeNode] loaded {path.name} ({len(text)} chars)")
 
     def _reload_from_source(self) -> None:
-        """Reload content from source_path (used on session restore)."""
+        """Reload content from source_path (used on session restore).
+
+        Deliberately uses load_from_path rather than load_from_path_and_fit —
+        on restore the saved geometry is authoritative; the user may have
+        manually corner-dragged the node smaller than the content (cropping
+        for canvas tidiness) and a fit-on-restore would silently undo that.
+        """
         p = Path(self.data.source_path)
         if p.is_file():
             self.load_from_path(p)
         else:
             _log.warning(f"[CodeNode] source_path missing on restore: {p}")
+
+    def load_from_path_and_fit(self, path: str | Path) -> None:
+        """User-initiated file load: read content + grow node to fit.
+
+        Convenience entry point for any user-driven caller (drag-drop,
+        file-browser button, future callers) that wants the node to size
+        itself to the content. Restore deliberately uses ``load_from_path``
+        alone so saved geometry is preserved.
+        """
+        self.load_from_path(path)
+        self._auto_fit_to_content()
+
+    def _auto_fit_to_content(self) -> None:
+        """Resize the node to fit the loaded content — grow-only, no upper cap.
+
+        Width grows to the longest line's natural width; height grows to
+        the full document height plus the title strip and bottom padding.
+        Preserves any manual corner-drag larger than the content (grow-
+        only), and has no upper bound — per the spatial workflow, a
+        5,000-line file rightfully spawns a node huge in proportion to
+        its tiny neighbours, since scale is the user's primary cognitive
+        sort dimension on the canvas.
+        """
+        if not self._editor:
+            return
+        doc = self._editor.document()
+
+        # Measure at unconstrained width to get the longest line's
+        # natural width, then re-layout at that width to read the true
+        # document height. Restore the previous text width afterwards
+        # so subsequent setRect re-layouts cleanly.
+        prev_tw = doc.textWidth()
+        doc.setTextWidth(-1)
+        ideal_w = doc.idealWidth()
+        doc.setTextWidth(ideal_w)
+        doc_h = doc.size().height()
+        doc.setTextWidth(prev_tw)
+
+        # Chrome accounting matches _position_editor: side padding both
+        # sides + button strip + bottom padding, plus a small breathing
+        # buffer so the last line isn't flush against the rect edge.
+        needed_w = ideal_w + _PAD * 2 + 8
+        needed_h = doc_h   + _BUTTON_ZONE_H + _PAD + 12
+
+        cur = self.rect()
+        new_w = max(cur.width(),  needed_w)
+        new_h = max(cur.height(), needed_h)
+
+        if abs(new_w - cur.width()) < 1 and abs(new_h - cur.height()) < 1:
+            return  # nothing meaningful changed
+
+        self.prepareGeometryChange()
+        self.setRect(QRectF(cur.x(), cur.y(), new_w, new_h))
+        self.data.width  = new_w
+        self.data.height = new_h
+        _log.debug(
+            "[CodeNode] auto-fit %.0fx%.0f → %.0fx%.0f (ideal_w=%.0f doc_h=%.0f)",
+            cur.width(), cur.height(), new_w, new_h, ideal_w, doc_h,
+        )
 
     def _open_file_browser(self) -> None:
         """Open a file dialog to pick a code file."""
@@ -252,7 +317,7 @@ class CodeNode(BaseNode):
         if path:
             if scene:
                 scene.remember_browse_dir("code", str(Path(path).parent))
-            self.load_from_path(path)
+            self.load_from_path_and_fit(path)
             # Mirror View.dropEvent's secondary spawn — .py source with hex
             # literals gets a PaletteNode satellite alongside the CodeNode.
             # Uses the _from_text variant so we don't re-read the file the
