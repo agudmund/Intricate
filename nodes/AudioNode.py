@@ -9,7 +9,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QRectF, QPointF, QUrl, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QPainter, QFont, QColor
+from PySide6.QtGui import QPainter, QFont, QColor, QLinearGradient, QPen
 from PySide6.QtWidgets import QFileDialog
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from shiboken6 import isValid as _shiboken_isValid
@@ -520,7 +520,6 @@ class AudioNode(BaseNode):
         if self._duration_ms > 0:
             ratio = self._position_ms / self._duration_ms
             fill_rect = QRectF(pr.left(), pr.top(), pr.width() * ratio, pr.height())
-            from PySide6.QtGui import QLinearGradient
             grad = QLinearGradient(fill_rect.left(), 0, fill_rect.right(), 0)
             grad.setColorAt(0.0, QColor("#1e1e1e"))
             grad.setColorAt(0.4, QColor("#5c3e4f"))
@@ -530,7 +529,6 @@ class AudioNode(BaseNode):
             painter.drawRoundedRect(fill_rect, 3, 3)
 
         # End-of-bar marker — tall vertical line at the right edge
-        from PySide6.QtGui import QPen
         marker_pen = QPen(QColor(Theme.textPrimary), 3)
         painter.setPen(marker_pen)
         painter.setBrush(Qt.NoBrush)
