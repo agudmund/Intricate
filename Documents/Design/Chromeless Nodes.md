@@ -23,6 +23,7 @@ The visual style of any individual node is up to that node — chromeless nodes 
 | `data/ChromelessRootData.py` | Pure Python dataclass — extends `NodeData` with the four pin fields and serialises them via `super().to_dict()` chaining |
 | `nodes/_demolition.py` | Shared demolition crew — same one BaseNode uses; tolerates missing connections / behaviour / buttons / ports |
 | `nodes/_shake_detect.py` | Shake gesture detection — composition rather than inheritance, both root families share it |
+| `nodes/_dialog_helper.py` | `_DialogChoreographyMixin` — shared file-dialog choreography. ChromelessRoot inherits it as a second base so any subclass can spawn QFileDialog / QInputDialog with the same Windows-foreground choreography BaseNode uses |
 
 ## The Pin Contract
 
@@ -101,6 +102,24 @@ def _extra_context_menu_items(self, ctx):
 ```
 
 Since chromeless nodes lack the button strip BaseNode provides, the context menu is the canonical home for any node-specific actions: reset, reload, refresh, browse-for-image, copy-to-clipboard. Pack interaction options into this hook rather than reaching for any other UI surface.
+
+## File-Dialog Choreography
+
+`ChromelessRoot` inherits `_DialogChoreographyMixin` (`nodes/_dialog_helper.py`) as a second base, so any chromeless subclass that needs a file picker, save dialog, or directory chooser gets the same Windows-foreground behaviour `BaseNode` provides. Wrap the dialog call in the context manager and use the yielded main window as the dialog parent:
+
+```python
+def _browse_for_image(self):
+    with self._dialog_choreography() as mw:
+        path, _ = QFileDialog.getOpenFileName(
+            mw, "Choose Image", "", "Images (*.png *.jpg *.jpeg)"
+        )
+    if path:
+        self._load_from_path(path)
+```
+
+The choreography drops the always-on-top window flag, rolls curtains up if they're down, drains the HWND-recreation aftermath, focuses the main window so the dialog parents to a real foreground HWND, then restores everything on exit. Without it, dialogs spawn parented to a not-yet-foregrounded HWND and Windows silently refuses to surface them — they appear to be missing entirely (the symptom that triggered this extraction). See the docstring in `_dialog_helper.py` for the three settle-points (post-`_lower_window` drain, curtain-anim wait with safety timeout, post-activate drain) that make this reliable on Windows.
+
+StickerNode's empty-sticker double-click is the canonical chromeless usage; future raw-image-style chromeless nodes that browse for source files inherit the same flow at zero cost.
 
 ## Generic Resize Grip
 
