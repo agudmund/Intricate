@@ -137,9 +137,20 @@ class CodeNode(BaseNode):
     Based on the TextNode pattern — always-editable PrettyEdit with a
     CodeHighlighter attached to the editor's document for live coloring.
     Supports drag-and-drop of code files from Explorer and a file browser
-    via double-click.
+    via the shelf button.
+
+    Adopts the AboutNode/PaletteNode resize-handle shelf gesture: buttons
+    start collapsed and surface only when the user yanks the resize handle
+    past the reveal threshold (and re-hide on shrink past the hide
+    threshold). The editor breathes with the shelf via _on_shelf_tick.
     """
     _has_depth_toggle = True
+
+    # Shelf reveal/hide thresholds — match AboutNode's asymmetric pair so
+    # the gesture feel is consistent across the family that has migrated
+    # to the resize-handle pattern.
+    _RESIZE_SHELF_REVEAL_THRESHOLD = 75.0
+    _RESIZE_SHELF_HIDE_THRESHOLD   = 30.0
 
     def __init__(self, data: CodeNodeData | None = None):
         if data is None:
@@ -150,6 +161,16 @@ class CodeNode(BaseNode):
         self.setBrush(self._bg_color())
         self._min_height = Theme.aboutMinHeight
         self._apply_depth()
+
+        # Start with the shelf collapsed — CodeNode adopts AboutNode's
+        # resize-handle reveal/hide gesture (mouseMoveEvent below) in
+        # place of the legacy double-click toggle. Buttons surface only
+        # when the user yanks the resize handle past the reveal threshold.
+        self._buttons_visible = False
+        self._anim_top_offset = self._HIDDEN_TOP_OFFSET
+        for btn in self._buttons:
+            btn.hide()
+        self._shelf_anchor_h: float | None = None
 
         self._editor: PrettyEdit | None = None
         self._highlighter: CodeHighlighter | None = None
@@ -207,12 +228,19 @@ class CodeNode(BaseNode):
         self.data.label = self._editor.toPlainText()
 
     def _position_editor(self) -> None:
+        # Use _anim_top_offset (not the static _BUTTON_ZONE_H) so the
+        # editor breathes with the shelf reveal/hide animation. When the
+        # shelf is hidden the offset is _HIDDEN_TOP_OFFSET (~8 px) and
+        # the editor occupies almost the entire node; when revealed the
+        # offset animates up to _BUTTON_ZONE_H and the editor shrinks
+        # to make room for the button strip.
         r = self.rect()
+        top = self._anim_top_offset
         self._editor.position(QRectF(
             r.left()  + _PAD,
-            r.top()   + _BUTTON_ZONE_H,
+            r.top()   + top,
             r.width() - _PAD * 2,
-            r.height() - _BUTTON_ZONE_H - _PAD,
+            r.height() - top - _PAD,
         ))
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -397,14 +425,53 @@ class CodeNode(BaseNode):
     # INTERACTION
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Shelf reveal/hide via resize-handle gesture ─────────────────────────
+    # Mirrors AboutNode's bidirectional shelf coupling. _shelf_anchor_h is
+    # seeded on every press and re-seeded after every toggle so a single
+    # continuous drag can flip the shelf multiple times.
+
+    def mousePressEvent(self, event) -> None:
+        # Seed the shelf anchor at the start of any drag so the first
+        # threshold check measures from press-time height.
+        self._shelf_anchor_h = self.rect().height()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        # Defer to BaseNode first so the resize actually happens and
+        # self.rect() reflects the updated geometry before we inspect it.
+        super().mouseMoveEvent(event)
+        if not self._is_resizing:
+            return
+        if self._shelf_anchor_h is None:
+            self._shelf_anchor_h = self.rect().height()
+        delta_h = self.rect().height() - self._shelf_anchor_h
+        if not self._buttons_visible and delta_h > self._RESIZE_SHELF_REVEAL_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
+        elif self._buttons_visible and delta_h < -self._RESIZE_SHELF_HIDE_THRESHOLD:
+            self._toggle_shelf()
+            self._shelf_anchor_h = self.rect().height()
+
+    def _on_shelf_tick(self, value: float) -> None:
+        # Reposition the editor on every animation frame so it grows /
+        # shrinks smoothly with the shelf reveal / hide. BaseNode's tick
+        # updates _anim_top_offset and triggers a repaint; we add the
+        # editor reposition on top.
+        super()._on_shelf_tick(value)
+        if self._editor:
+            self._position_editor()
+
     def mouseDoubleClickEvent(self, event) -> None:
-        # Double-click the title area → open file browser
-        title_bottom = self.rect().top() + self._BUTTON_ZONE_H
-        if event.pos().y() < title_bottom:
+        # Top-strip double-click → open file browser. Uses _anim_top_offset
+        # (not the static _BUTTON_ZONE_H) so the trigger zone matches the
+        # current shelf state — when the shelf is hidden the strip is
+        # ~8 px and the trigger is correspondingly tiny; when revealed
+        # the full button-strip height is the trigger zone.
+        if event.pos().y() < self.rect().top() + self._anim_top_offset:
             self._open_file_browser()
             event.accept()
             return
-        # Double-click the editor area → focus the editor
+        # Body double-click → focus the editor.
         if self._editor:
             self._editor.proxy.setFocus()
             self._editor.setFocus(Qt.MouseFocusReason)

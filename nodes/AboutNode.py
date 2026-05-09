@@ -232,13 +232,15 @@ class AboutNode(BaseNode):
             self._shelf_anchor_h = self.rect().height()
 
     def mouseDoubleClickEvent(self, event) -> None:
-        # Don't enter edit mode if the double-click landed in the visible
-        # shelf zone — the user is interacting with buttons, not requesting
-        # text edit.  When the shelf is hidden the top strip is purely
-        # visual, so double-click there falls through to edit like the body.
-        if self._buttons_visible and event.pos().y() < self._BUTTON_ZONE_H:
-            event.accept()
-            return
+        # AboutNode's only double-click behaviour is to start text edit.
+        # Shelf reveal/hide is the resize-handle gesture's job exclusively
+        # (see mouseMoveEvent above) — nothing about double-click should
+        # touch _buttons_visible. Deliberately does NOT call super(): the
+        # BaseNode default mouseDoubleClickEvent toggles the shelf on top-
+        # strip clicks, which is the legacy pattern AboutNode replaced.
+        # Buttons themselves consume their own clicks before they reach
+        # this handler, so a double-click that lands here is always on
+        # node body — start edit, accept, done.
         self._start_edit()
         event.accept()
 
