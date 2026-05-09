@@ -117,7 +117,7 @@ def _browse_for_image(self):
         self._load_from_path(path)
 ```
 
-The choreography drops the always-on-top window flag, rolls curtains up if they're down, drains the HWND-recreation aftermath, focuses the main window so the dialog parents to a real foreground HWND, then restores everything on exit. Without it, dialogs spawn parented to a not-yet-foregrounded HWND and Windows silently refuses to surface them — they appear to be missing entirely (the symptom that triggered this extraction). See the docstring in `_dialog_helper.py` for the three settle-points (post-`_lower_window` drain, curtain-anim wait with safety timeout, post-activate drain) that make this reliable on Windows.
+The choreography drops the always-on-top window flag, rolls curtains up if they're down, drains the HWND-recreation aftermath, focuses the main window so the dialog parents to a real foreground HWND, then restores everything on exit. Without it, dialogs spawn parented to a not-yet-foregrounded HWND and Windows silently refuses to surface them — they appear to be missing entirely (the symptom that triggered this extraction). See the docstring in `_dialog_helper.py` for the three settle-points (post-`_drop_topmost` drain, curtain-anim wait with safety timeout, post-activate drain) that make this reliable on Windows.
 
 StickerNode's empty-sticker double-click is the canonical chromeless usage; future raw-image-style chromeless nodes that browse for source files inherit the same flow at zero cost.
 

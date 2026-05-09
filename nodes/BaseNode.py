@@ -1545,7 +1545,7 @@ class BaseNode(QGraphicsRectItem, _DialogChoreographyMixin):
             for btn in self._buttons:
                 btn.show()
 
-    # File-dialog choreography (_lower_window, _raise_window,
+    # File-dialog choreography (_drop_topmost, _restore_topmost,
     # _dialog_choreography) lives on _DialogChoreographyMixin so the
     # chromeless family inherits the same behaviour without depending
     # on BaseNode's chrome.  See nodes/_dialog_helper.py.

@@ -64,7 +64,7 @@ class _DialogChoreographyMixin:
     # WINDOW FLAG MANAGEMENT
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _lower_window(self):
+    def _drop_topmost(self):
         """Drop always-on-top before opening a dialog so it isn't hidden.
 
         Pushes the current windowFlags onto an instance-level stack so
@@ -86,13 +86,13 @@ class _DialogChoreographyMixin:
             win.show()
         return win
 
-    def _raise_window(self, win=None) -> None:
+    def _restore_topmost(self, win=None) -> None:
         """Restore always-on-top after the dialog closes.
 
         Pops the most recently saved flags from the stack — see
-        ``_lower_window`` for the LIFO contract. Empty-stack fallback
+        ``_drop_topmost`` for the LIFO contract. Empty-stack fallback
         is silent (matches the prior hasattr-guard behaviour for cases
-        where ``_lower_window`` returned early without a real win).
+        where ``_drop_topmost`` returned early without a real win).
         """
         stack = getattr(self, '_saved_flags_stack', None)
         if win is not None and stack:
@@ -117,8 +117,8 @@ class _DialogChoreographyMixin:
 
         Three settle-points are load-bearing for Windows focus reliability:
 
-          1. **Drain pending events immediately after `_lower_window()`.**
-             `setWindowFlags` inside `_lower_window()` recreates the
+          1. **Drain pending events immediately after `_drop_topmost()`.**
+             `setWindowFlags` inside `_drop_topmost()` recreates the
              native HWND on Windows.  Without an immediate drain, the
              recreation events stack up behind the curtain animation
              and dialog spawn — the dialog ends up parented to a not-
@@ -158,11 +158,11 @@ class _DialogChoreographyMixin:
                 path, _ = QFileDialog.getOpenFileName(mw, "Title", start, filter)
                 # use path...
         """
-        win = self._lower_window()
+        win = self._drop_topmost()
         # Settle (1): drain HWND-recreation aftermath before further
         # choreography stacks events on top of it.  See docstring above.
         QApplication.processEvents()
-        # mw and win are the same here — _lower_window already located
+        # mw and win are the same here — _drop_topmost already located
         # the main window via _get_main_window. Aliased for readability:
         # `win` reads as "the thing whose flags we restore on exit",
         # `mw` reads as "the parent we hand to the dialog and the curtain
@@ -215,7 +215,7 @@ class _DialogChoreographyMixin:
                     mw.toggle_curtains()
                 except Exception:
                     _log.debug("[dialog] curtain restore path raised", exc_info=True)
-            self._raise_window(win)
+            self._restore_topmost(win)
 
 # The Qt-managed dialog base (PrettyDialog) was promoted to the Pretty
 # Widgets package on 2026-05-09 — it's a universal "ceremony popup"
