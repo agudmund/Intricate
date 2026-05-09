@@ -52,6 +52,25 @@ The curtain roll is roughly 539 ms. If the dialog spawns mid-animation, Windows 
 
 The mixin pushes the original `windowFlags` onto an instance-level stack on every `_drop_topmost()` and pops on every `_restore_topmost()`. Nested choreography (a future feature that branches dialog flow off another dialog flow) restores LIFO without the inner call clobbering the outer's saved state. A flat single-attribute save would silently lose `WindowStaysOnTopHint` on the outer's exit; the stack closes that door before any nested flow ever exists.
 
+### Native dialog centring (`_center_modal_dialog_on_screen`)
+
+The three settles handle foreground reliability — *will the dialog be visible on top?* This piece handles **positioning** — *where on the screen will it appear?* Native Windows dialogs (`IFileOpenDialog` and friends) persist their last position in the per-user registry (`ComDlg32` MRU). On a fresh machine after a reboot, that registry slot is empty and the OS defaults the dialog to the top-left of the primary screen — a friction the user pays once per fresh boot and not after, but a friction nonetheless.
+
+Qt offers no API to position a native dialog from the calling code; the dialog is owned by the OS shell. But Win32 *does* offer the API — `MoveWindow` against the dialog's HWND. The catch is timing: `QFileDialog.getOpenFileName` is synchronous and modal, so we can't position the dialog before calling it (the HWND doesn't exist yet) or after (the call has returned, the dialog is gone). The trick is firing inside the modal block — Qt's event loop keeps running during a modal `exec`, so a `QTimer.singleShot` scheduled before the call will fire while the dialog is up.
+
+The choreography schedules `QTimer.singleShot(50, lambda: _center_modal_dialog_on_screen(parent_hwnd))` right before yielding to the caller. The helper:
+
+1. **Confirms the foreground HWND is the dialog, not the parent.** If the dialog hasn't spawned yet (machine under load, slow Win32 spawn), polls back with up to 6 retries × 30 ms (~180 ms total) before giving up. Avoids accidentally moving the parent main window if the timer fires too early.
+2. **Reads the dialog's current size** via `GetWindowRect`. We centre without resizing — the dialog keeps whatever size it remembered.
+3. **Finds the parent's monitor** via `MonitorFromWindow` + `GetMonitorInfo`. Multi-monitor honest: the dialog centres on the screen the user is actively working on, not always the primary.
+4. **Moves the dialog** with `MoveWindow` to the centre of that monitor's `rcWork` (excludes taskbar).
+
+The trade is gentler than first expected. On the *very first* dialog after a fresh boot, there's a brief flash at the OS-remembered top-left position before our move lands — but Windows then writes the centred position into its `ComDlg32` MRU, so every subsequent dialog spawns already centred with no flash. The friction collapses to a once-per-fresh-machine micro-event.
+
+PrettyDialog-derived dialogs are already centred via `showEvent` — the Win32 nudge is idempotent in their case (same target position, no visible difference). Native `QFileDialog` and `QInputDialog` get the centring for free, no caller-side opt-in. Platform-gated to Windows; on macOS / Linux the helper is a no-op (those OS pickers handle their own centring conventions).
+
+The capability was demonstrated first as a PowerShell window-positioning experiment (`Shell.Application.Windows()` + `MoveWindow` on Explorer HWNDs) — the same Win32 ABI applied directly to the modal dialog HWND inside Qt's running event loop.
+
 ## The ceremony popup base (`PrettyDialog`)
 
 A `QDialog` subclass with three small, load-bearing features baked into `showEvent`:
@@ -102,7 +121,7 @@ Two valid categories of Qt-managed dialog co-exist with native OS dialogs:
 
 The test: would a native input prompt feel *cheap* here, like the moment was being papered over? If yes, custom Qt is right. If a native equivalent would do the job without losing anything, prefer native.
 
-Native dialogs (`QFileDialog`, `QInputDialog`, `getExistingDirectory`) only need the choreography mixin; they're owned by the OS shell and defend their own positioning via the OS's rules. Wrap them in `with self._dialog_choreography() as mw:` and pass `mw` as the parent.
+Native dialogs (`QFileDialog`, `QInputDialog`, `getExistingDirectory`) only need the choreography mixin; they're owned by the OS shell and defend their own positioning via the OS's rules. Wrap them in `with self._dialog_choreography() as mw:` and pass `mw` as the parent. The choreography also handles their first-time centring via `_center_modal_dialog_on_screen` — see the "Native dialog centring" section above — so even native dialogs spawn in the middle of the user's monitor without caller-side ceremony.
 
 ## Current consumers
 
@@ -110,7 +129,7 @@ Native dialogs (`QFileDialog`, `QInputDialog`, `getExistingDirectory`) only need
 |---|---|---|---|
 | Bulk-push commit message | `_CommitDialog` | `nodes/GitNode.py` | `PrettyDialog` |
 | New-session naming ("Name your next masterpiece") | `_NewSessionDialog` | `main_window.py` | `PrettyDialog` |
-| Native file pickers (CodeNode, ImageNode, VideoNode, AudioNode, SequenceNode, StickerNode) | `QFileDialog` (no subclass) | various nodes | choreography only, no PrettyDialog |
+| Native file pickers (CodeNode, ImageNode, VideoNode, AudioNode, SequenceNode, StickerNode) | `QFileDialog` (no subclass) | various nodes | choreography only, no PrettyDialog — the choreography's `_center_modal_dialog_on_screen` nudge handles their positioning |
 
 `_CommitDialog` and `_NewSessionDialog` are the two ceremony popups that earned their place. Both spawn from inside the choreography (GitNode via `with self._dialog_choreography() as mw:`, `_create_new_session` via the same after the IntricateApp / mixin migration), and both inherit `PrettyDialog` for the show-time discipline.
 
@@ -158,4 +177,22 @@ Recipe for the rare moment a third ceremony earns its 30 seconds:
 - **`_get_main_window`'s default catches `AttributeError, RuntimeError`** so a node not yet added to a scene returns `None` gracefully, and the choreography skips its scene-dependent steps without raising.
 - **`_assert_topmost_if_platform` is the OS-aware boundary** — keep all platform-specific window manipulation behind it, so the rest of `PrettyDialog` stays portable.
 - **Curtain anim duration is read from `mw.curtain_anim.duration()`** at the moment of safety-timeout calculation, not cached at framework init time, so a future runtime tweak to anim duration takes effect on the next dialog spawn without restart.
-- **Logging**: `nodes/_dialog_helper.py` and `pretty_widgets/PrettyDialog.py` both expose a `setup_logger("dialog")` instance. The choreography's three exception-swallow paths and `_win32_set_topmost`'s failure path log at DEBUG with `exc_info=True`, so a production-relevant raise leaves a paper trail without spamming normal-flow logs.
+- **Logging**: `nodes/_dialog_helper.py` and `pretty_widgets/PrettyDialog.py` both expose a `setup_logger("dialog")` instance. The choreography's three exception-swallow paths, `_win32_set_topmost`'s failure path, and `_center_modal_dialog_on_screen`'s failure path all log at DEBUG with `exc_info=True`, so a production-relevant raise leaves a paper trail without spamming normal-flow logs.
+- **`_center_modal_dialog_on_screen` retries with `QTimer.singleShot(30, ...)`** rather than blocking the calling thread. If the foreground hasn't switched to the dialog yet, it schedules itself again with `retries - 1`. Up to 6 retries × 30 ms (~180 ms total) before giving up — covers the slowest realistic spawn without holding open if no dialog ever appears.
+
+## Refinements log
+
+A six-item improvement list opened on 2026-05-09 around the framework's edges. Status:
+
+| # | Topic | Status | Where |
+|---|---|---|---|
+| 1 | Promote `_PrettyDialogBase` to the Pretty Widgets package | ✅ done | `pretty_widgets.PrettyDialog` 0.7.0 |
+| 2 | `_saved_flags_stack` LIFO lifecycle (nested-call safety) | ✅ done | see "_saved_flags_stack" section above |
+| 3 | Rename `_lower_window` / `_raise_window` → `_drop_topmost` / `_restore_topmost` | ✅ done | `nodes/_dialog_helper.py` |
+| 4 | Unit tests for the framework's lookup logic | ❌ deliberately not done | testing in this codebase is realtime, by design — see the saved memory `feedback_realtime_testing` for the full rationale |
+| 5 | Dedicated Design doc for the framework | ✅ done | this document |
+| 6 | Shared visual identity for ceremony dialogs (chrome + content helpers) | ✅ done | `PrettyDialog._apply_default_chrome` + `make_prompt_label` / `make_input` / `make_button_row` |
+
+The original five-item list (the conversation that birthed the framework) — first-CodeNode dialog race, screen-centred dialog, double-click audit, resize-handle shelf migration, palette satellite parity — also closed in the same arc, with the screen-centred dialog (item 2) resolved last via the post-spawn Win32 nudge documented above.
+
+Plus several refinements that grew out of the work organically along the way: GitNode commit dialog migration, CodeNode auto-fit on file load, CodeNode spellcheck=False (restoring syntax highlighter), AboutNode double-click cleanup. The framework reads cleaner now than it did before any of this; the doc you're reading is the surface of the shape that emerged.
