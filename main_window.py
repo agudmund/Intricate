@@ -22,6 +22,7 @@ from graphics.View import IntricateView
 from pretty_widgets.graphics.Theme import Theme
 from nodes.ClaudeNode import ClaudeNode
 from nodes.ImageNode import ImageNode
+from nodes._dialog_helper import _PrettyDialogBase
 from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
 from shared_braincell.logger import setup_logger
@@ -89,12 +90,24 @@ class _ButtonBar(QWidget):
         return super().event(e)
 
 
-class _NewSessionDialog(QDialog):
-    """Frameless new-session dialog matching the app's visual language."""
+class _NewSessionDialog(_PrettyDialogBase):
+    """Frameless new-session dialog — the ceremony of naming a piece.
+
+    Inherits _PrettyDialogBase from the extra-window framework so this
+    masterpiece dialog gets the same Windows-foreground treatment as
+    GitNode's commit dialog: explicit screen centring (overriding Qt's
+    parent-relative default that lands a dialog on the collapsed-curtain
+    parent), HWND_TOPMOST re-assertion via Win32 so the dialog wins the
+    topmost-band z-order race against Chrome PiP and friends, and
+    activate/raise on show. See nodes/_dialog_helper.py.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        # WindowStaysOnTopHint puts the dialog in the Windows topmost
+        # z-order band; _PrettyDialogBase.showEvent re-asserts HWND_TOPMOST
+        # via Win32 so we land at the *top* of the band.
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedWidth(380)
 
@@ -5261,7 +5274,12 @@ class IntricateApp(QMainWindow):
         except Exception:
             pass
 
-        dlg = _NewSessionDialog(parent=None)
+        # parent=self matches GitNode's commit-dialog pattern: the dialog
+        # parents to the main window for HWND ownership / modal scoping,
+        # and _PrettyDialogBase._center_on_screen overrides Qt's parent-
+        # relative default positioning so the dialog still lands dead-
+        # centre even with the parent in collapsed-curtain state.
+        dlg = _NewSessionDialog(parent=self)
         result = dlg.exec()
 
         # Roll curtains back down and restore window flags
