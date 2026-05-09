@@ -12,39 +12,64 @@ from contextlib import contextmanager
 from PySide6.QtCore import Qt, QEventLoop, QTimer, QAbstractAnimation
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QDialog
+from shared_braincell.logger import setup_logger
+
+_log = setup_logger("dialog")
 
 
 class _DialogChoreographyMixin:
-    """Modal-dialog choreography shared by BaseNode and ChromelessRoot.
+    """Modal-dialog choreography shared by BaseNode, ChromelessRoot, and the
+    application main window.
 
-    Lives as a pure-Python mixin so the chromeless family doesn't have
-    to inherit BaseNode's chrome to get the same dialog behaviour. Both
-    base classes pull this in via multiple inheritance:
+    Lives as a pure-Python mixin so any class that owns or has access to the
+    application main window can use it via multiple inheritance:
 
         class BaseNode(QGraphicsRectItem, _DialogChoreographyMixin): ...
         class ChromelessRoot(QGraphicsRectItem, _DialogChoreographyMixin): ...
+        class IntricateApp(QMainWindow, _DialogChoreographyMixin): ...
 
-    Any concrete node — chromeless or otherwise — can then spawn a file
-    or save dialog with the canonical Windows-foreground choreography:
+    Any concrete user — node, root, or main window — can then spawn a
+    dialog with the canonical Windows-foreground choreography:
 
         with self._dialog_choreography() as mw:
             path, _ = QFileDialog.getOpenFileName(mw, "Title", start, filter)
             # use path...
 
-    Assumes ``self.scene()`` returns the IntricateScene whose first view
-    is anchored to the application main window — true for every node
-    that has been added to the canvas.
+    The mixin locates the application main window via ``_get_main_window()``,
+    which subclasses can override. Default walks ``self.scene().views()[0]
+    .window()`` (correct for any QGraphicsItem placed on the IntricateScene);
+    ``IntricateApp(QMainWindow)`` overrides to return ``self`` directly.
     """
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # MAIN WINDOW LOOKUP
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _get_main_window(self):
+        """Locate the application main window for dialog parenting + flag flips.
+
+        Default implementation walks ``self.scene().views()[0].window()`` —
+        correct for any QGraphicsItem placed on the IntricateScene. Subclasses
+        whose ``self`` IS the main window (e.g. ``IntricateApp(QMainWindow)``)
+        override to return ``self`` directly, no traversal needed.
+
+        Returns None if no main window can be located (e.g. a node not yet
+        added to a scene). Choreography handles the None case gracefully.
+        """
+        try:
+            views = self.scene().views() if self.scene() else []
+            return views[0].window() if views else None
+        except (AttributeError, RuntimeError):
+            return None
 
     # ─────────────────────────────────────────────────────────────────────────
     # WINDOW FLAG MANAGEMENT
     # ─────────────────────────────────────────────────────────────────────────
 
     def _lower_window(self):
-        """Drop always-on-top before opening a file dialog so it isn't hidden."""
-        views = self.scene().views() if self.scene() else []
-        win = views[0].window() if views else None
-        if win:
+        """Drop always-on-top before opening a dialog so it isn't hidden."""
+        win = self._get_main_window()
+        if win is not None:
             self._saved_flags = win.windowFlags()
             win.setWindowFlags(self._saved_flags & ~Qt.WindowStaysOnTopHint)
             win.show()
@@ -52,7 +77,7 @@ class _DialogChoreographyMixin:
 
     def _raise_window(self, win=None) -> None:
         """Restore always-on-top after the dialog closes."""
-        if win and hasattr(self, '_saved_flags'):
+        if win is not None and hasattr(self, '_saved_flags'):
             win.setWindowFlags(self._saved_flags)
             win.show()
             win.raise_()
@@ -119,35 +144,36 @@ class _DialogChoreographyMixin:
         # Settle (1): drain HWND-recreation aftermath before further
         # choreography stacks events on top of it.  See docstring above.
         QApplication.processEvents()
+        # mw and win are the same here — _lower_window already located
+        # the main window via _get_main_window. Aliased for readability:
+        # `win` reads as "the thing whose flags we restore on exit",
+        # `mw` reads as "the parent we hand to the dialog and the curtain
+        # owner". Same object, two roles.
         was_collapsed = False
-        mw = None
+        mw = win
         try:
-            views = self.scene().views() if self.scene() else []
-            if views:
-                mw = views[0].window()
-                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
-                    mw.toggle_curtains()
-                    was_collapsed = True
-                    # Settle (2): block until the curtain roll finishes.
-                    anim = getattr(mw, 'curtain_anim', None)
-                    if anim is not None:
-                        loop = QEventLoop()
-                        anim.finished.connect(loop.quit)
-                        # Connect-before-state-check closes a race
-                        # where the animation could finish between
-                        # the attribute access above and the state
-                        # read below, leaving us listening for a
-                        # signal that already fired.
-                        if anim.state() == QAbstractAnimation.State.Running:
-                            # Safety timeout — see (2) in docstring.
-                            QTimer.singleShot(1500, loop.quit)
-                            loop.exec()
-                        try:
-                            anim.finished.disconnect(loop.quit)
-                        except (RuntimeError, TypeError):
-                            pass
+            if mw is not None and hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
+                mw.toggle_curtains()
+                was_collapsed = True
+                # Settle (2): block until the curtain roll finishes.
+                anim = getattr(mw, 'curtain_anim', None)
+                if anim is not None:
+                    loop = QEventLoop()
+                    anim.finished.connect(loop.quit)
+                    # Connect-before-state-check closes a race where
+                    # the animation could finish between the attribute
+                    # access above and the state read below, leaving
+                    # us listening for a signal that already fired.
+                    if anim.state() == QAbstractAnimation.State.Running:
+                        # Safety timeout — see (2) in docstring.
+                        QTimer.singleShot(1500, loop.quit)
+                        loop.exec()
+                    try:
+                        anim.finished.disconnect(loop.quit)
+                    except (RuntimeError, TypeError):
+                        pass
         except Exception:
-            pass
+            _log.debug("[dialog] curtain settle path raised", exc_info=True)
         if mw is not None:
             try:
                 mw.activateWindow()
@@ -156,7 +182,7 @@ class _DialogChoreographyMixin:
                 # actually lands before the dialog spawns.
                 QApplication.processEvents()
             except Exception:
-                pass
+                _log.debug("[dialog] activate/raise path raised", exc_info=True)
         try:
             yield mw
         finally:
@@ -164,7 +190,7 @@ class _DialogChoreographyMixin:
                 try:
                     mw.toggle_curtains()
                 except Exception:
-                    pass
+                    _log.debug("[dialog] curtain restore path raised", exc_info=True)
             self._raise_window(win)
 
 
@@ -270,4 +296,4 @@ class _PrettyDialogBase(QDialog):
                 SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW,
             )
         except Exception:
-            pass
+            _log.debug("[dialog] SetWindowPos topmost failed", exc_info=True)

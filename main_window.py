@@ -22,7 +22,7 @@ from graphics.View import IntricateView
 from pretty_widgets.graphics.Theme import Theme
 from nodes.ClaudeNode import ClaudeNode
 from nodes.ImageNode import ImageNode
-from nodes._dialog_helper import _PrettyDialogBase
+from nodes._dialog_helper import _PrettyDialogBase, _DialogChoreographyMixin
 from pretty_widgets.PrettyButton import button
 from pretty_widgets.PrettyMenu import menu as pretty_menu
 from shared_braincell.logger import setup_logger
@@ -195,7 +195,7 @@ class _NewSessionDialog(_PrettyDialogBase):
         return self._input.toPlainText().strip()
 
 
-class IntricateApp(QMainWindow):
+class IntricateApp(QMainWindow, _DialogChoreographyMixin):
     def __init__(self):
         super().__init__()
         # ── Chrome-pulse registry ─────────────────────────────────────────
@@ -5256,41 +5256,26 @@ class IntricateApp(QMainWindow):
         self._attach_joy_stats()
         self._status(f"welcome back to {new_project}")
 
+    # ─────────────────────────────────────────────────────────────────────
+    # Dialog-choreography mixin context. IntricateApp IS the main window,
+    # so the default scene-traversing lookup doesn't apply — return self.
+    # See nodes/_dialog_helper.py for the framework.
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _get_main_window(self):
+        return self
+
     def _create_new_session(self) -> None:
         """Prompt for a name, create the folder, and switch to the new session."""
         prev = getattr(self, '_active_project', '')
 
-        # Lower the window so the dialog isn't hidden behind always-on-top
-        saved_flags = self.windowFlags()
-        self.setWindowFlags(saved_flags & ~Qt.WindowStaysOnTopHint)
-        self.show()
-
-        # Roll up curtains for the cinematic reveal
-        was_collapsed = False
-        try:
-            if hasattr(self, 'is_collapsed') and not self.is_collapsed:
-                self.toggle_curtains()
-                was_collapsed = True
-        except Exception:
-            pass
-
-        # parent=self matches GitNode's commit-dialog pattern: the dialog
-        # parents to the main window for HWND ownership / modal scoping,
-        # and _PrettyDialogBase._center_on_screen overrides Qt's parent-
-        # relative default positioning so the dialog still lands dead-
-        # centre even with the parent in collapsed-curtain state.
-        dlg = _NewSessionDialog(parent=self)
-        result = dlg.exec()
-
-        # Roll curtains back down and restore window flags
-        if was_collapsed:
-            try:
-                self.toggle_curtains()
-            except Exception:
-                pass
-        self.setWindowFlags(saved_flags)
-        self.show()
-        self.raise_()
+        # Curtain dance, HWND settle, focus, and restore — all handled
+        # by the choreography mixin (matches GitNode's commit-dialog
+        # pattern). _PrettyDialogBase.showEvent then centres the dialog
+        # and asserts topmost-band dominance.
+        with self._dialog_choreography() as mw:
+            dlg = _NewSessionDialog(parent=mw)
+            result = dlg.exec()
 
         name = dlg.name().strip() if result == QDialog.DialogCode.Accepted else ""
 
