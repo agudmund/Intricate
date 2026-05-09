@@ -450,6 +450,31 @@ def main():
     # Install a global exception hook so unhandled errors inside Qt slots and
     # callbacks land in the log file instead of vanishing into stderr (which is
     # gone when running headless via pythonw or a frozen .exe).
+    # Single flush surface used by every crash path and atexit. The stdlib
+    # logger's RotatingFileHandler buffers writes and a dying process can
+    # exit before the buffer drains — validated 2026-05-08 when an
+    # AudioNode UnboundLocalError truncated the standard log mid-traceback.
+    # crash.txt caught it (the multi-layered logger scheme working as
+    # designed), but flushing the stdlib handlers here strengthens layer
+    # one so future crashes leave the full traceback in the standard log
+    # too, with crash.txt as backup-of-the-backup.
+    def _flush_all_logs():
+        try:
+            import logging as _logging
+            for _h in _logging.root.handlers:
+                try: _h.flush()
+                except Exception: pass
+            for _h in getattr(logger, 'handlers', []):
+                try: _h.flush()
+                except Exception: pass
+        except Exception:
+            pass
+        try:
+            import intricate_log
+            intricate_log.flush()
+        except Exception:
+            pass
+
     def _excepthook(exc_type, exc_value, exc_tb):
         if exc_type is KeyboardInterrupt:
             sys.__excepthook__(exc_type, exc_value, exc_tb)
@@ -463,12 +488,8 @@ def main():
             crash_path.write_text(tb_text, encoding="utf-8")
         except Exception:
             pass
-        # Flush the ring buffer so the crash lands on disk before we go down.
-        try:
-            import intricate_log
-            intricate_log.flush()
-        except Exception:
-            pass
+        # Flush every sink so the crash lands on disk before we go down.
+        _flush_all_logs()
     sys.excepthook = _excepthook
 
     # sys.unraisablehook fires for exceptions Python couldn't propagate
@@ -492,11 +513,7 @@ def main():
             crash_path.write_text(f"{context}\n\n{tb_text}", encoding="utf-8")
         except Exception:
             pass
-        try:
-            import intricate_log
-            intricate_log.flush()
-        except Exception:
-            pass
+        _flush_all_logs()
     sys.unraisablehook = _unraisablehook
 
     # faulthandler catches Windows structured exceptions (SEGFAULT,
@@ -515,15 +532,9 @@ def main():
     except Exception as _fh_exc:
         logger.warning("faulthandler install failed: %s", _fh_exc)
 
-    # Register atexit handler to flush the ring buffer on clean shutdown.
+    # Register atexit handler to flush every sink on clean shutdown.
     import atexit
-    def _flush_log():
-        try:
-            import intricate_log
-            intricate_log.flush()
-        except Exception:
-            pass
-    atexit.register(_flush_log)
+    atexit.register(_flush_all_logs)
 
     def _exit_pycache_cleanup():
         try:
