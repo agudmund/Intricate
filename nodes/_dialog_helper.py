@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
--Intricate - nodes/_dialog_helper.py dialog choreography mixin
--A small backstage hand for any node that needs a dialog to surface cleanly, for enjoying
+-Intricate - nodes/_dialog_helper.py extra-window framework
+-Backstage hands for any node that needs a dialog or popup to surface cleanly, for enjoying
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import sys
 from contextlib import contextmanager
 
 from PySide6.QtCore import Qt, QEventLoop, QTimer, QAbstractAnimation
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 
 class _DialogChoreographyMixin:
@@ -164,3 +165,72 @@ class _DialogChoreographyMixin:
                 except Exception:
                     pass
             self._raise_window(win)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# QT-MANAGED DIALOG BASE
+# ─────────────────────────────────────────────────────────────────────────────
+# The choreography above handles WHEN an extra window appears (curtain dance,
+# HWND settle, focus). The class below handles HOW a Qt-managed extra window
+# holds its ground once shown. Native OS dialogs (QFileDialog and friends)
+# don't need this — they're owned by the OS shell and defend themselves via
+# the OS's own positioning rules. Qt-managed QDialog subclasses sit in the
+# same z-order band as Chrome's YouTube PiP and other HWND_TOPMOST citizens
+# on Windows, and need active defense to win the band.
+#
+# The two halves compose: wrap a PrettyDialogBase exec() in
+#   `with self._dialog_choreography() as mw:`
+# and the dialog gets the curtain-dance + topmost-band defense for free.
+
+
+class _PrettyDialogBase(QDialog):
+    """QDialog base with cross-OS topmost-band defense baked in.
+
+    Inherit this for any Qt-managed dialog spawned from inside Intricate
+    so it lands on top of the always-on-top main window, and on Windows
+    additionally wins the topmost-band z-order race against Chrome's
+    YouTube PiP and other HWND_TOPMOST citizens.
+
+    Subclasses still own their own visual chrome (frameless flag,
+    stylesheet, layout, content). The base only owns the show-time
+    defense and activate/raise — no visual opinions.
+    """
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._assert_topmost_if_platform()
+        self.activateWindow()
+        self.raise_()
+
+    def _assert_topmost_if_platform(self) -> None:
+        """OS-aware topmost-band defense hook.
+
+        Windows: re-asserts HWND_TOPMOST via Win32 SetWindowPos so we
+        land at the *top* of the topmost band (Chrome PiP also sits in
+        that band, and the most recent SetWindowPos wins).
+
+        macOS / Linux: Qt's WindowStaysOnTopHint plus activate/raise is
+        sufficient in practice — this method stays as the expansion
+        point if a per-OS defense ever proves needed (NSWindow.level on
+        macOS, _NET_WM_STATE_ABOVE on X11/Wayland).
+        """
+        if sys.platform == "win32":
+            self._win32_set_topmost()
+
+    def _win32_set_topmost(self) -> None:
+        """Re-assert HWND_TOPMOST after Qt finishes showing the dialog."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            HWND_TOPMOST   = ctypes.c_void_p(-1)
+            SWP_NOSIZE     = 0x0001
+            SWP_NOMOVE     = 0x0002
+            SWP_SHOWWINDOW = 0x0040
+            user32.SetWindowPos(
+                ctypes.c_void_p(int(self.winId())),
+                HWND_TOPMOST,
+                0, 0, 0, 0,
+                SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW,
+            )
+        except Exception:
+            pass

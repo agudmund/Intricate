@@ -25,6 +25,7 @@ from PySide6.QtGui import QPainter, QFont, QColor
 from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGraphicsRectItem
 
 from nodes.BaseNode import BaseNode
+from nodes._dialog_helper import _PrettyDialogBase
 from data.GitNodeData import GitNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyButton import PrettyButton
@@ -194,15 +195,16 @@ def _scan_repos() -> list[tuple[str, str]]:
 
 
 
-class _CommitDialog(QDialog):
+class _CommitDialog(_PrettyDialogBase):
     """Frameless commit-message dialog matching the app's visual language."""
 
     def __init__(self, repo_count: int, parent=None):
         super().__init__(parent)
-        # WindowStaysOnTopHint puts the dialog in the Windows topmost z-order band.
-        # The showEvent below additionally re-asserts HWND_TOPMOST via Win32 so we
-        # land at the *top* of the band — Chrome's YouTube PiP is also HWND_TOPMOST,
-        # and within that band whoever called SetWindowPos last wins.
+        # WindowStaysOnTopHint puts the dialog in the Windows topmost z-order band;
+        # _PrettyDialogBase.showEvent re-asserts HWND_TOPMOST via Win32 after Qt
+        # finishes showing so we land at the *top* of the band (Chrome's YouTube
+        # PiP also sits topmost, and within that band whoever called SetWindowPos
+        # last wins).
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedWidth(380)
@@ -284,32 +286,6 @@ class _CommitDialog(QDialog):
 
     def message(self) -> str:
         return self._input.toPlainText().strip()
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        # Re-assert HWND_TOPMOST after Qt finishes showing — Chrome's YouTube PiP
-        # also sits in the topmost band, and the most recent SetWindowPos wins
-        # the z-order race within that band. Qt's WindowStaysOnTopHint alone
-        # gets us into the band but doesn't guarantee we land on top of it.
-        if sys.platform == "win32":
-            try:
-                import ctypes
-                user32 = ctypes.windll.user32
-                HWND_TOPMOST   = ctypes.c_void_p(-1)
-                SWP_NOSIZE     = 0x0001
-                SWP_NOMOVE     = 0x0002
-                SWP_SHOWWINDOW = 0x0040
-                user32.SetWindowPos(
-                    ctypes.c_void_p(int(self.winId())),
-                    HWND_TOPMOST,
-                    0, 0, 0, 0,
-                    SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW,
-                )
-            except Exception:
-                _log.debug("[git] SetWindowPos topmost failed", exc_info=True)
-        self.activateWindow()
-        self.raise_()
-
 
 class GitNode(BaseNode):
     _has_depth_toggle = True
@@ -616,25 +592,12 @@ class GitNode(BaseNode):
         # Session repos need a commit message; unpushed repos already have one
         msg = ""
         if session_repos:
-            win = self._lower_window()
-            was_collapsed = False
-            try:
-                views = self.scene().views() if self.scene() else []
-                if views:
-                    mw = views[0].window()
-                    if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
-                        mw.toggle_curtains()
-                        was_collapsed = True
-            except Exception:
-                pass
-            dlg = _CommitDialog(len(session_repos))
-            result = dlg.exec()
-            if was_collapsed:
-                try:
-                    mw.toggle_curtains()
-                except Exception:
-                    pass
-            self._raise_window(win)
+            # Curtain dance + HWND settle handled by the choreography mixin;
+            # the topmost-band defense lives on _PrettyDialogBase via the
+            # commit dialog's inheritance.  See nodes/_dialog_helper.py.
+            with self._dialog_choreography() as mw:
+                dlg = _CommitDialog(len(session_repos), parent=mw)
+                result = dlg.exec()
             if result != QDialog.DialogCode.Accepted or not dlg.message().strip():
                 return
             msg = dlg.message().strip()
