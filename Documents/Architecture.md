@@ -235,6 +235,7 @@ Framework-level designs that outgrew node-specific docs live in `Documents/Desig
 | `Icon Pipeline.md` | The end-to-end icon system — three families (sidebar/Pillow line-art, node-function emoji, node-utility sticker), generation + extraction recipes, the `tools/icon_pipeline/` toolkit (canvas/save/extract/verify/batch/paths), the `icons/` proprietary-vs-`Tertiary/` split, the `Images/Stickers/` source workspace, the brand-mark refresh ritual (`Intricate.ico` + `.lnk` + Win11 icon-cache flush). Verify PNGs land in `Documents/Data/Icon Pipeline/`, kept out of `icons/`. |
 | `Media Cache.md` | SHA-256 content-addressed byte-preserving cache — primitive shared by Image, Video, Sticker. Four invariants (content-addressed keys, byte-preserving, free dedup, retention-by-reference). API surface, integration recipe for new cached node types. |
 | `Settlers Category Design Brief.md` | Visual language + four-column grid spec for the Settlers companion app's settings categories. |
+| `Extra-Window Framework.md` | The two-piece popup framework — `_DialogChoreographyMixin` (WHEN, in `nodes/_dialog_helper.py`) + `pretty_widgets.PrettyDialog` (HOW, in the shared widget package). Three settle-points, the 30-second rule, the popup pattern (*"I'm here > Address this > Thank You > Come Again > Done"*), native-vs-custom decision, recipe for adding a new ceremony popup. |
 
 Per-node implementation writeups live in `Documents/Nodes/`. Compliance logs (crash classes, fixes, audits) live in `Documents/Compliance/Node Cleanup Compliance.md`.
 

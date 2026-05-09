@@ -121,7 +121,7 @@ The choreography drops the always-on-top window flag, rolls curtains up if they'
 
 StickerNode's empty-sticker double-click is the canonical chromeless usage; future raw-image-style chromeless nodes that browse for source files inherit the same flow at zero cost.
 
-The choreography is one half of a two-piece **extra-window framework**. The other half — `pretty_widgets.PrettyDialog` — is a `QDialog` subclass that handles HOW Qt-managed popups (frameless themed dialogs like GitNode's commit prompt, the new-session masterpiece input, the rare ceremony exceptions to Intricate's mostly-popup-free Z-depth workflow) hold their ground once shown: explicit screen centring plus cross-OS topmost-band defence. Lives in Pretty Widgets so other family apps (Pebbles, Majestic) can inherit it directly without depending on Intricate. Compose the two — wrap a `PrettyDialog.exec()` in `with self._dialog_choreography() as mw:` — and the dialog gets curtain-dance + screen-centred + topmost-band defence in one. Native OS dialogs (`QFileDialog` and friends) only need the choreography; they're owned by the OS shell and defend themselves via the OS's own positioning rules.
+The choreography is one half of the two-piece **extra-window framework**; the other half (`pretty_widgets.PrettyDialog`) handles the show-time discipline for ceremony popups. The framework as a whole — three settle-points, the 30-second rule, the native-vs-custom decision, recipe for adding new popups — is documented in `Documents/Design/Extra-Window Framework.md`.
 
 ## Generic Resize Grip
 
