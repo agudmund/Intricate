@@ -256,11 +256,18 @@ class StickerNode(ChromelessRoot):
             # Has an image — double-click toggles the viewport pin
             self._toggle_pin()
         else:
-            # Empty sticker — double-click browses for a PNG
-            path, _ = QFileDialog.getOpenFileName(
-                None, "Choose Sticker Image", "",
-                "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"
-            )
+            # Empty sticker — double-click browses for a PNG.
+            # Routes through the ChromelessRoot/_DialogChoreographyMixin
+            # choreography so the dialog gets the same Windows-foreground
+            # treatment as every other file browser in the app (drop
+            # always-on-top, roll curtains, settle the HWND, focus the
+            # main window) instead of spawning behind whatever else has
+            # the foreground.
+            with self._dialog_choreography() as mw:
+                path, _ = QFileDialog.getOpenFileName(
+                    mw, "Choose Sticker Image", "",
+                    "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"
+                )
             if path:
                 self._load_from_path(path)
         event.accept()

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem
 
 from data.ChromelessRootData import ChromelessRootData
 from nodes._shake_detect import ShakeDetector, arm_cooldown
+from nodes._dialog_helper import _DialogChoreographyMixin
 from pretty_widgets.graphics.Theme import Theme
 from shared_braincell.logger import setup_logger, TRACE
 
@@ -53,7 +54,7 @@ _ITEM_CHANGE_NAMES = {
 }
 
 
-class ChromelessRoot(QGraphicsRectItem):
+class ChromelessRoot(QGraphicsRectItem, _DialogChoreographyMixin):
     """Base class for the chromeless family of nodes.
 
     Sibling to BaseNode rather than descendant — inherits

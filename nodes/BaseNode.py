@@ -8,9 +8,8 @@
 
 import time as _time
 import uuid as _uuid
-from contextlib import contextmanager
-from PySide6.QtWidgets import QGraphicsRectItem, QStyleOptionGraphicsItem, QApplication
-from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve, QEventLoop, QAbstractAnimation
+from PySide6.QtWidgets import QGraphicsRectItem, QStyleOptionGraphicsItem
+from PySide6.QtCore import Qt, QRectF, QPointF, QSizeF, QTimer, QVariantAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPen, QPainter, QPainterPath, QFont
 from PySide6.QtWidgets import QGraphicsItem
 from shared_braincell.logger import setup_logger
@@ -22,6 +21,7 @@ from nodes.NodeBehaviour import NodeBehaviour
 from pretty_widgets.graphics.Theme import Theme
 from nodes.NodeButton import NodeButton, EmojiButton, BUTTON_SIZE
 from nodes._shake_detect import arm_cooldown as _arm_shake_cooldown, is_cooling_down as _shake_cooling_down
+from nodes._dialog_helper import _DialogChoreographyMixin
 
 
 def _c(hex_str): return QColor(hex_str)   # local shorthand
@@ -44,7 +44,7 @@ _RESIZE_GRIP     = Theme.nodeResizeGrip
 _RESIZE_OVERREACH = 6
 
 
-class BaseNode(QGraphicsRectItem):
+class BaseNode(QGraphicsRectItem, _DialogChoreographyMixin):
     """
     The stage every node type performs on.
 
@@ -1545,115 +1545,10 @@ class BaseNode(QGraphicsRectItem):
             for btn in self._buttons:
                 btn.show()
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # FILE DIALOG HELPER
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def _lower_window(self) -> 'QMainWindow | None':
-        """Drop always-on-top before opening a file dialog so it isn't hidden."""
-        views = self.scene().views() if self.scene() else []
-        win = views[0].window() if views else None
-        if win:
-            self._saved_flags = win.windowFlags()
-            win.setWindowFlags(self._saved_flags & ~Qt.WindowStaysOnTopHint)
-            win.show()
-        return win
-
-    def _raise_window(self, win=None) -> None:
-        """Restore always-on-top after the dialog closes."""
-        if win and hasattr(self, '_saved_flags'):
-            win.setWindowFlags(self._saved_flags)
-            win.show()
-            win.raise_()
-
-    @contextmanager
-    def _dialog_choreography(self):
-        """Run a modal dialog with Intricate's standard choreography.
-
-        Drops always-on-top, rolls curtains up if currently down, focuses
-        the main window so the dialog spawns with a real owner HWND in
-        front, then restores curtains and always-on-top on exit. Yields
-        the main window (or None if there is no scene/view) so the caller
-        can pass it as the dialog's parent — important on Windows so the
-        native file picker doesn't drift behind another desktop window.
-
-        Three settle-points are load-bearing for Windows focus reliability:
-
-          1. **Drain pending events immediately after `_lower_window()`.**
-             `setWindowFlags` inside `_lower_window()` recreates the
-             native HWND on Windows.  Without an immediate drain, the
-             recreation events stack up behind the curtain animation
-             and dialog spawn — the dialog ends up parented to a not-
-             yet-foregrounded HWND and the OS silently refuses to
-             surface it.  On a fresh session this manifests as the
-             first-ever file-browser click rolling the curtains up
-             but the dialog never appearing; subsequent clicks succeed
-             because the HWND is now warm.  Draining here breaks the
-             stack-up so the HWND is settled before any further
-             choreography begins.
-          2. **Curtain animation must finish before yielding.** Without
-             waiting, the dialog spawns mid-geometry-transition (the
-             curtain roll is ~539 ms).  Windows refuses to promote the
-             dialog to foreground while its parent HWND is in animated
-             flight, so the dialog opens behind whatever else holds the
-             foreground state.  We block on `curtain_anim.finished` via
-             a nested QEventLoop so the parent is fully settled when the
-             dialog appears.
-          3. **Drain the event queue after activate/raise.**
-             `activateWindow()` is a request that may not land until
-             pending events drain.  `processEvents()` flushes pending
-             events so the activation actually takes effect before the
-             dialog spawns.
-
-        Without these settle-points, the focus loss is intermittent —
-        sometimes the race resolves favourably, sometimes the dialog
-        ends up under another desktop app, and on a fresh session the
-        first dialog can fail to surface entirely.
-
-        Usage:
-            with self._dialog_choreography() as mw:
-                path, _ = QFileDialog.getOpenFileName(mw, "Title", start, filter)
-                # use path...
-        """
-        win = self._lower_window()
-        # Settle (1): drain HWND-recreation aftermath before further
-        # choreography stacks events on top of it.  See docstring above.
-        QApplication.processEvents()
-        was_collapsed = False
-        mw = None
-        try:
-            views = self.scene().views() if self.scene() else []
-            if views:
-                mw = views[0].window()
-                if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
-                    mw.toggle_curtains()
-                    was_collapsed = True
-                    # Block until the curtain roll finishes — see (2) above.
-                    anim = getattr(mw, 'curtain_anim', None)
-                    if anim is not None and anim.state() == QAbstractAnimation.State.Running:
-                        loop = QEventLoop()
-                        anim.finished.connect(loop.quit)
-                        loop.exec()
-        except Exception:
-            pass
-        if mw is not None:
-            try:
-                mw.activateWindow()
-                mw.raise_()
-                # Drain pending events so the activation actually
-                # lands before the dialog spawns — see (3) above.
-                QApplication.processEvents()
-            except Exception:
-                pass
-        try:
-            yield mw
-        finally:
-            if was_collapsed and mw is not None:
-                try:
-                    mw.toggle_curtains()
-                except Exception:
-                    pass
-            self._raise_window(win)
+    # File-dialog choreography (_lower_window, _raise_window,
+    # _dialog_choreography) lives on _DialogChoreographyMixin so the
+    # chromeless family inherits the same behaviour without depending
+    # on BaseNode's chrome.  See nodes/_dialog_helper.py.
 
     def hoverEnterEvent(self, event):
         if self.behaviour:
