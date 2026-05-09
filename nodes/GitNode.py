@@ -22,12 +22,11 @@ import threading
 
 from PySide6.QtCore import Qt, QRectF, QPointF, QTimer
 from PySide6.QtGui import QPainter, QFont, QColor
-from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGraphicsRectItem
+from PySide6.QtWidgets import QDialog, QGraphicsRectItem
 
 from nodes.BaseNode import BaseNode
 from data.GitNodeData import GitNodeData
 from pretty_widgets.graphics.Theme import Theme
-from pretty_widgets.PrettyButton import PrettyButton
 from pretty_widgets.PrettyDialog import PrettyDialog
 from shared_braincell.logger import setup_logger
 
@@ -196,96 +195,24 @@ def _scan_repos() -> list[tuple[str, str]]:
 
 
 class _CommitDialog(PrettyDialog):
-    """Frameless commit-message dialog matching the app's visual language."""
+    """Frameless commit-message dialog — composes PrettyDialog's shared chrome
+    + content helpers. The commit dialog earns its ceremony status: composing
+    a commit message is a deliberate punctuation, not a utility prompt."""
 
     def __init__(self, repo_count: int, parent=None):
         super().__init__(parent)
-        # WindowStaysOnTopHint puts the dialog in the Windows topmost z-order
-        # band; PrettyDialog.showEvent re-asserts HWND_TOPMOST via Win32 after
-        # Qt finishes showing so we land at the *top* of the band (Chrome's
-        # YouTube PiP also sits topmost, and within that band whoever called
-        # SetWindowPos last wins).
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedWidth(380)
-
-        # ── Outer container with background + border ─────────────────────
-        container = QWidget(self)
-        container.setStyleSheet(f"""
-            QWidget#commitContainer {{
-                background: {Theme.windowBg};
-                border: 1px solid {Theme.primaryBorder};
-                border-radius: 9px;
-            }}
-        """)
-        container.setObjectName("commitContainer")
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(container)
-
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-
-        # ── Label ────────────────────────────────────────────────────────
-        label = QLabel(f"Commit message for {repo_count} session repo(s):")
-        label.setStyleSheet(f"""
-            color: {Theme.textPrimary};
-            font-family: '{Theme.healthFontFamily}';
-            font-size: {Theme.healthFontSizeLabel}pt;
-        """)
-        label.setWordWrap(True)
-        layout.addWidget(label)
-
-        # ── Text input ───────────────────────────────────────────────────
-        # PrettyEdit in proxy-less mode for regular dialog layout.
-        from pretty_widgets.PrettyEdit import PrettyEdit
-        from PySide6.QtGui import QFontMetrics as _QFM
-        self._input = PrettyEdit(
-            None,
-            font_family    = Theme.healthFontFamily,
-            font_size      = Theme.healthFontSizeLabel,
-            font_color     = Theme.textPrimary,
-            always_visible = True,
-            enter_commits  = True,
-            placeholder    = "session sync\u2026",
+        self.content_layout.addWidget(
+            self.make_prompt_label(f"Commit message for {repo_count} session repo(s):")
         )
-        self._input.setStyleSheet(f"""
-            QTextEdit {{
-                background: {Theme.backDrop};
-                color: {Theme.textPrimary};
-                border: 1px solid {Theme.primaryBorder};
-                border-radius: 5px;
-                padding: 6px 10px;
-                font-family: '{Theme.healthFontFamily}';
-                font-size: {Theme.healthFontSizeLabel}pt;
-            }}
-        """)
-        _fm = _QFM(self._input.font())
-        self._input.setFixedHeight(_fm.lineSpacing() + 14)
+        self._input = self.make_input(placeholder="session sync…")
         self._input.committed.connect(lambda _t: self.accept())
-        layout.addWidget(self._input)
-
-        # ── Buttons ──────────────────────────────────────────────────────
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        btn_row.addStretch()
-
-        cancel_btn = PrettyButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(cancel_btn)
-
-        ok_btn = PrettyButton("Push")
-        ok_btn.clicked.connect(self.accept)
-        btn_row.addWidget(ok_btn)
-
-        layout.addLayout(btn_row)
-
+        self.content_layout.addWidget(self._input)
+        self.content_layout.addLayout(self.make_button_row(accept_label="Push"))
         self._input.setFocus()
 
     def message(self) -> str:
         return self._input.toPlainText().strip()
+
 
 class GitNode(BaseNode):
     _has_depth_toggle = True

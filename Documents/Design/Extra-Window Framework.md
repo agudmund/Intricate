@@ -120,12 +120,23 @@ Recipe for the rare moment a third ceremony earns its 30 seconds:
 
 1. **Confirm the 30-second rule.** Could this be a sideloaded app instead? A persistent state? An inline edit on the canvas? If yes to any, prefer that. Only proceed if the moment is genuinely brief and dominant.
 2. **Confirm the ceremony test.** Would a native input prompt feel cheap here? If no, use a native dialog with the choreography only. If yes, build a `PrettyDialog` subclass.
-3. **Subclass `PrettyDialog`** from `pretty_widgets.PrettyDialog`. Set the window flags:
+3. **Subclass `PrettyDialog`** from `pretty_widgets.PrettyDialog`. The base auto-applies the shared visual chrome on `__init__` — frameless + translucent + topmost window flags, themed outer container (`Theme.windowBg` background, `Theme.primaryBorder` border, 9 px rounded corners), inner content layout with the canonical margins (16, 16, 16, 16) and spacing 12. No setup code needed unless you want a non-default value: override class constants like `_DEFAULT_FIXED_WIDTH = 480` per-dialog if the family default doesn't fit.
+4. **Populate `self.content_layout`** with the dialog's content. The framework provides three helpers for the canonical shapes — `make_prompt_label(text)` for instruction text, `make_input(placeholder=, single_line=, spellcheck=)` for the text input, `make_button_row(cancel_label=, accept_label=)` for the Cancel + Accept row wired to `reject` / `accept`. A typical `__init__` is around a dozen lines:
    ```python
-   self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
-   self.setAttribute(Qt.WA_TranslucentBackground)
+   class MyCeremony(PrettyDialog):
+       def __init__(self, parent=None):
+           super().__init__(parent)
+           self.content_layout.addWidget(
+               self.make_prompt_label("Name your next masterpiece:")
+           )
+           self._input = self.make_input(placeholder="something lovely…")
+           self._input.committed.connect(lambda _t: self.accept())
+           self.content_layout.addWidget(self._input)
+           self.content_layout.addLayout(
+               self.make_button_row(accept_label="Create")
+           )
+           self._input.setFocus()
    ```
-4. **Build the visual chrome** — outer container with `Theme.windowBg` background, `Theme.primaryBorder` border, rounded corners (9px is the family default). Inner layout with margins (16, 16, 16, 16) and spacing 12. Cancel / accept buttons at the bottom via `PrettyButton`. (When a third consumer joins, this chrome pattern earns its keep as a shared mixin or default stylesheet on `PrettyDialog`. Until then, repeat per-dialog — three callers don't quite justify the abstraction yet.)
 5. **Spawn the dialog** from inside the choreography:
    ```python
    with self._dialog_choreography() as mw:

@@ -94,102 +94,28 @@ class _ButtonBar(QWidget):
 class _NewSessionDialog(PrettyDialog):
     """Frameless new-session dialog — the ceremony of naming a piece.
 
-    Inherits PrettyDialog from the Pretty Widgets package so this
-    masterpiece dialog gets the same Windows-foreground treatment as
-    GitNode's commit dialog: explicit screen centring (overriding Qt's
-    parent-relative default that lands a dialog on the collapsed-curtain
-    parent), HWND_TOPMOST re-assertion via Win32 so the dialog wins the
-    topmost-band z-order race against Chrome PiP and friends, and
-    activate/raise on show.
+    Inherits PrettyDialog from the Pretty Widgets package: explicit screen
+    centring, HWND_TOPMOST defence on Windows, activate/raise on show, plus
+    the family's shared visual chrome (frameless + translucent + themed
+    container) auto-applied via PrettyDialog.__init__. Subclass body is
+    a handful of lines naming the prompt, building the input, and wiring
+    the button row.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # WindowStaysOnTopHint puts the dialog in the Windows topmost
-        # z-order band; PrettyDialog.showEvent re-asserts HWND_TOPMOST
-        # via Win32 so we land at the *top* of the band.
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedWidth(380)
-
-        # ── Outer container with background + border ─────────────────────
-        container = QWidget(self)
-        container.setStyleSheet(f"""
-            QWidget#newSessionContainer {{
-                background: {Theme.windowBg};
-                border: 1px solid {Theme.primaryBorder};
-                border-radius: 9px;
-            }}
-        """)
-        container.setObjectName("newSessionContainer")
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(container)
-
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-
-        # ── Label ────────────────────────────────────────────────────────
-        lbl = QLabel("Name your next masterpiece:")
-        lbl.setStyleSheet(f"""
-            color: {Theme.textPrimary};
-            font-family: '{Theme.healthFontFamily}';
-            font-size: {Theme.healthFontSizeLabel}pt;
-        """)
-        lbl.setWordWrap(True)
-        layout.addWidget(lbl)
-
-        # ── Text input ───────────────────────────────────────────────────
-        # PrettyEdit in proxy-less mode (parent_node=None).  Placeholder
-        # picked fresh from the shared phrase bank each time the dialog
-        # opens — every new project is announced with its own little
-        # uplifting sample.
-        from pretty_widgets.PrettyEdit import PrettyEdit
-        from PySide6.QtGui import QFontMetrics as _QFM
-        self._input = PrettyEdit(
-            None,
-            font_family    = Theme.healthFontFamily,
-            font_size      = Theme.healthFontSizeLabel,
-            font_color     = Theme.textPrimary,
-            always_visible = True,
-            enter_commits  = True,
-            placeholder    = f"{pick_phrase()}\u2026",
+        self.content_layout.addWidget(
+            self.make_prompt_label("Name your next masterpiece:")
         )
-        self._input.setStyleSheet(f"""
-            QTextEdit {{
-                background: {Theme.backDrop};
-                color: {Theme.textPrimary};
-                border: 1px solid {Theme.primaryBorder};
-                border-radius: 5px;
-                padding: 6px 10px;
-                font-family: '{Theme.healthFontFamily}';
-                font-size: {Theme.healthFontSizeLabel}pt;
-            }}
-        """)
-        # Single-line visual height — PrettyEdit is multi-line by nature but
-        # enter_commits=True keeps it behaving like a line edit for input.
-        _fm = _QFM(self._input.font())
-        self._input.setFixedHeight(_fm.lineSpacing() + 14)
+        # Placeholder picked fresh from the shared phrase bank each time the
+        # dialog opens — every new project is announced with its own little
+        # uplifting sample.
+        self._input = self.make_input(placeholder=f"{pick_phrase()}…")
         self._input.committed.connect(lambda _t: self.accept())
-        layout.addWidget(self._input)
-
-        # ── Buttons ──────────────────────────────────────────────────────
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        btn_row.addStretch()
-
-        cancel_btn = button("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(cancel_btn)
-
-        ok_btn = button("Create")
-        ok_btn.clicked.connect(self.accept)
-        btn_row.addWidget(ok_btn)
-
-        layout.addLayout(btn_row)
-
+        self.content_layout.addWidget(self._input)
+        self.content_layout.addLayout(
+            self.make_button_row(accept_label="Create")
+        )
         self._input.setFocus()
 
     def name(self) -> str:
