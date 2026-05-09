@@ -127,7 +127,7 @@ Soft dep on `intricate_log`. No fallback to stdlib `logging.FileHandler` — if 
 | `nodes/_demolition.py` | Declarative teardown crew — manifest-based per-node cleanup |
 | `utils/persistence/media_cache.py` | Byte-preserving SHA-256 media cache, shared by Image / Video / Sticker |
 | `nodes/_shake_detect.py` | Shared shake-gesture detector used by BaseNode + StickerNode |
-| `nodes/_dialog_helper.py` | `_DialogChoreographyMixin` — shared file-dialog choreography (drop always-on-top, roll curtains, settle HWND, focus) inherited by both `BaseNode` and `ChromelessRoot` |
+| `nodes/_dialog_helper.py` | Extra-window framework — `_DialogChoreographyMixin` (WHEN: curtain dance + HWND settle, inherited by `BaseNode` and `ChromelessRoot`) and `_PrettyDialogBase` (HOW: Qt-managed `QDialog` base with cross-OS topmost-band defense, inherited by GitNode's commit dialog and any future Qt-managed popup) |
 
 ### Node Types
 

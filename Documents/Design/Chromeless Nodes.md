@@ -23,7 +23,7 @@ The visual style of any individual node is up to that node — chromeless nodes 
 | `data/ChromelessRootData.py` | Pure Python dataclass — extends `NodeData` with the four pin fields and serialises them via `super().to_dict()` chaining |
 | `nodes/_demolition.py` | Shared demolition crew — same one BaseNode uses; tolerates missing connections / behaviour / buttons / ports |
 | `nodes/_shake_detect.py` | Shake gesture detection — composition rather than inheritance, both root families share it |
-| `nodes/_dialog_helper.py` | `_DialogChoreographyMixin` — shared file-dialog choreography. ChromelessRoot inherits it as a second base so any subclass can spawn QFileDialog / QInputDialog with the same Windows-foreground choreography BaseNode uses |
+| `nodes/_dialog_helper.py` | Extra-window framework — `_DialogChoreographyMixin` (WHEN: ChromelessRoot inherits it as a second base for the curtain dance + HWND settle around any dialog spawn) and `_PrettyDialogBase` (HOW: Qt-managed `QDialog` base with cross-OS topmost-band defense, available to any chromeless or BaseNode descendant that needs a styled popup) |
 
 ## The Pin Contract
 
@@ -120,6 +120,8 @@ def _browse_for_image(self):
 The choreography drops the always-on-top window flag, rolls curtains up if they're down, drains the HWND-recreation aftermath, focuses the main window so the dialog parents to a real foreground HWND, then restores everything on exit. Without it, dialogs spawn parented to a not-yet-foregrounded HWND and Windows silently refuses to surface them — they appear to be missing entirely (the symptom that triggered this extraction). See the docstring in `_dialog_helper.py` for the three settle-points (post-`_lower_window` drain, curtain-anim wait with safety timeout, post-activate drain) that make this reliable on Windows.
 
 StickerNode's empty-sticker double-click is the canonical chromeless usage; future raw-image-style chromeless nodes that browse for source files inherit the same flow at zero cost.
+
+The choreography is one half of a two-piece **extra-window framework**. The other half — `_PrettyDialogBase` in the same `_dialog_helper.py` file — is a `QDialog` subclass that handles HOW Qt-managed popups (frameless themed dialogs like GitNode's commit prompt, future project-name input, the rare exceptions to Intricate's mostly-popup-free Z-depth workflow) hold their ground once shown. Compose the two — wrap a `_PrettyDialogBase.exec()` in `with self._dialog_choreography() as mw:` — and the dialog gets curtain-dance + topmost-band defense in one. Native OS dialogs (`QFileDialog` and friends) only need the choreography; they're owned by the OS shell and defend themselves via the OS's own positioning rules.
 
 ## Generic Resize Grip
 
