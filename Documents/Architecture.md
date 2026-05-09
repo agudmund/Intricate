@@ -127,7 +127,7 @@ Soft dep on `intricate_log`. No fallback to stdlib `logging.FileHandler` — if 
 | `nodes/_demolition.py` | Declarative teardown crew — manifest-based per-node cleanup |
 | `utils/persistence/media_cache.py` | Byte-preserving SHA-256 media cache, shared by Image / Video / Sticker |
 | `nodes/_shake_detect.py` | Shared shake-gesture detector used by BaseNode + StickerNode |
-| `nodes/_dialog_helper.py` | Extra-window framework — `_DialogChoreographyMixin` (WHEN: curtain dance + HWND settle, inherited by `BaseNode`, `ChromelessRoot`, and `IntricateApp` with a one-line `_get_main_window()` override per context) and `_PrettyDialogBase` (HOW: Qt-managed `QDialog` base with explicit screen centring + cross-OS topmost-band defense, inherited by GitNode's commit dialog and the new-session masterpiece dialog) |
+| `nodes/_dialog_helper.py` | Extra-window choreography — `_DialogChoreographyMixin` handles the WHEN of dialog spawning (curtain dance + HWND settle), inherited by `BaseNode`, `ChromelessRoot`, and `IntricateApp` with a one-line `_get_main_window()` override per context. The HOW (Qt-managed `QDialog` base with screen centring + topmost-band defence) lives in the Pretty Widgets package as `pretty_widgets.PrettyDialog` so other family apps can inherit it directly |
 
 ### Node Types
 

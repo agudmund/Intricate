@@ -6,12 +6,10 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
-import sys
 from contextlib import contextmanager
 
 from PySide6.QtCore import Qt, QEventLoop, QTimer, QAbstractAnimation
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication
 from shared_braincell.logger import setup_logger
 
 _log = setup_logger("dialog")
@@ -199,107 +197,9 @@ class _DialogChoreographyMixin:
                     _log.debug("[dialog] curtain restore path raised", exc_info=True)
             self._raise_window(win)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# QT-MANAGED DIALOG BASE
-# ─────────────────────────────────────────────────────────────────────────────
-# The choreography above handles WHEN an extra window appears (curtain dance,
-# HWND settle, focus). The class below handles HOW a Qt-managed extra window
-# holds its ground once shown. Native OS dialogs (QFileDialog and friends)
-# don't need this — they're owned by the OS shell and defend themselves via
-# the OS's own positioning rules. Qt-managed QDialog subclasses sit in the
-# same z-order band as Chrome's YouTube PiP and other HWND_TOPMOST citizens
-# on Windows, and need active defense to win the band.
-#
-# The two halves compose: wrap a PrettyDialogBase exec() in
-#   `with self._dialog_choreography() as mw:`
-# and the dialog gets the curtain-dance + topmost-band defense for free.
-
-
-class _PrettyDialogBase(QDialog):
-    """QDialog base with cross-OS topmost-band defense baked in.
-
-    Inherit this for any Qt-managed dialog spawned from inside Intricate
-    so it lands on top of the always-on-top main window, and on Windows
-    additionally wins the topmost-band z-order race against Chrome's
-    YouTube PiP and other HWND_TOPMOST citizens.
-
-    Subclasses still own their own visual chrome (frameless flag,
-    stylesheet, layout, content). The base only owns the show-time
-    defense and activate/raise — no visual opinions.
-    """
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._center_on_screen()
-        self._assert_topmost_if_platform()
-        self.activateWindow()
-        self.raise_()
-
-    def _center_on_screen(self) -> None:
-        """Position the dialog centered on the appropriate screen.
-
-        Overrides Qt's default parent-relative positioning, which can
-        land the dialog off-centre when the parent main window is in a
-        transient state during the choreography — most notably the
-        collapsed-curtain state, where Qt would centre the dialog on
-        the small strip at the top of the screen and the dialog would
-        land flat against the title bar instead of in the middle of
-        the canvas. With explicit centring here, every Qt-managed
-        ceremony dialog spawns dead-centre regardless of parent
-        geometry quirks.
-
-        Honours multi-monitor setups by preferring the parent's
-        screen when available, falling back to the primary screen.
-        Uses ``availableGeometry`` so the centred dialog excludes
-        the OS taskbar from its calculation.
-        """
-        screen = None
-        parent = self.parent()
-        if parent is not None:
-            try:
-                screen = parent.screen()
-            except Exception:
-                pass
-        if screen is None:
-            screen = QGuiApplication.primaryScreen()
-        if screen is None:
-            return
-        geom = screen.availableGeometry()
-        self.move(
-            geom.x() + (geom.width()  - self.width())  // 2,
-            geom.y() + (geom.height() - self.height()) // 2,
-        )
-
-    def _assert_topmost_if_platform(self) -> None:
-        """OS-aware topmost-band defense hook.
-
-        Windows: re-asserts HWND_TOPMOST via Win32 SetWindowPos so we
-        land at the *top* of the topmost band (Chrome PiP also sits in
-        that band, and the most recent SetWindowPos wins).
-
-        macOS / Linux: Qt's WindowStaysOnTopHint plus activate/raise is
-        sufficient in practice — this method stays as the expansion
-        point if a per-OS defense ever proves needed (NSWindow.level on
-        macOS, _NET_WM_STATE_ABOVE on X11/Wayland).
-        """
-        if sys.platform == "win32":
-            self._win32_set_topmost()
-
-    def _win32_set_topmost(self) -> None:
-        """Re-assert HWND_TOPMOST after Qt finishes showing the dialog."""
-        try:
-            import ctypes
-            user32 = ctypes.windll.user32
-            HWND_TOPMOST   = ctypes.c_void_p(-1)
-            SWP_NOSIZE     = 0x0001
-            SWP_NOMOVE     = 0x0002
-            SWP_SHOWWINDOW = 0x0040
-            user32.SetWindowPos(
-                ctypes.c_void_p(int(self.winId())),
-                HWND_TOPMOST,
-                0, 0, 0, 0,
-                SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW,
-            )
-        except Exception:
-            _log.debug("[dialog] SetWindowPos topmost failed", exc_info=True)
+# The Qt-managed dialog base (PrettyDialog) was promoted to the Pretty
+# Widgets package on 2026-05-09 — it's a universal "ceremony popup"
+# primitive that other apps in the family can inherit directly. Import
+# from `pretty_widgets.PrettyDialog` (or `from pretty_widgets import
+# PrettyDialog`). The choreography mixin above stays here because it's
+# Intricate-specific (knows about curtains, is_collapsed, etc.).

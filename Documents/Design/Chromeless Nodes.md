@@ -23,7 +23,7 @@ The visual style of any individual node is up to that node — chromeless nodes 
 | `data/ChromelessRootData.py` | Pure Python dataclass — extends `NodeData` with the four pin fields and serialises them via `super().to_dict()` chaining |
 | `nodes/_demolition.py` | Shared demolition crew — same one BaseNode uses; tolerates missing connections / behaviour / buttons / ports |
 | `nodes/_shake_detect.py` | Shake gesture detection — composition rather than inheritance, both root families share it |
-| `nodes/_dialog_helper.py` | Extra-window framework — `_DialogChoreographyMixin` (WHEN: ChromelessRoot inherits it as a second base for the curtain dance + HWND settle around any dialog spawn; the same mixin also serves `BaseNode` and `IntricateApp` via the `_get_main_window` extension point) and `_PrettyDialogBase` (HOW: Qt-managed `QDialog` base with explicit screen centring + cross-OS topmost-band defense, available to any node or main-window context that needs a ceremony popup) |
+| `nodes/_dialog_helper.py` | Extra-window choreography — `_DialogChoreographyMixin` handles the WHEN of dialog spawning (curtain dance + HWND settle); ChromelessRoot inherits it as a second base, same mixin also serves `BaseNode` and `IntricateApp` via the `_get_main_window` extension point. The HOW (Qt-managed `QDialog` base with screen centring + topmost-band defence) lives in Pretty Widgets as `pretty_widgets.PrettyDialog` |
 
 ## The Pin Contract
 
@@ -121,7 +121,7 @@ The choreography drops the always-on-top window flag, rolls curtains up if they'
 
 StickerNode's empty-sticker double-click is the canonical chromeless usage; future raw-image-style chromeless nodes that browse for source files inherit the same flow at zero cost.
 
-The choreography is one half of a two-piece **extra-window framework**. The other half — `_PrettyDialogBase` in the same `_dialog_helper.py` file — is a `QDialog` subclass that handles HOW Qt-managed popups (frameless themed dialogs like GitNode's commit prompt, future project-name input, the rare exceptions to Intricate's mostly-popup-free Z-depth workflow) hold their ground once shown. Compose the two — wrap a `_PrettyDialogBase.exec()` in `with self._dialog_choreography() as mw:` — and the dialog gets curtain-dance + topmost-band defense in one. Native OS dialogs (`QFileDialog` and friends) only need the choreography; they're owned by the OS shell and defend themselves via the OS's own positioning rules.
+The choreography is one half of a two-piece **extra-window framework**. The other half — `pretty_widgets.PrettyDialog` — is a `QDialog` subclass that handles HOW Qt-managed popups (frameless themed dialogs like GitNode's commit prompt, the new-session masterpiece input, the rare ceremony exceptions to Intricate's mostly-popup-free Z-depth workflow) hold their ground once shown: explicit screen centring plus cross-OS topmost-band defence. Lives in Pretty Widgets so other family apps (Pebbles, Majestic) can inherit it directly without depending on Intricate. Compose the two — wrap a `PrettyDialog.exec()` in `with self._dialog_choreography() as mw:` — and the dialog gets curtain-dance + screen-centred + topmost-band defence in one. Native OS dialogs (`QFileDialog` and friends) only need the choreography; they're owned by the OS shell and defend themselves via the OS's own positioning rules.
 
 ## Generic Resize Grip
 

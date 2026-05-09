@@ -25,10 +25,10 @@ from PySide6.QtGui import QPainter, QFont, QColor
 from PySide6.QtWidgets import QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGraphicsRectItem
 
 from nodes.BaseNode import BaseNode
-from nodes._dialog_helper import _PrettyDialogBase
 from data.GitNodeData import GitNodeData
 from pretty_widgets.graphics.Theme import Theme
 from pretty_widgets.PrettyButton import PrettyButton
+from pretty_widgets.PrettyDialog import PrettyDialog
 from shared_braincell.logger import setup_logger
 
 _log = setup_logger("git")
@@ -195,16 +195,16 @@ def _scan_repos() -> list[tuple[str, str]]:
 
 
 
-class _CommitDialog(_PrettyDialogBase):
+class _CommitDialog(PrettyDialog):
     """Frameless commit-message dialog matching the app's visual language."""
 
     def __init__(self, repo_count: int, parent=None):
         super().__init__(parent)
-        # WindowStaysOnTopHint puts the dialog in the Windows topmost z-order band;
-        # _PrettyDialogBase.showEvent re-asserts HWND_TOPMOST via Win32 after Qt
-        # finishes showing so we land at the *top* of the band (Chrome's YouTube
-        # PiP also sits topmost, and within that band whoever called SetWindowPos
-        # last wins).
+        # WindowStaysOnTopHint puts the dialog in the Windows topmost z-order
+        # band; PrettyDialog.showEvent re-asserts HWND_TOPMOST via Win32 after
+        # Qt finishes showing so we land at the *top* of the band (Chrome's
+        # YouTube PiP also sits topmost, and within that band whoever called
+        # SetWindowPos last wins).
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedWidth(380)
