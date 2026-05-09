@@ -1577,9 +1577,21 @@ class BaseNode(QGraphicsRectItem):
         can pass it as the dialog's parent — important on Windows so the
         native file picker doesn't drift behind another desktop window.
 
-        Two settle-points are load-bearing for Windows focus reliability:
+        Three settle-points are load-bearing for Windows focus reliability:
 
-          1. **Curtain animation must finish before yielding.** Without
+          1. **Drain pending events immediately after `_lower_window()`.**
+             `setWindowFlags` inside `_lower_window()` recreates the
+             native HWND on Windows.  Without an immediate drain, the
+             recreation events stack up behind the curtain animation
+             and dialog spawn — the dialog ends up parented to a not-
+             yet-foregrounded HWND and the OS silently refuses to
+             surface it.  On a fresh session this manifests as the
+             first-ever file-browser click rolling the curtains up
+             but the dialog never appearing; subsequent clicks succeed
+             because the HWND is now warm.  Draining here breaks the
+             stack-up so the HWND is settled before any further
+             choreography begins.
+          2. **Curtain animation must finish before yielding.** Without
              waiting, the dialog spawns mid-geometry-transition (the
              curtain roll is ~539 ms).  Windows refuses to promote the
              dialog to foreground while its parent HWND is in animated
@@ -1587,16 +1599,16 @@ class BaseNode(QGraphicsRectItem):
              foreground state.  We block on `curtain_anim.finished` via
              a nested QEventLoop so the parent is fully settled when the
              dialog appears.
-          2. **Drain the event queue after activate/raise.** `setWindow-
-             Flags` in `_lower_window()` recreates the native HWND on
-             Windows; `activateWindow()` is a request that may not land
-             until pending events drain.  `processEvents()` flushes the
-             HWND-recreation aftermath so the activation actually takes
-             effect before the dialog spawns.
+          3. **Drain the event queue after activate/raise.**
+             `activateWindow()` is a request that may not land until
+             pending events drain.  `processEvents()` flushes pending
+             events so the activation actually takes effect before the
+             dialog spawns.
 
-        Without these two settle-points, the focus loss is intermittent —
+        Without these settle-points, the focus loss is intermittent —
         sometimes the race resolves favourably, sometimes the dialog
-        ends up under another desktop app.
+        ends up under another desktop app, and on a fresh session the
+        first dialog can fail to surface entirely.
 
         Usage:
             with self._dialog_choreography() as mw:
@@ -1604,6 +1616,9 @@ class BaseNode(QGraphicsRectItem):
                 # use path...
         """
         win = self._lower_window()
+        # Settle (1): drain HWND-recreation aftermath before further
+        # choreography stacks events on top of it.  See docstring above.
+        QApplication.processEvents()
         was_collapsed = False
         mw = None
         try:
@@ -1613,7 +1628,7 @@ class BaseNode(QGraphicsRectItem):
                 if hasattr(mw, 'is_collapsed') and not mw.is_collapsed:
                     mw.toggle_curtains()
                     was_collapsed = True
-                    # Block until the curtain roll finishes — see (1) above.
+                    # Block until the curtain roll finishes — see (2) above.
                     anim = getattr(mw, 'curtain_anim', None)
                     if anim is not None and anim.state() == QAbstractAnimation.State.Running:
                         loop = QEventLoop()
@@ -1626,7 +1641,7 @@ class BaseNode(QGraphicsRectItem):
                 mw.activateWindow()
                 mw.raise_()
                 # Drain pending events so the activation actually
-                # lands before the dialog spawns — see (2) above.
+                # lands before the dialog spawns — see (3) above.
                 QApplication.processEvents()
             except Exception:
                 pass
