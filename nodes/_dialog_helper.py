@@ -6,6 +6,7 @@
 -Built using a single shared braincell by Yours Truly and various Intelligences
 """
 
+import sys
 from contextlib import contextmanager
 
 from PySide6.QtCore import Qt, QEventLoop, QTimer, QAbstractAnimation
@@ -207,6 +208,22 @@ class _DialogChoreographyMixin:
                 QApplication.processEvents()
             except Exception:
                 _log.debug("[dialog] activate/raise path raised", exc_info=True)
+        # Schedule a post-spawn centring nudge for the modal dialog the
+        # caller is about to spawn. The timer fires while the modal
+        # dialog is up (Qt's event loop keeps running during a modal
+        # exec / getOpenFileName), grabs the foreground HWND, and moves
+        # it to centre on the parent's monitor. First call after a fresh
+        # boot may show a brief flash at the OS-remembered position
+        # before the move; subsequent calls use the now-centred position
+        # Windows just remembered, so they spawn centred from the start.
+        # PrettyDialog-derived dialogs are already centred via
+        # showEvent — this nudge is idempotent in that case.
+        if mw is not None:
+            try:
+                parent_hwnd = int(mw.winId())
+                QTimer.singleShot(50, lambda: _center_modal_dialog_on_screen(parent_hwnd))
+            except Exception:
+                _log.debug("[dialog] failed to schedule centring", exc_info=True)
         try:
             yield mw
         finally:
@@ -216,6 +233,85 @@ class _DialogChoreographyMixin:
                 except Exception:
                     _log.debug("[dialog] curtain restore path raised", exc_info=True)
             self._restore_topmost(win)
+
+def _center_modal_dialog_on_screen(parent_hwnd: int, retries: int = 6) -> None:
+    """Move the foreground modal dialog to the centre of the parent's monitor.
+
+    Called via QTimer.singleShot from inside ``_dialog_choreography``
+    while the user's modal dialog is up. Solves the "native file dialog
+    opens at the OS-remembered top-left position on a fresh machine"
+    friction by moving the dialog to centre as soon as it spawns;
+    Windows then remembers the centred position in its ComDlg32 MRU,
+    so subsequent dialogs spawn already centred without any visible
+    move at all.
+
+    Platform-gated to Windows where the Win32 ABI gives us the post-
+    spawn positioning Qt itself does not. On other platforms this is
+    a no-op — native macOS / Linux dialogs handle centring through
+    their own OS conventions.
+
+    Multi-monitor honest: ``MonitorFromWindow`` finds the monitor the
+    parent main window is currently on, ``GetMonitorInfo`` reads its
+    work area (excludes the OS taskbar), and the dialog centres there.
+
+    Polls briefly with ``retries`` if the foreground hasn't switched
+    to the dialog yet (slow spawn, machine under load). Each retry
+    waits ~30 ms; default 6 retries means up to ~180 ms of pollback
+    before giving up — covers the slowest realistic dialog spawn
+    without holding the choreography open if no dialog ever appears.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd or int(hwnd) == int(parent_hwnd):
+            # Foreground hasn't switched to the dialog yet. Retry briefly
+            # so a slow spawn doesn't lose the centring.
+            if retries > 0:
+                QTimer.singleShot(
+                    30,
+                    lambda: _center_modal_dialog_on_screen(parent_hwnd, retries - 1),
+                )
+            return
+
+        # Read the dialog's current size so we can centre without resizing.
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return
+        w = rect.right - rect.left
+        h = rect.bottom - rect.top
+
+        # Find the parent's monitor (multi-monitor honest).
+        MONITOR_DEFAULTTONEAREST = 2
+        hmon = user32.MonitorFromWindow(int(parent_hwnd), MONITOR_DEFAULTTONEAREST)
+
+        class _MONITORINFO(ctypes.Structure):
+            _fields_ = [
+                ('cbSize',    wintypes.DWORD),
+                ('rcMonitor', wintypes.RECT),
+                ('rcWork',    wintypes.RECT),
+                ('dwFlags',   wintypes.DWORD),
+            ]
+        mi = _MONITORINFO()
+        mi.cbSize = ctypes.sizeof(_MONITORINFO)
+        if not user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+            return
+
+        sx = mi.rcWork.left
+        sy = mi.rcWork.top
+        sw = mi.rcWork.right - mi.rcWork.left
+        sh = mi.rcWork.bottom - mi.rcWork.top
+        x = sx + (sw - w) // 2
+        y = sy + (sh - h) // 2
+
+        user32.MoveWindow(hwnd, x, y, w, h, True)
+    except Exception:
+        _log.debug("[dialog] modal dialog centring failed", exc_info=True)
+
 
 # The Qt-managed dialog base (PrettyDialog) was promoted to the Pretty
 # Widgets package on 2026-05-09 — it's a universal "ceremony popup"
