@@ -462,16 +462,20 @@ class CodeNode(BaseNode):
             self._position_editor()
 
     def mouseDoubleClickEvent(self, event) -> None:
-        # Top-strip double-click → open file browser. Uses _anim_top_offset
-        # (not the static _BUTTON_ZONE_H) so the trigger zone matches the
-        # current shelf state — when the shelf is hidden the strip is
-        # ~8 px and the trigger is correspondingly tiny; when revealed
-        # the full button-strip height is the trigger zone.
-        if event.pos().y() < self.rect().top() + self._anim_top_offset:
-            self._open_file_browser()
-            event.accept()
-            return
-        # Body double-click → focus the editor.
+        # Double-click on the node body falls through to focus the editor —
+        # rare in practice because the always-visible PrettyEdit fills most
+        # of the rect and absorbs its own clicks, but keeps the padding
+        # around the editor as an affordance to drop focus into the text.
+        #
+        # Deliberately does NOT call super() — BaseNode's default toggles
+        # the shelf on top-strip double-click, which is the legacy pattern
+        # CodeNode replaced with the resize-handle gesture (mouseMoveEvent
+        # above). The previous title-strip → file-browser shortcut was
+        # also removed in the same pass: file browse is now exclusively
+        # via the shelf button (revealed by the resize-handle gesture).
+        # Spatial-canvas-native vs framework-leakage — a click is not a
+        # gesture; the gesture goes through the resize handle we already
+        # grab to dial the node's size anyway.
         if self._editor:
             self._editor.proxy.setFocus()
             self._editor.setFocus(Qt.MouseFocusReason)
