@@ -170,11 +170,15 @@ There are *two* live `.lnk` files that pin the icon path, not one:
 
 For each: load via `WScript.Shell.CreateShortcut(path)`, set `IconLocation = "C:\…\icons\Stickers\Intricate.ico,0"`, call `Save()`. Bumps mtime and forces Explorer to re-read the `IconLocation` field. If skipped: the per-file shell-icon cache keyed on the old path persists, so the icon never visibly changes in that surface.
 
+  Runnable: `Documents/Data/icon_pipeline_lnk_resave.ps1`
+
 **3. Update the `.intricate` file-association DefaultIcon (registry)**
 `HKCU\Software\Classes\Intricate.Session\DefaultIcon` stores the icon path Explorer uses when rendering `.intricate` session files. This **auto-heals on Intricate boot** via `register_file_association()` in `main.py` — `_expected_association_icon()` returns the current canonical path and the registrar rewrites if drifted. Worth knowing because: if you've changed the path but haven't relaunched Intricate yet, this is still stale; and on a fresh setup it has to land before file icons render correctly. `Set-ItemProperty -Path "HKCU:\Software\Classes\Intricate.Session\DefaultIcon" -Name "(Default)" -Value "..."` is the direct write.
 
 **4. Wipe shell icon caches**
 Stop `explorer.exe`, delete every `iconcache_*.db` and `thumbcache_*.db` under `%LocalAppData%\Microsoft\Windows\Explorer\`, then restart `explorer.exe`. The legacy `%LocalAppData%\IconCache.db` (Win7/XP-era) is **conditional** — modern Win11 does not generate it, so don't worry if it isn't present. The cache files hold rendered-pixel snapshots keyed by file path; they don't refresh on icon-content change unless deleted. Explorer will be down for ~1–2 seconds and respawn automatically; iconcache files rebuild immediately on restart, thumbcache files repopulate lazily as folders are browsed. If skipped: icons on the desktop and in Explorer continue to show the cached old rendering even though every path now points correctly.
+
+  Runnable: `Documents/Data/icon_pipeline_cache_flush.ps1`
 
 **5. Reset the identity-locked Personalization cache**
 This is the cache the memory entry `project_personalization_panel_cache_is_identity_locked.md` warns about. Win11 stores per-AUMID systray state in `HKCU\Control Panel\NotifyIconSettings\<hash>\` — and crucially, **the cached icon is stored as raw PNG bytes inside the `IconSnapshot` registry value** (starts with `\x89PNG` header), not as a path reference. So even when every path is corrected, Windows keeps showing the embedded snapshot until that key is deleted. The reset:
@@ -183,6 +187,8 @@ This is the cache the memory entry `project_personalization_panel_cache_is_ident
 - Refresh the shell: `& "$env:SystemRoot\System32\ie4uinit.exe" -show` (returns exit 1 even on success — normal), then broadcast `SHChangeNotify(SHCNE_ASSOCCHANGED)` via `[Shell32]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)`.
 - **DO NOT touch `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband\Favorites` or `FavoritesResolve`** — those are the pinned-items blob for *every* app on the taskbar. Wiping them loses every pinned item, not just Intricate.
 - Always back up first: `reg export "HKCU\Control Panel\NotifyIconSettings\<hash>" backup.reg /y`.
+
+  Runnable: `Documents/Data/icon_pipeline_identity_cache_reset.ps1`
 
 If after step 5 the pinned taskbar slot still shows the wrong icon, the bulletproof fallback is **manual unpin + repin** of the taskbar item — Windows binds fresh on repin and there's no programmatic alternative that matches its reliability.
 
@@ -253,6 +259,12 @@ Both `python.exe` and `pythonw.exe` are patched because Windows aggregates them 
 If no matching `NotifyIconSettings` entry exists yet (user has never toggled the panel switch), the sweep finds nothing and the function returns silently. The user's first panel toggle creates an entry; the next Intricate launch patches it automatically with the current brand mark — no manual intervention.
 
 The shape mirrors `_ensure_file_association()` in `main.py`: write the canonical state to known registry surfaces on every boot, accept that some writes might no-op or fail, and trust that eventual convergence happens across normal user workflows.
+
+For the AUMID metadata write specifically as a standalone outside the Intricate runtime (useful for setup-time, fresh-machine recovery, or verification): `Documents/Data/icon_pipeline_aumid_register.ps1`.
+
+### Other maintenance scripts
+
+- **`Documents/Data/icon_pipeline_orphan_cleanup.ps1`** — sweeps `NotifyIconSettings` for entries whose `ExecutablePath` no longer exists on disk (apps uninstalled, retired Microsoft Store versions, etc.) and removes them after a `.reg` backup. Runs in preview mode by default; `-Apply` to delete. Useful as a periodic tidy pass — Windows accumulates orphans over time but never auto-prunes.
 
 ### One-shot manual patch — `Documents/Data/spp_systray_label.ps1`
 

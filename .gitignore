@@ -20,6 +20,18 @@ Documents/data/joy_buckets.txt
 Documents/Data/joy_state.json
 Documents/data/joy_state.json
 
+# Curtain perf telemetry — per-curtain-frame timing samples written by
+# main_window.py's _on_curtains_settled.  Kept live as a reminder to check
+# them when curtain-resume lag returns; no version history needed.
+Documents/Data/curtain_perf.csv
+Documents/data/curtain_perf.csv
+
+# System events JSONL — long-running event log of significant runtime
+# happenings (autosave heartbeats, OS click frequency, etc.).  Constantly
+# generated, no backwards-versioning value.
+Documents/Data/system_events.jsonl
+Documents/data/system_events.jsonl
+
 # ── Adobe CEP carbon copy — keep only the Intricate-specific source ──────
 # Premiere loads the LIVE extension from %APPDATA%\Adobe\CEP\... ; the tree
 # under ./Adobe/CEP/ is a filing-only copy. Anything that's a build
