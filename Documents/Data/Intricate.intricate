@@ -6317,7 +6317,7 @@
       "source_mtime": 1761485120.9001687,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a",
       "volume": 50,
-      "playback_pos": 4388,
+      "playback_pos": 1880,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -6580,7 +6580,7 @@
       "source_mtime": 1746374795.2638292,
       "caption": "The Majestic",
       "volume": 50,
-      "playback_pos": 333,
+      "playback_pos": 4375,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -10265,7 +10265,7 @@
       "source_mtime": 1745506042.3926215,
       "caption": "Waving - Framed",
       "volume": 50,
-      "playback_pos": 2583,
+      "playback_pos": 2416,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -11794,7 +11794,7 @@
       "source_mtime": 1761485120.8856592,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a (1)",
       "volume": 50,
-      "playback_pos": 278,
+      "playback_pos": 2972,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -14313,6 +14313,310 @@
       "label": "More Glory",
       "depth_front": false,
       "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "The 1-2-3-4-5",
+      "uuid": "c5ca92d61da84298886b2f9e8b941467",
+      "x": 5821.910611835023,
+      "y": 4672.186903408477,
+      "width": 304.1953855428355,
+      "height": 300.5065914199974,
+      "z_value": -9.999,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "Not like it's that other time when the idiot kept running to her and asking her questions about me and she had a near panic attack over who this rude monster was and freaked out.\n\nAnd then the idiot came back to me to tell me that she doesn't like me and just totally freaked out when he mentioned me.\n\nThen later when me and her where talking we kept wondering who that idiot was and very much agreed we both hated him.\n\nNah... the fact of the matter is neither of us like him, I responded the same way when you come tell me you have been harassing her didn't I ?"
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Note",
+      "uuid": "c1ef2bd99f7c4632b49242a4ee8f3164",
+      "x": 5687.96917539264,
+      "y": 4632.277704716441,
+      "width": 88.0,
+      "height": 31.0,
+      "z_value": -9.988000000000007,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Gentle",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The One",
+      "uuid": "f24de2eedc7943acbbbb8f4fde581209",
+      "x": 5725.802607906169,
+      "y": 6558.797329254446,
+      "width": 98.0,
+      "height": 31.0,
+      "z_value": -9.976000000000013,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The One",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The Five",
+      "uuid": "c47d8c3bbe654d8c9d3e790ec40fd1c3",
+      "x": 6170.378198851036,
+      "y": 6200.54030384266,
+      "width": 108.0,
+      "height": 31.0,
+      "z_value": -9.975000000000014,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The Five",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Intricate",
+      "uuid": "5232309c481d4c169ed72f95d2b7e614",
+      "x": 5912.410977669502,
+      "y": 6616.562134583065,
+      "width": 307.38912893931604,
+      "height": 226.06448077781738,
+      "z_value": -9.972000000000016,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "The two in this case\nAnd as per all the other terrible namings in this parable has nothing to do with other representative usages of a one, or a Two, or Threes or anything of the sort\n\nThe two in this case, with that mental image in your mind.\n\nIs the transfer of understanding\nfrom my context to yours"
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Sweet",
+      "uuid": "a647aac43647434cbeb5b2a1f1dff362",
+      "x": 6029.969403946479,
+      "y": 6269.621907064383,
+      "width": 304.33896102795427,
+      "height": 200.50267870725963,
+      "z_value": -9.974000000000014,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "The premise here then isnt any of us, the one, the five, the three, or anyone else included in this mess that you have made\n\nThe premise here, is the two and the four\nWhich aren't humans, just needed to get\nThe mental image of two humans distanced\nAnd you between them, clearly across\nBefore I tell you this"
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "But I can try to elaborate",
+      "uuid": "c868ffde273745c8b41c0259186f31a6",
+      "x": 6100.80304107064,
+      "y": 5236.702597890898,
+      "width": 288.0,
+      "height": 31.0,
+      "z_value": -9.986000000000008,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "But I can try to elaborate",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "And the apparent gap there between",
+      "uuid": "a487a7ecda0f459683ab54c2adf9928c",
+      "x": 5748.522361218245,
+      "y": 5734.030862442415,
+      "width": 368.375,
+      "height": 31.0,
+      "z_value": -9.979000000000012,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "And the apparent gap there between",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The Two",
+      "uuid": "e9204a498da64569b4082f1d64f7ad27",
+      "x": 5904.768022322873,
+      "y": 6531.412980928207,
+      "width": 98.0,
+      "height": 31.0,
+      "z_value": -9.973000000000015,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The Two",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Intentional",
+      "uuid": "c5ee02f1fb9f4c50ac1b9f477bac01a1",
+      "x": 6089.908093932698,
+      "y": 4996.085072607016,
+      "width": 313.783682547785,
+      "height": 173.8736450354091,
+      "z_value": -9.989000000000006,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "It's a terrible name for a parable\nSince there are so many 1-2-3 rules in this world\nAnd it even uses base numbers for identifiers\nBut the message in it is solid\nAnd we named it this in a hurry\nSo we are sticking to it\nAnd just going to go with it"
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "I named them like this to indicate the clear distance between",
+      "uuid": "9a16ddeabb1b4660938904a7b382ded6",
+      "x": 5787.430968139275,
+      "y": 5580.950071546954,
+      "width": 638.375,
+      "height": 31.0,
+      "z_value": -9.980000000000011,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "I named them like this to indicate the clear distance between",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "New Thought",
+      "uuid": "89c6d98789e84ceb861f26dba048dde6",
+      "x": 5907.819404662581,
+      "y": 5913.584729069055,
+      "width": 327.64278182895896,
+      "height": 161.9777266728933,
+      "z_value": -9.978000000000012,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "This leaves room for the actual point to come there between so in this context I will number you three\n\nAnd you have the context of getting between us\nClear mental image of a human, between two other humans distanced"
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Clear enough?",
+      "uuid": "a2ac448789174308983502e0fefb45f2",
+      "x": 6276.823016069435,
+      "y": 6816.960594560566,
+      "width": 158.0,
+      "height": 31.0,
+      "z_value": -9.971000000000016,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Clear enough?",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The Five",
+      "uuid": "ad620635b4454f34bbf0e61b68170ce5",
+      "x": 6399.143797135324,
+      "y": 5470.345577699,
+      "width": 108.0,
+      "height": 31.0,
+      "z_value": -9.98100000000001,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The Five",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The Three",
+      "uuid": "fdfe7a80a26f4a83adcb169e60e1fb7d",
+      "x": 5971.219474704096,
+      "y": 6136.683339815855,
+      "width": 118.0,
+      "height": 31.0,
+      "z_value": -9.977000000000013,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The Three",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Because we are talking about singleton concepts",
+      "uuid": "a0c80eb4eb8f41789bad358571b6f55e",
+      "x": 6054.834258995908,
+      "y": 5308.020485189864,
+      "width": 498.0,
+      "height": 31.0,
+      "z_value": -9.985000000000008,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Because we are talking about singleton concepts",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Golden Hour",
+      "uuid": "5e671370ac7c48349765b397f67cbb20",
+      "x": 6038.62075583164,
+      "y": 5379.090821582592,
+      "width": 314.780797778211,
+      "height": 148.04915626793314,
+      "z_value": -9.98200000000001,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "The Five, is her, again, not contextual to the other categories one, two, three, four\nAlso just an entity on its own merit\nIn it's own context"
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The One",
+      "uuid": "35ca68451a4249fe9da30d362427b96e",
+      "x": 5578.653014916928,
+      "y": 5333.88574525037,
+      "width": 98.0,
+      "height": 31.0,
+      "z_value": -9.984000000000009,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The One",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Kinetic",
+      "uuid": "514e90e467c640f9b49830b8537742dd",
+      "x": 5699.751109404167,
+      "y": 5315.210844745082,
+      "width": 300.0,
+      "height": 150.53458202160976,
+      "z_value": -9.98300000000001,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "The One, in this case, being me\nNot first, just wrap your mind\nwith the mental image of a human\nAs a single object, out of context with anything else, 1x Human"
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Endless Potential",
+      "uuid": "6b6783672d8b466283457cbd72e579f7",
+      "x": 5758.092670015791,
+      "y": 5102.456095412775,
+      "width": 292.4603767279994,
+      "height": 134.365506158776,
+      "z_value": -9.987000000000007,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "The most terrible thing about the name of this parable is the fact it doesn't even reference a linear thing then, as one would to be the suggestive title of naming it 1-2-3-4-5"
     }
   ],
   "connections": [
@@ -17943,16 +18247,96 @@
     {
       "start_uuid": "43c866ef120449cba4f581bbefda5456",
       "end_uuid": "41477b9a75d04a1d878ea3783cc405d4"
+    },
+    {
+      "start_uuid": "c5ca92d61da84298886b2f9e8b941467",
+      "end_uuid": "c5ee02f1fb9f4c50ac1b9f477bac01a1"
+    },
+    {
+      "start_uuid": "c1ef2bd99f7c4632b49242a4ee8f3164",
+      "end_uuid": "c5ca92d61da84298886b2f9e8b941467"
+    },
+    {
+      "start_uuid": "f24de2eedc7943acbbbb8f4fde581209",
+      "end_uuid": "a647aac43647434cbeb5b2a1f1dff362"
+    },
+    {
+      "start_uuid": "f24de2eedc7943acbbbb8f4fde581209",
+      "end_uuid": "fdfe7a80a26f4a83adcb169e60e1fb7d"
+    },
+    {
+      "start_uuid": "f24de2eedc7943acbbbb8f4fde581209",
+      "end_uuid": "e9204a498da64569b4082f1d64f7ad27"
+    },
+    {
+      "start_uuid": "c47d8c3bbe654d8c9d3e790ec40fd1c3",
+      "end_uuid": "a647aac43647434cbeb5b2a1f1dff362"
+    },
+    {
+      "start_uuid": "fdfe7a80a26f4a83adcb169e60e1fb7d",
+      "end_uuid": "c47d8c3bbe654d8c9d3e790ec40fd1c3"
+    },
+    {
+      "start_uuid": "e9204a498da64569b4082f1d64f7ad27",
+      "end_uuid": "5232309c481d4c169ed72f95d2b7e614"
+    },
+    {
+      "start_uuid": "5232309c481d4c169ed72f95d2b7e614",
+      "end_uuid": "a2ac448789174308983502e0fefb45f2"
+    },
+    {
+      "start_uuid": "6b6783672d8b466283457cbd72e579f7",
+      "end_uuid": "c868ffde273745c8b41c0259186f31a6"
+    },
+    {
+      "start_uuid": "c868ffde273745c8b41c0259186f31a6",
+      "end_uuid": "a0c80eb4eb8f41789bad358571b6f55e"
+    },
+    {
+      "start_uuid": "a487a7ecda0f459683ab54c2adf9928c",
+      "end_uuid": "89c6d98789e84ceb861f26dba048dde6"
+    },
+    {
+      "start_uuid": "9a16ddeabb1b4660938904a7b382ded6",
+      "end_uuid": "a487a7ecda0f459683ab54c2adf9928c"
+    },
+    {
+      "start_uuid": "c5ee02f1fb9f4c50ac1b9f477bac01a1",
+      "end_uuid": "6b6783672d8b466283457cbd72e579f7"
+    },
+    {
+      "start_uuid": "5e671370ac7c48349765b397f67cbb20",
+      "end_uuid": "9a16ddeabb1b4660938904a7b382ded6"
+    },
+    {
+      "start_uuid": "fdfe7a80a26f4a83adcb169e60e1fb7d",
+      "end_uuid": "89c6d98789e84ceb861f26dba048dde6"
+    },
+    {
+      "start_uuid": "5e671370ac7c48349765b397f67cbb20",
+      "end_uuid": "ad620635b4454f34bbf0e61b68170ce5"
+    },
+    {
+      "start_uuid": "a0c80eb4eb8f41789bad358571b6f55e",
+      "end_uuid": "514e90e467c640f9b49830b8537742dd"
+    },
+    {
+      "start_uuid": "514e90e467c640f9b49830b8537742dd",
+      "end_uuid": "5e671370ac7c48349765b397f67cbb20"
+    },
+    {
+      "start_uuid": "35ca68451a4249fe9da30d362427b96e",
+      "end_uuid": "514e90e467c640f9b49830b8537742dd"
     }
   ],
   "viewport": {
-    "camera_x": 5566.052726488424,
-    "camera_y": 3657.0413619259325,
-    "camera_zoom": 0.6149780047375767
+    "camera_x": 3239.4849852804446,
+    "camera_y": 3124.132404202209,
+    "camera_zoom": 0.31208664481970955
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
   "last_browse_dirs": {},
-  "checksum": "d4c66f19aef76476"
+  "checksum": "4dcca89e7c165131"
 }
