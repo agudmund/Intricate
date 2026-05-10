@@ -70,7 +70,7 @@ def _expected_association_command() -> str:
 
 def _expected_association_icon() -> str:
     """The expected DefaultIcon value for the file association."""
-    return str(Path(__file__).resolve().parent / "icons" / "Intricate.ico")
+    return str(Path(__file__).resolve().parent / "icons" / "Stickers" / "Intricate.ico")
 
 
 def _read_hkcu(path: str) -> str | None:
@@ -226,7 +226,7 @@ def main():
     # identity-locked-cache pattern that binding doesn't refresh from .lnk
     # path changes or icon-content changes.  The namespaced form is a
     # never-before-seen string, so Windows registers a fresh identity and
-    # binds the current icons/Intricate.ico cleanly.  Forward-compatible
+    # binds the current icons/Stickers/Intricate.ico cleanly.  Forward-compatible
     # with the MSIX deployment plan where every family app gets a
     # `SingleSharedBraincell.<AppName>` publisher-namespaced AUMID.
     # Console title and singleton lock keep the bare `appName` so the
@@ -323,7 +323,7 @@ def main():
     # but pythonw needs it explicitly or Windows shows the default Python icon.
     from pathlib import Path
     from PySide6.QtGui import QIcon
-    _app_icon = Path(__file__).resolve().parent / "icons" / "Intricate.ico"
+    _app_icon = Path(__file__).resolve().parent / "icons" / "Stickers" / "Intricate.ico"
     if _app_icon.exists():
         app.setWindowIcon(QIcon(str(_app_icon)))
 

@@ -197,7 +197,7 @@ def buildApp():
         return
 
     # ── Build Args ───────────────────────────────────────────────────────
-    appIcon = projectRoot / iconsFolder / "Intricate.ico"
+    appIcon = projectRoot / iconsFolder / "Stickers" / "Intricate.ico"
     args = [
         entryPoint,
         f"--name={appName}",

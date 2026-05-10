@@ -324,7 +324,7 @@ category = "info"
 # Windows shell extraction from Intricate.lnk; for our own app the
 # extraction was circular indirection, so the registry now points at
 # the on-disk source the user owns end-to-end.
-icon_file = "Intricate.ico"
+icon_file = "Stickers/Intricate.ico"
 icon_fallback = "#9a9aaa"
 spawnable = true
 status = "version 0.6.0 — The Housekeeping before paradise arrives Era"

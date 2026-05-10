@@ -152,22 +152,117 @@ The pause sticker used by AudioNode, VideoNode, and MergeNode had been extracted
 
 The update was two files of work (source PNG + script) and zero lines of Python-consumer change. That is the pipeline running as designed: when assets are the primitive and consumers reference them through the metaclass, a visual refresh is a data edit, not a code edit.
 
-## Worked Example — The 2026-05-08 Brand Mark Refresh
+## The Brand Mark Refresh Chain
 
-`icons/Intricate.ico` is the proprietary identity icon. It sits on the desktop `.lnk`, the running-window taskbar slot, the systray, and embedded in the `.exe` at build time. Refreshing it touches more than a node icon does because Windows caches the rendered version per file across several shell databases — the icon-pipeline scripts produce the new asset, but the OS won't surface it until those caches are flushed.
+`icons/Stickers/Intricate.ico` is the proprietary identity icon. It sits on the desktop `.lnk`, the pinned taskbar slot, the systray, the `.intricate` file-type icon in Explorer, and embedded in the `.exe` at build time. Refreshing it touches more than a node icon does because Windows caches the rendered version per file *and per app-identity* across several shell databases and registry hives — the icon-pipeline scripts produce the new asset, but the OS won't surface it until those caches are explicitly invalidated.
 
-The pipeline for the brand mark itself is deliberately simple. `tools/icon_pipeline/scripts/extract_intricate_icon.py` is a passthrough, not an extraction — the PNG at `icons/Intricate.png` is treated as already-finished art (authored externally, dropped in by hand). No defringe, no largest-component cleanup, no resize. The script just writes a verify composite on the dark node bg and emits the multi-resolution ICO from the source as-is. This is the right shape because the input is a fully-cleaned hand-authored sticker, not a generator output that needs the post-processing tail.
+The pipeline for the brand mark itself is deliberately simple. `tools/icon_pipeline/scripts/extract_intricate_icon.py` is a passthrough, not an extraction — the PNG at `icons/Stickers/Intricate.png` is treated as already-finished art (authored externally, dropped in by hand). No defringe, no largest-component cleanup, no resize. The script just writes a verify composite on the dark node bg and emits the multi-resolution ICO from the source as-is. This is the right shape because the input is a fully-cleaned hand-authored sticker, not a generator output that needs the post-processing tail.
 
-When the PNG changes, the chain to refresh is:
+The complete refresh chain — verified manually on 2026-05-10, every step here is a real touch point with an associated failure mode if skipped:
 
-1. **Regenerate the ICO** — `python tools/icon_pipeline/scripts/extract_intricate_icon.py`. Produces `icons/Intricate.ico` (7 frames: 16/24/32/48/64/128/256) and `Documents/Data/Icon Pipeline/_verify_intricate_dark.png`.
-2. **Re-save `Intricate.lnk`** — load the shortcut via `WScript.Shell`, set `IconLocation` back to `icons/Intricate.ico,0`, and call `Save()`. Bumps mtime and forces Explorer to re-read the `IconLocation` field. Without this, the per-file shell-icon cache for the .lnk persists.
-3. **Wipe shell icon caches** — stop `explorer.exe`, delete every `iconcache_*.db` and `thumbcache_*.db` under `%LocalAppData%\Microsoft\Windows\Explorer\` (plus the legacy `%LocalAppData%\IconCache.db`), then restart `explorer.exe`. The cache files hold rendered-pixel snapshots keyed by file path; they don't refresh on icon-content change unless deleted.
-4. **Restart Intricate** — the running window's taskbar icon and the systray icon come from `QIcon("icons/Intricate.ico")` loaded once at process start. A vaporize-relaunch picks up the new asset.
+**1. Regenerate the ICO**
+`python tools/icon_pipeline/scripts/extract_intricate_icon.py`. Produces `icons/Stickers/Intricate.ico` (7 frames: 16/24/32/48/64/128/256) and `Documents/Data/Icon Pipeline/_verify_intricate_dark.png`. If skipped: nothing else does anything useful, every downstream step propagates the old icon.
 
-What this **doesn't** require is a fresh AUMID. The namespaced form `SingleSharedBraincell.Intricate` (set in `main.py` via `SetCurrentProcessExplicitAppUserModelID`) was a one-time fix for the Win11 Personalization > Taskbar cache that had bound a wrong icon to the bare `Intricate` identity at some earlier point. That binding is now path-stable — once the file content changes and the shell caches are flushed, the pinned-taskbar slot picks up the new mark on next launch. Future brand-mark refreshes do not need re-namespacing.
+**2. Re-save both `Intricate.lnk` shortcuts**
+There are *two* live `.lnk` files that pin the icon path, not one:
+- `C:\Users\thisg\Desktop\Intricate\Intricate.lnk` — the project-folder launcher (what File Explorer surfaces)
+- `%AppData%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Intricate.lnk` — the pinned-taskbar shortcut
+
+For each: load via `WScript.Shell.CreateShortcut(path)`, set `IconLocation = "C:\…\icons\Stickers\Intricate.ico,0"`, call `Save()`. Bumps mtime and forces Explorer to re-read the `IconLocation` field. If skipped: the per-file shell-icon cache keyed on the old path persists, so the icon never visibly changes in that surface.
+
+**3. Update the `.intricate` file-association DefaultIcon (registry)**
+`HKCU\Software\Classes\Intricate.Session\DefaultIcon` stores the icon path Explorer uses when rendering `.intricate` session files. This **auto-heals on Intricate boot** via `register_file_association()` in `main.py` — `_expected_association_icon()` returns the current canonical path and the registrar rewrites if drifted. Worth knowing because: if you've changed the path but haven't relaunched Intricate yet, this is still stale; and on a fresh setup it has to land before file icons render correctly. `Set-ItemProperty -Path "HKCU:\Software\Classes\Intricate.Session\DefaultIcon" -Name "(Default)" -Value "..."` is the direct write.
+
+**4. Wipe shell icon caches**
+Stop `explorer.exe`, delete every `iconcache_*.db` and `thumbcache_*.db` under `%LocalAppData%\Microsoft\Windows\Explorer\`, then restart `explorer.exe`. The legacy `%LocalAppData%\IconCache.db` (Win7/XP-era) is **conditional** — modern Win11 does not generate it, so don't worry if it isn't present. The cache files hold rendered-pixel snapshots keyed by file path; they don't refresh on icon-content change unless deleted. Explorer will be down for ~1–2 seconds and respawn automatically; iconcache files rebuild immediately on restart, thumbcache files repopulate lazily as folders are browsed. If skipped: icons on the desktop and in Explorer continue to show the cached old rendering even though every path now points correctly.
+
+**5. Reset the identity-locked Personalization cache**
+This is the cache the memory entry `project_personalization_panel_cache_is_identity_locked.md` warns about. Win11 stores per-AUMID systray state in `HKCU\Control Panel\NotifyIconSettings\<hash>\` — and crucially, **the cached icon is stored as raw PNG bytes inside the `IconSnapshot` registry value** (starts with `\x89PNG` header), not as a path reference. So even when every path is corrected, Windows keeps showing the embedded snapshot until that key is deleted. The reset:
+- Locate the entry whose `ExecutablePath` is `C:\python\pythonw.exe` (Intricate's launcher), delete the whole sub-key `Remove-Item "HKCU:\Control Panel\NotifyIconSettings\<hash>" -Force -Recurse`.
+- Sweep stale identity records: `Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched" -Name Intricate` (the historical bare-identity baggage), same for `SingleSharedBraincell.Intricate`, same for `ShowJumpView\Intricate`. These are alt-tab and jump-list usage counters; deleting them is cosmetic but clears the identity attachments.
+- Refresh the shell: `& "$env:SystemRoot\System32\ie4uinit.exe" -show` (returns exit 1 even on success — normal), then broadcast `SHChangeNotify(SHCNE_ASSOCCHANGED)` via `[Shell32]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)`.
+- **DO NOT touch `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband\Favorites` or `FavoritesResolve`** — those are the pinned-items blob for *every* app on the taskbar. Wiping them loses every pinned item, not just Intricate.
+- Always back up first: `reg export "HKCU\Control Panel\NotifyIconSettings\<hash>" backup.reg /y`.
+
+If after step 5 the pinned taskbar slot still shows the wrong icon, the bulletproof fallback is **manual unpin + repin** of the taskbar item — Windows binds fresh on repin and there's no programmatic alternative that matches its reliability.
+
+**6. Restart Intricate**
+The running window's taskbar icon and the systray icon come from `QIcon("icons/Stickers/Intricate.ico")` loaded once at process start. A vaporize-relaunch picks up the new asset. If skipped: the *running* session keeps showing the old icon in its own window and tray slot even though everything else in the OS has refreshed.
+
+What this chain **does not** require is a fresh AUMID. The namespaced form `SingleSharedBraincell.Intricate` (set in `main.py` via `SetCurrentProcessExplicitAppUserModelID`) was a one-time fix for the Win11 Personalization > Taskbar cache that had bound a wrong icon to the bare `Intricate` identity at some earlier point. That binding is now path-stable — once the cache reset above runs, the pinned-taskbar slot picks up the new mark on next launch. Future brand-mark refreshes do not need re-namespacing.
 
 The brand mark also doubles as `Theme.iconCurtains` — it is BOTH a real UI primitive (the curtains share-arrow that appears on the canvas) AND the family-wide fallback for any missing-icon lookup. If a `Theme.iconXxx` reference can't resolve, the metaclass returns this share-arrow as the sentinel rather than crashing. Recognising the share-arrow in a "wrong icon" bug means our own fallback path triggered, not a Windows-generic placeholder.
+
+## The Personalization › Taskbar Panel — What Drives What
+
+The panel at Settings › Personalization › Taskbar › "Other system tray icons" is a hybrid surface that merges several data sources. The 2026-05-10 investigation mapped which input drives which output — useful because the obvious-sounding levers (Qt's `setToolTip`, AUMID metadata, the registry's `InitialTooltip` field) turned out to *not* drive the panel's label, while only `IconSnapshot` moved the icon. The actual ground truth:
+
+| Panel surface | Data source | Notes |
+|---|---|---|
+| **Icon** (the small image in the row) | `HKCU\Control Panel\NotifyIconSettings\<hash>\IconSnapshot` — raw PNG bytes embedded in the registry value | This is the lever. Write 32×32 PNG bytes, the panel updates on next Settings *reopen* (UI caches; close-window + reopen forces re-read). |
+| **Label** (the row text) | PE `FileDescription` resource embedded in the binary at `ExecutablePath` | NOT registry. `InitialTooltip`, `AUMID DisplayName`, and Qt `setToolTip` were all tested and none of them moved this. |
+| **Toggle state** (On/Off switch) | `NotifyIconSettings\<hash>\IsPromoted` | `1` = pin to visible tray, `0` = stay in chevron overflow. |
+| **Hover tooltip** on the live systray icon | `Shell_NotifyIcon` `szTip`, populated live by Qt's `setToolTip` | Independent of the panel — affects only the live tray icon, not the persistent panel row. |
+| **Live entry presence** in panel before user has toggled | Shell_NotifyIcon enumeration of running tray processes | Apps appear in the panel because they're currently running with a registered tray icon. The first user-toggle is what *persists* a `NotifyIconSettings\<hash>\` entry. |
+
+### Why dev shows "Python" and production will show "Intricate"
+
+The panel label comes from the PE `FileDescription` resource of the binary at `ExecutablePath`. Two realities for Intricate:
+
+| Mode | Launcher | PE FileDescription | Panel label |
+|---|---|---|---|
+| Dev | `C:\python\pythonw.exe` | `"Python"` (Microsoft's resource) | `Python` |
+| Built | `dist\Intricate\Intricate.exe` | `"Intricate"` (PyInstaller writes from `--name`) | `Intricate` |
+
+There is no registry override for this. The label being "Python" in dev mode is a property of running interpreted Python via Microsoft's launcher binary — the same way a Node app run via `node main.js` would surface as "Node.js" in the panel. **It's technically correct (the binary running IS pythonw.exe) and resolves naturally to "Intricate" the moment a built `.exe` ships.**
+
+The `IconSnapshot` lever IS available, though, so the dev-mode panel shows "Python" *with the correct brand sticker* — enough identifier that the row is unambiguously Intricate's even while the binary name reads as generic.
+
+### What we tested and what each lever actually did
+
+Five distinct writes attempted while chasing the panel label; only one moved the rendering:
+
+- ✅ **`IconSnapshot`** (PNG bytes in `NotifyIconSettings\<hash>\`) → drives the panel icon. Confirmed.
+- ❌ **`InitialTooltip`** (`NotifyIconSettings\<hash>\InitialTooltip`) → no observable effect on this panel. May still be read by other Windows surfaces.
+- ❌ **AUMID `DisplayName`** (`HKCU\Software\Classes\AppUserModelId\SingleSharedBraincell.Intricate\DisplayName`) → no effect on the Personalization panel. Likely affects other surfaces (toast notifications, jump lists, the "running apps" listing in Task Manager).
+- ❌ **AUMID `IconUri`** (sibling above) → no effect on the Personalization panel.
+- ✅ **Qt `setToolTip("Intricate")`** → drives the hover-tooltip over the live tray icon. Confirmed at the systray, not at the panel.
+
+The four no-bite writes still ship because they're harmless and may bite for surfaces we haven't catalogued (jump lists, taskbar grouping for chained processes, toast titles). The boot-time self-heal maintains all of them at the canonical values.
+
+### Boot-time Self-Heal — `_heal_systray_panel_metadata()`
+
+In `main_window.py`'s `_setup_system_tray()`, immediately after Qt registers the tray icon and tooltip, an idempotent helper runs:
+
+```python
+self._heal_systray_panel_metadata()
+```
+
+It writes (silently, non-fatal on every step):
+
+1. **AUMID metadata** at `HKCU\Software\Classes\AppUserModelId\SingleSharedBraincell.Intricate`:
+   - `DisplayName = "Intricate"`
+   - `IconUri = <absolute path to icons/Stickers/Intricate.ico>`
+
+2. **NotifyIconSettings sweep** — for every entry whose `ExecutablePath` filename matches Intricate's launcher (`pythonw.exe` / `python.exe` in dev, `Intricate.exe` in production), writes:
+   - `InitialTooltip = "Intricate"`
+   - `IconSnapshot = <32×32 PNG bytes>` rendered via `QIcon(path).pixmap(32, 32).save(QBuffer, "PNG")`
+
+Both `python.exe` and `pythonw.exe` are patched because Windows aggregates them under one panel row, so whichever variant the current run is using might not be the one with the persisted entry.
+
+If no matching `NotifyIconSettings` entry exists yet (user has never toggled the panel switch), the sweep finds nothing and the function returns silently. The user's first panel toggle creates an entry; the next Intricate launch patches it automatically with the current brand mark — no manual intervention.
+
+The shape mirrors `_ensure_file_association()` in `main.py`: write the canonical state to known registry surfaces on every boot, accept that some writes might no-op or fail, and trust that eventual convergence happens across normal user workflows.
+
+### One-shot manual patch — `Documents/Data/spp_systray_label.ps1`
+
+For machines where the runtime self-heal hasn't yet had a chance to populate, the one-shot PowerShell script does the same patching from outside Intricate. Useful for: fresh setups, manual recovery after a registry reset, or verifying the panel update independently of Intricate's runtime. Runs in HKCU — no admin elevation needed.
+
+```
+& 'C:\Users\thisg\Desktop\Intricate\Documents\Data\spp_systray_label.ps1'
+```
+
+The script generates the PNG via `System.Drawing` instead of Qt (so it can run from any PowerShell session, no Qt runtime needed) and writes to the same two `NotifyIconSettings` entries. Idempotent — safe to run repeatedly.
 
 ## Technical Notes
 
@@ -198,7 +293,7 @@ The `icons/` directory is split into two zones at the file-system level, mirrori
 
 | Location | Holds | Examples |
 |---|---|---|
-| `icons/` (root) | **Proprietary** Intricate brand assets — every icon designed in our own visual language | `Intricate.ico`, `warm_node.ico`, `claude_node.ico`, `Push.png`, every sidebar / toolbar / sticker icon authored in-house |
+| `icons/` (root) | **Proprietary** Intricate brand assets — every icon designed in our own visual language | `Stickers/Intricate.ico`, `warm_node.ico`, `claude_node.ico`, `Push.png`, every sidebar / toolbar / sticker icon authored in-house |
 | `icons/Tertiary/` | **Tertiary** third-party brand assets — official icons of external apps Intricate references, kept in their original branding without alteration | `claude_desktop.ico`, `claude_cli.ico`, `anthropic_icon.ico`, `adobe_group.ico`, `indesign_app.ico`, `Adobe-Emblem.png` |
 
 The split makes the proprietary/third-party boundary visible at a glance in the asset folder. It enforces the no-altered-branding rule physically: nothing in `icons/Tertiary/` is meant to be touched, recoloured, or restyled — these are the canonical brand assets of other companies, used as-is per the three-tier icon treatment doctrine. The proprietary `icons/` root, by contrast, is fair game for the recolor / solidify / rebuild batch utilities and any creative pass.

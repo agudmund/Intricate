@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Rebuild Intricate.ico from the source-of-truth Intricate.png.
 
-The PNG at icons/Intricate.png is the authored brand mark — replace it
-whenever the brand evolves and re-run this script to regenerate the
+The PNG at icons/Stickers/Intricate.png is the authored brand mark — replace
+it whenever the brand evolves and re-run this script to regenerate the
 multi-resolution .ico Windows reads from for the taskbar / tray /
 shortcut.  No trim or resize: the PNG is taken as-is so what the user
 authored is what ships.
@@ -13,8 +13,8 @@ fallback.
 """
 from PIL import Image
 
-SRC = "icons/Intricate.png"
-ICO = "icons/Intricate.ico"
+SRC = "icons/Stickers/Intricate.png"
+ICO = "icons/Stickers/Intricate.ico"
 VERIFY = "Documents/Data/Icon Pipeline/_verify_intricate_dark.png"
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 

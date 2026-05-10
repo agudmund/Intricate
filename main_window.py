@@ -564,12 +564,22 @@ class IntricateApp(QMainWindow, _DialogChoreographyMixin):
         # mark (the share-arrow IS the family fallback per
         # project_curtains_icon_is_family_fallback memory), so even a
         # missing-file scenario still lands on the right glyph.
-        _icon_path = _Path(__file__).resolve().parent / "icons" / "Intricate.ico"
+        _icon_path = _Path(__file__).resolve().parent / "icons" / "Stickers" / "Intricate.ico"
         if _icon_path.exists():
             self._tray_icon.setIcon(QIcon(str(_icon_path)))
         else:
             icon = Theme.icon(Theme.iconCurtains)
             self._tray_icon.setIcon(QIcon(icon) if icon and not icon.isNull() else self.windowIcon())
+
+        # Tooltip is what Windows reads as the display name in Personalization >
+        # Taskbar > "Other system tray icons".  When this is empty, Windows
+        # falls back to the executable's PE FileDescription resource — which
+        # for pythonw.exe-launched apps yields "Python", with whatever stale
+        # IconSnapshot Windows captured the first time the entry registered.
+        # Setting an explicit tooltip is the only lever that surfaces our own
+        # identity in that panel.  See Documents/Design/Icon Pipeline.md ›
+        # The Brand Mark Refresh Chain › step 5 for the full mechanism.
+        self._tray_icon.setToolTip("Intricate")
 
         from pretty_widgets.PrettyMenu import PrettyMenu
         tray_menu = PrettyMenu(self)
@@ -578,6 +588,109 @@ class IntricateApp(QMainWindow, _DialogChoreographyMixin):
         tray_menu.addAction("Exit", self.close)
         self._tray_icon.setContextMenu(tray_menu)
         self._tray_icon.activated.connect(self._on_tray_activated)
+
+        # Self-heal the Personalization > Taskbar panel metadata so the
+        # entry there reads "Intricate" with the current brand mark
+        # instead of "Python" with whatever stale icon Windows captured
+        # the first time the entry was created.  This patches HKCU directly
+        # for both the AUMID metadata key and any matching NotifyIconSettings
+        # entries.  Silent no-op if write fails or entries don't exist yet —
+        # entries materialize when the user first toggles the panel switch,
+        # and the next Intricate launch picks them up.
+        try:
+            self._heal_systray_panel_metadata()
+        except Exception:
+            import logging
+            logging.getLogger("intricate").debug(
+                "[systray] panel-metadata self-heal raised — continuing", exc_info=True)
+
+    def _heal_systray_panel_metadata(self) -> None:
+        """Idempotent write of Personalization-panel metadata for our identity.
+
+        Two registry surfaces:
+          1. HKCU\\Software\\Classes\\AppUserModelId\\SingleSharedBraincell.Intricate
+             - DisplayName = "Intricate"
+             - IconUri = absolute path to icons/Stickers/Intricate.ico
+             (canonical AUMID metadata; some Win11 surfaces read this)
+          2. HKCU\\Control Panel\\NotifyIconSettings\\<hash>\\
+             - InitialTooltip = "Intricate"  (what the panel renders as label)
+             - IconSnapshot = 32x32 PNG bytes of our brand mark
+             Sweep finds entries whose ExecutablePath matches our launcher
+             binary's filename (python.exe / pythonw.exe / Intricate.exe).
+
+        See Documents/Design/Icon Pipeline.md › The Brand Mark Refresh Chain
+        for the full touch-point map and why Qt's setToolTip alone isn't enough.
+        """
+        import sys
+        import winreg
+        from pathlib import Path as _P
+        from PySide6.QtCore import QBuffer, QIODevice
+        from PySide6.QtGui import QIcon
+
+        _icon_path = _P(__file__).resolve().parent / "icons" / "Stickers" / "Intricate.ico"
+        if not _icon_path.exists():
+            return
+
+        # ── AUMID metadata (winreg-only, no Qt needed) ─────────────────
+        try:
+            _aumid_key = r"Software\Classes\AppUserModelId\SingleSharedBraincell.Intricate"
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _aumid_key) as k:
+                winreg.SetValueEx(k, "DisplayName", 0, winreg.REG_SZ, "Intricate")
+                winreg.SetValueEx(k, "IconUri", 0, winreg.REG_SZ, str(_icon_path))
+        except OSError:
+            pass  # silent — write fails are non-fatal
+
+        # ── NotifyIconSettings sweep (needs PNG bytes from Qt) ─────────
+        _icon = QIcon(str(_icon_path))
+        _pixmap = _icon.pixmap(32, 32)
+        if _pixmap.isNull():
+            return
+        _buf = QBuffer()
+        _buf.open(QIODevice.OpenModeFlag.WriteOnly)
+        _pixmap.save(_buf, "PNG")
+        _png_bytes = bytes(_buf.data())
+        _buf.close()
+        if not _png_bytes:
+            return
+
+        # Match by basename so dev (python.exe / pythonw.exe) AND frozen
+        # builds (Intricate.exe) both land.  Windows aggregates python.exe
+        # and pythonw.exe under one NotifyIconSettings row, so when running
+        # via one we still need to patch the entry under the other.
+        _my_exe = _P(sys.executable).name.lower()
+        _targets = {_my_exe}
+        if _my_exe == "pythonw.exe":
+            _targets.add("python.exe")
+        elif _my_exe == "python.exe":
+            _targets.add("pythonw.exe")
+
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                r"Control Panel\NotifyIconSettings") as nis:
+                _i = 0
+                while True:
+                    try:
+                        _subname = winreg.EnumKey(nis, _i)
+                    except OSError:
+                        break
+                    _i += 1
+                    try:
+                        with winreg.OpenKey(nis, _subname, 0,
+                                            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE) as k:
+                            try:
+                                _exe, _ = winreg.QueryValueEx(k, "ExecutablePath")
+                            except FileNotFoundError:
+                                continue
+                            if not _exe or _P(_exe).name.lower() not in _targets:
+                                continue
+                            winreg.SetValueEx(k, "InitialTooltip", 0,
+                                              winreg.REG_SZ, "Intricate")
+                            winreg.SetValueEx(k, "IconSnapshot", 0,
+                                              winreg.REG_BINARY, _png_bytes)
+                    except OSError:
+                        continue
+        except OSError:
+            pass
 
     def _minimize_to_tray(self) -> None:
         """Hide the window and show the system tray icon."""

@@ -63,7 +63,7 @@ _LAUNCHER_ICON_MAP: dict[str, str] = {
     # an OS-side cache state override our canonical file.
     #
     # Hence: Intricate itself is excluded — its source of truth is
-    # icons/Intricate.ico, which build.py embeds into the .exe and the
+    # icons/Stickers/Intricate.ico, which build.py embeds into the .exe and the
     # .lnk inherits.  Other family apps remain here for now while their
     # .lnk is still the only handle on their identity from this side.
     "~/Desktop/The Settlers/The Settlers.lnk":       "the_settlers_app.ico",
