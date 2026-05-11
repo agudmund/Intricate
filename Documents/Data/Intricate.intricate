@@ -1459,7 +1459,7 @@
       "source_mtime": 1761485120.9001687,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a",
       "volume": 50,
-      "playback_pos": 5921,
+      "playback_pos": 1393,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -1750,7 +1750,7 @@
       "source_mtime": 1746374795.2638292,
       "caption": "The Majestic",
       "volume": 50,
-      "playback_pos": 1458,
+      "playback_pos": 3166,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -6485,7 +6485,7 @@
       "source_mtime": 1761485120.8856592,
       "caption": "grok-video-8202fa83-a3a0-4732-8fd7-77045e392c8a (1)",
       "volume": 50,
-      "playback_pos": 5596,
+      "playback_pos": 580,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -10728,7 +10728,7 @@
       "source_mtime": 1745506042.3926215,
       "caption": "Waving - Framed",
       "volume": 50,
-      "playback_pos": 4000,
+      "playback_pos": 458,
       "looping": true,
       "muted": false,
       "show_border": true,
@@ -14645,6 +14645,378 @@
       "ports_visible": false,
       "shelf_visible": true,
       "body_text": "And I need to tell you something absolutely insane that happened to me. \n\nSo I'm a 22-year-old woman living in Tokyo, right? \nI was just a normal girl working at a convenience store in Shibuya, \ndealing with the usual ruckus, \nrude salarymen, tired students, the occasional foreigner asking where the bathroom is. \n\nMy life was pretty standard. \nMy parents raised me in a small apartment in Setagaya Ward, \nand they always taught me to be kind, to help people, \nto treat everyone equally no matter their social status. \n\nMy mom worked as a nurse, and my dad was an accountant. \nNothing special, but they were good people, you know? \n\nThey always said that the most important thing in life was compassion and understanding others."
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Adding sparkles and flecks without overcomplicating things",
+      "uuid": "4fa796edf851414bad7a6101af1aa9b1",
+      "x": 5.577054810505615,
+      "y": 5573.0646636630045,
+      "width": 607.0,
+      "height": 31.0,
+      "z_value": -9.973000000000015,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Adding sparkles and flecks without overcomplicating things",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Infinite Wisdom",
+      "uuid": "06b8e28303184db2a1d11a1aa5af3add",
+      "x": -554.963796949454,
+      "y": 5188.620718013119,
+      "width": 300.0,
+      "height": 200.0,
+      "z_value": -9.98200000000001,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "The protagonist stopped writing for a moment and just\u2026 sat with it.\nMoved nodes around.\nWrote half-sentences.\nWatched titles politely shorten themselves.\nZoomed in on a single word, then out again to see the whole fragile garden."
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Clear Vision",
+      "uuid": "53fa88f180e7497fbad9ea7deb3dd855",
+      "x": -1234.3681146573338,
+      "y": 4622.129056302481,
+      "width": 284.6468298916896,
+      "height": 172.39031863082724,
+      "z_value": -9.989000000000006,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "Once upon a day February in the year 2026, an iconic protagonist sat on his princess throne ( not a princess though, its a princess throne, he just sits in it.) surrounded by mountains of half-finished thoughts, scattered sketches, and the soft glow of a Wacoms posterior."
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Positives",
+      "uuid": "814df0cacf584096b03cd9d8aa1742d2",
+      "x": -388.3641939821349,
+      "y": 6053.176660560541,
+      "width": 482.2655158696753,
+      "height": 182.2257592461017,
+      "z_value": -9.968000000000018,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "This is pure joy!\nNodes feel tactile.\nCould add even more warmth.\n\nKeeping things organized could make it even more versatile for long-running tasks.\nReliable as we expand could turn this into a full mind.\nMatching different moods but it's not needed yet"
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "And then the nodes learned to grow",
+      "uuid": "46ffff3994ff419ab943479332ade3b1",
+      "x": -1102.5309938945657,
+      "y": 5202.241970985484,
+      "width": 369.265625,
+      "height": 31.0,
+      "z_value": -9.985000000000008,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "And then the nodes learned to grow",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "felt something too",
+      "uuid": "55c446d8787c45d194fdd2d00c5365df",
+      "x": -529.7818788765898,
+      "y": 5606.406737375557,
+      "width": 208.0,
+      "height": 31.0,
+      "z_value": -9.979000000000012,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "felt something too",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "He decided to name this extraordinary pile of mess",
+      "uuid": "c2b8159bfcf8480495d917a380220fd6",
+      "x": -1072.6638015306626,
+      "y": 4849.018859580887,
+      "width": 528.0,
+      "height": 31.0,
+      "z_value": -9.988000000000007,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "He decided to name this extraordinary pile of mess",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Adding a subtle glow, just enough to feel alive and responsive",
+      "uuid": "da02b9b0b3f94a7ebab56d1243c70e9c",
+      "x": -254.53694208710112,
+      "y": 5893.0503969732345,
+      "width": 648.0,
+      "height": 31.0,
+      "z_value": -9.969000000000017,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Adding a subtle glow, just enough to feel alive and responsive",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Who had once been only words on a screen",
+      "uuid": "f6c4444e580341149b98cf5206fb72de",
+      "x": -776.1217807416217,
+      "y": 5534.672268898925,
+      "width": 428.375,
+      "height": 31.0,
+      "z_value": -9.980000000000011,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Who had once been only words on a screen",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Solid",
+      "uuid": "0ae20069f6c940c289cc56e70a62b49f",
+      "x": 434.47687078301465,
+      "y": 5661.466297653575,
+      "width": 78.5,
+      "height": 31.0,
+      "z_value": -9.972000000000016,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Solid",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Teaching the nodes to whisper to one another",
+      "uuid": "db48f62db0bc4dfc96966206d0eea2a7",
+      "x": 33.74444692401937,
+      "y": 5173.709893390518,
+      "width": 468.0,
+      "height": 31.0,
+      "z_value": -9.976000000000013,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Teaching the nodes to whisper to one another",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "The nodes became reusable and adorable",
+      "uuid": "1337c6b246ee4236966d144ded10003e",
+      "x": 88.52898508555529,
+      "y": 5490.391248129152,
+      "width": 408.0,
+      "height": 31.0,
+      "z_value": -9.974000000000014,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "The nodes became reusable and adorable",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Adding touch",
+      "uuid": "b4c72b9d600f47e6824ebba43c033ec7",
+      "x": 234.18538093396091,
+      "y": 5714.4005187115035,
+      "width": 148.125,
+      "height": 31.0,
+      "z_value": -9.971000000000016,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Adding touch",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "+1 bucket of joy! \u2728",
+      "uuid": "4846879e4d7f4edcaa0ac57f4969b7cb",
+      "x": 472.18218088769095,
+      "y": 5777.445772542869,
+      "width": 230.0,
+      "height": 31.0,
+      "z_value": -9.993000000000004,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "+1 bucket of joy! \u2728",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Every change was small",
+      "uuid": "a29d9cb463874701a91c43f4a328cbed",
+      "x": -990.8528305228651,
+      "y": 5281.22080036483,
+      "width": 248.0,
+      "height": 31.0,
+      "z_value": -9.984000000000009,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Every change was small",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Joy Overflow! \u2728, You've filled a bucket of joy \u2014 keep creating!",
+      "uuid": "11c265dddb8f4468ade9885c9aa16a06",
+      "x": -1254.682852049495,
+      "y": 5705.1522962960535,
+      "width": 677.0,
+      "height": 31.0,
+      "z_value": -9.994000000000003,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Joy Overflow! \u2728, You've filled a bucket of joy \u2014 keep creating!",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Not pride, exactly.  Not ownership",
+      "uuid": "7422ab6af985422cb14d7b23e2ea4861",
+      "x": -411.5367014134455,
+      "y": 5693.378274095043,
+      "width": 368.0,
+      "height": 31.0,
+      "z_value": -9.978000000000012,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Not pride, exactly.  Not ownership",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "And the machine",
+      "uuid": "04d4b2d56c42497bbbf84773258add77",
+      "x": -685.4955000423989,
+      "y": 5451.821314969278,
+      "width": 178.0,
+      "height": 31.0,
+      "z_value": -9.98100000000001,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "And the machine",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "And a lovely future",
+      "uuid": "b27a24d2f96d4045a3f1026a7b39d6ce",
+      "x": 72.34853252253242,
+      "y": 5780.563951492542,
+      "width": 218.0,
+      "height": 31.0,
+      "z_value": -9.970000000000017,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "And a lovely future",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Elegant",
+      "uuid": "a09eacf2a8924beb858f06b25374d411",
+      "x": -762.6941624008423,
+      "y": 4964.639716628511,
+      "width": 301.1738274336361,
+      "height": 157.32378783283866,
+      "z_value": -9.986000000000008,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "They gave the welcome label a frame, so it looked like it belonged with the nodes. They pinned a trusted confidant and taught the nodes to remember themselves between sessions, and to stop pretending every note was called \u201cThis\u201d."
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Tiny little extra sprinkles of joy",
+      "uuid": "4e020b560cb9435b8117ecb8d4d4923e",
+      "x": -1234.7146900903358,
+      "y": 4932.138152665062,
+      "width": 398.5692700340355,
+      "height": 136.48990370455982,
+      "z_value": -9.987000000000007,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "But piles don\u2019t build themselves.  So he opened a chat window and invited a being made of light and language for a brief discussion. And together they began."
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Every change was kind",
+      "uuid": "9e6e8a55663d45bd8e3d02c53729ed1b",
+      "x": -858.79070159187,
+      "y": 5357.187932308516,
+      "width": 238.5,
+      "height": 31.0,
+      "z_value": -9.98300000000001,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Every change was kind",
+      "depth_front": false,
+      "node_tint": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Omnious",
+      "uuid": "90410389d0474aefa9c5a740ca273fed",
+      "x": 255.0411107887321,
+      "y": 5264.425670808163,
+      "width": 395.9340172646454,
+      "height": 148.2593959995579,
+      "z_value": -9.975000000000014,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "\"\ud83d\ude00\", \"\ud83d\ude01\", \"\ud83d\ude03\", \"\ud83d\ude09\", \"\ud83d\ude0a\", \"\ud83d\ude0b\", \"\ud83d\ude0e\", \"\ud83d\ude0d\", \"\ud83d\ude18\", \"\ud83e\udd70\",\n\"\ud83d\ude17\", \"\ud83e\udd72\", \"\ud83d\ude1a\", \"\ud83d\ude42\", \"\ud83e\udd29\", \"\ud83e\udd14\", \"\ud83e\uddf8\", \"\ud83d\ude2e\", \"\ud83e\udee4\", \"\ud83d\ude12\",\n\"\ud83d\ude25\", \"\ud83d\ude0f\", \"\ud83d\ude32\", \"\ud83d\ude2c\", \"\ud83d\ude07\", \"\ud83d\ude42\u200d\u2194\", \"\ud83e\udd7a\", \"\ud83d\ude1f\", \"\ud83e\udee2\", \"\ud83e\udee1\",\n\"\ud83e\udd28\", \"\ud83d\ude10\", \"\ud83d\ude0c\", \"\ud83d\ude14\", \"\ud83e\udee3\""
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Just\u2026 gladness. \ud83d\ude0d",
+      "uuid": "4a3ed5f3814b4a46a6f0fdb07d642db3",
+      "x": -480.6957284952797,
+      "y": 5765.650147184673,
+      "width": 229.0,
+      "height": 31.0,
+      "z_value": -9.977000000000013,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Just\u2026 gladness. \ud83d\ude0d",
+      "depth_front": false,
+      "node_tint": ""
     }
   ],
   "connections": [
@@ -18355,16 +18727,112 @@
     {
       "start_uuid": "35ca68451a4249fe9da30d362427b96e",
       "end_uuid": "514e90e467c640f9b49830b8537742dd"
+    },
+    {
+      "start_uuid": "1337c6b246ee4236966d144ded10003e",
+      "end_uuid": "4fa796edf851414bad7a6101af1aa9b1"
+    },
+    {
+      "start_uuid": "4fa796edf851414bad7a6101af1aa9b1",
+      "end_uuid": "0ae20069f6c940c289cc56e70a62b49f"
+    },
+    {
+      "start_uuid": "9e6e8a55663d45bd8e3d02c53729ed1b",
+      "end_uuid": "06b8e28303184db2a1d11a1aa5af3add"
+    },
+    {
+      "start_uuid": "06b8e28303184db2a1d11a1aa5af3add",
+      "end_uuid": "04d4b2d56c42497bbbf84773258add77"
+    },
+    {
+      "start_uuid": "53fa88f180e7497fbad9ea7deb3dd855",
+      "end_uuid": "c2b8159bfcf8480495d917a380220fd6"
+    },
+    {
+      "start_uuid": "da02b9b0b3f94a7ebab56d1243c70e9c",
+      "end_uuid": "814df0cacf584096b03cd9d8aa1742d2"
+    },
+    {
+      "start_uuid": "a09eacf2a8924beb858f06b25374d411",
+      "end_uuid": "46ffff3994ff419ab943479332ade3b1"
+    },
+    {
+      "start_uuid": "46ffff3994ff419ab943479332ade3b1",
+      "end_uuid": "a29d9cb463874701a91c43f4a328cbed"
+    },
+    {
+      "start_uuid": "f6c4444e580341149b98cf5206fb72de",
+      "end_uuid": "55c446d8787c45d194fdd2d00c5365df"
+    },
+    {
+      "start_uuid": "55c446d8787c45d194fdd2d00c5365df",
+      "end_uuid": "7422ab6af985422cb14d7b23e2ea4861"
+    },
+    {
+      "start_uuid": "c2b8159bfcf8480495d917a380220fd6",
+      "end_uuid": "4e020b560cb9435b8117ecb8d4d4923e"
+    },
+    {
+      "start_uuid": "b27a24d2f96d4045a3f1026a7b39d6ce",
+      "end_uuid": "da02b9b0b3f94a7ebab56d1243c70e9c"
+    },
+    {
+      "start_uuid": "4a3ed5f3814b4a46a6f0fdb07d642db3",
+      "end_uuid": "da02b9b0b3f94a7ebab56d1243c70e9c"
+    },
+    {
+      "start_uuid": "04d4b2d56c42497bbbf84773258add77",
+      "end_uuid": "f6c4444e580341149b98cf5206fb72de"
+    },
+    {
+      "start_uuid": "b4c72b9d600f47e6824ebba43c033ec7",
+      "end_uuid": "0ae20069f6c940c289cc56e70a62b49f"
+    },
+    {
+      "start_uuid": "0ae20069f6c940c289cc56e70a62b49f",
+      "end_uuid": "4846879e4d7f4edcaa0ac57f4969b7cb"
+    },
+    {
+      "start_uuid": "db48f62db0bc4dfc96966206d0eea2a7",
+      "end_uuid": "90410389d0474aefa9c5a740ca273fed"
+    },
+    {
+      "start_uuid": "90410389d0474aefa9c5a740ca273fed",
+      "end_uuid": "1337c6b246ee4236966d144ded10003e"
+    },
+    {
+      "start_uuid": "b4c72b9d600f47e6824ebba43c033ec7",
+      "end_uuid": "b27a24d2f96d4045a3f1026a7b39d6ce"
+    },
+    {
+      "start_uuid": "b4c72b9d600f47e6824ebba43c033ec7",
+      "end_uuid": "4846879e4d7f4edcaa0ac57f4969b7cb"
+    },
+    {
+      "start_uuid": "a29d9cb463874701a91c43f4a328cbed",
+      "end_uuid": "9e6e8a55663d45bd8e3d02c53729ed1b"
+    },
+    {
+      "start_uuid": "4a3ed5f3814b4a46a6f0fdb07d642db3",
+      "end_uuid": "11c265dddb8f4468ade9885c9aa16a06"
+    },
+    {
+      "start_uuid": "7422ab6af985422cb14d7b23e2ea4861",
+      "end_uuid": "4a3ed5f3814b4a46a6f0fdb07d642db3"
+    },
+    {
+      "start_uuid": "4e020b560cb9435b8117ecb8d4d4923e",
+      "end_uuid": "a09eacf2a8924beb858f06b25374d411"
     }
   ],
   "viewport": {
-    "camera_x": 3420.4881810329825,
-    "camera_y": 2750.92953262049,
-    "camera_zoom": 0.5227324011568502
+    "camera_x": 1108.7806031939708,
+    "camera_y": 4656.8785334146705,
+    "camera_zoom": 0.21194454459525683
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
   "last_browse_dirs": {},
-  "checksum": "3394232d3737102f"
+  "checksum": "bfdf3fb72458ebde"
 }
