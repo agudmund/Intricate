@@ -245,6 +245,26 @@ def main():
 
     logger = setup_logger()
 
+    # ── Compass seed — locate the asset vault, persist the env var ─────
+    # Self-bootstrapping. On first launch (or after the cached path is
+    # invalidated) this walks the discovery strategies and writes the
+    # result to SingleSharedBraincell_AssetVault via setx. Subsequent
+    # launches hit the env var first and return instantly. No setup
+    # wizard, no dialog, no per-machine config files.
+    try:
+        from utils.compass_seed import find_asset_vault, Presence
+        _vault_path, _vault_presence = find_asset_vault()
+        if _vault_presence == Presence.HERE:
+            logger.info(f"[compass] vault: HERE → {_vault_path}")
+        elif _vault_presence == Presence.PARTIAL:
+            logger.info(f"[compass] vault: PARTIAL → {_vault_path} (compass module missing)")
+        elif _vault_presence == Presence.GATED_BY_USER:
+            logger.warning(f"[compass] vault: GATED_BY_USER → {_vault_path} (owned by another OS user)")
+        else:
+            logger.info("[compass] vault: NOT_CLONED — falling back to repo-local resources")
+    except Exception:
+        logger.exception("[compass] seed raised — continuing without vault location")
+
     # Now that logger is live, run the passive file-association check
     try:
         _ensure_file_association(logger)
