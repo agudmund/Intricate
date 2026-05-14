@@ -4809,7 +4809,7 @@
       "x": 0.0,
       "y": 0.0,
       "width": 300.0,
-      "height": 172.0,
+      "height": 192.0,
       "z_value": 0.0,
       "ports_visible": false,
       "shelf_visible": true,
@@ -15093,6 +15093,22 @@
       "ports_visible": false,
       "shelf_visible": true,
       "body_text": "Both use the same \"removeItem before setWidget(None)\" order without explicit rect invalidation. Worth sweeping if artefacts show up."
+    },
+    {
+      "node_id": 0,
+      "node_type": "about",
+      "title": "Note",
+      "uuid": "c5a81169e84a44968cfab10d23cc1086",
+      "x": 11587.808013017231,
+      "y": 8759.8085219398,
+      "width": 178.0,
+      "height": 29.0,
+      "z_value": -8.88000000000062,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "label": "Bright Tomorrow",
+      "depth_front": false,
+      "node_tint": ""
     }
   ],
   "connections": [
@@ -18894,13 +18910,13 @@
     }
   ],
   "viewport": {
-    "camera_x": 12097.731143494984,
-    "camera_y": 8763.631195813887,
+    "camera_x": 12148.247809368939,
+    "camera_y": 8590.864198524958,
     "camera_zoom": 0.9897723678905268
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
   "last_browse_dirs": {},
-  "checksum": "b09097106a5e0d44"
+  "checksum": "254ac42c16aa9e1d"
 }
