@@ -19,6 +19,9 @@ Documents/data/joy_buckets.txt
 # Joy live pulse (happy_secs + bar_value) — runtime state (see joy/joy_state.py)
 Documents/Data/joy_state.json
 Documents/data/joy_state.json
+# Joy stats — runtime telemetry, not source
+Documents/Data/joy_stats.json
+Documents/data/joy_stats.json
 
 # Curtain perf telemetry — per-curtain-frame timing samples written by
 # main_window.py's _on_curtains_settled.  Kept live as a reminder to check
