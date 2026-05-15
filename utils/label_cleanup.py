@@ -122,6 +122,12 @@ def prettify_label(text: str) -> str:
     - trailing colon stripped — on an AboutNode the colon dangles
       because the node is already the label visually.  Mid-string
       colons (ratios, times) are untouched.
+    - trailing period stripped — AboutNodes are single-line title
+      statements; a terminating period reads as a half-finished
+      sentence on the small chrome.  Ellipsis (``...``) is left intact
+      because it carries expressive meaning (trailing off) rather than
+      sentence-grammar.  ``!`` and ``?`` are also preserved — they're
+      tone, not punctuation-of-completion.
 
     Surrounding prose is preserved verbatim.  Invalid dates
     (month > 12, day > 31) pass through unchanged.  Em-dashes without
@@ -150,8 +156,11 @@ def prettify_label(text: str) -> str:
     text = _BOX_DRAWING_RE.sub(" ", text)
     # Strip inline-code backticks.
     text = text.replace("`", "")
-    # Strip leading/trailing whitespace, then a trailing colon.
+    # Strip leading/trailing whitespace, then a trailing colon, then a
+    # trailing period — but not an ellipsis, which is expressive.
     text = text.strip()
     if text.endswith(':'):
-        text = text[:-1].strip()
+        text = text[:-1].rstrip()
+    if text.endswith('.') and not text.endswith('...'):
+        text = text[:-1].rstrip()
     return text
