@@ -7248,21 +7248,6 @@
     },
     {
       "node_id": 0,
-      "node_type": "git",
-      "title": "Git Status",
-      "uuid": "5ecd84db71154a79b58fd382f5f849bf",
-      "x": 0.0,
-      "y": 0.0,
-      "width": 300.0,
-      "height": 172.0,
-      "z_value": 0.0,
-      "ports_visible": false,
-      "shelf_visible": true,
-      "depth_front": false,
-      "node_tint": ""
-    },
-    {
-      "node_id": 0,
       "node_type": "sticker",
       "title": "Sticker",
       "uuid": "122d3b861f814fff8ff4699a876dc9f3",
@@ -8082,6 +8067,28 @@
       "ports_visible": false,
       "shelf_visible": true,
       "body_text": "1. _transform_markdown_table() \u2014 if the paragraph is a markdown table (header row, |---|---| separator on line 2, data rows), the header cells are joined into the title (Oxford comma at 3+ cells), the separator is dropped, and each data row becomes a single pipe-stripped, whitespace-collapsed body line.\n2. _extract_leading_bold() \u2014 otherwise, if the paragraph opens with phrase (optionally preceded by a 1., -, or  list marker; optionally followed by a \u2014, :, or - separator), the phrase becomes the title and the rest becomes the body. Trailing : and . are stripped from the title since the WarmNode title font already cues end-of-phrase visually."
+    },
+    {
+      "node_id": 0,
+      "node_type": "sticker",
+      "title": "Sticker",
+      "uuid": "3fb7a03e7a2841d38392f6f9a022c58d",
+      "x": 1992.0810841802017,
+      "y": 9406.92291638594,
+      "width": 334.0,
+      "height": 362.0,
+      "z_value": 100.0,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "pinned": false,
+      "pin_vp_x": 0.0,
+      "pin_vp_y": 0.0,
+      "pin_scale": 1.0,
+      "cache_key": "a657c0b643e40a8001b5d2af1fafc689b69ec1778dd826a4bb3efd516dc5941e.png",
+      "source_path": "C:\\Users\\thisg\\Desktop\\_asset\\The Majestic\\Polaroid\\As a humble estimate.png",
+      "source_size": 24035,
+      "source_mtime": 1778956478.9573257,
+      "image_b64": ""
     },
     {
       "node_id": 0,
@@ -16230,6 +16237,174 @@
       "ports_visible": false,
       "shelf_visible": true,
       "body_text": "The naive model is: train slowly for accuracy, then gradually speed up while trying to preserve accuracy. That model fails because it treats speed and precision as a tradeoff to be balanced, and balancing them means accepting some loss of one for the other. What you're describing is structurally different: speed isn't trained at all. Speed is the emergent property of precision saturating. When every component lands with absolute precision, the next iteration has no error to correct for, no hesitation to resolve, no ambiguity to disambiguate \u2014 and that absence of friction is what manifests as speed. You didn't make it faster; you removed everything that was slowing it down."
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "As a humble estimate",
+      "uuid": "973ef18c25fc43d68698061ab26073f6",
+      "x": 1653.645598489834,
+      "y": 9150.032675114428,
+      "width": 300.0,
+      "height": 284.0,
+      "z_value": -8.82700000000065,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "It is 2026, and there is a reference in there from 2011.  So it definitely took more than ten years at least to create it with my fancy human hands and zero generated text.\n\nThere are at least thirty thousand pages in total, and it's quite lovely, even has Nayeon photos in it.  Not like the other boring books that don't have Nayeon photos in them.  Who would ever want to read those kinds of books, really?"
+    },
+    {
+      "node_id": 0,
+      "node_type": "palette",
+      "title": "Intricate",
+      "uuid": "a51c3e2448f24b248e9c9bf177250314",
+      "x": 2584.2843599288817,
+      "y": 10187.63504204796,
+      "width": 300.0,
+      "height": 1014.0,
+      "z_value": -8.821000000000653,
+      "ports_visible": false,
+      "shelf_visible": false,
+      "colors": [
+        {
+          "label": "#2a2f3a",
+          "hex": "#2a2f3a"
+        },
+        {
+          "label": "#b05f5f",
+          "hex": "#b05f5f"
+        },
+        {
+          "label": "#4a3a5a",
+          "hex": "#4a3a5a"
+        },
+        {
+          "label": "#1e1e1e",
+          "hex": "#1e1e1e"
+        },
+        {
+          "label": "#5a6a5a",
+          "hex": "#5a6a5a"
+        },
+        {
+          "label": "#2a3a2f",
+          "hex": "#2a3a2f"
+        },
+        {
+          "label": "#8a7560",
+          "hex": "#8a7560"
+        },
+        {
+          "label": "#8a7a67",
+          "hex": "#8a7a67"
+        },
+        {
+          "label": "#8a9a8a",
+          "hex": "#8a9a8a"
+        },
+        {
+          "label": "#d4b99f",
+          "hex": "#d4b99f"
+        },
+        {
+          "label": "#9b8a72",
+          "hex": "#9b8a72"
+        },
+        {
+          "label": "#9a4a4a",
+          "hex": "#9a4a4a"
+        },
+        {
+          "label": "#c97a7a",
+          "hex": "#c97a7a"
+        }
+      ]
+    },
+    {
+      "node_id": 0,
+      "node_type": "sticker",
+      "title": "Sticker",
+      "uuid": "ed29f099330f4623a1a2c511585e1277",
+      "x": 2218.126268271986,
+      "y": 10021.364618080568,
+      "width": 272.0,
+      "height": 221.0,
+      "z_value": 100.0,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "pinned": false,
+      "pin_vp_x": 0.0,
+      "pin_vp_y": 0.0,
+      "pin_scale": 1.0,
+      "cache_key": "03ba89aaeec9e0c38f54651e20e58dbadab29f006813817fa4b43f49a3ad2f9f.png",
+      "source_path": "C:\\Users\\thisg\\Desktop\\_asset\\The Majestic\\Polaroid\\So in conclusion.png",
+      "source_size": 14643,
+      "source_mtime": 1778969246.5885553,
+      "image_b64": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "Again he felt Shame",
+      "uuid": "73241b7c44044be489771a5a48494b9c",
+      "x": 2393.0605163035025,
+      "y": 9626.434765833046,
+      "width": 301.8523281552507,
+      "height": 177.82228529861095,
+      "z_value": -8.825000000000651,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "Later, another group of men passed by, pointing angrily at them, saying, \"Look at this!  Is this what you call caring these days?  Sitting on a donkey, leaving a poor child running behind.\"\n\nAgain he felt shame and told the boy to ride on the donkey with him."
+    },
+    {
+      "node_id": 0,
+      "node_type": "sticker",
+      "title": "Sticker",
+      "uuid": "42327e9de6934c83937d075c726303de",
+      "x": 2725.5181226040345,
+      "y": 9798.90743433835,
+      "width": 296.0,
+      "height": 321.0,
+      "z_value": 100.0,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "pinned": false,
+      "pin_vp_x": 0.0,
+      "pin_vp_y": 0.0,
+      "pin_scale": 1.0,
+      "cache_key": "d8cdab7499edd71865052e7ca7af63e948b85181843e35944f03aea44fc01034.png",
+      "source_path": "C:\\Users\\thisg\\Desktop\\_asset\\The Majestic\\Polaroid\\Again he felt Shame.png",
+      "source_size": 20870,
+      "source_mtime": 1778969017.5911448,
+      "image_b64": ""
+    },
+    {
+      "node_id": 0,
+      "node_type": "warm",
+      "title": "So in conclusion",
+      "uuid": "340d924f48984e49a8acfb258ca54f1d",
+      "x": 2028.499198750856,
+      "y": 9890.005657633488,
+      "width": 216.17471770300563,
+      "height": 129.45019269023214,
+      "z_value": -8.823000000000652,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "body_text": "In a world full of brain-eating zombies and alpaca cooking shows, why not give other crazy ideas a try as well?"
+    },
+    {
+      "node_id": 0,
+      "node_type": "git",
+      "title": "Git Status",
+      "uuid": "1a49885efb8c451d9923e154714d2cbb",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 300.0,
+      "height": 152.0,
+      "z_value": 0.0,
+      "ports_visible": false,
+      "shelf_visible": true,
+      "depth_front": false,
+      "node_tint": ""
     }
   ],
   "connections": [
@@ -20135,13 +20310,13 @@
     }
   ],
   "viewport": {
-    "camera_x": 1643.172858790721,
-    "camera_y": 9003.41431932685,
-    "camera_zoom": 0.9548599781246947
+    "camera_x": 3557.1299007965144,
+    "camera_y": 10166.905288094234,
+    "camera_zoom": 0.5827732069992195
   },
   "ui_migrations": [
     "image_border_default_on_v1"
   ],
   "last_browse_dirs": {},
-  "checksum": "57be0c4e0cd7f221"
+  "checksum": "8295c5b31bd66056"
 }
