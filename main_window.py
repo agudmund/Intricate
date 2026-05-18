@@ -406,6 +406,13 @@ class IntricateApp(QMainWindow, _DialogChoreographyMixin):
         self._curtains_btn.setFixedSize(_btn, _btn)
         self._curtains_btn.setIconSize(_ico)
         self._curtains_btn.setParent(self.top_toolbar)
+        # Flat single-state button — the sticker icon is its own visual, no
+        # plate needed. Pressed-state shading was legacy from a tactile-input
+        # button-shadow test; the curtains button is small enough to live as
+        # a single PNG with no background swap on press.
+        self._curtains_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; padding: 0px; }"
+        )
 
         # Dock watcher — polls the window behind while curtains are rolled up
         self._dock_watcher = QTimer(self)
