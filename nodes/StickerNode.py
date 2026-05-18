@@ -263,12 +263,16 @@ class StickerNode(ChromelessRoot):
             # always-on-top, roll curtains, settle the HWND, focus the
             # main window) instead of spawning behind whatever else has
             # the foreground.
+            scene = self.scene()
+            start_dir = scene.get_browse_dir("sticker") if scene else ""
             with self._dialog_choreography() as mw:
                 path, _ = QFileDialog.getOpenFileName(
-                    mw, "Choose Sticker Image", "",
+                    mw, "Choose Sticker Image", start_dir,
                     "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"
                 )
             if path:
+                if scene:
+                    scene.remember_browse_dir("sticker", str(Path(path).parent))
                 self._load_from_path(path)
         event.accept()
 
