@@ -394,8 +394,14 @@ class IntricateApp(QMainWindow, _DialogChoreographyMixin):
         _btn = Theme.toolbarBtnSize
         _ico = QSize(Theme.toolbarBtnIconSize, Theme.toolbarBtnIconSize)
 
+        # Official brand mark — the sticker-style Intricate icon, same asset
+        # the tray uses. Theme.iconCurtains stays untouched globally because
+        # it doubles as the family-wide missing-icon fallback (per the
+        # curtains_icon_is_family_fallback note); only this button is
+        # promoted to the new brand mark.
         self._curtains_btn = self.setup_iconic_button(
             clicked=self.toggle_curtains,
+            icon="Stickers/Intricate.ico",
         )
         self._curtains_btn.setFixedSize(_btn, _btn)
         self._curtains_btn.setIconSize(_ico)
