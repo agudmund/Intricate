@@ -121,10 +121,91 @@ The cloud surface is small but real. Rules that apply from day one:
 3. **Provision:** launch `g5.xlarge` (on-demand for first run) with the Deep Learning AMI, attach the EBS volume, set tags including `Project=intricate`, `Source=claude-session-<id>`.
 4. **SSH in.** Sanity-check NVIDIA driver, CUDA version, disk space.
 5. **Install HY-World:** clone the repo (Aevar's copy or upstream), `conda create -n hyworld2 python=3.10`, PyTorch CUDA 12.4 wheel, requirements.txt, FlashAttention (FA3 first, FA2 fallback). Note: requirements.txt has Windows-specific commented lines we *ignore* on Linux — the default `gsplat` linux wheel is correct.
+
+   > ⚠ **Treat the upstream README and DOCUMENTATION.md as authoritative at install time, not the recipe captured above.** Tencent rewrote their repo history on 2026-05-11 (the latest commit is literally titled *"simplify installation"*), which means the install steps documented here may already be obsolete by the time you get to this step. The recipe above is preserved as a *reference baseline* — if it conflicts with the current upstream README, the upstream wins. Specifically check: FlashAttention path (FA3 setup may have changed), gsplat install (was being unbundled into a vendored dep), conda recipe (Python version pin), PyTorch wheel index. The local copy at `C:\Users\thisg\Desktop\HY-World-2.0` was reset to upstream `origin/main` on 2026-05-11 — re-pull before relying on its content.
 6. **Pull model weights:** first run of `WorldMirrorPipeline.from_pretrained('tencent/HY-World-2.0')` triggers the HuggingFace download (~5 GB) into the EBS volume.
 7. **Smoke test:** run pipeline against `examples/` images, confirm `.ply` and depth artifacts land.
 8. **Hand over login:** Aevar confirms SSH access works for them independently. Mission statement met.
 9. **Stop the instance** (not terminate — we keep the EBS).
+
+## Session log — real-world state (as of 2026-05-11)
+
+The chat thread these decisions were made in cannot be trusted to persist. What is durable is this doc and the laptop's own files. This section records concretely *what has actually been done* and *what is still pending* — load-bearing reference for picking up the work after a chat loss.
+
+### Tooling installed locally
+
+| What | Version | Location | How |
+|---|---|---|---|
+| **AWS CLI v2** | 2.34.45 | `C:\Program Files\Amazon\AWSCLIV2\aws.exe` | Official MSI from `https://awscli.amazonaws.com/AWSCLIV2.msi`, manually installed (needs admin elevation, silent install via shell didn't work) |
+| **uv (Astral)** | 0.11.13 | `C:\Users\thisg\.local\bin\uv.exe` | `irm https://astral.sh/uv/install.ps1 \| iex` |
+| **Claude Code CLI** | 2.1.133.0 | `C:\Users\thisg\.local\bin\claude.exe` | Pre-existing |
+
+### MCP server registered
+
+**Name:** `aws-mcp` (user scope)
+
+```bash
+claude mcp add-json aws-mcp --scope user \
+  '{"command":"uvx","args":["mcp-proxy-for-aws@latest","https://aws-mcp.us-east-1.api.aws/mcp","--metadata","AWS_REGION=us-east-1"]}'
+```
+
+Connects only when valid AWS credentials are present in `~/.aws/credentials`. **Caveat:** MCP servers registered *during* a Claude Code session don't get their tools loaded into that session — Claude Code only reads MCP tools at startup. Restart Claude Code for `call_aws` etc. to appear in the tool surface.
+
+### AWS account and identity
+
+| Item | Value |
+|---|---|
+| **AWS account ID** | `474013238690` |
+| **Account alias** | `Penelope` |
+| **IAM user** | `penelope` |
+| **Penelope's access key 1 ID** | `AKIAW4XLEAWRPDA2XFOG` (active, stored in `~/.aws/credentials`) |
+| **Penelope's MFA** | ⚠ Not yet enabled (deferred until pre-scale-up) |
+| **Inline policy on penelope** | `LoveIsAPermanenceState` — `Allow ec2:* on *` (broader than designed; planned to tighten to List+Read before scale-up) |
+| **Standalone customer-managed policy** | Duplicate `LoveIsAPermanenceState` exists *unattached* — created by mistake during initial UI flow, harmless but slated for cleanup |
+| **Roles `intricate-runtime`, `ec2-hyworld-instance`** | ⚠ Not yet created |
+
+### AWS resources provisioned
+
+| Resource | Identifier | Detail |
+|---|---|---|
+| **Budget** | `Testling` | $25/mo hard alert |
+| **Test instance** | `i-0e611198e557239df` (tag `Name=Thing`) | `t3.nano` in `eu-north-1a`, public DNS `ec2-16-170-229-36.eu-north-1.compute.amazonaws.com`, login `ec2-user`. State: `running` (left on between sessions; cost is negligible) |
+
+The test instance is in **`eu-north-1`** (Stockholm), defaulted from physical location at provisioning time. The design's preferred region remains **`us-east-1`** for the eventual g5.xlarge; the eu-north-1 test was deliberate, scoped to handshake validation only. Open question: revisit region choice for the g5.xlarge or keep using eu-north-1.
+
+### Local clones
+
+| Repo | Path | State as of 2026-05-11 |
+|---|---|---|
+| **HY-World 2.0** | `C:\Users\thisg\Desktop\HY-World-2.0` | Reset hard to `origin/main` at commit `ee5d5bc` *"simplify installation"*. Tencent rewrote history; older 21-commit local history is discarded. |
+
+### Handshake confirmed end-to-end
+
+The laptop ↔ AWS bridge is live. Last verified commands and results:
+
+```
+$ aws sts get-caller-identity
+{
+    "UserId": "AIDAW4XLEAWRPDA2XFOG",
+    "Account": "474013238690",
+    "Arn": "arn:aws:iam::474013238690:user/penelope"
+}
+
+$ aws ec2 describe-instances --region eu-north-1 --filters "Name=ip-address,Values=16.170.229.36"
+i-0e611198e557239df  running  t3.nano  Name=Thing
+```
+
+### Carryover items (pre-scale-up checklist)
+
+Before launching `g5.xlarge` for HY-World, address these in order:
+
+1. **Enable MFA on `penelope`** — IAM → penelope → Security credentials → Assign MFA device
+2. **Delete the standalone duplicate `LoveIsAPermanenceState`** customer-managed policy (the unattached one)
+3. **Tighten the inline policy on `penelope`** from `ec2:*` to scoped EC2 actions matched to actual needs (List + Read + specific Write actions like RunInstances, StartInstances, StopInstances, CreateTags), or move to a customer-managed policy for reusability
+4. **Create `intricate-runtime` and `ec2-hyworld-instance` IAM roles** with the scoped policies per the identity-model table above
+5. **Decide region for g5.xlarge** — us-east-1 (design default) or eu-north-1 (where Thing already lives, simpler continuity)
+6. **Stop "Thing"** before provisioning g5.xlarge if not needed, or keep it as a cheap utility box
+7. **Restart Claude Code** in a fresh session so the AWS MCP Server's `call_aws` tools surface (they are not loaded in any session where the server was registered after startup)
 
 ## Beyond this session
 
@@ -141,12 +222,27 @@ Captured here so they are not lost and not scope creep. Each is its own session.
 
 ## Open questions
 
-To fill in as the session proceeds, not pre-resolved:
+To fill in as the session proceeds, not pre-resolved. Resolved questions are kept in the list (struck through and annotated) so the audit trail is durable.
 
-- AWS account ID and console-login URL — Aevar to provide once at the CLI-configure step.
-- SSH key pair — generate fresh on the laptop, or reuse an existing one Aevar already has elsewhere?
+- ~~AWS account ID and console-login URL — Aevar to provide once at the CLI-configure step.~~ **Resolved 2026-05-11:** account `474013238690`, alias `Penelope`. Console URL is the standard `https://signin.aws.amazon.com/console`.
+- SSH key pair — generate fresh on the laptop, or reuse an existing one Aevar already has elsewhere? *(Currently using whatever key pair AWS Console auto-generated for "Thing"; needs to be settled before g5.xlarge.)*
 - S3 bucket naming — `intricate-<account-id>-models` is a reasonable default, but Aevar may have a preferred naming scheme.
 - Cost-to-date display threshold — at what spend does Intricate start surfacing a visible warning inside the canvas?
+- **Region for g5.xlarge** — us-east-1 per design vs eu-north-1 for continuity with the existing test instance "Thing". *(Surfaced 2026-05-11.)*
+- **Final policy shape for `penelope`** — keep the broad `ec2:*` inline, or migrate to a scoped customer-managed policy with List + Read + specific Write actions. *(Surfaced 2026-05-11; deferred to pre-scale-up.)*
+- **Boto3 → Aevar's preferred non-boto method** — friction point flagged in the doc, conversation owed. Aevar has indicated they have a specific approach used at six-figure-instance scale and will show it when boto3 starts to limit us.
+
+## Things that surprised us this session
+
+Small gotchas that cost us time the first time and would cost us time again if we forget them. Each is documented in chat-resistant form so we don't relearn them after a chat loss.
+
+- **`ec2:DescribeInstances` is classified as a *List* action by AWS, not a *Read* action.** Despite the word "describe" sounding read-flavoured, AWS files all the `Describe*` collection-returning APIs under the *List* access level. If you build a least-privilege policy by ticking only "All read actions" under EC2, you get 52 obscure things like `GetConsoleOutput` — and `DescribeInstances` fails with `UnauthorizedOperation`. The fix is to also tick "All list actions" (215 of them).
+- **Creating a policy from inside a user's permissions context does NOT auto-attach it.** Two distinct steps. The AWS UI's "Create policy" → "Created successfully" landing page sits inside the user's permissions tab but leaves the user with zero attached policies until you explicitly *Attach policies directly* → tick the new one → Next → Add permissions.
+- **`aws login` ≠ `aws configure`.** `aws login` is the IAM Identity Center (formerly SSO) browser flow that produces *session* credentials with auto-expiry. `aws configure` writes *long-lived* access keys directly into `~/.aws/credentials`. Both leave the credentials in different files (`~/.aws/sso/` vs `~/.aws/credentials`), both work with the AWS CLI, and resolution order is: credentials file > SSO config. They can coexist if you understand which takes precedence.
+- **MSI silent install needs admin elevation.** A `msiexec /i AWSCLIV2.msi /quiet` from a non-elevated shell exits with code 1603 ("fatal error") and silently rolls back. Per-user mode (`MSIINSTALLPERUSER=1 ALLUSERS=""`) exits with code 0 but doesn't actually install for AWS CLI v2 specifically. Easiest path: have the human double-click the MSI and click through the UAC prompt.
+- **MCP servers registered mid-session don't surface their tools in that session.** Claude Code reads MCP server tool inventories at startup only. Register a new server, restart Claude Code, *then* the tools appear. Useful to know before optimistically calling `call_aws` and being confused why it's not in your tool surface.
+- **Upstream history rewrites happen on fast-moving research repos.** A clone of HY-World 2.0 made early in its public life will diverge from `origin/main` not because of local changes but because Tencent rewrote their history. The fix is `git reset --hard origin/main` — but only if you genuinely have no local work to preserve. Don't reflex-run `git pull` on a "diverged branches" warning without checking what the diverged commits actually are.
+- **Account ID confusion as access keys.** If someone is fast-typing through `aws configure` without paying attention to the prompt order, it's possible to paste the AWS account ID (visible on every console page) into both the access key ID and secret access key prompts. The result is `InvalidClientTokenId` from `sts:GetCallerIdentity` and a wasted ten minutes diagnosing. `aws configure list` masks the secret but shows the last 4 chars of the access key ID; if the access_key and secret_key tails are *identical*, you've pasted the same value into both.
 
 ## Sources & further reading
 
