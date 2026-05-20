@@ -44,9 +44,11 @@ A `QTimer` at 100 ms on the main thread (`_check_cache_delivery`) atomically fol
 
 `_restore_from_session()` walks three cases:
 
-1. **Source file on disk exists** → play from source (fast start), schedule background drift check.
-2. **Source missing, cache_key resolves** → play from the cached copy. Spawn an AboutNode: *"source missing — playing from cache"*. The graph self-served.
+1. **Source file on disk exists** → bind source, restore `playback_pos`, schedule background drift check.
+2. **Source missing, cache_key resolves** → bind the cached copy. Spawn an AboutNode: *"source missing — playing from cache"*. The graph self-served.
 3. **Neither** → empty placeholder. Node stays in the graph, ready to receive a fresh load.
+
+In all three "with-source" branches the node is marked `_viewport_visible = False` and stashes `_pending_autoplay = data.was_playing`. Actual playback is gated on the post-load visibility sweep — see **Viewport Culling**. The position seek itself runs the moment the decoder reports `LoadedMedia` regardless of visibility, so when a clip later fades in it lands frame-accurate at its saved scrub position.
 
 ### Drift Detection (Cheap Fingerprint, Then Rehash)
 
@@ -88,11 +90,23 @@ The cap is an overlay effect — as zoom exceeds what the source can provide, Qt
 
 ### Playback State
 
-Standard QMediaPlayer wiring — `setVideoOutput(QVideoSink)` → `videoFrameChanged` → `_on_frame`. Persisted across session save/load: volume, mute, looping, playback position, and was-playing flag. On restore with an extant source (or cache), the player resumes at `playback_pos`.
+Standard QMediaPlayer wiring — `setVideoOutput(QVideoSink)` → `videoFrameChanged` → `_on_frame`. Persisted across session save/load: volume, mute, looping, playback position, and was-playing flag.
+
+Caller intent flows through a single `_pending_autoplay` flag consumed by `_on_media_status` on the `LoadedMedia` transition:
+
+| Caller | Sets `_pending_autoplay` to |
+|---|---|
+| `load_from_path` (drag-drop, file browser) | `True` (default — flips to `False` only for the rare paused-load caller) |
+| `_restore_from_session` | `data.was_playing` |
+| GitNode plushie etc. | explicit `autoplay=True` |
+
+When `LoadedMedia` fires: if the intent is set AND `_viewport_visible` is `True`, the player plays immediately; if the intent is set but the node is off-screen (typical mid-session-restore where the camera hasn't settled yet), the intent is stashed into `_was_playing_before_cull` so the next visibility-on transition can fade in cleanly. This is the only mechanism — no path calls `play()` directly on `LoadedMedia`.
 
 ### Viewport Culling
 
 `_viewport_visible` tracks whether the node is inside the visible scene rect. When a video leaves the viewport, playback pauses (fades volume first); when it returns, it resumes if it was previously playing. In an animatic view with 200 clips, this keeps decoder load proportional to what the user can actually see.
+
+The cull system also **gates session-load playback**. During `load_session`, every restored video defaults to `_viewport_visible = False` with `_pending_autoplay = data.was_playing`. As each decoder reports `LoadedMedia` (often mid-load, during the `processEvents` yields in the restore loop), the handler sees not-yet-visible and parks the play intent into `_was_playing_before_cull` instead of calling `play()`. After the load completes, `_load_session_into_scene` schedules a single deferred settle: apply the saved camera position, then `view._notify_viewport_changed()` runs the visibility sweep — in-view clips fade in via the standard cull-resume path, off-view stay paused. Without this every was-playing clip in the session blasted ~1 s of audio at the moment of load.
 
 ## Data Class
 
@@ -130,28 +144,44 @@ The progress bar ends short of the resize zone with an **end-of-bar marker** (a 
 
 ### Drop
 
-1. `load_from_path(path)` sets source, player plays immediately
-2. Caption AboutNode spawns if the node had no existing caption
-3. Daemon thread runs `cache_source_file(path)` — hash + copy
-4. Delivery timer folds `cache_key`, `source_size`, `source_mtime` into the data class
-5. From this point forward the graph knows the video permanently
+1. `load_from_path(path)` sets source, marks `_pending_autoplay = True` (the default — drag-drop should roll)
+2. `_on_media_status(LoadedMedia)` fires when the decoder is ready and calls `play()` (node is in-view by definition — the user just dropped a file on the canvas)
+3. Caption AboutNode spawns if the node had no existing caption
+4. Daemon thread runs `cache_source_file(path)` — hash + copy
+5. Delivery timer folds `cache_key`, `source_size`, `source_mtime` into the data class
+6. From this point forward the graph knows the video permanently
 
 ### Session Restore
 
-See **Session Restore Preference Order** above. Source takes precedence (fast playback + background drift check); cache is the fallback; placeholder if both are gone.
+See **Session Restore Preference Order** above. Source takes precedence (bind source, seek to `playback_pos`, background drift check); cache is the fallback; placeholder if both are gone. Playback itself doesn't kick in until the post-load visibility sweep — see **Viewport Culling** for the audio-blast deferral.
 
 ### Removal
 
-`_prepare_for_removal()`:
+Teardown is driven by BaseNode's demolition crew. VideoNode declares its moving parts via class-level flags and supplies a bespoke `_demolition_pre` for the QMediaPlayer pipeline — on Windows / WMF the severance order is load-bearing or the decoder thread raises `STATUS_HEAP_CORRUPTION` (0xc0000374) in ntdll on queued events that land post-`deleteLater`.
 
-1. Sets `_destroyed` flag — background workers check this before writing
-2. Stops `_cache_poll` timer and disconnects its `timeout` signal
-3. Nulls `_pending_*` fields
-4. Stops and disconnects the volume animation if running
-5. Disconnects all QMediaPlayer signals (`videoFrameChanged`, `durationChanged`, `positionChanged`, `mediaStatusChanged`)
-6. Stops the player synchronously, severs `setVideoOutput(None)` / `setAudioOutput(None)`, schedules C++ `deleteLater()` on player/sink/audio in the correct order
-7. Nulls frame pixmap and scaled cache
-8. Calls `super()._prepare_for_removal()`
+Declarative flags consumed by the crew:
+
+```python
+_demolition_thread_flag = '_destroyed'
+_demolition_timers      = [('_cache_poll', '_check_cache_delivery')]
+_demolition_animations  = [('_volume_anim', ['finished'])]
+```
+
+Crew sequence per node:
+
+1. `_destroyed = True` — background ingest/drift workers bail on the next check (see `_check_cache_delivery`, `_start_drift_check`)
+2. `_cache_poll` timer stopped, `timeout` disconnected
+3. `_volume_anim` `finished` disconnected, animation stopped
+4. `_demolition_pre`:
+   - Null pending fields (`_pending_cache_key`, `_pending_drift`, `_pending_size`, `_pending_mtime`)
+   - `blockSignals(True)` on player / sink / audio — covers QMediaPlayer internal emissions (`playbackStateChanged`, `errorOccurred`, `bufferProgress`, `sourceChanged`) we never connected to but WMF can still fire post-disconnect
+   - Fade volume to zero so the audio sink drains cleanly
+   - `disconnect()` outgoing connections on all three
+   - `setSource(QUrl())` to flush the WMF decoder, then `stop()`, `setVideoOutput(None)`, `setAudioOutput(None)`, `deleteLater()` on each
+   - Drop the Python wrapper refs (`_player`, `_sink`, `_audio` set to `None`)
+5. `_demolition_post`: null frame pixmap and scaled cache
+
+Shake-delete adds one extra synchronous step **before** the particle burst: `_quiet_for_shake` runs `setSource(QUrl()) + stop()` so the WMF decoder detaches while Python and Qt are both fully alive. Without it, the 8000-sprite particle window kept the decoder running on partially-freed pipeline state and occasionally fastfailed inside WMF on malformed media before Qt could emit a catchable signal.
 
 Cache files are **not** removed here — the user may undo the delete, or the removed node's cache entry may have been referenced by the undo snapshot. Orphan cleanup happens on session save via `gc_cache()`.
 

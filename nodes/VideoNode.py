@@ -225,7 +225,7 @@ class VideoNode(BaseNode):
     # MEDIA PLAYER
     # ─────────────────────────────────────────────────────────────────────────
 
-    def load_from_path(self, path: str | Path, *, autoplay: bool = False) -> None:
+    def load_from_path(self, path: str | Path, *, autoplay: bool = True) -> None:
         """Load a video from a file path. Public — called by file browser and View.dropEvent.
 
         Playback starts immediately from the source path so the user never waits
@@ -234,9 +234,11 @@ class VideoNode(BaseNode):
         that moment on the graph knows about the video and can restore it
         even if the source file later moves or disappears.
 
-        `autoplay=True` overrides the default paused-on-load behaviour for
-        callers that need an immediately-rolling clip (e.g. GitNode's
-        progress-bar plushie, where a paused progress bar would be silly).
+        Default `autoplay=True` mirrors the user-facing contract: drop a file,
+        the clip starts rolling. Pass `autoplay=False` for the rare loader that
+        wants the node to land paused. Session restore does NOT route through
+        here — it bypasses to `_set_source` and gates playback on
+        `data.was_playing` plus the post-load visibility sweep.
         Loop semantics are still driven by `data.looping` set before this
         call.
         """
