@@ -28,7 +28,7 @@ The media cache lives at `Documents/data/cache/` under the active project. Video
 
 Large files use `cache_source_file(path)` which streams through 1 MiB chunks: one pass for the SHA, one pass for a `shutil.copyfile`. Already-cached files short-circuit to hash-only. A 2 GB video hashes in ~6 s on local NVMe and is written verbatim — no transcode, no re-encode, nothing that could change a byte.
 
-**Permanence contract:** when a video is dropped, the node immediately shows playback from the source path (zero wait). A daemon thread caches the bytes in the background and stamps `data.cache_key` on completion. From that instant forward, the graph remembers the video even if the source is moved, deleted, or lives on an unmounted drive.
+**Permanence contract:** when a video is dropped, the node binds to the source path immediately (zero wait — first frame paints from the live source, paused). A daemon thread caches the bytes in the background and stamps `data.cache_key` on completion. From that instant forward, the graph remembers the video even if the source is moved, deleted, or lives on an unmounted drive.
 
 ### Async Pipeline
 
@@ -126,7 +126,7 @@ The cull system also **gates session-load playback**. During `load_session`, eve
 - `looping: bool` — whether playback loops
 - `muted: bool` — audio mute state
 - `show_border: bool` — ivory border overlay toggle
-- `was_playing: bool` — whether the node was playing at save time
+- `was_playing: bool` — whether the node was playing at save time (persisted for forensics; no longer drives restore — see **Playback State**)
 
 Default size: 360 × 280.
 
