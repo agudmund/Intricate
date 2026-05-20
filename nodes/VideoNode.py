@@ -114,22 +114,13 @@ class VideoNode(BaseNode):
         self._frame_pending: bool = False          # throttle: skip if paint hasn't caught up
         self._last_lod: float = 1.0                # quantized LOD the current frame was sized for
 
-        # ── Media player ──────────────────────────────────────────────────────
-        self._player = QMediaPlayer()
-        self._audio  = QAudioOutput()
-        self._sink   = QVideoSink()
-
-        self._player.setAudioOutput(self._audio)
-        self._player.setVideoOutput(self._sink)
-        self._audio.setVolume(data.volume / 100.0)
-        from utils.audio import audio as _audio_mgr
-        self._audio.setMuted(data.muted or _audio_mgr.is_muted())
-
-        self._sink.videoFrameChanged.connect(self._on_frame)
-        self._player.durationChanged.connect(self._on_duration_changed)
-        self._player.positionChanged.connect(self._on_position_changed)
-        self._player.mediaStatusChanged.connect(self._on_media_status)
-
+        # ── State flags read by Qt slots ──────────────────────────────────────
+        # Initialised BEFORE the QMediaPlayer signals are connected — any
+        # queued mediaStatusChanged / positionChanged / videoFrameChanged
+        # meta-call that lands during __init__ must find every attribute its
+        # handler reads. The 2026-04-21 compliance audit's belt-and-braces
+        # philosophy ("don't rely on 'in practice it never fires'"): wire the
+        # state first, then permit the world to talk to us.
         self._duration_ms: int = 0
         self._position_ms: int = 0
         self._was_playing: bool = False   # track state across scrub
@@ -147,6 +138,22 @@ class VideoNode(BaseNode):
         self._pending_autoplay: bool = False
         self._volume_anim: QPropertyAnimation | None = None
         self._target_volume: float = data.volume / 100.0  # user's intended volume
+
+        # ── Media player ──────────────────────────────────────────────────────
+        self._player = QMediaPlayer()
+        self._audio  = QAudioOutput()
+        self._sink   = QVideoSink()
+
+        self._player.setAudioOutput(self._audio)
+        self._player.setVideoOutput(self._sink)
+        self._audio.setVolume(data.volume / 100.0)
+        from utils.audio import audio as _audio_mgr
+        self._audio.setMuted(data.muted or _audio_mgr.is_muted())
+
+        self._sink.videoFrameChanged.connect(self._on_frame)
+        self._player.durationChanged.connect(self._on_duration_changed)
+        self._player.positionChanged.connect(self._on_position_changed)
+        self._player.mediaStatusChanged.connect(self._on_media_status)
 
         # Button row starts hidden. Reveal is bound to the resize gesture
         # (mirrors AboutNode): drag the bottom-right corner downward past
