@@ -117,9 +117,20 @@ A few decisions worth recording where this brief lives:
 - **Levels are bytes, not enums.** `TRACE=5`, `DEBUG=10`, `INFO=20`, `WARNING=30`, `ERROR=40`, `CRITICAL=50` — the values match the stdlib `logging` module exactly so the adapter shim doesn't have to translate.
 - **The build is one-shot via `python install.py`** in the repo root. The script checks Python/Rust/maturin, builds the release wheel, installs it into the active interpreter with `--force-reinstall --no-deps`, and verifies the Rust backend loaded. The family runs against system Python with no venv, which means `maturin develop` isn't usable here (it insists on a venv); the wheel-then-pip flow the installer wraps is the canonical path. See the repo's README for the manual flow underneath.
 
+## Forward-compatibility — wheels and the upgrade chain
+
+A new Python release shouldn't strand the family. Two mechanisms cover the two halves of the problem:
+
+- **Runtime: abi3.** Wheels are built against CPython's stable ABI with a floor of 3.11 (`abi3-py311` flag in `Cargo.toml`). The wheel filename carries the `cp311-abi3` marker rather than `cp313-cp313`, and a single wheel works on every CPython ≥ 3.11 — 3.11, 3.12, 3.13, 3.14, and onward until CPython does a major-version reset. A Python upgrade does not invalidate an already-installed wheel. The pyo3 surface intricate-log uses lives entirely inside the stable-ABI subset, so there is no functionality cost.
+- **Build-time: the install chain.** The wheel is forward-compatible at runtime, but the *build* still depends on pyo3 knowing about the running Python. pyo3's `build.rs` carries a hardcoded "supported Python versions" table. When the running Python is newer than the pinned pyo3 supports — say a fresh 3.14 on a clone whose `Cargo.lock` pins pyo3 0.24 — the build fails before it reaches source. `install.py` detects this specific failure mode (signature-matches on pyo3's "Python version not supported" wording) and runs an upgrade chain: `rustup update stable`, `pip install --upgrade maturin`, `cargo update -p pyo3`. Then retries the build once. If the chain rescues it, the install proceeds. If pyo3's latest version has a source-breaking API change against our `src/lib.rs`, the script surfaces the original error and exits — at which point pinning an upper bound in `Cargo.toml` until the source is adapted is the manual step. The pin is a tombstone, not a permanent restriction.
+
+The two mechanisms compose. When a Python 3.14 user clones, the chain pulls newer pyo3+maturin+rustc, the build stamps an abi3 wheel, and three years later when 3.17 lands, the same wheel keeps working — no chain rerun needed unless someone actually rebuilds.
+
+The principle: **"intricate never stops"**. A new Python should not block the install. The chain self-heals what it can; the pure-Python fallback covers what it can't.
+
 ## Forward direction
 
-The piece is stable; no rewrites planned. The two foreseeable extensions:
+Two foreseeable extensions beyond the current shape:
 
 - **A binary log format.** The on-disk file is currently human-readable text. A binary log would cut file size and make structured queries faster, but would also force tooling to ship alongside — and the current readability is genuinely useful when something has gone wrong on a user's machine and they need to paste a tail into chat. We will not change this unless there is a concrete reason.
 - **A second producer thread.** The SPSC protocol assumes one producer in practice (because the GIL serialises Python callers). Some future arrangement where a Rust-side subsystem also logs would require either lifting that assumption (MPSC ring), routing the second producer through the Python entry point, or giving it its own ring. We have not needed to decide.
