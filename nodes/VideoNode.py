@@ -121,7 +121,7 @@ class VideoNode(BaseNode):
         self._viewport_visible: bool = True   # assume visible until told otherwise
         self._was_playing_before_cull: bool = False
         # Deferred play intent — set by load_from_path(autoplay=True) and by
-        # _restore_from_session when data.was_playing is True. Consumed by
+        # _restore_from_session when data.looping is True. Consumed by
         # _on_media_status once the decoder reports LoadedMedia. The two-step
         # avoids the audio-blast on session load: every video used to call
         # play() unconditionally on LoadedMedia, before the viewport-cull pass
@@ -225,22 +225,22 @@ class VideoNode(BaseNode):
     # MEDIA PLAYER
     # ─────────────────────────────────────────────────────────────────────────
 
-    def load_from_path(self, path: str | Path, *, autoplay: bool = True) -> None:
+    def load_from_path(self, path: str | Path, *, autoplay: bool = False) -> None:
         """Load a video from a file path. Public — called by file browser and View.dropEvent.
 
-        Playback starts immediately from the source path so the user never waits
-        on the cache. A background worker hashes + copies the source bytes
-        into the media cache and stamps data.cache_key on completion. From
-        that moment on the graph knows about the video and can restore it
-        even if the source file later moves or disappears.
+        Default is paused-on-load: the user curates what plays when. Drag-drop
+        and the file-browser dialog both flow through here without overriding
+        the default, so a freshly-bound clip lands on the canvas with frame
+        zero showing and waits for the user to double-click play.
 
-        Default `autoplay=True` mirrors the user-facing contract: drop a file,
-        the clip starts rolling. Pass `autoplay=False` for the rare loader that
-        wants the node to land paused. Session restore does NOT route through
-        here — it bypasses to `_set_source` and gates playback on
-        `data.was_playing` plus the post-load visibility sweep.
-        Loop semantics are still driven by `data.looping` set before this
-        call.
+        Pass `autoplay=True` for code-spawned nodes that need to roll on
+        arrival (e.g. GitNode's progress-bar plushie, where a paused
+        progress bar would be silly). Loopers spawned this way must also
+        set `data.looping = True` before this call.
+
+        Session restore does NOT route through here — it bypasses to
+        `_set_source` and gates playback on `data.looping` plus the
+        post-load visibility sweep.
         """
         path = Path(path)
         if not path.exists():
@@ -285,11 +285,17 @@ class VideoNode(BaseNode):
         # restored node as not-yet-visible and stash the autoplay intent;
         # the post-load visibility sweep (main_window._load_session_into_scene)
         # will then fade-in only the nodes that landed inside the camera frame.
-        # Without this every was_playing video blasted ~1s of audio before
-        # the culling sweep could run.
+        #
+        # The autoplay criterion is `data.looping`, not `data.was_playing`:
+        # loopers are ambient room-fixtures (the acoustic-space design frame),
+        # so they restore to playing regardless of how the user last left
+        # them; non-loopers are user-curated and stay paused on reload until
+        # the user chooses to play them. Without this gate every restored
+        # looping video blasted ~1 s of audio before the visibility sweep
+        # could mute the off-screen ones.
         if (src_path and src_path.exists()) or cache_path is not None:
             self._viewport_visible = False
-            self._pending_autoplay = bool(self.data.was_playing)
+            self._pending_autoplay = bool(self.data.looping)
 
         if src_path and src_path.exists():
             self._set_source(src_path, restore_pos=self.data.playback_pos)
@@ -407,7 +413,7 @@ class VideoNode(BaseNode):
                 self._player.setPosition(self._restore_pos)
                 self._restore_pos = 0
             # Honour caller intent — load_from_path(autoplay=True) and
-            # _restore_from_session(was_playing=True) both set _pending_autoplay.
+            # _restore_from_session (data.looping=True) both set _pending_autoplay.
             # When off-screen at load (the typical session-restore case where
             # the saved viewport hasn't been applied yet) the intent is stashed
             # into _was_playing_before_cull so the existing viewport-cull
