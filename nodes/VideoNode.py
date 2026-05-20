@@ -120,6 +120,13 @@ class VideoNode(BaseNode):
 
         self._viewport_visible: bool = True   # assume visible until told otherwise
         self._was_playing_before_cull: bool = False
+        # Deferred play intent — set by load_from_path(autoplay=True) and by
+        # _restore_from_session when data.was_playing is True. Consumed by
+        # _on_media_status once the decoder reports LoadedMedia. The two-step
+        # avoids the audio-blast on session load: every video used to call
+        # play() unconditionally on LoadedMedia, before the viewport-cull pass
+        # had a chance to settle on which videos are actually in view.
+        self._pending_autoplay: bool = False
         self._volume_anim: QPropertyAnimation | None = None
         self._target_volume: float = data.volume / 100.0  # user's intended volume
 
@@ -244,7 +251,10 @@ class VideoNode(BaseNode):
         # Fire-and-forget cache ingestion. See _check_cache_delivery for pickup.
         self._start_cache_ingest(path)
         if autoplay:
-            self._player.play()
+            # Defer to _on_media_status — direct play() here races with the
+            # async decoder load and the LoadedMedia handler would re-trigger
+            # playback anyway. Setting the flag is the single source of truth.
+            self._pending_autoplay = True
 
     def _set_source(self, path: Path, restore_pos: int = 0) -> None:
         self.data.source_path = str(path.resolve())
@@ -267,6 +277,17 @@ class VideoNode(BaseNode):
 
         src_path = Path(self.data.source_path) if self.data.source_path else None
         cache_path = cached_path(self.data.cache_key) if self.data.cache_key else None
+
+        # Session restore is a bulk operation — many videos can decode in
+        # quick succession before the saved viewport is applied. Mark each
+        # restored node as not-yet-visible and stash the autoplay intent;
+        # the post-load visibility sweep (main_window._load_session_into_scene)
+        # will then fade-in only the nodes that landed inside the camera frame.
+        # Without this every was_playing video blasted ~1s of audio before
+        # the culling sweep could run.
+        if (src_path and src_path.exists()) or cache_path is not None:
+            self._viewport_visible = False
+            self._pending_autoplay = bool(self.data.was_playing)
 
         if src_path and src_path.exists():
             self._set_source(src_path, restore_pos=self.data.playback_pos)
@@ -383,8 +404,18 @@ class VideoNode(BaseNode):
             if hasattr(self, '_restore_pos') and self._restore_pos > 0:
                 self._player.setPosition(self._restore_pos)
                 self._restore_pos = 0
-            # Always autoplay on load
-            self._player.play()
+            # Honour caller intent — load_from_path(autoplay=True) and
+            # _restore_from_session(was_playing=True) both set _pending_autoplay.
+            # When off-screen at load (the typical session-restore case where
+            # the saved viewport hasn't been applied yet) the intent is stashed
+            # into _was_playing_before_cull so the existing viewport-cull
+            # fade-in path resumes playback the moment the camera lands.
+            if self._pending_autoplay:
+                self._pending_autoplay = False
+                if self._viewport_visible:
+                    self._player.play()
+                else:
+                    self._was_playing_before_cull = True
         elif status == QMediaPlayer.MediaStatus.EndOfMedia:
             if self.data.looping:
                 self._player.setPosition(0)

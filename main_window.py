@@ -5207,8 +5207,16 @@ class IntricateApp(QMainWindow, _DialogChoreographyMixin):
         self._autosave_timer.stop()
         if path.exists():
             vp = self.scene.load_session(path)
-            if vp:
-                QTimer.singleShot(0, lambda: self._apply_viewport(vp))
+            # Settle: position the camera (if a saved viewport exists), then
+            # sweep video/audio visibility so restored was_playing media can
+            # fade in (if in view) instead of blasting audio across every clip
+            # in the scene during the bulk load. Single deferred tick — runs
+            # after Qt has drained the load's queued LoadedMedia signals.
+            def _settle_after_load():
+                if vp:
+                    self._apply_viewport(vp)
+                self.view._notify_viewport_changed()
+            QTimer.singleShot(0, _settle_after_load)
         # Residue indicator — stray *.intricate siblings (debug copies,
         # ctrl-c/ctrl-v leftovers) get a sticky note at view focus so the
         # user can inspect and manually sweep. Never auto-deleted.
