@@ -21061,8 +21061,8 @@
     }
   ],
   "viewport": {
-    "camera_x": 2445.5026723596316,
-    "camera_y": 5009.13250182808,
+    "camera_x": 2444.6009383359005,
+    "camera_y": 4743.12096482731,
     "camera_zoom": 1.1089744577474654
   },
   "ui_migrations": [
@@ -21071,5 +21071,5 @@
   "last_browse_dirs": {
     "sticker": "C:\\Users\\thisg\\Desktop\\_asset\\The Majestic\\Polaroid"
   },
-  "checksum": "54a473875710f462"
+  "checksum": "ea4c7320423647cf"
 }
