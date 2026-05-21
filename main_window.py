@@ -4459,6 +4459,14 @@ class IntricateApp(QMainWindow, _DialogChoreographyMixin):
         Whisper holds 30 s instead of the default 3 s so it doesn't vanish
         before the user looks at the screen — a 3-second meov in the corner
         is too easy to miss; 30 s gives the cat real visible presence."""
+        # Temporarily muted — the meov cadence drifted off the offline timers
+        # the user actually runs against, so as a productivity nudge it
+        # currently misfires rather than helps. Revisit once the two
+        # timing models are reconciled. Gating here suppresses the whisper,
+        # the titlebar colour pulse, and the self-rescheduling cascade in
+        # one place; surrounding state machinery (curtains start/stop,
+        # joy_hungry flip) is unaffected.
+        return
         self._meov_level += 1
         if random.random() < self._MEOV_BANG_CHANCE:
             message = "meov" + ("!" * random.randint(1, 2))
@@ -4573,6 +4581,11 @@ class IntricateApp(QMainWindow, _DialogChoreographyMixin):
 
     def _start_chrome_pulse(self) -> None:
         """Begin the joy-hungry chrome pulse — dark base ↔ bright pink, looped."""
+        # Temporarily disabled — inconsistent with the current feed-timer
+        # cadence; revisit once the timing model is reconciled. Surrounding
+        # state (joy_hungry flag, text-meov) still fires; only the whole-app
+        # surface fade is suppressed.
+        return
         if not hasattr(self, '_chrome_pulse_anim') or self._chrome_pulse_anim is None:
             from PySide6.QtCore import QVariantAnimation
             from PySide6.QtGui import QColor
